@@ -14,14 +14,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 11.0.3
+          bun-version: 1.4.0
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: PYTHONDONTWRITEBYTECODE=1 python3 evals/run_all.py
-      - run: python3 scripts/check_public_safety.py .
+      - run: bun install --frozen-lockfile
+      - run: bun run check

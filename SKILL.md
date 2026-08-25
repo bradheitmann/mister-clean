@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 5.5.0
+  version: 6.0.0
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v5.5.0
+# Mister Clean — v6.0.0
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -105,7 +105,7 @@ is explicitly in scope (as it is during Mister Clean development), then test
 the revision through a fresh bare invocation (see evals/blind-run-contract.md). A
 standalone report is structural evidence only. CLEAN is machine-gated by the
 live-bound [assets/closure-bundle.json](assets/closure-bundle.json) through
-`scripts/validate_bundle.py`: CLEAN is refused
+the bundled `mister-clean validate bundle` command: CLEAN is refused
 with any open/blocked/deferred/not_assessed debt, any
 decision_or_coordination_required, unsatisfied dimensions, a missing debt
 census, blocked residuals, a stale target binding, or a non-`proceed`
@@ -365,7 +365,7 @@ Prefer the bounded initializer when available; it creates the layout and
 records the live Git/topology/planning census while making **no CLEAN claim**:
 
 ```bash
-python3 "$MISTER_CLEAN_ROOT/scripts/prepare_bundle.py" \
+node "$MISTER_CLEAN_ROOT/bin/mister-clean.js" prepare \
   --repo "<live-checkout-root>" --evidence-home "<evidence-home>" \
   --run-id "<run-id>" --request-ref "<invocation-ref>" \
   --request-text "<exact operative invocation text>" \
@@ -380,7 +380,7 @@ never establish CLEAN. Independent review must examine the extracted criteria
 set before close.
 
 ```bash
-python3 "$MISTER_CLEAN_ROOT/scripts/validate_closeout.py" manifest \
+node "$MISTER_CLEAN_ROOT/bin/mister-clean.js" validate manifest \
   "<evidence-home>/mister-clean/<run-id>/action-manifest.json"
 ```
 
@@ -502,9 +502,9 @@ planning census, topology census, gate records, debris census, and independent
 review exist:
 
 ```bash
-python3 "$MISTER_CLEAN_ROOT/scripts/validate_closeout.py" manifest \
+node "$MISTER_CLEAN_ROOT/bin/mister-clean.js" validate manifest \
   "<bundle-dir>/action-manifest.json"
-python3 "$MISTER_CLEAN_ROOT/scripts/validate_bundle.py" \
+node "$MISTER_CLEAN_ROOT/bin/mister-clean.js" validate bundle \
   "<bundle-dir>/closure-bundle.json" --repo "<live-checkout-root>"
 ```
 
@@ -528,8 +528,8 @@ its path, digest, subject commit, and repository/operator designation through
 The package's own template self-check is separate and never a closeout gate:
 
 ```bash
-python3 "$MISTER_CLEAN_ROOT/scripts/validate_bundle.py" \
-  "$MISTER_CLEAN_ROOT/assets/closure-bundle.json" --template
+node "$MISTER_CLEAN_ROOT/bin/mister-clean.js" validate bundle \
+  "$MISTER_CLEAN_ROOT/assets/closure-bundle.json" --template --structural
 ```
 
 The validator enforces TYPED evidence
@@ -625,7 +625,7 @@ zero-debt/passing-state requirements activate only for CLEAN.
 - [references/authorization-and-modes.md](references/authorization-and-modes.md) — before any write or external action.
 - [references/completion-debt.md](references/completion-debt.md) — multi-step procedures, debt states, deferral rules.
 - [references/code-hygiene-rubric.md](references/code-hygiene-rubric.md) — ten hygiene dimensions, absence proofs, evidence-bound findings, the GATE ratchet.
-- [references/stack-adapters.md](references/stack-adapters.md) — ecosystem-specific debris/boundary checks, loaded via `scripts/detect_stack.py`.
+- [references/stack-adapters.md](references/stack-adapters.md) — ecosystem-specific debris/boundary checks, loaded via `mister-clean detect stack`.
 - [references/persistence-and-continuation.md](references/persistence-and-continuation.md) — checkpoints, resume/rebind, the debt-ledger mutex.
 - [references/tool-liveness.md](references/tool-liveness.md) — normalize/verify discovery tools, time-bound probes, replace stalled agents without repeating the mechanism.
 - [references/write-lane-isolation.md](references/write-lane-isolation.md) — preallocated per-delegate worktrees, collision response without work loss.

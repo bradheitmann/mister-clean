@@ -26,7 +26,7 @@ when the current repository makes them relevant.
 Run the local stdio server:
 
 ```sh
-npx -y @bradheitmann/mister-clean
+npx -y --package @bradheitmann/mister-clean mister-clean-mcp
 ```
 
 Or connect a Streamable HTTP client to:
@@ -42,26 +42,27 @@ verified.
 
 ## Validate a closeout
 
-The authoritative local validators remain inside the repository:
+The authoritative local validators are exposed through one Node-compatible
+CLI:
 
 ```sh
-python3 scripts/validate_closeout.py report path/to/closeout-report.json
-python3 scripts/validate_closeout.py manifest path/to/action-manifest.json
-python3 scripts/validate_bundle.py path/to/closure-bundle.json --repo path/to/live-checkout
+mister-clean validate report path/to/closeout-report.json
+mister-clean validate manifest path/to/action-manifest.json
+mister-clean validate bundle path/to/closure-bundle.json --repo path/to/live-checkout
 ```
 
-For an installed skill, resolve these commands from the directory containing
-the installed `SKILL.md`; do not assume the target repository contains the
-validator scripts. Keep the report, manifest, bundle, and their digest-bound
-evidence records together under one run directory.
+The installed skill resolves the same standalone CLI from its own
+`bin/mister-clean.js`; it never
+assumes the target repository contains Mister Clean tooling. Keep the report,
+manifest, bundle, and their digest-bound evidence records together under one
+run directory.
 
 Run the full project check before proposing a release:
 
 ```sh
-pnpm install
-pnpm check
-PYTHONDONTWRITEBYTECODE=1 python3 evals/run_all.py
-python3 scripts/check_public_safety.py .
+bun install --frozen-lockfile
+bun run check
+bun src/cli.ts audit public-safety .
 ```
 
 ## Public-safety boundary

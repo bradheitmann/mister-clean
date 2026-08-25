@@ -80,7 +80,7 @@ canonical source or becomes one.
 
 ## 7. Stack-aware adapters — equipped, not prose
 
-Run `python3 scripts/detect_stack.py <repo>`: it detects the repository's
+Run `mister-clean detect stack <repo>`: it detects the repository's
 ecosystems from manifests/locks/config and prints the applicable sections of
 [stack-adapters.md](stack-adapters.md) — the stack's KNOWN debris classes and
 boundary risks. A CLEAN verdict on a detected stack includes those checks; an

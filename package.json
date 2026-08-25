@@ -1,10 +1,11 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "5.5.0",
+  "version": "6.0.0",
   "description": "Successor-readiness skill and read-only MCP server for paying repository completion debt.",
   "type": "module",
   "license": "MIT",
   "bin": {
+    "mister-clean": "bin/mister-clean.js",
     "mister-clean-mcp": "dist/stdio.js"
   },
   "exports": {
@@ -13,16 +14,16 @@
   "files": [
     "agents/*.yaml",
     "assets/**",
-    "dist/**",
+    "bin/mister-clean.js",
+    "dist/server.*",
+    "dist/stdio.*",
     "evals/*.md",
     "evals/*.xml",
-    "evals/*.py",
     "examples/*.md",
     "references/*.md",
-    "scripts/*.py",
-    "scripts/*.mjs",
     "templates/*.md",
     "LICENSE",
+    "MANIFEST.sha256",
     "README.md",
     "SECURITY.md",
     "SKILL.md"
@@ -47,14 +48,17 @@
     "node": ">=22"
   },
   "scripts": {
-    "build:materials": "node scripts/generate_materials.mjs",
-    "build": "pnpm build:materials && tsc --noEmit && tsup src/server.ts src/stdio.ts --format esm --dts --splitting false --clean",
-    "check": "pnpm test && pnpm build && pnpm pack:check",
-    "deploy": "pnpm build:materials && wrangler deploy",
-    "dev": "pnpm build:materials && wrangler dev",
-    "pack:check": "pnpm pack --dry-run",
-    "prepack": "pnpm build",
-    "test": "pnpm build:materials && vitest run",
+    "audit:public": "bun src/cli.ts audit public-safety .",
+    "build:materials": "bun scripts/generate_materials.mjs",
+    "build": "bun run build:materials && tsc --noEmit && tsup src/server.ts src/stdio.ts src/cli.ts --format esm --dts --splitting false --clean && bun run sync:cli",
+    "check": "bun run test && bun run build && bun run pack:check && bun run pack:smoke && bun run audit:public",
+    "deploy": "bun run build:materials && wrangler deploy",
+    "dev": "bun run build:materials && wrangler dev",
+    "pack:check": "bun pm pack --dry-run",
+    "pack:smoke": "node scripts/verify_packed_cli.mjs",
+    "prepack": "bun run build",
+    "sync:cli": "bun scripts/sync_cli.mjs",
+    "test": "bun run build:materials && vitest run",
     "types": "wrangler types env.d.ts --include-runtime false"
   },
   "dependencies": {
@@ -71,5 +75,10 @@
     "vitest": "4.0.18",
     "wrangler": "4.125.0"
   },
-  "packageManager": "pnpm@11.0.3"
+  "trustedDependencies": [
+    "core-js-pure",
+    "esbuild",
+    "workerd"
+  ],
+  "packageManager": "bun@1.4.0"
 }

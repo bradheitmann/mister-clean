@@ -1,6 +1,6 @@
 # Stack adapters — ecosystem-specific hygiene checks
 
-Loaded selectively by `scripts/detect_stack.py` (rubric §7). Each section
+Loaded selectively by `mister-clean detect stack` (rubric §7). Each section
 lists the stack's KNOWN debris classes and boundary risks; a CLEAN verdict on
 a detected stack includes these checks. Extend with new sections as stacks
 are encountered — the detector picks up any `## <ecosystem>` header.
@@ -11,6 +11,16 @@ are encountered — the detector picks up any `## <ecosystem>` header.
 - Workspace globs vs actual directories drift (packages exist that no
   manifest reaches — the unreachable-suite defect).
 - Engines/volta/nvmrc pinning disagreement across docs and manifests.
+
+## node-bun
+- `bun.lock` drift or a second package-manager lockfile selecting a different
+  dependency graph.
+- Install scripts silently skipped because required packages are absent from
+  `trustedDependencies`.
+- Runtime code that depends on `Bun.*` even though the published package
+  promises Node compatibility.
+- CLI behavior that passes from source under Bun but fails from the packed
+  `dist/` artifact under the minimum supported Node version.
 
 ## node-pnpm
 - `pnpm-lock.yaml` hand-edits (NEVER hand-edit; regenerate).

@@ -34,7 +34,7 @@ directives; from the next candidate cycle onward, bare invocations only.)
 **Navigability constraint on revisions.** Robustness must not produce an
 unnavigable megadump: SKILL.md stays a compact entrypoint router; depth
 lives in selectively-loaded references; detection lives in executable
-scripts (detect_stack.py pattern); each reference is loaded only when its
+stack-adapter discovery; each reference is loaded only when its
 trigger applies. A skill nobody can traverse teaches nothing — the skill
 must itself pass the navigation-entropy standard it enforces.
 
