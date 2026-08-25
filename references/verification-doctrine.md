@@ -1,4 +1,4 @@
-# Verification Doctrine — sixteen principles, each paid for
+# Verification Doctrine — seventeen principles, each paid for
 
 Every principle below was learned from a real failure during a multi-day
 multi-agent hygiene campaign. Each entry: the rule, then the incident that

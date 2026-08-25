@@ -1,6 +1,6 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "description": "Successor-readiness skill and read-only MCP server for paying repository completion debt.",
   "type": "module",
   "license": "MIT",
@@ -50,7 +50,7 @@
   "scripts": {
     "audit:public": "bun src/cli.ts audit public-safety .",
     "build:materials": "bun scripts/generate_materials.mjs",
-    "build": "bun run build:materials && tsc --noEmit && tsup src/server.ts src/stdio.ts src/cli.ts --format esm --dts --splitting false --clean && bun run sync:cli",
+    "build": "bun run build:materials && tsc --noEmit && tsup && bun run sync:cli",
     "check": "bun run test && bun run pack:check && bun run pack:smoke && bun run audit:public",
     "deploy": "bun run build:materials && wrangler deploy",
     "dev": "bun run build:materials && wrangler dev",
@@ -64,7 +64,6 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
     "agents": "0.21.0",
-    "yaml": "2.9.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -74,7 +73,8 @@
     "tsup": "8.5.0",
     "typescript": "6.0.3",
     "vitest": "4.0.18",
-    "wrangler": "4.125.0"
+    "wrangler": "4.125.0",
+    "yaml": "2.9.0"
   },
   "trustedDependencies": [
     "core-js-pure",

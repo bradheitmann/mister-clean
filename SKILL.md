@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 6.1.0
+  version: 6.1.1
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v6.1.0
+# Mister Clean — v6.1.1
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -700,6 +700,6 @@ zero-debt/passing-state requirements activate only for CLEAN.
 - [references/intelligent-momentum.md](references/intelligent-momentum.md) — why uniformity and finished procedures control future agents.
 - [references/situational-awareness.md](references/situational-awareness.md) — detecting planning system, procedure graph, topology, management layer, enforcement.
 - [references/verification-and-claims.md](references/verification-and-claims.md) — same-object rule, claim kinds, isolated checks.
-- [references/verification-doctrine.md](references/verification-doctrine.md) — thirteen principles, each with the failure that taught it.
+- [references/verification-doctrine.md](references/verification-doctrine.md) — seventeen principles, each with the failure that taught it.
 - [references/conformance-and-provenance.md](references/conformance-and-provenance.md) — historical normalization without provenance loss.
 - [references/behavioral-evals.md](references/behavioral-evals.md) — only when testing or revising this skill.
