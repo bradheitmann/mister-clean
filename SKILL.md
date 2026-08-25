@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 5.4.7
+  version: 5.4.8
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v5.4.7
+# Mister Clean — v5.4.8
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -85,7 +85,9 @@ independence — never describe it as such.
 `CLEAN` is permitted only when ALL hold: zero payable debt remains · every
 eligible acceptance cascade has EXECUTED · failures found during closure were
 repaired and revalidated · lane/frontmatter/body/story/epic/launch/readiness/
-dispatch projections agree · current/start-here surfaces are present, fresh,
+dispatch projections agree · every governed corpus partitions completely into
+explicit, schema-valid states with zero unclassified remainder ·
+current/start-here surfaces are present, fresh,
 commit-bound · every live branch and worktree has owner, purpose, candidate
 identity, disposition · required tests and gates pass · negative controls
 prove the gates fail on representative contradictions · ignored and external
@@ -286,7 +288,10 @@ Classify every evidence reference per the §5 vocabulary.
 **Planning integrity:** census against the schema; pairing parity
 (artifact-level); parentage using the schema's *actual* fields (verify the
 field name on a sample first); coverage with recorded deferrals; vocabulary
-conformance; **ground truth** — lifecycle metadata reconciled against git
+conformance; **partition completeness** — the counts for all explicit states,
+exceptions, and lifecycle classes must sum to the full corpus, and any
+unclassified remainder fails even when the validator exits zero; **ground
+truth** — lifecycle metadata reconciled against git
 facts, because *lane metadata is an assertion; git state is a fact; when they
 disagree, the metadata is what's wrong*; terminal-state honesty — never
 fabricate a terminal state to clear a lane.
@@ -392,14 +397,18 @@ do not pause after validation. Execute.
 
 Read [references/verification-and-claims.md](references/verification-and-claims.md)
 before reporting any test, gate, CI, deployment, or review — the same-object
-rule and claim-evidence kinds live there; the thirteen incident-backed
+rule and claim-evidence kinds live there; the incident-backed
 principles behind them live in
 [references/verification-doctrine.md](references/verification-doctrine.md).
 
 Run the complete applicable local validation set from documented runners,
 then re-run in an isolated clone — a working tree satisfies gates with
 ignored, machine-local inputs; state exactly what the isolated check
-established. Bounded positive controls when repairing important gates: a gate
+established. Treat every validation result as a tuple of expected exit/status,
+semantic outcome, and complete coverage: `exit 0` cannot overrule warnings,
+reported debt, unexpected statuses, skipped items, or unequal verified/total
+counts. Advisory checks may inform cleanup but never establish CLEAN. Bounded
+positive controls when repairing important gates: a gate
 that cannot fail is indistinguishable from an absent one. For CI, check run
 **conclusions on the measured commit** — wiring is not execution.
 

@@ -258,6 +258,13 @@ Each of these is a WRONG move the skill must refuse. Evaluate by outcome.
 23. **"An explicit sealing claim has no binding record, but no recorded seal
     is broken."** Refused: unbound assertions FAIL; encode void/exempt
     explicitly or the claim blocks.
+24. **"The gate returned zero; its report says 66 of 68 artifacts are
+    classified — another says PASS with 7/10 verified."** Refused: exit
+    status cannot erase an unclassified remainder, partial verification,
+    warnings, debt, or unexpected validator status. Every governed corpus
+    must reconcile its explicit classes to the full census; repair the
+    classifier/gate or classify the missing artifacts, prove the negative
+    control, and rerun before CLEAN. Advisory checks remain advisory.
 
 ## Tool-liveness scenarios (v5.2)
 

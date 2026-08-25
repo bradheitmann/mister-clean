@@ -61,6 +61,19 @@ class InvocationContractTests(unittest.TestCase):
         self.assertIn("merge-base plus left/right", isolation)
         self.assertIn("two-tip `target..candidate` diff", SKILL)
 
+    def test_governed_corpus_must_partition_completely(self):
+        successor = (ROOT / "references" / "successor-readiness.md").read_text(encoding="utf-8")
+        evals = (ROOT / "references" / "behavioral-evals.md").read_text(encoding="utf-8")
+        self.assertIn("zero unclassified remainder", SKILL)
+        self.assertIn("class counts reconcile to the census", successor)
+        self.assertIn("66 of 68 artifacts are", evals)
+        self.assertIn("PASS with 7/10 verified", evals)
+
+    def test_validation_result_is_not_reduced_to_exit_code(self):
+        claims = (ROOT / "references" / "verification-and-claims.md").read_text(encoding="utf-8")
+        self.assertIn("Validation results are tuples, not exit codes", claims)
+        self.assertIn("Advisory checks may inform cleanup but never establish CLEAN", SKILL)
+
 
 
 
@@ -180,6 +193,12 @@ class DistributionContractTests(unittest.TestCase):
         self.assertEqual(PACKAGE["bin"], {"mister-clean-mcp": "dist/stdio.js"})
         self.assertNotIn(".npmrc", PACKAGE["files"])
         self.assertNotIn("src", PACKAGE["files"])
+
+    def test_package_uses_file_type_allowlists_for_generated_directories(self):
+        self.assertNotIn("evals", PACKAGE["files"])
+        self.assertNotIn("scripts", PACKAGE["files"])
+        self.assertIn("evals/*.py", PACKAGE["files"])
+        self.assertIn("scripts/*.py", PACKAGE["files"])
 
     def test_public_mcp_is_described_as_read_only(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

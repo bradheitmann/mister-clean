@@ -37,6 +37,21 @@ State exactly what the isolated check established.
 - A test suite is a control only when a named runner or CI step reaches it.
 - Control wiring and control execution are distinct. For CI claims, inspect the actual run conclusion and steps for the measured commit.
 
+## Validation results are tuples, not exit codes
+
+For every validation used as closure evidence, inspect all three dimensions:
+
+1. the command returned the documented expected status (an unknown or
+   environment-error status is failure, not a fallback);
+2. the semantic result contains no in-scope warning, debt, conditional,
+   skipped, partial, or failure state; and
+3. coverage is complete — verified/total and all class counts reconcile to
+   the independently measured census.
+
+An advisory or intentionally fail-open hook can inform the cleanup, but it
+cannot establish CLEAN. A line such as `PASS (7/10 verified)` or `66 of 68
+classified` is not a pass merely because its process exited zero.
+
 ## Volatile actions
 
 Recheck volatile facts immediately before consequential actions such as deletion, push, worktree removal, or process signaling. Preserve unique evidence before removal and compare content or reachable state, not merely names or file existence.

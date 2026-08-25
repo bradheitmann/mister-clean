@@ -142,7 +142,10 @@ Everything below is MUST unless marked SHOULD.
     parent tables and counts vs. children, reference existence (status
     index, guides, north-star format), dispatch baselines and path
     preflights vs. the live tree, worktree↔owner↔candidate mapping, and
-    generated-surface freshness.
+    generated-surface freshness. For every governed corpus, its explicit
+    lifecycle/evidence/exception classes must form a complete partition: the
+    class counts reconcile to the census, and an unclassified remainder is a
+    failure even if the underlying command returns zero.
 23. **Unbound assertions fail.** A sealing/immutability claim with no seal
     record is fail-open — make it fail, or encode the exemption (void /
     superseded / exempt) explicitly. Lifecycle vocabularies must distinguish
