@@ -8,7 +8,7 @@ import sys, unittest
 from pathlib import Path
 
 EVALS = Path(__file__).resolve().parent
-REQUIRED_MODULES = {"test_skill_contract", "test_validate_closeout"}
+REQUIRED_MODULES = {"test_skill_contract", "test_validate_bundle", "test_validate_closeout"}
 
 loader = unittest.TestLoader()
 suite = loader.discover(start_dir=str(EVALS), pattern="test_*.py")

@@ -1,0 +1,185 @@
+{
+  "record_type": "mister-clean.closure-bundle",
+  "schema_version": "1.0",
+  "run_id": "<stable closeout run id>",
+  "request_ref": "<current Mister Clean invocation>",
+  "report": {
+    "path": "closeout-report.json",
+    "sha256": "<sha256 of the completed report>"
+  },
+  "manifest": {
+    "path": "action-manifest.json",
+    "sha256": "<sha256 of the completed manifest>"
+  },
+  "custody": {
+    "mode": "sidecar",
+    "subject_commit": "<closing subject commit>",
+    "evidence_root": null,
+    "evidence_paths": []
+  },
+  "criteria_discovery": {
+    "source_kind": "exact_bytes",
+    "request_source": {
+      "path": "<operative request bytes path, relative to this bundle>",
+      "sha256": "<sha256 of operative request bytes>"
+    },
+    "source_refs": [
+      {
+        "path": "<criteria-source JSON path, relative to this bundle>",
+        "sha256": "<sha256 of criteria-source JSON>"
+      }
+    ],
+    "request_sha256": "<sha256 of the bounded request source>",
+    "discovered_count": 1,
+    "none_found": false,
+    "criteria_ids": [
+      "<explicit operator acceptance criterion, if any (e.g. wordmark-uses-canonical-letterform)>"
+    ]
+  },
+  "change_inventory": {
+    "start_commit": "<full starting commit>",
+    "subject_commit": "<full closing subject commit>",
+    "changes": []
+  },
+  "planning_discovery": {
+    "unknown": false,
+    "systems": [
+      {
+        "id": "repository-planning",
+        "kind": "repo_files",
+        "sources": [
+          "<planning entrypoint or policy source>"
+        ],
+        "schema_sources": [
+          "<schema, template, or explicit plain-document convention>"
+        ],
+        "validators": [
+          "<validator command or explicit no-validator evidence>"
+        ],
+        "corpus": {
+          "roots": [
+            "<repository-relative planning root>"
+          ],
+          "include_globs": [
+            "**/*.md"
+          ],
+          "total": 0,
+          "classified": 0,
+          "unclassified": 0,
+          "artifacts": []
+        }
+      }
+    ]
+  },
+  "successor_readiness": {
+    "snapshots": {
+      "start": {
+        "kind": "repository_snapshot",
+        "object": "<full starting commit>",
+        "command": "<exact snapshot command>",
+        "result": "<digest or census result>",
+        "observed_at": "<ISO-8601 timestamp>"
+      },
+      "end": {
+        "kind": "repository_snapshot",
+        "object": "<full closing subject commit>",
+        "command": "<exact snapshot command>",
+        "result": "<digest or census result>",
+        "observed_at": "<ISO-8601 timestamp>"
+      }
+    },
+    "target_observation": {
+      "kind": "remote_ref_resolution",
+      "local_ref": "refs/remotes/origin/main",
+      "remote": "origin",
+      "remote_ref": "refs/heads/main",
+      "commit": "<remotely observed target commit>",
+      "observed_at": "<ISO-8601 timestamp>"
+    },
+    "topology": {
+      "worktrees": [],
+      "branches": [],
+      "remote_refs": [],
+      "stashes": [],
+      "processes": [],
+      "dirty": 0,
+      "unowned": 0,
+      "unmerged": 0,
+      "blocking_processes": 0
+    },
+    "current_state": {
+      "state": "designated",
+      "path": "<repository-relative current-state entrypoint>",
+      "sha256": "<sha256 of current-state entrypoint>",
+      "commit": "<closing commit>",
+      "generator": "<generator command or 'authored source'>",
+      "designation": {
+        "path": "<current-state designation JSON path, relative to this bundle>",
+        "sha256": "<sha256 of current-state designation JSON>"
+      }
+    },
+    "gates": [
+      {
+        "id": "fresh-clone",
+        "kind": "isolated_clone",
+        "object": "<closing commit>",
+        "command": "<exact command>",
+        "expected_status": 0,
+        "observed_status": 0,
+        "semantic_status": "pass",
+        "verified": 0,
+        "total": 0,
+        "warnings": 0,
+        "debt": 0,
+        "skipped": 0,
+        "evidence_ref": {
+          "path": "<gate-result JSON path, relative to this bundle>",
+          "sha256": "<sha256 of gate-result JSON>"
+        }
+      }
+    ],
+    "debris": {
+      "removed": 0,
+      "retained": 0,
+      "unclassified": 0,
+      "evidence": [
+        {
+          "path": "<debris-census JSON path, relative to this bundle>",
+          "sha256": "<sha256 of debris-census JSON>"
+        }
+      ]
+    },
+    "handoff": {
+      "entrypoints": [
+        "<current-state or start-here path>"
+      ],
+      "next_owner": "<next owner or 'unassigned-by-policy'>",
+      "next_action": "<one safe next action>"
+    },
+    "final_review": {
+      "mechanism": "<operator/repository-named review mechanism or harness-neutral equivalent>",
+      "status": "passed",
+      "reviewer": "<independent reviewer identity>",
+      "implementer": "<closeout implementer identity>",
+      "reviewer_execution": {
+        "harness": "<review harness>",
+        "session_id": "<review session id>",
+        "receipt_id": "<review execution receipt id>"
+      },
+      "implementer_execution": {
+        "harness": "<implementation harness>",
+        "session_id": "<implementation session id>",
+        "receipt_id": "<implementation execution receipt id>"
+      },
+      "criteria_reviewed": true,
+      "planning_reviewed": true,
+      "findings_total": 0,
+      "findings_paid": 0,
+      "unresolved": 0,
+      "evidence_ref": {
+        "path": "<independent-review JSON path, relative to this bundle>",
+        "sha256": "<sha256 of independent-review JSON>"
+      }
+    }
+  }
+}

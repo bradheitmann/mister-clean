@@ -3,7 +3,7 @@
   "schema_version": "1.1",
   "generated_at": "<ISO-8601 timestamp>",
   "repo": {
-    "path": "<repository path>",
+    "id": "<portable repository identity, e.g. owner/name>",
     "commit": "<commit or working-tree snapshot>",
     "branch": "<branch or detached>"
   },

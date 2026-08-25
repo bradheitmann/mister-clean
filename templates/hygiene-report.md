@@ -9,7 +9,7 @@ management = {layer or none} · enforcement = {hooks/gates + latest run conclusi
 
 ## 1. Verdict — the no-handoff test
 
-**{CLEAN | NOT CLEAN}** — machine-gated: the closeout JSON's `verdict` field
+**{CLEAN | NOT CLEAN}** — machine-gated: the live-bound closure bundle
 is validated (CLEAN is refused while any debt is open/blocked/not_assessed or
 any disposition is decision_or_coordination_required). {one paragraph: could a team with no prior
 background and no handoff clone this, read the entry points, pick up the

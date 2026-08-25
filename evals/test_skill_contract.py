@@ -26,7 +26,8 @@ class InvocationContractTests(unittest.TestCase):
         self.assertEqual(MANIFEST["execution_state"], "authorized")
         self.assertEqual(MANIFEST["authorization_basis"]["source"], "skill_invocation")
         self.assertTrue(MANIFEST["authorization_basis"]["standing"])
-        self.assertEqual(MANIFEST["actions"][0]["authorization"]["state"], "granted")
+        self.assertEqual(MANIFEST["actions"], [])
+        self.assertIn("execution ledger", SKILL)
 
     def test_invocation_is_explicit_only(self):
         # standing authority must never attach to background/implicit selection
@@ -206,6 +207,12 @@ class DistributionContractTests(unittest.TestCase):
         self.assertIn("intentionally read-only", readme)
         self.assertIn("public MCP surface is read-only", security)
         self.assertIn("does not receive repository access", security)
+
+    def test_clean_requires_the_live_bound_bundle(self):
+        bundle = json.loads((ROOT / "assets" / "closure-bundle.json").read_text(encoding="utf-8"))
+        self.assertEqual(bundle["record_type"], "mister-clean.closure-bundle")
+        self.assertIn("scripts/validate_bundle.py", SKILL)
+        self.assertIn("standalone report is structural evidence only", SKILL)
 
     def test_source_manifest_is_complete_and_current(self):
         import hashlib

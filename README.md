@@ -47,7 +47,13 @@ The authoritative local validators remain inside the repository:
 ```sh
 python3 scripts/validate_closeout.py report path/to/closeout-report.json
 python3 scripts/validate_closeout.py manifest path/to/action-manifest.json
+python3 scripts/validate_bundle.py path/to/closure-bundle.json --repo path/to/live-checkout
 ```
+
+For an installed skill, resolve these commands from the directory containing
+the installed `SKILL.md`; do not assume the target repository contains the
+validator scripts. Keep the report, manifest, bundle, and their digest-bound
+evidence records together under one run directory.
 
 Run the full project check before proposing a release:
 

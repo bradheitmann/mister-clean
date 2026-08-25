@@ -96,7 +96,11 @@ lockfile was hand-edited. No skipped test lacks an owner and exit condition.
 1. `README.md` — purpose, setup, and established runners.
 2. `docs/CURRENT-STATE.md` — current state, constraints, and next safe action.
 3. `docs/decisions/` — durable architectural decisions.
-4. `evidence/closeout-report.json` — machine-validated closure bundle.
+4. `evidence/closeout-report.json` — human- and machine-readable closeout report.
+5. `evidence/action-manifest.json` — authorized/executed action record.
+6. `evidence/closure-bundle.json` — live-bound CLEAN proof tying the report,
+   manifest, criteria, planning census, topology, gates, and final review to
+   one invocation and repository object.
 
 Next safe action: claim the highest-priority roadmap item named in
 `docs/CURRENT-STATE.md`; no cleanup archaeology is required first.

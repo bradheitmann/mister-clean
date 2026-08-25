@@ -7,13 +7,14 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 
 DIMENSION_STATES = {"satisfied", "open", "blocked", "not_assessed", "not_applicable"}
 CLAIM_STATES = {"established", "not_established", "not_assessed", "not_applicable"}
-DEBT_STATES = {"satisfied", "open", "blocked", "deferred", "not_assessed"}
+DEBT_STATES = {"satisfied", "accepted_exception", "open", "blocked", "deferred", "not_assessed"}
 RECOMMENDATIONS = {"proceed", "proceed_with_conditions", "do_not_proceed", "not_assessed"}
 MODES = {"AUDIT", "CLEAN", "CLOSE", "CONFORM"}
 EXECUTION_STATES = {"authorized", "executed"}
@@ -72,6 +73,16 @@ GENERIC_FILLER = {"measured", "fixture-value", "n/a", "na", "done", "ok",
                   "verified", "pass", "true", "yes", "-", "tbd", "todo",
                   "checked", "clean", "good"}
 
+DIMENSION_EVIDENCE_KINDS = {
+    "completion_debt": {"debt_census", "acceptance_execution"},
+    "repository_state": {"git_topology"},
+    "planning_integrity": {"planning_census"},
+    "verification": {"validation_summary"},
+    "handoff_readiness": {"successor_readiness"},
+}
+ACTION_EVIDENCE_KINDS = {"git_change", "validation_result", "remote_ref_resolution", "process_observation", "tracker_receipt", "independent_qa_verdict"}
+DEBT_EVIDENCE_KINDS = {"acceptance_execution", "gate_result", "historical_record"}
+
 
 def _is_generic(v):
     """A single generic adjective/filler token is not evidence."""
@@ -79,6 +90,8 @@ def _is_generic(v):
         return v.strip().casefold() in GENERIC_FILLER or len(v.strip()) < 3
     if isinstance(v, (list, tuple)):
         return all(_is_generic(x) for x in v) if v else True
+    if isinstance(v, dict):
+        return not any(_debt_meaningful(x) for x in v.values())
     return False
 def _debt_meaningful(x):
     if isinstance(x, str):
@@ -135,6 +148,25 @@ def nonempty(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def iso_timestamp(value: Any) -> bool:
+    if not nonempty(value):
+        return False
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def digest_ref(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and nonempty(value.get("path"))
+        and isinstance(value.get("sha256"), str)
+        and bool(re.fullmatch(r"[0-9a-f]{64}", value["sha256"]))
+    )
+
+
 def require_keys(obj: Any, keys: set[str], path: str, errors: list[str]) -> None:
     if not isinstance(obj, dict):
         errors.append(f"{path}: expected object")
@@ -170,7 +202,11 @@ def validate_authorization_basis(basis: Any, path: str, errors: list[str]) -> No
         errors.append(f"{path}.standing: expected true")
 
 
-def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
+def validate_report(
+    data: Any,
+    allow_placeholders: bool = False,
+    bundle_context: bool = False,
+) -> list[str]:
     errors: list[str] = []
     require_keys(
         data,
@@ -203,6 +239,12 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
     if data["mode"] not in MODES:
         errors.append(f"$.mode: unsupported value {data['mode']!r}")
     validate_authorization_basis(data["authorization_basis"], "$.authorization_basis", errors)
+    repo = data.get("repo") or {}
+    if not allow_placeholders:
+        if not nonempty(repo.get("id")):
+            errors.append("$.repo.id: required portable repository identity")
+        if not (isinstance(repo.get("commit"), str) and re.fullmatch(r"[0-9a-f]{7,40}", repo.get("commit") or "")):
+            errors.append("$.repo.commit: required 7-40 char hex object id")
 
     target = data["target_binding"]
     require_keys(
@@ -324,6 +366,8 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
     verdict = data.get("verdict")
     if verdict not in VERDICTS:
         errors.append(f"$.verdict: required, CLEAN or NOT_CLEAN (got {verdict!r})")
+    if verdict == "CLEAN" and not bundle_context:
+        errors.append("$.verdict: CLEAN requires validation through a live-bound mister-clean.closure-bundle; a standalone report is structural evidence only")
     debts = data.get("completion_debts") or []
     seen_ids = set()
     docr = []
@@ -346,19 +390,38 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
         elif disp not in DISPOSITIONS:
             errors.append(f"$.completion_debts[{i}].disposition: unsupported {disp!r}")
         if disp == "accepted_exception":
-            for k in ("authority", "scope", "rationale"):
-                if not nonempty(d.get(k)):
-                    errors.append(f"$.completion_debts[{i}].{k}: required for accepted_exception")
+            if d.get("state") != "accepted_exception":
+                errors.append(f"$.completion_debts[{i}]: accepted_exception disposition requires state=accepted_exception (one row, one terminal bucket)")
+            exception = d.get("exception")
+            require_keys(exception, {"actor", "at", "ref", "scope", "rationale"}, f"$.completion_debts[{i}].exception", errors)
+            if isinstance(exception, dict):
+                for key in ("actor", "scope", "rationale"):
+                    if not nonempty(exception.get(key)):
+                        errors.append(f"$.completion_debts[{i}].exception.{key}: required for accepted_exception")
+                if not iso_timestamp(exception.get("at")):
+                    errors.append(f"$.completion_debts[{i}].exception.at: required timezone-aware ISO-8601 timestamp")
+                ref = exception.get("ref")
+                if not (isinstance(ref, dict) and nonempty(ref.get("path")) and re.fullmatch(r"[0-9a-f]{64}", str(ref.get("sha256", "")))):
+                    errors.append(f"$.completion_debts[{i}].exception.ref: required digest-bound evidence reference {{path,sha256}}")
+        elif d.get("state") == "accepted_exception":
+            errors.append(f"$.completion_debts[{i}].disposition: state=accepted_exception requires disposition=accepted_exception")
         if d.get("class") in STALE_DOC_CLASSES and disp == "accepted_exception":
             errors.append(f"$.completion_debts[{i}].disposition: a reviewer-reported stale doc/comment is PAYABLE regardless of severity label -- accepted_exception is for irreparable historical limits only; fix the doc before CLEAN")
         if disp == "decision_or_coordination_required":
             docr.append(did or f"#{i}")
         if d.get("state") == "satisfied":
             ev = d.get("evidence")
-            if isinstance(ev, str):
-                errors.append(f"$.completion_debts[{i}].evidence: satisfied debt requires a TYPED evidence list, not a bare string")
-            elif not (isinstance(ev, list) and any(_debt_meaningful(x) for x in ev)):
-                errors.append(f"$.completion_debts[{i}].evidence: satisfied debt requires a nonempty list of meaningful entries")
+            typed = [entry for entry in ev or [] if isinstance(entry, dict)] if isinstance(ev, list) else []
+            required = ("kind", "object", "command", "result", "observed_at")
+            if not any(
+                entry.get("kind") in DEBT_EVIDENCE_KINDS
+                and
+                all(nonempty(entry.get(key)) for key in required[:-1])
+                and iso_timestamp(entry.get("observed_at"))
+                and digest_ref(entry.get("evidence_ref"))
+                for entry in typed
+            ):
+                errors.append(f"$.completion_debts[{i}].evidence: satisfied debt requires allowlisted, time-bound, digest-referenced execution evidence")
     # residuals must be typed; CLEAN constrains their kinds
     residuals = data.get("residuals") or []
     for i, r in enumerate(residuals):
@@ -427,8 +490,17 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
             dd = dims.get(name) or {}
             st = dd.get("state")
             if st == "satisfied":
-                if _is_generic(dd.get("evidence")):
-                    errors.append(f"$.dimensions.{name}: CLEAN requires SPECIFIC satisfied evidence (a command/count/sha/path), not a generic token like 'measured'")
+                evidence = dd.get("evidence")
+                typed = [entry for entry in evidence or [] if isinstance(entry, dict)]
+                required = ("kind", "object", "command", "result")
+                allowed = DIMENSION_EVIDENCE_KINDS[name]
+                if not any(
+                    entry.get("kind") in allowed
+                    and all(nonempty(entry.get(key)) for key in required)
+                    and iso_timestamp(entry.get("observed_at"))
+                    for entry in typed
+                ):
+                    errors.append(f"$.dimensions.{name}: CLEAN requires time-bound evidence kind {sorted(allowed)} with object/command/result")
                 continue
             if st == "not_applicable":
                 na += 1
@@ -456,8 +528,10 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
                 disc = int(census.get("discovered")); paid = int(census.get("paid")); acc = int(census.get("accepted_exception"))
                 if disc != paid + acc:
                     errors.append(f"$.debt_census: discovered ({disc}) must equal paid ({paid}) + accepted_exception ({acc})")
+                if disc != len(seen_ids):
+                    errors.append(f"$.debt_census.discovered ({disc}) != unique completion_debts ledger entries ({len(seen_ids)})")
                 sat = sum(1 for d in debts if isinstance(d, dict) and d.get("state") == "satisfied")
-                exc = sum(1 for d in debts if isinstance(d, dict) and d.get("disposition") == "accepted_exception")
+                exc = sum(1 for d in debts if isinstance(d, dict) and d.get("state") == "accepted_exception")
                 if paid != sat:
                     errors.append(f"$.debt_census.paid ({paid}) != satisfied ledger entries ({sat})")
                 if acc != exc:
@@ -475,16 +549,14 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
     if not allow_placeholders:
         repo = data.get("repo") or {}
         import re as _re
-        if not (isinstance(repo.get("path"), str) and repo["path"].startswith("/")):
-            errors.append("$.repo.path: required absolute path")
         if not (isinstance(repo.get("commit"), str) and _re.fullmatch(r"[0-9a-f]{7,40}", repo.get("commit") or "")):
             errors.append("$.repo.commit: required 7-40 char hex object id")
         target = data.get("target_binding") or {}
         for field in ("target_commit", "candidate_commit", "merge_base"):
             if not (isinstance(target.get(field), str) and _re.fullmatch(r"[0-9a-f]{7,40}", target.get(field) or "")):
                 errors.append(f"$.target_binding.{field}: required 7-40 char hex object id")
-        if not nonempty(data.get("generated_at")):
-            errors.append("$.generated_at: required")
+        if not iso_timestamp(data.get("generated_at")):
+            errors.append("$.generated_at: required timezone-aware ISO-8601 timestamp")
     claims = data.get("claims") or {}
     for name, claim in claims.items():
         if not isinstance(claim, dict):
@@ -528,10 +600,18 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
             if _rc and v != _rc:
                 errors.append(f"$.claims.{k}: CLEAN requires claim commit {v!r} to equal repo.commit {_rc!r}")
         # report actions must be finished or explicitly skipped-with-reason
+        seen_action_ids: set[str] = set()
         for i, a in enumerate(data.get("actions") or []):
             if not isinstance(a, dict):
                 errors.append(f"$.actions[{i}]: expected object")
                 continue
+            action_id = a.get("id")
+            if not nonempty(action_id):
+                errors.append(f"$.actions[{i}].id: required")
+            elif action_id in seen_action_ids:
+                errors.append(f"$.actions[{i}].id: duplicate {action_id!r}")
+            else:
+                seen_action_ids.add(action_id)
             st = a.get("status")
             if st in ("planned", "failed", "blocked", None):
                 errors.append(f"$.actions[{i}]: CLEAN forbidden with unfinished/failed action (status={st!r})")
@@ -625,6 +705,12 @@ def validate_manifest(data: Any, allow_placeholders: bool = False) -> list[str]:
         errors.append(f"$.execution_state: unsupported value {execution_state!r}")
     if data["mode"] not in {"CLEAN", "CLOSE", "CONFORM"}:
         errors.append("$.mode: action manifest requires CLEAN, CLOSE, or CONFORM")
+    repo = data.get("repo") or {}
+    if not allow_placeholders:
+        if not nonempty(repo.get("id")):
+            errors.append("$.repo.id: required portable repository identity")
+        if not (isinstance(repo.get("commit"), str) and re.fullmatch(r"[0-9a-f]{7,40}", repo.get("commit") or "")):
+            errors.append("$.repo.commit: required 7-40 char hex object id")
     if not nonempty(data["request_ref"]):
         errors.append("$.request_ref: required")
     validate_authorization_basis(data["authorization_basis"], "$.authorization_basis", errors)
@@ -697,8 +783,15 @@ def validate_manifest(data: Any, allow_placeholders: bool = False) -> list[str]:
                 if outcome.get("state") != "verified":
                     errors.append(f"{path}.outcome.state: executed action requires verified")
                 oev = outcome.get("evidence")
-                if not (isinstance(oev, list) and any(_debt_meaningful(x) for x in oev)):
-                    errors.append(f"{path}.outcome.evidence: executed action requires meaningful typed evidence (not [], [null], or [{{}}])")
+                typed = [item for item in oev or [] if isinstance(item, dict)] if isinstance(oev, list) else []
+                if not any(
+                    item.get("kind") in ACTION_EVIDENCE_KINDS
+                    and nonempty(item.get("object")) and nonempty(item.get("command"))
+                    and nonempty(item.get("result")) and iso_timestamp(item.get("observed_at"))
+                    and digest_ref(item.get("evidence_ref"))
+                    for item in typed
+                ):
+                    errors.append(f"{path}.outcome.evidence: executed action requires allowlisted, time-bound, digest-referenced execution evidence")
     if not allow_placeholders:
         for path in find_placeholders(data):
             errors.append(f"{path}: unresolved template placeholder")
@@ -740,15 +833,12 @@ def validate_manifest(data: Any, allow_placeholders: bool = False) -> list[str]:
                 errors.append(f"$.actions[{i}].verification: executed action requires meaningful evidence (not empty/null placeholders)")
         if not allow_placeholders:
             LOCAL_KINDS = {"local_edit", "local_move", "recoverable_delete", "doc_update", "planning_record_update", "historical_conform", "handoff_update"}
-            repo_path = ((data.get("repo") or {}).get("path")) or ""
             tgt = a.get("target")
             if a.get("kind") in LOCAL_KINDS and isinstance(tgt, str) and tgt:
                 import posixpath as _pp
-                base = repo_path.rstrip("/") if repo_path else ""
-                # resolve BOTH absolute and relative (traversal) targets against the repo root
-                resolved = _pp.normpath(tgt if tgt.startswith("/") else _pp.join(base, tgt))
-                if not (base and (resolved == base or resolved.startswith(base + "/"))):
-                    errors.append(f"$.actions[{i}].target: {a.get('kind')} target {tgt!r} resolves to {resolved!r}, outside the authorized repository {base!r} (traversal/out-of-scope rejected)")
+                normalized = _pp.normpath(tgt)
+                if tgt.startswith("/") or normalized == ".." or normalized.startswith("../") or normalized == ".git" or normalized.startswith(".git/"):
+                    errors.append(f"$.actions[{i}].target: local mutation target must be repository-relative, non-traversing, and outside .git (got {tgt!r})")
             if a.get("kind") == "agent_dispatch":
                 mech = a.get("mechanism")
                 if mech not in ("in_session_subagent", "external_orchestrated_agent"):

@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 5.4.8
+  version: 5.5.0
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v5.4.8
+# Mister Clean — v5.5.0
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -94,11 +94,18 @@ prove the gates fail on representative contradictions · ignored and external
 state is explicitly accounted for · historical limitations are ratified
 accepted exceptions, not ambiguous residuals · no unresolved principal
 decision or hard-boundary blocker remains; AND, once the run would otherwise
-be clean, the `/swarm-review` final gate has run (seven read-only specialists
-+ ATLAS synthesis), its clear-pre-implementation findings are remediated, and
+be clean, the final independent-review mechanism named by repository/operator
+policy has run (use `/swarm-review` exactly when installed or explicitly
+required; otherwise use a harness-neutral independent equivalent), its clear
+pre-implementation findings are remediated, and
 any in-domain class it surfaced that the closeout missed has become a skill
-revision followed by a fresh re-audit (see evals/blind-run-contract.md). The closeout JSON's `verdict`
-field is machine-gated by `scripts/validate_closeout.py`: CLEAN is refused
+improvement candidate; pay the repository finding and run a fresh repository
+re-audit. Revise Mister Clean in the same run only when the skill repository
+is explicitly in scope (as it is during Mister Clean development), then test
+the revision through a fresh bare invocation (see evals/blind-run-contract.md). A
+standalone report is structural evidence only. CLEAN is machine-gated by the
+live-bound [assets/closure-bundle.json](assets/closure-bundle.json) through
+`scripts/validate_bundle.py`: CLEAN is refused
 with any open/blocked/deferred/not_assessed debt, any
 decision_or_coordination_required, unsatisfied dimensions, a missing debt
 census, blocked residuals, a stale target binding, or a non-`proceed`
@@ -165,6 +172,18 @@ pacing ceiling limits SIMULTANEOUS work, not TOTAL work. Protocol:
 
 Do not downgrade a bare invocation to AUDIT because the request is short. The
 skill name is the request.
+
+## Fast route
+
+1. Freeze the live Git, worktree, process, planning, and request snapshot.
+2. Discover the repository's actual procedure graph and acceptance criteria.
+3. Start an empty, incremental action ledger; do not pre-plan the whole close.
+4. Pay executable debt before conformance and cosmetic cleanup.
+5. Integrate the current target and rerun every affected established gate.
+6. Produce the committed current-state/handoff surface a fresh clone needs.
+7. Run independent final review; pay its in-scope findings; re-audit.
+8. Build and live-validate one colocated closure bundle against the subject.
+9. Return CLEAN only when that bundle passes; otherwise return precise NOT CLEAN.
 
 ## The verdict model
 
@@ -319,11 +338,50 @@ nobody runs is not a control.
 
 ### 3. Record the execution ledger
 
-Copy [assets/action-manifest.json](assets/action-manifest.json) into a
-collision-free temporary directory, fill it, and validate:
+Resolve `MISTER_CLEAN_ROOT` to the directory containing **this installed
+`SKILL.md`**. Validator paths are always relative to that root, never the
+target repository's current directory. Create this collision-free layout in
+the target repository's established evidence home (which may be ignored-local
+when a fresh clone does not need the proof files):
+
+```text
+<evidence-home>/mister-clean/<run-id>/
+  action-manifest.json
+  closeout-report.json
+  closure-bundle.json
+  criteria-source.json
+  gate-*.json
+  debris-census.json
+  independent-review.json
+```
+
+Copy [assets/action-manifest.json](assets/action-manifest.json) into that
+directory. It intentionally starts with `actions: []`. Add each material
+action immediately before or when it becomes concrete; do not predict the
+entire repair program before beginning. Validate only the incremental ledger
+at this stage:
+
+Prefer the bounded initializer when available; it creates the layout and
+records the live Git/topology/planning census while making **no CLEAN claim**:
 
 ```bash
-python3 scripts/validate_closeout.py manifest path/to/action-manifest.json
+python3 "$MISTER_CLEAN_ROOT/scripts/prepare_bundle.py" \
+  --repo "<live-checkout-root>" --evidence-home "<evidence-home>" \
+  --run-id "<run-id>" --request-ref "<invocation-ref>" \
+  --request-text "<exact operative invocation text>" \
+  --criterion "<criterion-id>"
+```
+
+Repeat `--criterion` for every explicit criterion. Capture the exact operative
+invocation at initialization with `--request-text`; if a durable exact-byte
+source already exists, use `--request-source` instead. Omit both only for an
+audit or interim NOT CLEAN scaffold: that records `reference_only` and can
+never establish CLEAN. Independent review must examine the extracted criteria
+set before close.
+
+```bash
+python3 "$MISTER_CLEAN_ROOT/scripts/validate_closeout.py" manifest \
+  "<evidence-home>/mister-clean/<run-id>/action-manifest.json"
 ```
 
 The manifest is an execution ledger, not an approval request. Classify every
@@ -335,7 +393,8 @@ by the validator: `agent_dispatch`, `acceptance_execute`, `local_edit`, `local_m
 `stash_preserve`, `stash_drop`, `branch_delete_local`,
 `branch_delete_remote`, `worktree_remove`, `process_signal`,
 `tracker_write`, `historical_conform`, `handoff_update`. Do not invent kinds;
-do not pause after validation. Execute.
+do not pause after validation. Execute. Keep the report's action rows exactly
+equal to this canonical ledger; the live bundle rejects merely matching IDs.
 
 ### 4. Finish, conform, clean — in that order
 
@@ -436,8 +495,44 @@ constraints; validation commands and results; genuine residual work with
 owner and next action.
 
 Validate a filled [assets/closeout-report.json](assets/closeout-report.json)
-(`python3 scripts/validate_closeout.py report …`), store it in the
-repository's established evidence home. The validator enforces TYPED evidence
+and [assets/action-manifest.json](assets/action-manifest.json), then bind both
+through [assets/closure-bundle.json](assets/closure-bundle.json). Do this
+**after** the final subject commit, target observation, current-state artifact,
+planning census, topology census, gate records, debris census, and independent
+review exist:
+
+```bash
+python3 "$MISTER_CLEAN_ROOT/scripts/validate_closeout.py" manifest \
+  "<bundle-dir>/action-manifest.json"
+python3 "$MISTER_CLEAN_ROOT/scripts/validate_bundle.py" \
+  "<bundle-dir>/closure-bundle.json" --repo "<live-checkout-root>"
+```
+
+The primary JSON files and every referenced proof record remain colocated.
+Repository identity in the durable records is portable (`repo.id` + subject
+commit), never a machine-specific absolute path; `--repo` supplies the live
+checkout only during validation. `custody.mode: sidecar` binds a clean live
+HEAD to the subject without a self-referential commit. Receipt-commit custody
+is deliberately unsupported: embedding a receipt's own commit identity creates
+a circular proof and makes target/topology binding ambiguous. A fresh clone
+must never depend
+on ignored/sidecar proof files to operate; committed current-state and handoff
+surfaces carry the operational truth.
+
+Current-state discovery is tri-state: `missing` and `candidate_unverified`
+are honest, payable states during the run; only `designated` may establish
+CLEAN. Never silently promote a generic README. A designated surface binds
+its path, digest, subject commit, and repository/operator designation through
+`mister-clean.current-state-designation` evidence.
+
+The package's own template self-check is separate and never a closeout gate:
+
+```bash
+python3 "$MISTER_CLEAN_ROOT/scripts/validate_bundle.py" \
+  "$MISTER_CLEAN_ROOT/assets/closure-bundle.json" --template
+```
+
+The validator enforces TYPED evidence
 (learned by failing it in the field): claim evidence entries are objects —
 `git_commit{commit}`, `remote_ref_resolution{remote,ref,commit,observed_at}`,
 `established_ci{provider,run_id,commit,conclusion}`,
@@ -450,6 +545,26 @@ system), and render the human report from
 [templates/hygiene-report.md](templates/hygiene-report.md) or
 [templates/session-close-report.md](templates/session-close-report.md). A
 filled public-safe example: [examples/example-report.md](examples/example-report.md).
+
+The end bundle also reconciles the full start-commit → subject-commit Git diff
+against the canonical action ledger. Every changed path maps to a concrete
+executed action; an empty ledger is valid only when the two commits have no
+material diff. A preexisting or concurrent change adopted into the subject is
+still an integration action, not an exclusion. Action and satisfied-
+debt outcomes require allowlisted, time-bound execution records, not prose.
+Reviewer/implementer labels are normalized and their harness/session/receipt
+identities must be distinct. A local bundle may live-resolve Git commits and
+remote refs, but it cannot promote local assertions into established CI,
+deployment, or independent-QA claims without a configured trusted adapter;
+keep those claims `not_established` or policy-bound `not_applicable`.
+
+**Trust boundary.** These validators prevent accidental false closure by a
+cooperating agent; they are not a cryptographic defense against an actor that
+can rewrite both evidence and validator code. Local execution records prove
+schema, digest, time, object, and cross-artifact agreement. Claims that require
+an external authority remain unestablished without a trusted adapter. Do not
+inflate ordinary repository closeout into hardware attestation or an
+unobtainable independent trust root.
 
 **Optional state instrument.** When a visual overview materially helps an
 operator see convergence across Git, planning, code, validation, completion
@@ -466,6 +581,11 @@ repository or report, it is stale debt and must be regenerated or removed.
 Do not return a proposed plan when executable work remained. A valid result
 is changed repository state plus evidence, or a precise hard-boundary report
 after every independent action has been completed.
+
+An honest `NOT CLEAN` report does not wait for a passing CLEAN bundle. The
+bundle validator accepts evidenced unresolved dimensions, gates, review
+findings, stashes, and blockers when the report verdict is NOT CLEAN; the
+zero-debt/passing-state requirements activate only for CLEAN.
 
 ## Red flags — thoughts that mean you are about to fail
 

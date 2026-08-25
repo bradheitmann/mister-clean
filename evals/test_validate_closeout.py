@@ -31,7 +31,7 @@ def fill_placeholders(value):
 def bind_report(r):
     """canonical binding: make a filled report satisfy v5 repo-binding checks"""
     r["generated_at"] = "2026-08-25T04:00:00Z"
-    r["repo"] = {"path": "/tmp/fixture-repo", "commit": "a" * 40, "branch": "main"}
+    r["repo"] = {"id": "fixture/repo", "commit": "a" * 40, "branch": "main"}
     r["target_binding"] = {
         "target_ref": "origin/main",
         "target_commit": "a" * 40,
@@ -47,7 +47,10 @@ def bind_report(r):
 
 
 def load_filled_asset(name: str):
-    return bind_report(fill_placeholders(load_asset(name)))
+    value = bind_report(fill_placeholders(load_asset(name)))
+    if name == "action-manifest.json" and not value["actions"]:
+        value["actions"] = [sample_local_action()]
+    return value
 
 
 def clean_claims(commit):
@@ -66,8 +69,33 @@ def clean_claims(commit):
 
 def specific_dims():
     return {name: {"state": "satisfied",
-                   "evidence": [f"{name}: ran gate, exit 0, 12/12"], "notes": []}
+                   "evidence": [{"kind": next(iter(VALIDATOR.DIMENSION_EVIDENCE_KINDS[name])),
+                                 "object": "a" * 40,
+                                 "command": f"verify {name}",
+                                 "result": "exit 0; 12/12 verified",
+                                 "observed_at": "2026-08-25T04:00:00Z"}],
+                   "notes": []}
             for name in VALIDATOR.REQUIRED_DIMENSIONS}
+
+
+def typed_debt_evidence():
+    return [{"kind": "acceptance_execution", "object": "a" * 40,
+             "command": "run independent acceptance review", "result": "accepted 1/1",
+             "observed_at": "2026-08-25T04:00:00Z",
+             "evidence_ref": {"path": "debt-result.json", "sha256": "c" * 64}}]
+
+
+def ruling_ref():
+    return {"path": "operator-ruling.json", "sha256": "b" * 64}
+
+
+def sample_local_action():
+    return {
+        "id": "A-LOCAL", "kind": "local_edit", "target": "docs/current.md",
+        "purpose": "repair handoff state", "risk": "reversible_local",
+        "authorization": {"state": "granted", "source": "skill_invocation", "ref": "fixture-value"},
+        "preconditions": [], "verification": ["document validator passed"],
+    }
 
 
 def push_action():
@@ -266,7 +294,10 @@ class ManifestValidationTests(unittest.TestCase):
         action = push_action()
         action["outcome"] = {
             "state": "verified",
-            "evidence": [{"remote_ref": "origin/feature/docs", "commit": "abc123def"}],
+            "evidence": [{"kind": "remote_ref_resolution", "object": "origin/feature/docs",
+                          "command": "git ls-remote origin refs/heads/feature/docs",
+                          "result": "abc123def", "observed_at": "2026-08-25T04:00:00Z",
+                          "evidence_ref": {"path": "action-result.json", "sha256": "d" * 64}}],
         }
         manifest["actions"] = [action]
         self.assertEqual(VALIDATOR.validate_manifest(manifest), [])
@@ -338,20 +369,19 @@ class V5RulingGateTests(unittest.TestCase):
     def test_accepted_exception_without_authority_is_refused(self):
         r = self._base()
         r["verdict"] = "NOT_CLEAN"
-        r["completion_debts"] = [{"id": "D4", "procedure": "x->y", "state": "deferred",
-                                  "disposition": "accepted_exception", "evidence": "e", "ruling": {"actor": "principal", "date": "2026-08-25", "reason": "r", "next_owner": "o", "ref": "ref"}}]
+        r["completion_debts"] = [{"id": "D4", "procedure": "x->y", "state": "accepted_exception",
+                                  "disposition": "accepted_exception", "evidence": "e"}]
         errs = VALIDATOR.validate_report(r)
-        for k in ("authority", "scope", "rationale"):
-            self.assertTrue(any(f".{k}: required" in e for e in errs), (k, errs))
+        self.assertTrue(any(".exception" in e for e in errs), errs)
 
     def test_accepted_exception_with_authority_passes(self):
         r = self._base()
         r["verdict"] = "NOT_CLEAN"
-        r["completion_debts"] = [{"id": "D5", "procedure": "x->y", "state": "deferred",
-                                  "disposition": "accepted_exception", "evidence": "e", "ruling": {"actor": "principal", "date": "2026-08-25", "reason": "r", "next_owner": "o", "ref": "ref"},
-                                  "authority": "principal ruling 2026-08-25",
-                                  "scope": "historical reviewer provenance only",
-                                  "rationale": "history cannot be un-authored"}]
+        r["completion_debts"] = [{"id": "D5", "procedure": "x->y", "state": "accepted_exception",
+                                  "disposition": "accepted_exception", "evidence": "e",
+                                  "exception": {"actor": "principal", "at": "2026-08-25T04:00:00Z",
+                                                "ref": ruling_ref(), "scope": "historical reviewer provenance only",
+                                                "rationale": "history cannot be un-authored"}}]
         self.assertEqual(VALIDATOR.validate_report(r), [])
 
     def test_legacy_unrecoverable_requires_authority_and_scope(self):
@@ -382,10 +412,10 @@ class V5RulingGateTests(unittest.TestCase):
         r["claims"] = clean_claims((r.get("repo") or {}).get("commit"))
         r["debt_census"] = {"discovered": 1, "paid": 1, "accepted_exception": 0}
         r["completion_debts"] = [{"id": "D-OK", "procedure": "x->y", "state": "satisfied",
-                                  "disposition": "autonomously_validate", "evidence": ["verdict ref"]}]
+                                  "disposition": "autonomously_validate", "evidence": typed_debt_evidence()}]
         r["residuals"] = []
         r["handoff_assessment"] = {"recommendation": "proceed", "reasons": ["all debt paid"], "conditions": []}
-        self.assertEqual(VALIDATOR.validate_report(r), [])
+        self.assertEqual(VALIDATOR.validate_report(r, bundle_context=True), [])
 
     def test_clean_with_blocked_residual_is_refused(self):
         r = self._base()
@@ -412,6 +442,35 @@ class V5RulingGateTests(unittest.TestCase):
         errs = VALIDATOR.validate_report(r)
         self.assertTrue(any("deferred (unpaid work cannot be CLEAN" in e for e in errs), errs)
 
+    def test_accepted_exception_is_one_exclusive_census_bucket(self):
+        r = self._base()
+        r["dimensions"] = specific_dims()
+        r["claims"] = clean_claims(r["repo"]["commit"])
+        r["completion_debts"] = [{
+            "id": "D-HIST", "procedure": "historical provenance -> disposition",
+            "state": "accepted_exception", "disposition": "accepted_exception",
+            "evidence": [{"kind": "historical_record", "ref": "history.md"}],
+            "exception": {"actor": "principal", "at": "2026-08-25T04:00:00Z",
+                          "ref": ruling_ref(), "scope": "historical provenance",
+                          "rationale": "cannot be reconstructed without fabrication"},
+        }]
+        r["debt_census"] = {"discovered": 1, "paid": 0, "accepted_exception": 1}
+        r["residuals"] = []
+        r["handoff_assessment"] = {"recommendation": "proceed", "reasons": ["bound exception"], "conditions": []}
+        self.assertEqual(VALIDATOR.validate_report(r, bundle_context=True), [])
+
+    def test_satisfied_plus_accepted_exception_double_count_is_refused(self):
+        r = self._base()
+        r["verdict"] = "NOT_CLEAN"
+        r["completion_debts"] = [{
+            "id": "D-DOUBLE", "procedure": "x->y", "state": "satisfied",
+            "disposition": "accepted_exception", "evidence": [{"kind": "result", "ref": "x"}],
+            "exception": {"actor": "principal", "at": "2026-08-25T04:00:00Z",
+                          "ref": ruling_ref(), "scope": "s", "rationale": "r"},
+        }]
+        errs = VALIDATOR.validate_report(r)
+        self.assertTrue(any("one row, one terminal bucket" in e for e in errs), errs)
+
     def test_missing_verdict_is_refused(self):
         r = self._base()
         del r["verdict"]
@@ -437,24 +496,25 @@ class V5CheckerClassTests(unittest.TestCase):
         r["completion_debts"] = [{"id": "S1", "procedure": "x->y", "state": "satisfied",
                                   "disposition": "autonomously_validate", "evidence": "a bare string"}]
         errs = VALIDATOR.validate_report(r)
-        self.assertTrue(any("TYPED evidence list" in e for e in errs), errs)
+        self.assertTrue(any("allowlisted" in e for e in errs), errs)
 
     def test_satisfied_debt_typed_list_passes(self):
         r = load_filled_asset("closeout-report.json")
         r["verdict"] = "NOT_CLEAN"
         r["completion_debts"] = [{"id": "S2", "procedure": "x->y", "state": "satisfied",
                                   "disposition": "autonomously_validate",
-                                  "evidence": [{"kind": "verdict_ref", "ref": "story-reviews/X.md"}]}]
-        self.assertEqual(VALIDATOR.validate_report(r), [])
+                                  "evidence": typed_debt_evidence()}]
+        self.assertEqual(VALIDATOR.validate_report(r, bundle_context=True), [])
 
     def _mani(self):
         m = fill_placeholders(load_asset("action-manifest.json"))
-        m["repo"] = {"path": "/tmp/fixture-repo", "commit": "a" * 40}
+        m["repo"] = {"id": "fixture/repo", "commit": "a" * 40}
         m["request_ref"] = "operator invocation"
         m["authorization_basis"]["ref"] = "operator invocation"
+        m["actions"] = [sample_local_action()]
         for a in m["actions"]:
             a["authorization"]["ref"] = "operator invocation"
-            a["target"] = "/tmp/fixture-repo/file.md"
+            a["target"] = "file.md"
         return m
 
     def test_executed_outcome_empty_object_evidence_refused(self):
@@ -464,14 +524,14 @@ class V5CheckerClassTests(unittest.TestCase):
         m["actions"][0]["status"] = "executed"
         m["actions"][0]["verification"] = ["real check"]
         errs = VALIDATOR.validate_manifest(m)
-        self.assertTrue(any("meaningful typed evidence" in e for e in errs), errs)
+        self.assertTrue(any("allowlisted" in e for e in errs), errs)
 
     def test_local_edit_outside_repo_refused(self):
         m = self._mani()
         m["actions"][0]["kind"] = "local_edit"
         m["actions"][0]["target"] = "/etc/hosts"
         errs = VALIDATOR.validate_manifest(m)
-        self.assertTrue(any("outside the authorized repository" in e for e in errs), errs)
+        self.assertTrue(any("repository-relative" in e for e in errs), errs)
 
     def test_agent_dispatch_without_mechanism_refused(self):
         m = self._mani()
@@ -602,12 +662,12 @@ class V55VerdictIntegrityTests(unittest.TestCase):
         r = self._clean()
         r["acceptance_criteria"] = [{"id": "brand-wordmark", "source": "operator", "met": False,
                                      "waiver": {"actor": "operator", "ref": "ruling 2026-08-25"}}]
-        self.assertEqual(VALIDATOR.validate_report(r), [])
+        self.assertEqual(VALIDATOR.validate_report(r, bundle_context=True), [])
 
     def test_met_criterion_permits_clean(self):
         r = self._clean()
         r["acceptance_criteria"] = [{"id": "brand-wordmark", "source": "operator", "met": True}]
-        self.assertEqual(VALIDATOR.validate_report(r), [])
+        self.assertEqual(VALIDATOR.validate_report(r, bundle_context=True), [])
 
     def test_stale_doc_debt_cannot_be_accepted_exception(self):
         r = self._clean()
@@ -641,14 +701,14 @@ class V54FalseGreenTests(unittest.TestCase):
         return r
 
     def test_specific_evidence_clean_passes(self):
-        self.assertEqual(VALIDATOR.validate_report(self._clean_specific()), [])
+        self.assertEqual(VALIDATOR.validate_report(self._clean_specific(), bundle_context=True), [])
 
     def test_generic_dimension_evidence_refused_for_clean(self):
         r = self._clean_specific()
         for name in VALIDATOR.REQUIRED_DIMENSIONS:
             r["dimensions"][name] = {"state": "satisfied", "evidence": ["measured"], "notes": []}
         errs = VALIDATOR.validate_report(r)
-        self.assertTrue(any("SPECIFIC satisfied evidence" in e for e in errs), errs)
+        self.assertTrue(any("requires time-bound evidence kind" in e for e in errs), errs)
 
     def test_not_assessed_claim_refused_for_clean(self):
         r = self._clean_specific()
@@ -658,18 +718,20 @@ class V54FalseGreenTests(unittest.TestCase):
 
     def test_relative_traversal_target_refused(self):
         m = fill_placeholders(load_asset("action-manifest.json"))
-        m["repo"] = {"path": "/tmp/fixture-repo", "commit": "a" * 40}
+        m["repo"] = {"id": "fixture/repo", "commit": "a" * 40}
         m["request_ref"] = "op"; m["authorization_basis"]["ref"] = "op"
+        m["actions"] = [sample_local_action()]
         for a in m["actions"]:
             a["authorization"]["ref"] = "op"
             a["kind"] = "local_edit"; a["target"] = "../../etc/hosts"
         errs = VALIDATOR.validate_manifest(m)
-        self.assertTrue(any("traversal/out-of-scope rejected" in e for e in errs), errs)
+        self.assertTrue(any("repository-relative" in e for e in errs), errs)
 
     def test_in_repo_relative_target_allowed(self):
         m = fill_placeholders(load_asset("action-manifest.json"))
-        m["repo"] = {"path": "/tmp/fixture-repo", "commit": "a" * 40}
+        m["repo"] = {"id": "fixture/repo", "commit": "a" * 40}
         m["request_ref"] = "op"; m["authorization_basis"]["ref"] = "op"
+        m["actions"] = [sample_local_action()]
         for a in m["actions"]:
             a["authorization"]["ref"] = "op"
             a["kind"] = "local_edit"; a["target"] = "src/x.ts"
