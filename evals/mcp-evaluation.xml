@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+  <qa_pair>
+    <question>Cross-check the entrypoint's core doctrine against its completion-debt reference. When the repository contains unfinished executable obligations plus structural inconsistency and debris, what exact three-stage priority order governs the close? Return the three uppercase words separated by " → ".</question>
+    <answer>FINISH → CONFORM → CLEAN</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Reconcile the entrypoint's finding taxonomy with the authorization reference and action-manifest template. How many mutually exclusive dispositions may a finding receive? Return one integer.</question>
+    <answer>4</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Compare the bare-invocation rule, mode table, agent metadata, and authorization reference. Which uppercase mode is selected when the user invokes the skill by name without asking for a read-only review? Return only the mode.</question>
+    <answer>CLOSE</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect the verdict model, closeout template, and validator-facing example. How many named dimensions must remain distinct beneath the headline verdict? Return one integer.</question>
+    <answer>5</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Triangulate the persistence doctrine, completion-debt doctrine, and entrypoint. If an authorized payable debt remains merely queued because the session became long, which exact headline verdict is permitted? Return only the verdict with its space.</question>
+    <answer>NOT CLEAN</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Compare the action-manifest template, closeout-report template, and authorization doctrine. Which machine-readable source value identifies the standing authorization created by an explicit Mister Clean invocation? Return only that lowercase value.</question>
+    <answer>skill_invocation</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the dashboard contract in the entrypoint and then inspect the dashboard artifact itself. Does a green visual projection establish the CLEAN verdict without the underlying evidence gates? Return exactly True or False.</question>
+    <answer>False</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Reconcile the stack-adapter reference with the entrypoint's discovery rule and the code-hygiene rubric's detector contract. What exit status represents an unknown stack that may not be silently skipped? Return one integer.</question>
+    <answer>3</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Compare target derivation in the entrypoint with the authorization and situational-awareness references. Which authority wins when an operator ruling, repository policy, and observed evidence disagree? Return only the two-word label used by the skill.</question>
+    <answer>operator ruling</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Cross-check successor readiness, verification doctrine, and the entrypoint's meaning of CLEAN. A fresh clone cannot reach an artifact that the handoff relies upon, while every local test is green. Is CLEAN permitted? Return exactly Yes or No.</question>
+    <answer>No</answer>
+  </qa_pair>
+</evaluation>

@@ -197,6 +197,16 @@ class DistributionContractTests(unittest.TestCase):
             actual = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
             self.assertEqual(recorded[relative.as_posix()], actual, relative.as_posix())
 
+    def test_mcp_evaluation_has_ten_read_only_stationary_pairs(self):
+        import xml.etree.ElementTree as ET
+
+        document = ET.parse(ROOT / "evals" / "mcp-evaluation.xml")
+        pairs = document.findall("./qa_pair")
+        self.assertEqual(len(pairs), 10)
+        for pair in pairs:
+            self.assertTrue((pair.findtext("question") or "").strip())
+            self.assertTrue((pair.findtext("answer") or "").strip())
+
 
 if __name__ == "__main__":
     unittest.main()
