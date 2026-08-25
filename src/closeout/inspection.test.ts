@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   detectStack,
   generateManifest,
+  generatePackageManifest,
   loadDenylist,
   scanPublicSafety,
 } from "./inspection.js";
@@ -126,6 +127,32 @@ describe("generateManifest", () => {
       content: `${aHash}  ./a.txt\n${zHash}  ./z.txt\n`,
       exitCode: 0,
     });
+    await expect(readFile(join(root, "MANIFEST.sha256"), "utf8")).resolves.toBe("old\n");
+  });
+});
+
+describe("generatePackageManifest", () => {
+  it("hashes the declared public package surface rather than unshipped source", async () => {
+    const root = await fixture("package-manifest");
+    await Promise.all([
+      put(root, "package.json", JSON.stringify({ files: ["bin/*.js", "dist/**", "SKILL.md", "MANIFEST.sha256"] })),
+      put(root, "bin/mister-clean.js", "cli\n"),
+      put(root, "dist/server.js", "server\n"),
+      put(root, "SKILL.md", "skill\n"),
+      put(root, "src/private.ts", "source\n"),
+      put(root, "MANIFEST.sha256", "old\n"),
+      put(root, "node_modules/ignored.js", "dependency\n"),
+    ]);
+
+    const result = await generatePackageManifest(root);
+    expect(result.entries.map((entry) => entry.path)).toEqual([
+      "./SKILL.md",
+      "./bin/mister-clean.js",
+      "./dist/server.js",
+      "./package.json",
+    ]);
+    expect(result.entries.some((entry) => entry.path.startsWith("./src/"))).toBe(false);
+    expect(result.entries.some((entry) => entry.path === "./MANIFEST.sha256")).toBe(false);
     await expect(readFile(join(root, "MANIFEST.sha256"), "utf8")).resolves.toBe("old\n");
   });
 });

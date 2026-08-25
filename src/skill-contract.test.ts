@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { generateManifest, STACK_MARKERS } from "./closeout/inspection.js";
+import { generatePackageManifest, STACK_MARKERS } from "./closeout/inspection.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -215,8 +215,8 @@ describe("unified TypeScript distribution contract", () => {
     expect(skill).toContain("standalone report is structural evidence only");
   });
 
-  it("keeps the public source manifest complete, current, and free of Python runtime entries", async () => {
-    const expected = await generateManifest(ROOT);
+  it("keeps the shipped package manifest complete, current, and free of Python runtime entries", async () => {
+    const expected = await generatePackageManifest(ROOT);
     const lines = (await readFile(join(ROOT, "MANIFEST.sha256"), "utf8")).trimEnd().split("\n");
     const recorded = new Map(lines.map((line) => {
       const [digest, path] = line.split("  ");
@@ -225,6 +225,8 @@ describe("unified TypeScript distribution contract", () => {
     expect([...recorded.keys()].sort()).toEqual(expected.entries.map((entry) => entry.path));
     for (const entry of expected.entries) expect(recorded.get(entry.path)).toBe(entry.sha256);
     expect(expected.entries.some((entry) => entry.path.endsWith(".py"))).toBe(false);
+    expect(expected.entries.some((entry) => entry.path.startsWith("./src/"))).toBe(false);
+    expect(expected.entries.some((entry) => entry.path.startsWith("./dist/"))).toBe(true);
   });
 
   it("retains ten complete read-only MCP evaluation pairs", async () => {

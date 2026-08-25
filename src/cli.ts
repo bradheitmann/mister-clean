@@ -201,8 +201,11 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
 async function runManifest(args: string[], io: CliIO): Promise<number> {
   const root = args.shift() ?? packageRoot(import.meta.url);
   const check = removeFlag(args, "--check");
+  const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
-  const result = await nodeCloseoutEngine.generateManifest(root);
+  const result = packageSurface
+    ? await nodeCloseoutEngine.generatePackageManifest(root)
+    : await nodeCloseoutEngine.generateManifest(root);
   const path = join(resolve(root), "MANIFEST.sha256");
   if (check) {
     if (!existsSync(path) || readFileSync(path, "utf8") !== result.content) {

@@ -6,6 +6,7 @@ import {
 import {
   detectStack,
   generateManifest,
+  generatePackageManifest,
   loadDenylist,
   scanPublicSafety,
   type ManifestResult,
@@ -33,6 +34,7 @@ export interface CloseoutEngine {
   auditPlanning(root: string): Promise<PlanningAuditResult>;
   scanPublicSafety(root: string, denylistPath?: string): Promise<PublicSafetyScanResult>;
   generateManifest(root: string): Promise<ManifestResult>;
+  generatePackageManifest(root: string): Promise<ManifestResult>;
 }
 
 /**
@@ -55,4 +57,5 @@ export const nodeCloseoutEngine: CloseoutEngine = {
     return scanPublicSafety(root, await loadDenylist(denylistPath));
   },
   generateManifest,
+  generatePackageManifest,
 };

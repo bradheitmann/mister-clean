@@ -11330,6 +11330,13 @@ var MANIFEST_EXCLUDED_FILES = /* @__PURE__ */ new Set([
   "MANIFEST.sha256",
   "src/generated-materials.ts"
 ]);
+var PACKAGE_MANIFEST_EXCLUDED_DIRS = /* @__PURE__ */ new Set([
+  ".git",
+  ".wrangler",
+  "__pycache__",
+  "coverage",
+  "node_modules"
+]);
 var PUBLIC_SAFETY_RULES = [
   ["posix-home-path", /\/(?:Users|home)\/[^/\s]+\//],
   ["windows-home-path", /\b[A-Za-z]:\\Users\\[^\\\s]+\\/],
@@ -11448,6 +11455,49 @@ async function generateManifest(root) {
     if (MANIFEST_EXCLUDED_FILES.has(file.relative)) continue;
     if (basename4(file.relative).endsWith(".pyc") || basename4(file.relative).endsWith(".skill")) continue;
     if (hasExcludedPart(file.relative, MANIFEST_EXCLUDED_DIRS)) continue;
+    if (file.symlink && !(await stat(file.absolute)).isFile()) continue;
+    const bytes = await readFile2(file.absolute);
+    entries.push({
+      path: `./${file.relative}`,
+      sha256: createHash3("sha256").update(bytes).digest("hex")
+    });
+  }
+  entries.sort((left, right) => compareCodePoints3(left.path, right.path));
+  return {
+    entries,
+    content: entries.map((entry) => `${entry.sha256}  ${entry.path}`).join("\n") + (entries.length ? "\n" : ""),
+    exitCode: 0
+  };
+}
+function packagePatternExpression(pattern) {
+  const normalized = pattern.replace(/^\.\//, "").replace(/\/$/, "");
+  let source = "^";
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index];
+    if (character === "*" && normalized[index + 1] === "*") {
+      source += ".*";
+      index += 1;
+    } else if (character === "*") {
+      source += "[^/]*";
+    } else {
+      source += character.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+    }
+  }
+  return new RegExp(`${source}$`, "u");
+}
+async function generatePackageManifest(root) {
+  const absoluteRoot = resolve4(root);
+  const packageData = JSON.parse(await readFile2(resolve4(absoluteRoot, "package.json"), "utf8"));
+  if (!Array.isArray(packageData.files) || packageData.files.some((entry) => typeof entry !== "string")) {
+    throw new Error("package.json files must be an array of strings");
+  }
+  const patterns = packageData.files.filter((entry) => entry !== "MANIFEST.sha256").map(packagePatternExpression);
+  const entries = [];
+  const files = await walkFiles(absoluteRoot, PACKAGE_MANIFEST_EXCLUDED_DIRS);
+  for (const file of files) {
+    if (file.relative === "MANIFEST.sha256") continue;
+    if (basename4(file.relative).endsWith(".pyc") || basename4(file.relative).endsWith(".skill")) continue;
+    if (file.relative !== "package.json" && !patterns.some((pattern) => pattern.test(file.relative))) continue;
     if (file.symlink && !(await stat(file.absolute)).isFile()) continue;
     const bytes = await readFile2(file.absolute);
     entries.push({
@@ -11887,7 +11937,8 @@ var nodeCloseoutEngine = {
   async scanPublicSafety(root, denylistPath) {
     return scanPublicSafety(root, await loadDenylist(denylistPath));
   },
-  generateManifest
+  generateManifest,
+  generatePackageManifest
 };
 
 // src/cli.ts
@@ -12071,8 +12122,9 @@ async function runAudit(args, io) {
 async function runManifest(args, io) {
   const root = args.shift() ?? packageRoot(import.meta.url);
   const check = removeFlag(args, "--check");
+  const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
-  const result = await nodeCloseoutEngine.generateManifest(root);
+  const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
   const path = join3(resolve6(root), "MANIFEST.sha256");
   if (check) {
     if (!existsSync3(path) || readFileSync4(path, "utf8") !== result.content) {

@@ -43,6 +43,14 @@ try {
   if (!standaloneOutput.includes("PASS kind=bundle")) {
     throw new Error(`unexpected standalone skill CLI output: ${standaloneOutput}`);
   }
+  const standaloneManifest = execFileSync(
+    process.execPath,
+    [join(unpacked, "bin", "mister-clean.js"), "manifest", unpacked, "--package", "--check"],
+    { cwd: standalone, encoding: "utf8" },
+  );
+  if (!standaloneManifest.includes("manifest: PASS")) {
+    throw new Error(`unexpected standalone manifest output: ${standaloneManifest}`);
+  }
 
   execFileSync("npm", ["install", archive, "--ignore-scripts", "--no-audit", "--no-fund"], {
     cwd: consumer,
@@ -62,6 +70,14 @@ try {
     { cwd: consumer, encoding: "utf8" },
   );
   if (!output.includes("PASS kind=bundle")) throw new Error(`unexpected CLI output: ${output}`);
+  const installedManifest = execFileSync(
+    process.execPath,
+    [join(consumer, "node_modules", ".bin", "mister-clean"), "manifest", installed, "--package", "--check"],
+    { cwd: consumer, encoding: "utf8" },
+  );
+  if (!installedManifest.includes("manifest: PASS")) {
+    throw new Error(`unexpected installed manifest output: ${installedManifest}`);
+  }
   console.log(`standalone packed skill CLI: PASS under ${process.version}`);
   console.log(`installed packed CLI: PASS under ${process.version}`);
 } finally {

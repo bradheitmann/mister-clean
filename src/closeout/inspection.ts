@@ -87,6 +87,14 @@ export const MANIFEST_EXCLUDED_FILES = new Set([
   "src/generated-materials.ts",
 ]);
 
+const PACKAGE_MANIFEST_EXCLUDED_DIRS = new Set([
+  ".git",
+  ".wrangler",
+  "__pycache__",
+  "coverage",
+  "node_modules",
+]);
+
 const PUBLIC_SAFETY_RULES: ReadonlyArray<readonly [string, RegExp]> = [
   ["posix-home-path", /\/(?:Users|home)\/[^/\s]+\//],
   ["windows-home-path", /\b[A-Za-z]:\\Users\\[^\\\s]+\\/],
@@ -257,6 +265,63 @@ export async function generateManifest(root: string): Promise<ManifestResult> {
     // pathlib's is_file() follows a file symlink but rejects a symlink to a
     // directory. Public-safety inspection deliberately treats every symlink
     // as text; manifest generation has the narrower historical behavior.
+    if (file.symlink && !(await stat(file.absolute)).isFile()) continue;
+    const bytes = await readFile(file.absolute);
+    entries.push({
+      path: `./${file.relative}`,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    });
+  }
+
+  entries.sort((left, right) => compareCodePoints(left.path, right.path));
+  return {
+    entries,
+    content: entries.map((entry) => `${entry.sha256}  ${entry.path}`).join("\n") + (entries.length ? "\n" : ""),
+    exitCode: 0,
+  };
+}
+
+function packagePatternExpression(pattern: string): RegExp {
+  const normalized = pattern.replace(/^\.\//, "").replace(/\/$/, "");
+  let source = "^";
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index] as string;
+    if (character === "*" && normalized[index + 1] === "*") {
+      source += ".*";
+      index += 1;
+    } else if (character === "*") {
+      source += "[^/]*";
+    } else {
+      source += character.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+    }
+  }
+  return new RegExp(`${source}$`, "u");
+}
+
+/**
+ * Deterministic manifest of the files the package declares as public. This is
+ * deliberately distinct from the source-tree manifest: a shipped manifest
+ * must validate the installed artifact, not files its consumer never receives.
+ */
+export async function generatePackageManifest(root: string): Promise<ManifestResult> {
+  const absoluteRoot = resolve(root);
+  const packageData = JSON.parse(await readFile(resolve(absoluteRoot, "package.json"), "utf8")) as {
+    files?: unknown;
+  };
+  if (!Array.isArray(packageData.files) || packageData.files.some((entry) => typeof entry !== "string")) {
+    throw new Error("package.json files must be an array of strings");
+  }
+
+  const patterns = packageData.files
+    .filter((entry): entry is string => entry !== "MANIFEST.sha256")
+    .map(packagePatternExpression);
+  const entries: ManifestEntry[] = [];
+  const files = await walkFiles(absoluteRoot, PACKAGE_MANIFEST_EXCLUDED_DIRS);
+
+  for (const file of files) {
+    if (file.relative === "MANIFEST.sha256") continue;
+    if (basename(file.relative).endsWith(".pyc") || basename(file.relative).endsWith(".skill")) continue;
+    if (file.relative !== "package.json" && !patterns.some((pattern) => pattern.test(file.relative))) continue;
     if (file.symlink && !(await stat(file.absolute)).isFile()) continue;
     const bytes = await readFile(file.absolute);
     entries.push({
