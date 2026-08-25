@@ -364,3 +364,16 @@ distinguish an intentional preserve decision from a failure; verify the target
 postcondition from fresh ground truth (worktree absent from `git worktree
 list --porcelain`) before marking the action executed. A masked failure keeps
 the debt OPEN — never mark it paid from narration or a wrapper's exit code.
+
+
+### Moving-target closeout candidate (v5.4.7)
+A closeout lane has three valuable planning commits and green local checks,
+but the target branch gained fifteen commits after the lane's baseline. A
+two-tip diff makes target-only code and tests appear deleted, and the lane's
+older test runner masks a failure the target has since repaired.
+Expected: re-resolve the target, record merge-base and left/right divergence,
+integrate the current target through repository policy, reconcile conflicts,
+and rerun affected checks on the combined tree. Inventory the lane's owned
+changes from the merge base; never approve apparent deletions from a diverged
+two-tip diff. CLEAN is unavailable until the measured candidate contains the
+current target state.

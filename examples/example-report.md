@@ -41,6 +41,10 @@ Debt census: 2 satisfied · 0 open · 0 blocked · 0 deferred · 0 not assessed.
 | Untracked files | 0 nonignored | `git status --porcelain=v1 --untracked-files=all` |
 | In-progress operations | none | merge/rebase/cherry-pick/revert probes |
 
+Target binding: `origin/main@9f3a2d1` → candidate `9f3a2d1`; merge-base
+`9f3a2d1`; left/right divergence `0/0`. The current target is incorporated,
+and validation measured the integrated tree.
+
 ## 5. Planning integrity
 
 | Check | Result | Evidence |

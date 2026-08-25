@@ -32,6 +32,17 @@ def bind_report(r):
     """canonical binding: make a filled report satisfy v5 repo-binding checks"""
     r["generated_at"] = "2026-08-25T04:00:00Z"
     r["repo"] = {"path": "/tmp/fixture-repo", "commit": "a" * 40, "branch": "main"}
+    r["target_binding"] = {
+        "target_ref": "origin/main",
+        "target_commit": "a" * 40,
+        "candidate_commit": "a" * 40,
+        "merge_base": "a" * 40,
+        "target_commits_missing": 0,
+        "candidate_commits_ahead": 0,
+        "target_incorporated": True,
+        "measured_at": "2026-08-25T04:00:00Z",
+        "evidence": ["git merge-base origin/main HEAD; git rev-list --left-right --count origin/main...HEAD -> 0 0"],
+    }
     return r
 
 
@@ -178,6 +189,36 @@ class ReportValidationTests(unittest.TestCase):
         }
         errors = VALIDATOR.validate_report(report)
         self.assertTrue(any("distinct reviewer/implementer" in error for error in errors))
+
+    def test_clean_refuses_candidate_behind_target(self):
+        report = load_filled_asset("closeout-report.json")
+        report["verdict"] = "CLEAN"
+        report["dimensions"] = specific_dims()
+        report["completion_debts"] = []
+        report["claims"] = clean_claims(report["repo"]["commit"])
+        report["residuals"] = []
+        report["acceptance_criteria"] = []
+        report["debt_census"] = {"discovered": 0, "paid": 0, "accepted_exception": 0}
+        report["handoff_assessment"] = {"recommendation": "proceed", "reasons": ["measured"], "conditions": []}
+        report["target_binding"]["target_commits_missing"] = 15
+        report["target_binding"]["target_incorporated"] = False
+        errors = VALIDATOR.validate_report(report)
+        self.assertTrue(any("target_commits_missing=0" in error for error in errors), errors)
+        self.assertTrue(any("target_incorporated=true" in error for error in errors), errors)
+
+    def test_clean_refuses_target_binding_for_another_candidate(self):
+        report = load_filled_asset("closeout-report.json")
+        report["verdict"] = "CLEAN"
+        report["dimensions"] = specific_dims()
+        report["completion_debts"] = []
+        report["claims"] = clean_claims(report["repo"]["commit"])
+        report["residuals"] = []
+        report["acceptance_criteria"] = []
+        report["debt_census"] = {"discovered": 0, "paid": 0, "accepted_exception": 0}
+        report["handoff_assessment"] = {"recommendation": "proceed", "reasons": ["measured"], "conditions": []}
+        report["target_binding"]["candidate_commit"] = "b" * 40
+        errors = VALIDATOR.validate_report(report)
+        self.assertTrue(any("equality with repo.commit" in error for error in errors), errors)
 
 
 class ManifestValidationTests(unittest.TestCase):

@@ -53,6 +53,10 @@ Self-certified pairs are forbidden — name who/what executed each second half.}
 
 ## 3. Git state
 
+**Target binding:** {target ref @ commit} · candidate {commit} · merge-base
+{commit} · target commits missing: {0} · candidate commits ahead: {n} ·
+measured by {exact command/result}. A stale candidate cannot support CLEAN.
+
 | Surface | Target | Before | After | Status |
 |---|---|---|---|---|
 | Local branches | main + ≤1 working | | | |

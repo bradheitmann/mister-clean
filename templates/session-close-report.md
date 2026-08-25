@@ -32,6 +32,11 @@ _No explicit operator criteria this session → write "none"; never omit the sec
 
 ## Git
 
+**Target integration:** {target ref @ commit} → {closing candidate @ commit} ·
+merge-base {commit} · target commits missing from candidate: {0} · measured by
+{exact left/right divergence command}. CLEAN requires zero missing target
+commits and revalidation of the integrated tree.
+
 | | Target | Actual |
 |---|---|---|
 | Branches (local / remote) | main+≤1 / main | |

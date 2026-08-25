@@ -1,6 +1,6 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "5.4.6",
+  "version": "5.4.7",
   "description": "Successor-readiness skill and read-only MCP server for paying repository completion debt.",
   "type": "module",
   "license": "MIT",

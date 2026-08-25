@@ -179,6 +179,7 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
             "schema_version",
             "generated_at",
             "repo",
+            "target_binding",
             "mode",
             "authorization_basis",
             "scope",
@@ -197,11 +198,41 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
         return errors
     if data["record_type"] != "mister-clean.closeout":
         errors.append("$.record_type: expected mister-clean.closeout")
-    if data["schema_version"] != "1.0":
-        errors.append("$.schema_version: expected 1.0")
+    if data["schema_version"] != "1.1":
+        errors.append("$.schema_version: expected 1.1")
     if data["mode"] not in MODES:
         errors.append(f"$.mode: unsupported value {data['mode']!r}")
     validate_authorization_basis(data["authorization_basis"], "$.authorization_basis", errors)
+
+    target = data["target_binding"]
+    require_keys(
+        target,
+        {
+            "target_ref",
+            "target_commit",
+            "candidate_commit",
+            "merge_base",
+            "target_commits_missing",
+            "candidate_commits_ahead",
+            "target_incorporated",
+            "measured_at",
+            "evidence",
+        },
+        "$.target_binding",
+        errors,
+    )
+    if isinstance(target, dict):
+        for field in ("target_ref", "measured_at"):
+            if not nonempty(target.get(field)):
+                errors.append(f"$.target_binding.{field}: required")
+        for field in ("target_commits_missing", "candidate_commits_ahead"):
+            value = target.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                errors.append(f"$.target_binding.{field}: required nonnegative integer")
+        if not isinstance(target.get("target_incorporated"), bool):
+            errors.append("$.target_binding.target_incorporated: required boolean")
+        if not isinstance(target.get("evidence"), list) or not target.get("evidence"):
+            errors.append("$.target_binding.evidence: required nonempty array")
 
     dimensions = data["dimensions"]
     require_keys(dimensions, REQUIRED_DIMENSIONS, "$.dimensions", errors)
@@ -363,6 +394,15 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
         elif isinstance(w, dict) and c.get("source") in OPERATOR_ACTORS and _norm_actor(w.get("actor")) not in OPERATOR_ACTORS:
             errors.append(f"$.acceptance_criteria[{i}].waiver: an operator-source criterion may be waived ONLY by the operator, not by a reviewer ({w.get('actor')!r})")
     if verdict == "CLEAN":
+        target = data.get("target_binding") or {}
+        if target.get("target_incorporated") is not True:
+            errors.append("$.target_binding: CLEAN requires target_incorporated=true")
+        if target.get("target_commits_missing") != 0:
+            errors.append("$.target_binding: CLEAN requires target_commits_missing=0")
+        if target.get("candidate_commit") != (data.get("repo") or {}).get("commit"):
+            errors.append("$.target_binding.candidate_commit: CLEAN requires equality with repo.commit")
+        if target.get("merge_base") != target.get("target_commit"):
+            errors.append("$.target_binding.merge_base: CLEAN requires current target to be an ancestor of the closing candidate")
         # debts: only satisfied or bound accepted_exception may remain
         for i, d in enumerate(debts):
             if not isinstance(d, dict):
@@ -439,6 +479,10 @@ def validate_report(data: Any, allow_placeholders: bool = False) -> list[str]:
             errors.append("$.repo.path: required absolute path")
         if not (isinstance(repo.get("commit"), str) and _re.fullmatch(r"[0-9a-f]{7,40}", repo.get("commit") or "")):
             errors.append("$.repo.commit: required 7-40 char hex object id")
+        target = data.get("target_binding") or {}
+        for field in ("target_commit", "candidate_commit", "merge_base"):
+            if not (isinstance(target.get(field), str) and _re.fullmatch(r"[0-9a-f]{7,40}", target.get(field) or "")):
+                errors.append(f"$.target_binding.{field}: required 7-40 char hex object id")
         if not nonempty(data.get("generated_at")):
             errors.append("$.generated_at: required")
     claims = data.get("claims") or {}

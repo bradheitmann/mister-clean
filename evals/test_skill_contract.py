@@ -52,6 +52,15 @@ class InvocationContractTests(unittest.TestCase):
     def test_process_ownership_alone_is_insufficient(self):
         self.assertIn("Ownership alone is not a reason to terminate it", SKILL)
 
+    def test_closing_candidate_must_contain_current_target(self):
+        successor = (ROOT / "references" / "successor-readiness.md").read_text(encoding="utf-8")
+        isolation = (ROOT / "references" / "write-lane-isolation.md").read_text(encoding="utf-8")
+        normalized_skill = " ".join(SKILL.split())
+        self.assertIn("a candidate that is behind a moving target is not a closing state", normalized_skill)
+        self.assertIn("The closing candidate contains the current target", successor)
+        self.assertIn("merge-base plus left/right", isolation)
+        self.assertIn("two-tip `target..candidate` diff", SKILL)
+
 
 
 

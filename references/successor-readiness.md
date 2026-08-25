@@ -33,6 +33,13 @@ Everything below is MUST unless marked SHOULD.
    A claim sourced from one class must not be reported as another.
 4. **Zero nonignored untracked items, or an exact explained manifest.** Never
    delete or commit ignored evidence merely to reach zero.
+4a. **The closing candidate contains the current target.** Resolve the target
+   branch at every continuation and immediately before final verification;
+   record merge-base and left/right divergence. If the target advanced,
+   integrate it through repository policy and re-run affected checks on the
+   integrated tree. A candidate green on an older baseline is not successor-
+   ready, and a two-tip diff across diverged histories is not proof that
+   apparent deletions are intended.
 
 ## 2. Planning lifecycle reconciliation — projections must agree
 

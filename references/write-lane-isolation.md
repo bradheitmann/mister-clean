@@ -25,6 +25,19 @@ worktree is not isolation** — it is a shared mutable buffer with no lock.
    its assigned worktree/branch. (Compose with the tool-liveness handshake —
    one bootstrap covers both: prove tools AND prove location before work.)
 
+## Integration closure — isolation ends in one current tree
+
+Parallel lanes may begin from recorded baselines; the closing candidate may
+not remain there while the target moves. Before a lane is accepted for final
+integration, resolve the target ref again, record merge-base plus left/right
+counts, and incorporate the current target by the repository's approved merge
+or rebase policy. Validate the combined tree, not only the lane tip. When both
+sides advanced, `git diff target..candidate` conflates target-only additions
+with candidate deletions; inventory the lane from the merge base, then prove
+the integrated result accounts for every target-only path and treats any
+removal as an owned, proved closeout action. A lane that cannot yet integrate
+remains owned in-flight state, never a clean closeout.
+
 ## Collision response (when isolation was not in place, or was breached)
 
 1. **Freeze all writers** to the contended tree immediately.

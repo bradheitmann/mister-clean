@@ -1,11 +1,24 @@
 {
   "record_type": "mister-clean.closeout",
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "generated_at": "<ISO-8601 timestamp>",
   "repo": {
     "path": "<repository path>",
     "commit": "<commit or working-tree snapshot>",
     "branch": "<branch or detached>"
+  },
+  "target_binding": {
+    "target_ref": "<resolved target ref>",
+    "target_commit": "<current target commit>",
+    "candidate_commit": "<closing candidate commit>",
+    "merge_base": "<merge-base commit>",
+    "target_commits_missing": 0,
+    "candidate_commits_ahead": 0,
+    "target_incorporated": false,
+    "measured_at": "<ISO-8601 timestamp>",
+    "evidence": [
+      "<exact merge-base and left-right divergence command plus result>"
+    ]
   },
   "mode": "CLOSE",
   "authorization_basis": {
