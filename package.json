@@ -1,0 +1,72 @@
+{
+  "name": "@bradheitmann/mister-clean",
+  "version": "5.4.6",
+  "description": "Successor-readiness skill and read-only MCP server for paying repository completion debt.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "mister-clean-mcp": "dist/stdio.js"
+  },
+  "exports": {
+    ".": "./dist/server.js"
+  },
+  "files": [
+    "agents",
+    "assets",
+    "dist",
+    "evals",
+    "examples",
+    "references",
+    "scripts",
+    "templates",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "SKILL.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bradheitmann/mister-clean.git"
+  },
+  "homepage": "https://bradheitmann.ai/mister-clean/",
+  "bugs": {
+    "url": "https://github.com/bradheitmann/mister-clean/issues"
+  },
+  "keywords": [
+    "agent-skill",
+    "code-quality",
+    "handoff",
+    "mcp",
+    "repository-hygiene",
+    "successor-readiness"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:materials": "node scripts/generate_materials.mjs",
+    "build": "pnpm build:materials && tsc --noEmit && tsup src/server.ts src/stdio.ts --format esm --dts --splitting false --clean",
+    "check": "pnpm test && pnpm build && pnpm pack:check",
+    "deploy": "pnpm build:materials && wrangler deploy",
+    "dev": "pnpm build:materials && wrangler dev",
+    "pack:check": "pnpm pack --dry-run",
+    "prepack": "pnpm build",
+    "test": "pnpm build:materials && vitest run",
+    "types": "wrangler types env.d.ts --include-runtime false"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.21.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260825.1",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "26.0.1",
+    "tsup": "8.5.0",
+    "typescript": "6.0.3",
+    "vitest": "4.0.18",
+    "wrangler": "4.125.0"
+  },
+  "packageManager": "pnpm@11.0.3"
+}

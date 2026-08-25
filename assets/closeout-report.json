@@ -1,0 +1,105 @@
+{
+  "record_type": "mister-clean.closeout",
+  "schema_version": "1.0",
+  "generated_at": "<ISO-8601 timestamp>",
+  "repo": {
+    "path": "<repository path>",
+    "commit": "<commit or working-tree snapshot>",
+    "branch": "<branch or detached>"
+  },
+  "mode": "CLOSE",
+  "authorization_basis": {
+    "source": "skill_invocation",
+    "ref": "<current Mister Clean invocation>",
+    "scope": "named_repository_and_current_task",
+    "standing": true
+  },
+  "scope": {
+    "included": [],
+    "excluded": [],
+    "policy_sources": []
+  },
+  "dimensions": {
+    "completion_debt": {
+      "state": "not_assessed",
+      "evidence": [],
+      "notes": []
+    },
+    "repository_state": {
+      "state": "not_assessed",
+      "evidence": [],
+      "notes": []
+    },
+    "planning_integrity": {
+      "state": "not_assessed",
+      "evidence": [],
+      "notes": []
+    },
+    "verification": {
+      "state": "not_assessed",
+      "evidence": [],
+      "notes": []
+    },
+    "handoff_readiness": {
+      "state": "not_assessed",
+      "evidence": [],
+      "notes": []
+    }
+  },
+  "completion_debts": [
+    {
+      "id": "DEBT-XX",
+      "procedure": "<first half -> second half>",
+      "state": "not_assessed",
+      "disposition": "autonomously_validate",
+      "evidence": [
+        "<typed evidence entries; satisfied debts REQUIRE a list like this, never a bare string>"
+      ]
+    }
+  ],
+  "claims": {
+    "committed_locally": {
+      "state": "not_assessed",
+      "evidence": []
+    },
+    "pushed": {
+      "state": "not_assessed",
+      "evidence": []
+    },
+    "ci_green_on_push": {
+      "state": "not_assessed",
+      "evidence": []
+    },
+    "deployed": {
+      "state": "not_assessed",
+      "evidence": []
+    },
+    "independently_qa_accepted": {
+      "state": "not_assessed",
+      "evidence": []
+    }
+  },
+  "actions": [],
+  "residuals": [],
+  "acceptance_criteria": [
+    {
+      "id": "<explicit operator acceptance criterion, if any (e.g. wordmark-uses-canonical-letterform)>",
+      "source": "operator",
+      "met": true,
+      "evidence": [
+        "<how the criterion was verified as met; unmet+no operator waiver forbids CLEAN>"
+      ]
+    }
+  ],
+  "handoff_assessment": {
+    "recommendation": "not_assessed",
+    "reasons": [],
+    "conditions": []
+  },
+  "verdict": "NOT_CLEAN",
+  "debt_census": {
+    "discovered": 0,
+    "paid": 0,
+    "accepted_exception": 0
+  }
+}

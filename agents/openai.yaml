@@ -1,0 +1,9 @@
+interface:
+  display_name: "Mister Clean"
+  short_description: "Autonomous repository closeout (explicit invocation only)"
+  # NO default_prompt: invocation carries standing cleanup authority (commits,
+  # pushes, archival), so background/implicit skill selection must never become
+  # authorization. The skill activates ONLY on an explicit $mister-clean
+  # invocation or an unambiguous user request naming it.
+policy:
+  allow_implicit_invocation: false

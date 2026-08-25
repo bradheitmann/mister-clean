@@ -1,0 +1,45 @@
+{
+  "record_type": "mister-clean.action-manifest",
+  "schema_version": "1.0",
+  "execution_state": "authorized",
+  "repo": {
+    "path": "<repository path>",
+    "commit": "<commit or working-tree snapshot>"
+  },
+  "mode": "CLOSE",
+  "request_ref": "<current Mister Clean invocation>",
+  "authorization_basis": {
+    "source": "skill_invocation",
+    "ref": "<current Mister Clean invocation>",
+    "scope": "named_repository_and_current_task",
+    "standing": true
+  },
+  "policy_sources": [],
+  "actions": [
+    {
+      "id": "A-001",
+      "kind": "local_edit",
+      "target": "<exact target>",
+      "purpose": "<why this advances closeout>",
+      "risk": "reversible_local",
+      "authorization": {
+        "state": "granted",
+        "source": "skill_invocation",
+        "ref": "<current Mister Clean invocation>"
+      },
+      "preconditions": [],
+      "verification": [
+        "<exact postcondition or check>"
+      ]
+    }
+  ],
+  "excluded_actions": [
+    "unrecoverable destruction",
+    "history rewrite or force-push",
+    "security bypass",
+    "other owners' live work",
+    "unrelated repositories or environments",
+    "production deployment",
+    "non-consenting third-party effects"
+  ]
+}

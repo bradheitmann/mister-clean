@@ -1,0 +1,19 @@
+# OS-regenerated ephemera — Finder rewrites .DS_Store into any browsed directory,
+# so a source-tree zero is non-terminal. The freeze/build excludes these
+# structurally (see references/tool-liveness.md §6); this keeps them out of VCS too.
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+.dev.vars*
+.npmrc
+.public-safety.local
+.wrangler/
+coverage/
+dist/
+node_modules/
+src/generated-materials.ts
+*.skill

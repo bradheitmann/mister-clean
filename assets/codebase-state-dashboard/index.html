@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en" data-style="ridgeline">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Mister Clean · Codebase State Instrument</title>
+  <link rel="stylesheet" href="./dashboard-tokens.css">
+  <script>document.documentElement.classList.add('mc-js');</script>
+  <style>
+    * { box-sizing: border-box; }
+    html { background: var(--mc-semantic-surface-default); color: var(--mc-semantic-fg1); }
+    body {
+      margin: var(--mc-space-0);
+      min-width: 320px;
+      background: var(--mc-semantic-surface-default);
+      color: var(--mc-semantic-fg1);
+      font-family: var(--mc-sans);
+      font-size: var(--t-body);
+      line-height: 1.55;
+    }
+    a { color: inherit; text-decoration-thickness: var(--mc-border-hair); text-underline-offset: var(--mc-space-1); }
+    a:hover { text-decoration-thickness: var(--mc-border-thick); }
+    :where(a, summary):focus-visible {
+      outline: var(--mc-focus-ring-width) solid var(--mc-focus-ring-color);
+      outline-offset: var(--mc-focus-ring-offset);
+    }
+    .shell { width: min(100% - var(--mc-space-6), 1440px); margin-inline: auto; }
+    .eyebrow, .label, .chip, th, .meta, .state-code {
+      font-family: var(--mc-mono);
+      font-size: var(--t-label);
+      letter-spacing: var(--tr-caps-wide);
+      text-transform: uppercase;
+    }
+    .masthead {
+      border-bottom: var(--mc-border-hair) solid var(--mc-semantic-border-default);
+      padding-block: var(--mc-space-5);
+    }
+    .masthead-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--mc-space-5); }
+    .title-block { max-width: var(--mc-container-prose); }
+    .eyebrow { color: var(--mc-semantic-fg2); margin: var(--mc-space-0) var(--mc-space-0) var(--mc-space-3); }
+    h1, h2, h3, p { margin-top: var(--mc-space-0); }
+    h1 {
+      max-width: 12ch;
+      margin-bottom: var(--mc-space-3);
+      font-family: var(--mc-serif);
+      font-size: var(--t-display-l);
+      font-weight: var(--w-medium);
+      line-height: 0.98;
+      letter-spacing: var(--tr-tight);
+    }
+    h2 {
+      margin-bottom: var(--mc-space-4);
+      font-family: var(--mc-serif);
+      font-size: var(--t-display-m);
+      font-weight: var(--w-medium);
+      line-height: 1.05;
+    }
+    h3 { margin-bottom: var(--mc-space-2); font-size: var(--t-body); font-weight: var(--w-semibold); }
+    .lede { color: var(--mc-semantic-fg2); max-width: 65ch; margin-bottom: var(--mc-space-0); }
+    .snapshot {
+      min-width: 16rem;
+      border-left: var(--mc-border-thick) solid var(--mc-semantic-border-accent);
+      padding-left: var(--mc-space-4);
+    }
+    .snapshot strong { display: block; font-family: var(--mc-mono); font-size: var(--t-body-sm); font-weight: var(--w-medium); }
+    .snapshot span { display: block; color: var(--mc-semantic-fg2); font-family: var(--mc-mono); font-size: var(--t-fine); }
+    .view-nav {
+      position: sticky;
+      top: var(--mc-space-0);
+      z-index: var(--mc-z-sticky);
+      border-bottom: var(--mc-border-hair) solid var(--mc-semantic-border-default);
+      background: var(--mc-semantic-surface-default);
+      backdrop-filter: var(--mc-backdrop-blur);
+    }
+    .view-nav .shell { display: flex; gap: var(--mc-space-5); overflow-x: auto; }
+    .view-nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--mc-touch-target-min);
+      flex: 0 0 auto;
+      font-family: var(--mc-mono);
+      font-size: var(--t-label);
+      letter-spacing: var(--tr-caps);
+      text-transform: uppercase;
+    }
+    main { padding-block: var(--mc-space-6) var(--mc-space-10); }
+    section { scroll-margin-top: var(--mc-space-10); }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--mc-space-3); }
+    .card {
+      border: var(--mc-border-hair) solid var(--mc-semantic-border-default);
+      border-radius: 0;
+      background: var(--mc-semantic-surface-default);
+      padding: var(--mc-space-4);
+      transition:
+        border-color var(--mc-motion-fast) var(--mc-ease-out),
+        box-shadow var(--mc-motion-fast) var(--mc-ease-out),
+        transform var(--mc-motion-fast) var(--mc-ease-out);
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .card:hover {
+        border-color: var(--mc-semantic-border-accent);
+        box-shadow: var(--mc-elevation-hover);
+        transform: translateY(calc(var(--mc-space-1) / -2));
+      }
+    }
+    .metric { min-height: 10rem; display: flex; flex-direction: column; justify-content: space-between; }
+    .metric-value {
+      display: block;
+      font-family: var(--mc-mono);
+      font-size: var(--t-display-m);
+      font-weight: var(--w-medium);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .metric-note { color: var(--mc-semantic-fg2); font-size: var(--t-fine); margin-bottom: var(--mc-space-0); }
+    .verdict-card { border-left: var(--mc-border-emphasis) solid var(--mc-signal-risk); background: var(--mc-signal-risk-surface); }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: var(--mc-density-compact-control-height);
+      border: var(--mc-border-hair) solid currentColor;
+      border-radius: 0;
+      padding-inline: var(--mc-space-3);
+    }
+    .chip-risk { color: var(--mc-signal-risk); }
+    .chip-caution { color: var(--mc-signal-caution); }
+    .chip-pass { color: var(--mc-signal-pass); }
+    .section-block { padding-top: var(--mc-space-10); }
+    .section-head { display: grid; grid-template-columns: minmax(7rem, 12rem) 1fr; gap: var(--mc-space-6); align-items: start; }
+    .index-rail { position: sticky; top: var(--mc-index-sticky-offset); }
+    .index-number {
+      display: block;
+      color: var(--mc-index-number-color);
+      font-family: var(--mc-mono);
+      font-size: var(--mc-index-number-size);
+      font-weight: var(--mc-index-number-weight);
+      line-height: 1;
+    }
+    .index-label { color: var(--mc-index-label-color); font-family: var(--mc-mono); font-size: var(--mc-index-label-size); letter-spacing: var(--mc-index-label-tracking); text-transform: uppercase; }
+    .section-content { border-left: var(--mc-grid-hairline-weight) solid var(--mc-grid-hairline-color); padding-left: var(--mc-space-6); min-width: 0; }
+    .bearing-grid { display: grid; grid-template-columns: minmax(16rem, 0.82fr) 1.18fr; gap: var(--mc-space-5); }
+    .instrument { min-height: 27rem; display: grid; place-items: center; text-align: center; }
+    .instrument-figure { position: relative; width: min(100%, 21rem); aspect-ratio: 1; display: grid; place-items: center; }
+    .instrument svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+    .instrument-track { fill: none; stroke: var(--mc-semantic-border-default); stroke-width: var(--mc-dataviz-axis-stroke); }
+    .instrument-ring { fill: none; stroke-linecap: round; stroke-width: var(--mc-dataviz-line-stroke); }
+    .ring-paid { stroke: var(--mc-signal-pass); }
+    .ring-partial { stroke: var(--mc-signal-caution); }
+    .ring-open { stroke: var(--mc-signal-risk); }
+    .instrument-center { position: absolute; inset: 0; display: grid; place-content: center; }
+    .instrument-center strong { font-family: var(--mc-mono); font-size: var(--t-display-l); font-weight: var(--w-medium); line-height: 0.9; }
+    .instrument-center span { color: var(--mc-semantic-fg2); font-family: var(--mc-mono); font-size: var(--t-label); letter-spacing: var(--tr-caps); text-transform: uppercase; }
+    .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--mc-space-3); margin-top: var(--mc-space-4); }
+    .legend span { display: inline-flex; align-items: center; gap: var(--mc-space-2); font-family: var(--mc-mono); font-size: var(--t-fine); }
+    .legend i { width: var(--mc-space-2); height: var(--mc-space-2); border-radius: 0; background: currentColor; }
+    .legend .paid { color: var(--mc-signal-pass); }
+    .legend .partial { color: var(--mc-signal-caution); }
+    .legend .open { color: var(--mc-signal-risk); }
+    .north-star { background: var(--mc-semantic-surface-warm); }
+    .north-star blockquote { margin: var(--mc-space-0); font-family: var(--mc-serif); font-size: var(--t-title); line-height: 1.15; }
+    .north-star cite { display: block; margin-top: var(--mc-space-4); color: var(--mc-semantic-fg2); font-family: var(--mc-mono); font-size: var(--t-fine); font-style: normal; }
+    .bearing-questions { margin: var(--mc-space-4) var(--mc-space-0) var(--mc-space-0); padding-left: var(--mc-space-5); }
+    .bearing-questions li { margin-bottom: var(--mc-space-2); }
+    .chart-card { overflow: hidden; }
+    .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--mc-space-4); margin-bottom: var(--mc-space-3); }
+    .chart-head strong { font-family: var(--mc-mono); font-size: var(--t-title); font-weight: var(--w-medium); }
+    .chart-svg { display: block; width: 100%; min-height: 16rem; overflow: visible; }
+    .chart-grid { stroke: var(--mc-dataviz-grid); stroke-width: var(--mc-dataviz-axis-stroke); }
+    .chart-axis { stroke: var(--mc-dataviz-axis); stroke-width: var(--mc-dataviz-axis-stroke); }
+    .chart-line {
+      fill: none;
+      stroke: var(--mc-dataviz-series);
+      stroke-width: var(--mc-dataviz-line-stroke);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .chart-point { fill: var(--mc-semantic-surface-default); stroke: var(--mc-dataviz-point-color); stroke-width: var(--mc-border-thick); }
+    .chart-label { fill: var(--mc-semantic-fg3); font-family: var(--mc-mono); font-size: var(--t-micro); letter-spacing: var(--tr-wide); }
+    html.mc-js .chart-line[data-draw] { stroke-dasharray: var(--path-length); stroke-dashoffset: var(--path-length); }
+    html.mc-js .chart-line[data-draw].is-drawn { stroke-dashoffset: var(--mc-space-0); transition: stroke-dashoffset var(--mc-dataviz-draw-duration) var(--mc-ease-out); }
+    .debt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--mc-space-5); }
+    .bar-list { display: grid; gap: var(--mc-space-4); }
+    .bar-row { display: grid; grid-template-columns: 7rem 1fr 3rem; gap: var(--mc-space-3); align-items: center; }
+    .bar-label, .bar-value { font-family: var(--mc-mono); font-size: var(--t-fine); }
+    .bar-value { text-align: right; font-variant-numeric: tabular-nums; }
+    .bar-track { height: var(--mc-space-2); background: var(--mc-semantic-surface-alt); overflow: hidden; }
+    .bar { width: var(--bar-target); height: 100%; transform-origin: left; }
+    html.mc-js .bar { transform: scaleX(0); }
+    html.mc-js .bar.is-drawn { transform: scaleX(1); transition: transform var(--mc-dataviz-draw-duration) var(--mc-ease-out); }
+    .bar-paid { background: var(--mc-signal-pass); }
+    .bar-partial { background: var(--mc-signal-caution); }
+    .bar-open { background: var(--mc-signal-risk); }
+    .holdout-number { font-family: var(--mc-mono); font-size: var(--t-display-l); font-weight: var(--w-medium); line-height: 1; }
+    .holdout-rule { width: 100%; height: var(--mc-border-thick); margin-block: var(--mc-space-4); background: var(--mc-semantic-border-default); position: relative; }
+    .holdout-rule span { display: block; width: var(--holdout-progress, 0%); height: 100%; background: var(--mc-dataviz-series); }
+    .timeline { list-style: none; margin: var(--mc-space-0); padding: var(--mc-space-0); }
+    .timeline li { display: grid; grid-template-columns: 6rem var(--mc-space-4) 1fr; gap: var(--mc-space-3); min-height: 4.5rem; }
+    .timeline .time { color: var(--mc-semantic-fg2); font-family: var(--mc-mono); font-size: var(--t-fine); }
+    .timeline .track { position: relative; display: flex; justify-content: center; }
+    .timeline .track::before { content: ''; position: absolute; top: var(--mc-space-3); bottom: calc(var(--mc-space-3) * -1); width: var(--mc-border-hair); background: var(--mc-semantic-border-default); }
+    .timeline li:last-child .track::before { display: none; }
+    .timeline .dot { position: relative; z-index: var(--mc-z-raised); width: var(--mc-space-3); height: var(--mc-space-3); margin-top: var(--mc-space-1); border: var(--mc-border-thick) solid var(--mc-semantic-border-default); border-radius: 0; background: var(--mc-semantic-surface-default); }
+    .timeline .done .dot { border-color: var(--mc-signal-pass); background: var(--mc-signal-pass); }
+    .timeline .active .dot { border-color: var(--mc-signal-caution); background: var(--mc-signal-caution-surface); }
+    .timeline .body strong { display: block; font-size: var(--t-body-sm); font-weight: var(--w-semibold); }
+    .timeline .body span { color: var(--mc-semantic-fg2); font-size: var(--t-fine); }
+    .truth-table { width: 100%; border-collapse: collapse; font-size: var(--t-body-sm); }
+    .truth-table th, .truth-table td { padding: var(--mc-space-3); border-bottom: var(--mc-border-hair) solid var(--mc-component-table-rule); text-align: left; vertical-align: top; }
+    .truth-table th { color: var(--mc-semantic-fg2); font-weight: var(--w-medium); }
+    .truth-table td:first-child { font-weight: var(--w-semibold); }
+    .truth-table td:nth-child(2) { font-family: var(--mc-mono); font-size: var(--t-fine); text-transform: uppercase; }
+    .state-open { color: var(--mc-signal-risk); }
+    .state-active { color: var(--mc-signal-caution); }
+    .state-verified { color: var(--mc-signal-pass); }
+    details { margin-top: var(--mc-space-5); border-top: var(--mc-border-hair) solid var(--mc-semantic-border-default); }
+    summary { display: flex; align-items: center; min-height: var(--mc-touch-target-min); cursor: pointer; font-family: var(--mc-mono); font-size: var(--t-fine); letter-spacing: var(--tr-caps); text-transform: uppercase; }
+    .method { padding: var(--mc-space-4); background: var(--mc-semantic-surface-alt); color: var(--mc-semantic-fg2); font-size: var(--t-fine); }
+    footer { border-top: var(--mc-border-hair) solid var(--mc-semantic-border-default); padding-block: var(--mc-space-5); color: var(--mc-semantic-fg2); }
+    footer .shell { display: flex; justify-content: space-between; gap: var(--mc-space-4); }
+    footer p { margin-bottom: var(--mc-space-0); font-size: var(--t-fine); }
+    .no-js-note { display: block; }
+    html.mc-js .no-js-note { display: none; }
+    .state-error { display: none; border: var(--mc-border-hair) solid var(--mc-signal-risk); background: var(--mc-signal-risk-surface); color: var(--mc-signal-risk); padding: var(--mc-space-4); }
+    .state-error.is-visible { display: block; }
+    @media (max-width: 1024px) {
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .bearing-grid, .debt-grid { grid-template-columns: 1fr; }
+      .instrument { min-height: 23rem; }
+    }
+    @media (max-width: 768px) {
+      .shell { width: min(100% - var(--mc-space-4), 1440px); }
+      .masthead-row { display: block; }
+      .snapshot { margin-top: var(--mc-space-5); }
+      .section-head { grid-template-columns: 1fr; gap: var(--mc-space-3); }
+      .index-rail { position: static; display: flex; align-items: baseline; gap: var(--mc-space-3); }
+      .section-content { padding-left: var(--mc-space-4); }
+      .chart-head { display: block; }
+      .chart-head strong { display: block; margin-top: var(--mc-space-2); }
+      .truth-table, .truth-table tbody, .truth-table tr, .truth-table td { display: block; }
+      .truth-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .truth-table tr { border-bottom: var(--mc-border-hair) solid var(--mc-component-table-rule); padding-block: var(--mc-space-3); }
+      .truth-table td { border: var(--mc-space-0); padding: var(--mc-space-1) var(--mc-space-0); }
+      footer .shell { display: block; }
+    }
+    @media (max-width: 520px) {
+      .metric-grid { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 5.5rem 1fr 2.5rem; }
+      .timeline li { grid-template-columns: 4rem var(--mc-space-3) 1fr; }
+      .instrument { min-height: 19rem; }
+      .instrument-figure { width: min(100%, 17rem); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+      html.mc-js .bar { transform: none !important; }
+      html.mc-js .chart-line[data-draw] { stroke-dashoffset: var(--mc-space-0) !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="shell masthead-row">
+      <div class="title-block">
+        <p class="eyebrow">Mister Clean / State instrument</p>
+        <h1>Are we getting closer?</h1>
+        <p class="lede">A derived view of code, planning, Git, verification, and skill capability. The test is not activity. The test is whether each move reduces the distance to a successor-ready repository.</p>
+      </div>
+      <div class="snapshot" aria-label="Dashboard snapshot identity">
+        <strong>EXAMPLE REPOSITORY · MAIN · <span data-bind="repo.commit">9f3a2d1</span></strong>
+        <span data-bind="snapshot.generatedAt">2026-01-15 14:30 UTC</span>
+        <span>Illustrative data · replace before use</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="view-nav" aria-label="Dashboard sections">
+    <div class="shell">
+      <a href="#bearing">Bearing</a>
+      <a href="#evolution">Evolution</a>
+      <a href="#debt">Debt</a>
+      <a href="#path">Critical path</a>
+      <a href="#truth">Truth surfaces</a>
+    </div>
+  </nav>
+
+  <main class="shell">
+    <div id="state-error" class="state-error" role="alert">The embedded state could not be read. The dashboard remains a projection; inspect the repository and closeout report directly.</div>
+    <p class="no-js-note method">JavaScript is unavailable. All values and final chart geometry remain visible; animated transitions are disabled.</p>
+
+    <section aria-labelledby="summary-title">
+      <h2 id="summary-title">Current state</h2>
+      <div class="metric-grid">
+        <article class="card metric verdict-card">
+          <span class="label">Closeout verdict</span>
+          <span class="chip chip-risk" data-bind="verdict">Not clean</span>
+          <p class="metric-note">Payable work remains. A report is not payment.</p>
+        </article>
+        <article class="card metric">
+          <span class="label">Tracked tree</span>
+          <strong class="metric-value" data-count-bind="repo.files" data-format="integer">1,248</strong>
+          <p class="metric-note"><span data-count-bind="repo.mainStates" data-format="integer">86</span> first-parent states on main.</p>
+        </article>
+        <article class="card metric">
+          <span class="label">Main tree size</span>
+          <strong class="metric-value" data-count-bind="repo.kib" data-format="decimal">9,214.375</strong>
+          <p class="metric-note">KiB of tracked blob content at the bound snapshot.</p>
+        </article>
+        <article class="card metric">
+          <span class="label">Skill contract</span>
+          <strong class="metric-value"><span data-count-bind="skillAudit.paid" data-format="integer">18</span>/<span data-bind="skillAudit.total">25</span></strong>
+          <p class="metric-note">Cases paid. <span data-bind="skillAudit.partial">5</span> partial · <span data-bind="skillAudit.open">2</span> open.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="bearing" class="section-block section-head" aria-labelledby="bearing-title">
+      <div class="index-rail"><span class="index-number">01</span><span class="index-label">Bearing</span></div>
+      <div class="section-content">
+        <h2 id="bearing-title">Direction before motion.</h2>
+        <div class="bearing-grid">
+          <article class="card instrument">
+            <div>
+              <div class="instrument-figure" role="img" aria-label="Illustrative Mister Clean contract audit: 18 paid, 5 partially paid, 2 open, 25 total">
+                <svg viewBox="0 0 240 240" aria-hidden="true">
+                  <circle class="instrument-track" cx="120" cy="120" r="88"></circle>
+                  <circle class="instrument-track" cx="120" cy="120" r="72"></circle>
+                  <circle class="instrument-track" cx="120" cy="120" r="56"></circle>
+                  <circle class="instrument-ring ring-paid" data-ring="paid" cx="120" cy="120" r="88" stroke-dasharray="397.981 154.939"></circle>
+                  <circle class="instrument-ring ring-partial" data-ring="partial" cx="120" cy="120" r="72" stroke-dasharray="90.478 361.911"></circle>
+                  <circle class="instrument-ring ring-open" data-ring="open" cx="120" cy="120" r="56" stroke-dasharray="28.149 323.710"></circle>
+                </svg>
+                <div class="instrument-center"><strong data-count-bind="skillAudit.paid" data-format="integer">18</strong><span>Paid of 25</span></div>
+              </div>
+              <div class="legend" aria-hidden="true">
+                <span class="paid"><i></i>Paid 18</span>
+                <span class="partial"><i></i>Partial 5</span>
+                <span class="open"><i></i>Open 2</span>
+              </div>
+            </div>
+          </article>
+          <article class="card north-star">
+            <span class="label">North Star</span>
+            <blockquote>Leave a repository so coherent, complete, and legible that a new programming team can begin from the work—not from archaeology.</blockquote>
+            <cite>Direction is necessary. Medium-term convergence keeps the route honest.</cite>
+            <ol class="bearing-questions">
+              <li>What changed in the system, not merely in its description?</li>
+              <li>Which uncertainty or dependency was actually retired?</li>
+              <li>Did this shorten the critical path to a clean handoff?</li>
+              <li>Did it remove more concepts, gates, and follow-up work than it created?</li>
+              <li>What is the largest safe outcome-producing step available now?</li>
+            </ol>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="evolution" class="section-block section-head" aria-labelledby="evolution-title">
+      <div class="index-rail"><span class="index-number">02</span><span class="index-label">Evolution</span></div>
+      <div class="section-content">
+        <h2 id="evolution-title">Size is context, not guilt.</h2>
+        <article class="card chart-card">
+          <div class="chart-head">
+            <div><span class="label">Tracked tree / first-parent main history</span><p class="metric-note">Eight illustrative milestones across 86 main states.</p></div>
+            <strong><span data-count-bind="repo.kib" data-format="decimal">9,214.375</span> KiB</strong>
+          </div>
+          <svg class="chart-svg" viewBox="0 0 760 250" role="img" aria-labelledby="size-chart-title size-chart-desc">
+            <title id="size-chart-title">Illustrative tracked codebase size across main history</title>
+            <desc id="size-chart-desc">The example repository rises from 420.125 KiB at state one to 9,214.375 KiB at state 86.</desc>
+            <line class="chart-grid" x1="40" y1="42" x2="720" y2="42"></line>
+            <line class="chart-grid" x1="40" y1="84" x2="720" y2="84"></line>
+            <line class="chart-grid" x1="40" y1="126" x2="720" y2="126"></line>
+            <line class="chart-grid" x1="40" y1="168" x2="720" y2="168"></line>
+            <line class="chart-axis" x1="40" y1="210" x2="720" y2="210"></line>
+            <path class="chart-line" data-draw pathLength="1" d="M40 202 L118 178 L215 148 L312 127 L410 101 L507 78 L604 60 L720 45"></path>
+            <g aria-hidden="true">
+              <circle class="chart-point" cx="40" cy="202" r="4"><title>State 1 · 420.125 KiB</title></circle>
+              <circle class="chart-point" cx="118" cy="178" r="4"><title>State 11 · 1,760.250 KiB</title></circle>
+              <circle class="chart-point" cx="215" cy="148" r="4"><title>State 23 · 3,440.500 KiB</title></circle>
+              <circle class="chart-point" cx="312" cy="127" r="4"><title>State 35 · 4,616.875 KiB</title></circle>
+              <circle class="chart-point" cx="410" cy="101" r="4"><title>State 47 · 6,073.250 KiB</title></circle>
+              <circle class="chart-point" cx="507" cy="78" r="4"><title>State 59 · 7,361.125 KiB</title></circle>
+              <circle class="chart-point" cx="604" cy="60" r="4"><title>State 71 · 8,369.750 KiB</title></circle>
+              <circle class="chart-point" cx="720" cy="45" r="4"><title>State 86 · 9,214.375 KiB</title></circle>
+            </g>
+            <text class="chart-label" x="40" y="236">01</text>
+            <text class="chart-label" x="352" y="236">MAIN STATE</text>
+            <text class="chart-label" x="698" y="236">86</text>
+          </svg>
+          <p class="method">Interpretation: growth is not itself debt. The cleanup question is whether every remaining concept earns its place and whether successor agents face one coherent path through it.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="debt" class="section-block section-head" aria-labelledby="debt-title">
+      <div class="index-rail"><span class="index-number">03</span><span class="index-label">Debt</span></div>
+      <div class="section-content">
+        <h2 id="debt-title">Honesty is not payment.</h2>
+        <div class="debt-grid">
+          <article class="card">
+            <h3>Mister Clean contract audit</h3>
+            <div class="bar-list" role="img" aria-label="Eighteen paid, five partial, and two open illustrative contract cases">
+              <div class="bar-row"><span class="bar-label">Paid</span><span class="bar-track"><span class="bar bar-paid" style="--bar-target: 72%"></span></span><span class="bar-value">18</span></div>
+              <div class="bar-row"><span class="bar-label">Partial</span><span class="bar-track"><span class="bar bar-partial" style="--bar-target: 20%"></span></span><span class="bar-value">5</span></div>
+              <div class="bar-row"><span class="bar-label">Open</span><span class="bar-track"><span class="bar bar-open" style="--bar-target: 8%"></span></span><span class="bar-value">2</span></div>
+            </div>
+            <p class="metric-note">Highest-leverage repairs: one repository-bound closure proof, strict action schemas, exact test discovery, and verified package closure.</p>
+          </article>
+          <article class="card">
+            <span class="label">Acceptance cascade</span>
+            <div class="holdout-number"><span data-count-bind="holdouts.executed" data-format="integer">23</span>/<span data-bind="holdouts.total">24</span></div>
+            <div class="holdout-rule" aria-hidden="true"><span data-holdout-progress></span></div>
+            <p class="metric-note">Executed holdouts on the closeout branch at this illustrative snapshot. The remaining review is payable work unless a real hard boundary is proved.</p>
+            <span class="chip chip-caution">Cascade incomplete</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="path" class="section-block section-head" aria-labelledby="path-title">
+      <div class="index-rail"><span class="index-number">04</span><span class="index-label">Critical path</span></div>
+      <div class="section-content">
+        <h2 id="path-title">Finish the bounded work. Then converge.</h2>
+        <article class="card">
+          <ol class="timeline">
+            <li class="done"><span class="time">Bound</span><span class="track"><span class="dot"></span></span><span class="body"><strong>Repository truth captured</strong><span>Git, planning, runtime, and validation surfaces are bound to one start snapshot.</span></span></li>
+            <li class="done"><span class="time">Paid</span><span class="track"><span class="dot"></span></span><span class="body"><strong>Systemic hygiene repair</strong><span>The root cause was corrected and the invariant was added to an established runner.</span></span></li>
+            <li class="active"><span class="time">Review</span><span class="track"><span class="dot"></span></span><span class="body"><strong>Final acceptance cascade</strong><span>One independent review remains; its work unit, baseline, and acceptance bar are explicit.</span></span></li>
+            <li><span class="time">Next</span><span class="track"><span class="dot"></span></span><span class="body"><strong>One integrated candidate</strong><span>Run the complete repository surface against one measured commit.</span></span></li>
+            <li><span class="time">Then</span><span class="track"><span class="dot"></span></span><span class="body"><strong>Bare Mister Clean invocation</strong><span>Let the skill discover and pay planning, Git, review, and handoff debt without issue-specific coaching.</span></span></li>
+            <li><span class="time">Final</span><span class="track"><span class="dot"></span></span><span class="body"><strong>Blind audit and swarm review</strong><span>Every missed in-domain issue becomes a general skill improvement and a fresh invocation.</span></span></li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <section id="truth" class="section-block section-head" aria-labelledby="truth-title">
+      <div class="index-rail"><span class="index-number">05</span><span class="index-label">Truth surfaces</span></div>
+      <div class="section-content">
+        <h2 id="truth-title">Green gates can coexist with an unclean repository.</h2>
+        <article class="card">
+          <table class="truth-table">
+            <thead><tr><th>Domain</th><th>State</th><th>Bound evidence at this snapshot</th></tr></thead>
+            <tbody>
+              <tr><td>Git topology</td><td class="state-verified">Verified</td><td>Main is synchronized at <span class="state-code">9f3a2d1</span>; every remaining worktree is clean, owned, and dispositioned.</td></tr>
+              <tr><td>Planning truth</td><td class="state-verified">Verified</td><td><span data-bind="planning.epics">6</span> epics · <span data-bind="planning.stories">21</span> stories · <span data-bind="planning.slices">44</span> slices. Physical lanes and derived projections agree at the snapshot.</td></tr>
+              <tr><td>CI execution</td><td class="state-verified">Verified</td><td>The established workflow concluded successfully on the measured commit; wiring alone was not treated as execution.</td></tr>
+              <tr><td>Runtime custody</td><td class="state-verified">Verified</td><td>No task-owned process, local dependency, or ignored artifact is required by the committed handoff.</td></tr>
+              <tr><td>Acceptance cascade</td><td class="state-active">Active</td><td>Twenty-three of twenty-four independent reviews have executed. The final review keeps the repository NOT CLEAN.</td></tr>
+              <tr><td>Successor entry</td><td class="state-open">Open</td><td>The current-state artifact exists, but the final acceptance result and end snapshot have not yet been bound together.</td></tr>
+              <tr><td>Skill capability</td><td class="state-active">Measured</td><td>This visual is illustrative. Only the validated closeout bundle and repository evidence can establish the real state.</td></tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>How to read this instrument</summary>
+            <div class="method">
+              This dashboard is a derived projection. It does not establish CLEAN, replace the machine closeout report, authorize an action, or satisfy a test. Rebind every value to the repository and report snapshots before using it for a new run. If the visual and the repository disagree, the repository wins and the visual is stale debt.
+            </div>
+          </details>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell">
+      <p>Mister Clean · Codebase State Instrument · No logo used.</p>
+      <p>Portable public token pack · animated data views · reduced-motion path.</p>
+    </div>
+  </footer>
+
+  <script>
+    window.MISTER_CLEAN_DASHBOARD_STATE = {
+      snapshot: { generatedAt: '2026-01-15 14:30 UTC' },
+      verdict: 'Not clean',
+      repo: { commit: '9f3a2d1', files: 1248, mainStates: 86, kib: 9214.375 },
+      skillAudit: { total: 25, paid: 18, partial: 5, open: 2 },
+      holdouts: { executed: 23, total: 24 },
+      planning: { epics: 6, stories: 21, slices: 44 }
+    };
+
+    (function () {
+      var state = window.MISTER_CLEAN_DASHBOARD_STATE;
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var rootStyle = getComputedStyle(document.documentElement);
+      var countDuration = parseFloat(rootStyle.getPropertyValue('--mc-dataviz-count-duration')) || 560;
+
+      function read(path) {
+        return path.split('.').reduce(function (value, key) { return value == null ? value : value[key]; }, state);
+      }
+      function format(value, kind) {
+        if (kind === 'decimal') return Number(value).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+        if (kind === 'integer') return Math.round(Number(value)).toLocaleString();
+        return String(value);
+      }
+      function bindStatic() {
+        document.querySelectorAll('[data-bind]').forEach(function (node) {
+          var value = read(node.getAttribute('data-bind'));
+          if (value !== undefined) node.textContent = value;
+        });
+        var progress = document.querySelector('[data-holdout-progress]');
+        if (progress && Number(state.holdouts.total) > 0) {
+          progress.style.setProperty('--holdout-progress', ((Number(state.holdouts.executed) / Number(state.holdouts.total)) * 100) + '%');
+        }
+      }
+      function count(node) {
+        var target = Number(read(node.getAttribute('data-count-bind')));
+        var kind = node.getAttribute('data-format') || 'integer';
+        if (!Number.isFinite(target) || reduced) { node.textContent = format(target, kind); return; }
+        var start = null;
+        requestAnimationFrame(function tick(now) {
+          if (start === null) start = now;
+          var progress = Math.min(1, (now - start) / countDuration);
+          var eased = 1 - Math.pow(1 - progress, 3);
+          node.textContent = format(target * eased, kind);
+          if (progress < 1) requestAnimationFrame(tick);
+        });
+      }
+      function revealData() {
+        document.querySelectorAll('[data-count-bind]').forEach(count);
+        document.querySelectorAll('.bar').forEach(function (bar) { bar.classList.add('is-drawn'); });
+        document.querySelectorAll('.chart-line[data-draw]').forEach(function (path) {
+          var length = path.getTotalLength();
+          path.style.setProperty('--path-length', length);
+          requestAnimationFrame(function () { path.classList.add('is-drawn'); });
+        });
+        document.querySelectorAll('[data-ring]').forEach(function (ring) {
+          var length = ring.getTotalLength();
+          if (!reduced) {
+            ring.style.strokeDashoffset = length;
+            ring.style.transition = 'stroke-dashoffset var(--mc-dataviz-count-duration) var(--mc-ease-out)';
+            requestAnimationFrame(function () { ring.style.strokeDashoffset = '0'; });
+          }
+        });
+      }
+      try {
+        bindStatic();
+        if (reduced || !('IntersectionObserver' in window)) {
+          revealData();
+        } else {
+          var fired = false;
+          var target = document.getElementById('bearing');
+          var observer = new IntersectionObserver(function (entries) {
+            if (!fired && entries.some(function (entry) { return entry.isIntersecting; })) {
+              fired = true;
+              revealData();
+              observer.disconnect();
+            }
+          }, { threshold: 0.08 });
+          observer.observe(target);
+          window.setTimeout(function () { if (!fired) { fired = true; revealData(); observer.disconnect(); } }, 2400);
+        }
+      } catch (error) {
+        document.getElementById('state-error').classList.add('is-visible');
+      }
+    })();
+  </script>
+</body>
+</html>

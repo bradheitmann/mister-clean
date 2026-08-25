@@ -1,0 +1,70 @@
+/* Public, self-contained tokens for the optional Mister Clean dashboard. */
+
+:root {
+  color-scheme: light;
+
+  --mc-sans: "Avenir Next", Avenir, "Helvetica Neue", sans-serif;
+  --mc-serif: Iowan Old Style, Baskerville, "Times New Roman", serif;
+  --mc-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --mc-semantic-fg1: #17201d;
+  --mc-semantic-fg2: #52605a;
+  --mc-semantic-fg3: #78857f;
+  --mc-semantic-surface-default: #f6f5f0;
+  --mc-semantic-surface-alt: #ecebe5;
+  --mc-semantic-surface-warm: #e8e2d4;
+  --mc-semantic-border-default: #b8beb8;
+  --mc-semantic-border-accent: #244f43;
+  --mc-component-table-rule: #ced2cd;
+  --mc-grid-hairline-color: #c7ccc7;
+  --mc-index-number-color: #244f43;
+  --mc-index-label-color: #52605a;
+  --mc-dataviz-axis: #818c87;
+  --mc-dataviz-grid: #d8dbd6;
+  --mc-dataviz-series: #1e6b59;
+  --mc-dataviz-point-color: #1e6b59;
+  --mc-signal-pass: #1e6b59;
+  --mc-signal-caution: #9a6500;
+  --mc-signal-caution-surface: #f5e9c7;
+  --mc-signal-risk: #a23d32;
+  --mc-signal-risk-surface: #f3ddd8;
+
+  --mc-space-0: 0;
+  --mc-space-1: 0.25rem;
+  --mc-space-2: 0.5rem;
+  --mc-space-3: 0.75rem;
+  --mc-space-4: 1rem;
+  --mc-space-5: 1.5rem;
+  --mc-space-6: 2rem;
+  --mc-space-10: 4rem;
+  --mc-container-prose: 48rem;
+  --mc-touch-target-min: 2.75rem;
+  --mc-density-compact-control-height: 1.75rem;
+  --mc-index-sticky-offset: 5.5rem;
+
+  --mc-border-hair: 1px;
+  --mc-border-thick: 2px;
+  --mc-border-emphasis: 3px;
+  --mc-grid-hairline-weight: 1px;
+  --mc-dataviz-axis-stroke: 1px;
+  --mc-dataviz-line-stroke: 3px;
+  --mc-focus-ring-width: 3px;
+  --mc-focus-ring-offset: 3px;
+  --mc-focus-ring-color: #1e6b59;
+  --mc-radii-md: 0.375rem;
+  --mc-radii-pill: 999px;
+
+  --mc-motion-fast: 160ms;
+  --mc-dataviz-count-duration: 560ms;
+  --mc-dataviz-draw-duration: 900ms;
+  --mc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --mc-backdrop-blur: blur(12px);
+  --mc-elevation-hover: 0 0.75rem 2.5rem rgb(23 32 29 / 0.12);
+
+  --mc-index-number-size: clamp(2rem, 4vw, 4rem);
+  --mc-index-number-weight: 500;
+  --mc-index-label-size: 0.72rem;
+  --mc-index-label-tracking: 0.12em;
+  --mc-z-raised: 2;
+  --mc-z-sticky: 10;
+}
