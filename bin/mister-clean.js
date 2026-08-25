@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
 // src/cli.ts
-import { existsSync as existsSync3, readFileSync as readFileSync3, realpathSync as realpathSync2, statSync as statSync2, writeFileSync as writeFileSync3 } from "fs";
-import { join as join3, relative as relative5, resolve as resolve5, sep as sep5 } from "path";
+import { existsSync as existsSync3, readFileSync as readFileSync4, realpathSync as realpathSync2, statSync as statSync2, writeFileSync as writeFileSync3 } from "fs";
+import { join as join3, relative as relative6, resolve as resolve6, sep as sep6 } from "path";
 import { fileURLToPath as fileURLToPath2, pathToFileURL } from "url";
 
 // src/closeout/bundle.ts
-import { createHash } from "crypto";
+import { createHash as createHash2 } from "crypto";
 import { execFile } from "child_process";
 import { access, lstat, readFile, readdir, realpath } from "fs/promises";
-import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "path";
+import { basename as basename3, dirname as dirname2, isAbsolute as isAbsolute2, relative as relative3, resolve as resolve3, sep as sep3 } from "path";
 import { promisify } from "util";
 
 // src/closeout/records.ts
@@ -556,6 +556,2366 @@ function validateManifest(data, allowPlaceholders = false) {
   return errors;
 }
 
+// src/closeout/repository.ts
+import { createHash } from "crypto";
+import { execFileSync, spawnSync } from "child_process";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  readdirSync,
+  statSync,
+  writeFileSync
+} from "fs";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "path";
+import { fileURLToPath } from "url";
+var PLANNING_DIRECTORY_NAMES = /* @__PURE__ */ new Set([
+  "planning",
+  "plans",
+  "roadmap",
+  "project-management",
+  "work-items",
+  "work_items",
+  "tasks",
+  "stories",
+  "epics",
+  "slices",
+  "issues"
+]);
+var PLANNING_FILE_STEMS = /* @__PURE__ */ new Set([
+  "backlog",
+  "current",
+  "milestones",
+  "plan",
+  "planning",
+  "project-plan",
+  "project_plan",
+  "roadmap",
+  "status",
+  "tasks",
+  "todo",
+  "work-items",
+  "work_items"
+]);
+var PLANNING_FILE_EXTENSIONS = /* @__PURE__ */ new Set([
+  ".json",
+  ".md",
+  ".mdx",
+  ".txt",
+  ".yaml",
+  ".yml"
+]);
+function isCanonicalPlanningFileName(path) {
+  const name = basename(path);
+  const extension = extname(name).toLocaleLowerCase("und");
+  if (!PLANNING_FILE_EXTENSIONS.has(extension)) return false;
+  const stem = name.slice(0, -extension.length).toLocaleLowerCase("und");
+  return PLANNING_FILE_STEMS.has(stem);
+}
+var PLANNING_LANE_LIFECYCLES = /* @__PURE__ */ new Map([
+  ["backlog", "preexecution"],
+  ["todo", "preexecution"],
+  ["to-do", "preexecution"],
+  ["to_do", "preexecution"],
+  ["ready", "preexecution"],
+  ["planned", "preexecution"],
+  ["active", "active"],
+  ["doing", "active"],
+  ["in-progress", "active"],
+  ["in_progress", "active"],
+  ["inprogress", "active"],
+  ["failed", "active"],
+  ["done", "done"],
+  ["complete", "done"],
+  ["completed", "done"],
+  ["closed", "done"],
+  ["history", "archived"],
+  ["historical", "archived"],
+  ["archive", "archived"],
+  ["archived", "archived"],
+  ["superseded", "archived"]
+]);
+var PLANNING_LANE_NAMES = new Set(PLANNING_LANE_LIFECYCLES.keys());
+function planningLaneLifecycle(name) {
+  return PLANNING_LANE_LIFECYCLES.get(name.toLocaleLowerCase("und"));
+}
+var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
+  ".git",
+  "node_modules",
+  "vendor",
+  ".venv",
+  "venv",
+  "dist",
+  "build",
+  ".cache"
+]);
+function compareCodePoints(left, right) {
+  const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
+  const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
+  for (let index = 0; index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
+    const difference = (leftPoints[index] ?? 0) - (rightPoints[index] ?? 0);
+    if (difference) return difference;
+  }
+  return leftPoints.length - rightPoints.length;
+}
+function runGit(repository, args, allowedStatuses = [0]) {
+  const result = spawnSync("git", ["-C", repository, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  const status = result.status ?? 1;
+  const stdout = result.stdout.trim();
+  const stderr = result.stderr.trim();
+  if (result.error) throw result.error;
+  if (!allowedStatuses.includes(status)) {
+    throw new Error(stderr || `git ${args.join(" ")} exited ${status}`);
+  }
+  return { status, stdout, stderr };
+}
+function git(repository, ...args) {
+  return runGit(repository, args).stdout;
+}
+function isGitAncestor(repository, ancestor, descendant) {
+  return runGit(repository, ["merge-base", "--is-ancestor", ancestor, descendant], [0, 1]).status === 0;
+}
+function sha256Bytes(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+function sha256File(path) {
+  return sha256Bytes(readFileSync(path));
+}
+function readJson(path) {
+  const value = JSON.parse(readFileSync(path, "utf8"));
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${path}: expected a JSON object`);
+  }
+  return value;
+}
+function writeJson(path, value) {
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}
+`, "utf8");
+}
+function packageRoot(fromUrl = import.meta.url) {
+  const sourcePath = fileURLToPath(fromUrl);
+  const here = dirname(existsSync(sourcePath) ? realpathSync(sourcePath) : sourcePath);
+  const candidates = [resolve(here, "..", ".."), resolve(here, "..")];
+  const found = candidates.find((candidate) => existsSync(join(candidate, "assets", "closure-bundle.json")));
+  if (!found) throw new Error("Cannot locate Mister Clean package assets");
+  return found;
+}
+function repositoryIdentity(repository) {
+  const remote = runGit(repository, ["config", "--get", "remote.origin.url"], [0, 1]).stdout;
+  if (remote && !remote.startsWith("/") && !remote.startsWith("file://")) {
+    let value;
+    if (remote.includes("://")) {
+      value = new URL(remote).pathname.replace(/^\/+|\/+$/g, "");
+    } else {
+      value = remote.split(":", 2).at(-1) ?? remote;
+    }
+    value = value.replace(/\.git$/, "").replace(/\/+$/, "");
+    if (value.includes("/")) return value;
+  }
+  return repository.split(sep).filter(Boolean).at(-1) ?? repository;
+}
+function childEntries(directory) {
+  try {
+    return readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+  } catch {
+    return [];
+  }
+}
+function discoverPlanningRoots(repository) {
+  const candidates = /* @__PURE__ */ new Set();
+  function visit(directory) {
+    const relativePath = relative(repository, directory);
+    const name = directory.split(sep).at(-1)?.toLocaleLowerCase() ?? "";
+    if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
+      candidates.add(directory);
+      return;
+    }
+    const entries = childEntries(directory).filter((entry) => !PLANNING_IGNORED_NAMES.has(entry.name));
+    for (const entry of entries) {
+      if ((entry.isFile() || entry.isSymbolicLink()) && isCanonicalPlanningFileName(entry.name)) {
+        candidates.add(join(directory, entry.name));
+      }
+    }
+    const names = entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name);
+    const laneCount = names.filter((child) => PLANNING_LANE_NAMES.has(child.toLocaleLowerCase())).length;
+    if (laneCount >= 2 && relativePath !== "") {
+      candidates.add(directory);
+      return;
+    }
+    for (const child of names) visit(join(directory, child));
+  }
+  visit(repository);
+  const ordered = [...candidates].sort((left, right) => {
+    const depth = left.split(sep).length - right.split(sep).length;
+    return depth || compareCodePoints(left, right);
+  });
+  const minimal = [];
+  for (const candidate of ordered) {
+    if (!minimal.some((root) => candidate === root || candidate.startsWith(`${root}${sep}`))) {
+      minimal.push(candidate);
+    }
+  }
+  return minimal.map((root) => relative(repository, root).split(sep).join("/")).sort();
+}
+function parseWorktrees(repository) {
+  const output = git(repository, "worktree", "list", "--porcelain", "-z");
+  if (!output) return [];
+  const records = [];
+  let current = {};
+  for (const item of output.split("\0")) {
+    if (!item) continue;
+    if (item.startsWith("worktree ") && current.worktree) {
+      records.push(current);
+      current = {};
+    }
+    const separator = item.indexOf(" ");
+    const rawKey = separator === -1 ? item : item.slice(0, separator);
+    const key = rawKey === "HEAD" ? "head" : rawKey.toLocaleLowerCase();
+    if (separator === -1) current[key] = "true";
+    else current[key] = item.slice(separator + 1);
+  }
+  if (current.worktree) records.push(current);
+  return records;
+}
+function listEntriesRecursively(root) {
+  const entries = [];
+  function visit(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path);
+      else if (entry.isSymbolicLink()) entries.push({ kind: "symlink", path });
+      else if (entry.isFile()) entries.push({ kind: "file", path });
+      else entries.push({ kind: "other", path });
+    }
+  }
+  visit(root);
+  return entries.sort((left, right) => left.path.localeCompare(right.path));
+}
+function listFilesRecursively(root) {
+  return listEntriesRecursively(root).filter((entry) => entry.kind === "file").map((entry) => entry.path);
+}
+function assertDirectory(path) {
+  if (!existsSync(path) || !statSync(path).isDirectory()) throw new Error(`not a directory: ${path}`);
+}
+
+// src/closeout/planning.ts
+import { lstatSync as lstatSync2, readFileSync as readFileSync2 } from "fs";
+import { basename as basename2, extname as extname2, relative as relative2, resolve as resolve2, sep as sep2 } from "path";
+import { parse as parseYaml } from "yaml";
+var TEXT_EXTENSIONS = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
+var DONE = /* @__PURE__ */ new Set([
+  "accept",
+  "accepted",
+  "approved",
+  "closed",
+  "complete",
+  "completed",
+  "dev complete",
+  "done",
+  "implemented",
+  "merged",
+  "pass",
+  "passed",
+  "shipped",
+  "verified"
+]);
+var ACTIVE = /* @__PURE__ */ new Set([
+  "active",
+  "blocked",
+  "claimed",
+  "doing",
+  "escalated",
+  "executing",
+  "failed",
+  "in progress",
+  "inprogress",
+  "ready for acceptance",
+  "ready for qa",
+  "ready for review",
+  "rejected",
+  "revise",
+  "underway"
+]);
+var PREEXECUTION = /* @__PURE__ */ new Set([
+  "backlog",
+  "draft",
+  "not started",
+  "notstarted",
+  "pending",
+  "planned",
+  "ready",
+  "to do",
+  "todo",
+  "unstarted"
+]);
+var ARCHIVED = /* @__PURE__ */ new Set(["archive", "archived", "historical", "history", "superseded"]);
+var FAILED = /* @__PURE__ */ new Set(["deny", "denied", "fail", "failed", "reject", "rejected", "revise"]);
+var PASSED = /* @__PURE__ */ new Set([...DONE, "approve"]);
+var UNRUN = /* @__PURE__ */ new Set([
+  "backlog",
+  "blocked",
+  "not executed",
+  "not run",
+  "notexecuted",
+  "notrun",
+  "pending",
+  "planned",
+  "to do",
+  "todo",
+  "unexecuted",
+  "unrun"
+]);
+var NOT_APPLICABLE = /* @__PURE__ */ new Set(["n/a", "na", "not applicable", "not required", "waived"]);
+var NON_ARTIFACT_CLASSES = /* @__PURE__ */ new Set(["guidance", "non artifact", "reference", "schema", "template"]);
+var ACCEPTANCE_KINDS = ["acceptance", "holdout", "qa", "review"];
+var ACCEPTANCE_WORDS = new Set(ACCEPTANCE_KINDS);
+var LEAF_ARTIFACT_TYPES = /* @__PURE__ */ new Set(["slice", "task"]);
+var ROLLUP_ARTIFACT_TYPES = /* @__PURE__ */ new Set(["index", "rollup", "status_index"]);
+var HIERARCHY_ARTIFACT_TYPES = /* @__PURE__ */ new Set(["epic", "feature", "slice", "story", "task", "work_item"]);
+var PLANNING_ARTIFACT_TYPES = /* @__PURE__ */ new Set([
+  ...HIERARCHY_ARTIFACT_TYPES,
+  ...ROLLUP_ARTIFACT_TYPES,
+  "acceptance",
+  "holdout",
+  "qa",
+  "review"
+]);
+var CHILD_PARENTAGE_ROLE_ALIASES = /* @__PURE__ */ new Set(["child_parentage", "hierarchy", "parent", "parentage"]);
+var ROLLUP_PROJECTION_ROLE_ALIASES = /* @__PURE__ */ new Set(["index", "projection", "rollup", "rollup_projection", "status_index"]);
+var CANONICAL_PARENT_FIELDS = {
+  feature: ["epic", "epic_id"],
+  slice: ["story", "story_id", "feature", "feature_id", "epic", "epic_id"],
+  story: ["feature", "feature_id", "epic", "epic_id"],
+  task: ["slice", "slice_id", "story", "story_id", "feature", "feature_id", "epic", "epic_id"],
+  work_item: ["story", "story_id", "feature", "feature_id", "epic", "epic_id"]
+};
+var ACCEPTANCE_VALUE_FIELDS = [
+  "current_lifecycle",
+  "current_phase",
+  "current_stage",
+  "current_state",
+  "current_status",
+  "implementation_status",
+  "lifecycle",
+  "outcome",
+  "phase",
+  "result",
+  "stage",
+  "state",
+  "status",
+  "verdict"
+];
+var ACCEPTANCE_OUTCOME_WORDS = /* @__PURE__ */ new Set([
+  "lifecycle",
+  "outcome",
+  "phase",
+  "result",
+  "stage",
+  "state",
+  "status",
+  "verdict"
+]);
+var EXPLICIT_ACCEPTANCE_FIELDS = [
+  ...ACCEPTANCE_KINDS.flatMap((kind) => ACCEPTANCE_VALUE_FIELDS.map((field) => `${kind}_${field}`)),
+  "outcome",
+  "result",
+  "verdict"
+];
+var DECISIVE_ACCEPTANCE_FIELDS = [
+  ...ACCEPTANCE_KINDS.flatMap((kind) => ["outcome", "result", "verdict"].map((field) => `${kind}_${field}`)),
+  "outcome",
+  "result",
+  "verdict"
+];
+var HISTORICAL_HEADINGS = /\b(archive|archived|changelog|historical|history|prior|previous|superseded)\b/i;
+var PARENTAGE_TARGET_HEADERS = /* @__PURE__ */ new Set([
+  "artifact",
+  "artifact id",
+  "artifacts",
+  "child",
+  "child id",
+  "children",
+  "epic",
+  "epic id",
+  "epics",
+  "feature",
+  "feature id",
+  "features",
+  "id",
+  "ids",
+  "item",
+  "item id",
+  "items",
+  "planning artifact",
+  "planning artifact id",
+  "planning artifacts",
+  "slice",
+  "slice id",
+  "slices",
+  "stories",
+  "story",
+  "story id",
+  "task",
+  "task id",
+  "tasks",
+  "work item",
+  "work item id",
+  "work items"
+]);
+var ROLLUP_TARGET_HEADERS = /* @__PURE__ */ new Set([
+  "artifact",
+  "artifact id",
+  "artifacts",
+  "child",
+  "child id",
+  "children",
+  "epic",
+  "epic id",
+  "epics",
+  "feature",
+  "feature id",
+  "features",
+  "id",
+  "ids",
+  "item",
+  "item id",
+  "items",
+  "planning artifact",
+  "planning artifact id",
+  "planning artifacts",
+  "slice",
+  "slice id",
+  "slices",
+  "stories",
+  "story",
+  "story id",
+  "task",
+  "task id",
+  "tasks",
+  "work item",
+  "work item id",
+  "work items"
+]);
+var STRUCTURED_CHILD_KEYS = /* @__PURE__ */ new Set([
+  "artifact",
+  "artifact_ids",
+  "artifacts",
+  "artifacts_ids",
+  "child",
+  "child_ids",
+  "children",
+  "children_ids",
+  "epic",
+  "epic_ids",
+  "epics",
+  "epics_ids",
+  "feature",
+  "feature_ids",
+  "features",
+  "features_ids",
+  "ids",
+  "item",
+  "item_ids",
+  "items",
+  "items_ids",
+  "planning_artifact",
+  "planning_artifact_ids",
+  "planning_artifacts",
+  "planning_artifacts_ids",
+  "slice",
+  "slice_ids",
+  "slices",
+  "slices_ids",
+  "stories",
+  "stories_ids",
+  "story",
+  "story_ids",
+  "task",
+  "task_ids",
+  "tasks",
+  "tasks_ids",
+  "work_item",
+  "work_item_ids",
+  "work_items",
+  "work_items_ids"
+]);
+var STRUCTURED_ID_KEYS = [
+  "id",
+  "artifact_id",
+  "child_id",
+  "epic_id",
+  "feature_id",
+  "item_id",
+  "planning_artifact_id",
+  "slice_id",
+  "story_id",
+  "task_id",
+  "work_item_id"
+];
+var STRUCTURED_STATE_KEYS = [
+  "current_lifecycle",
+  "current_phase",
+  "current_stage",
+  "current_state",
+  "current_status",
+  "implementation_status",
+  "lifecycle",
+  "phase",
+  "stage",
+  "state",
+  "status"
+];
+var STATE_HEADERS = new Set(STRUCTURED_STATE_KEYS.map(normalize));
+var STATE_HEADER_WORDS = /* @__PURE__ */ new Set(["lifecycle", "phase", "stage", "state", "status"]);
+var ACCEPTANCE_ID_FIELDS = ["acceptance_id", "holdout_id", "qa_id", "review_id"];
+var FINDING_CODES = [
+  "acceptance_cascade_unexecuted",
+  "acceptance_failure_unpaid",
+  "acceptance_gate_identity_conflict",
+  "acceptance_gate_undiscovered",
+  "acceptance_gate_unknown",
+  "archive_classification_conflict",
+  "body_projection_conflict",
+  "completed_parent_unexecuted_acceptance",
+  "duplicate_artifact_id",
+  "lane_status_conflict",
+  "lifecycle_state_unknown",
+  "orphan_parent_reference",
+  "parent_child_projection_conflict",
+  "parent_completion_stale",
+  "planning_input_unparsed",
+  "planning_relationship_conflict",
+  "planning_relationship_unresolved",
+  "preexecution_parent_has_started_children"
+];
+function object2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function normalize(value) {
+  return foldCase(value.replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").replace(/([a-z\d])([A-Z])/g, "$1 $2")).replace(/[`*"']/g, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function isNonArtifactPlanningClass(value) {
+  return NON_ARTIFACT_CLASSES.has(normalize(value));
+}
+function normalizedId(value) {
+  return foldCase(value).trim();
+}
+function keyToken(value) {
+  return normalize(value).replace(/ /g, "_");
+}
+function scalar(value) {
+  if (typeof value === "string") return value.trim() || void 0;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return void 0;
+}
+function unique(values) {
+  const seen = /* @__PURE__ */ new Set();
+  const result = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    const key = normalizedId(trimmed);
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+function topEntries(metadata, keys) {
+  const priorities = /* @__PURE__ */ new Map();
+  for (const [index, key] of keys.entries()) {
+    const token = keyToken(key);
+    if (!priorities.has(token)) priorities.set(token, index);
+  }
+  return Object.entries(metadata).filter(([key]) => priorities.has(keyToken(key))).sort(([left], [right]) => (priorities.get(keyToken(left)) ?? Number.MAX_SAFE_INTEGER) - (priorities.get(keyToken(right)) ?? Number.MAX_SAFE_INTEGER) || keyToken(left).localeCompare(keyToken(right)) || left.localeCompare(right));
+}
+function lifecycle(value) {
+  if (!value) return "unknown";
+  const token = normalize(value);
+  if (DONE.has(token)) return "done";
+  if (ACTIVE.has(token)) return "active";
+  if (PREEXECUTION.has(token)) return "preexecution";
+  if (ARCHIVED.has(token)) return "archived";
+  return "unknown";
+}
+function acceptance(value) {
+  if (!value) return "unknown";
+  const token = normalize(value);
+  if (FAILED.has(token)) return "failed";
+  if (UNRUN.has(token)) return "unrun";
+  if (NOT_APPLICABLE.has(token)) return "not_applicable";
+  if (PASSED.has(token)) return "passed";
+  return "unknown";
+}
+function stateProjection(values) {
+  const orderedValues = unique(values).sort((left, right) => normalize(left).localeCompare(normalize(right)) || left.localeCompare(right));
+  const states = [...new Set(orderedValues.map(lifecycle))].sort();
+  return {
+    state: states.length === 1 ? states[0] ?? "unknown" : "unknown",
+    states,
+    values: orderedValues
+  };
+}
+function frontmatterRange(content) {
+  const lines2 = content.split(/\r?\n/);
+  let start = 0;
+  while (start < lines2.length) {
+    while (lines2[start]?.trim() === "") start += 1;
+    if (lines2[start]?.trim().startsWith("<!--")) {
+      while (start < lines2.length && !lines2[start]?.includes("-->")) start += 1;
+      if (start < lines2.length) start += 1;
+      continue;
+    }
+    break;
+  }
+  if (lines2[start]?.trim() !== "---") return void 0;
+  for (let end = start + 1; end < lines2.length; end += 1) {
+    if (lines2[end]?.trim() === "---") return { end, lines: lines2, start };
+  }
+  return void 0;
+}
+function parseStructured(content, kind) {
+  try {
+    if (kind === "json") parseYaml(content);
+    const value = kind === "json" ? JSON.parse(content) : parseYaml(content);
+    const metadata = object2(value);
+    if (!metadata) return { metadata: {}, parseError: `${kind} root is not an object`, structured: false };
+    return { metadata, structured: true };
+  } catch (error) {
+    const parseError = error instanceof Error ? error.message.split("\n", 1)[0] : void 0;
+    return {
+      metadata: {},
+      parseError: parseError ?? `${kind} parse failed`,
+      structured: false
+    };
+  }
+}
+function parseSource(source) {
+  const extension = extname2(source.path).toLocaleLowerCase("und");
+  if (extension === ".json") return parseStructured(source.content, "json");
+  if (extension === ".yaml" || extension === ".yml") return parseStructured(source.content, "yaml");
+  const range = frontmatterRange(source.content);
+  if (!range) return { metadata: {}, structured: false };
+  const raw = range.lines.slice(range.start + 1, range.end).join("\n");
+  return parseStructured(raw, "yaml");
+}
+function topValues(metadata, keys) {
+  const values = [];
+  for (const [, value] of topEntries(metadata, keys)) {
+    const item = scalar(value);
+    if (item) values.push(item);
+  }
+  return unique(values);
+}
+function scalarAliasValues(metadata, keys, label) {
+  const entries = topEntries(metadata, keys);
+  const values = [];
+  const invalid = [];
+  for (const [key, raw] of entries) {
+    const value = scalar(raw);
+    if (value) values.push(value);
+    else invalid.push(key);
+  }
+  return {
+    ...invalid.length > 0 ? { error: `${label} aliases must each contain one nonempty scalar; invalid: ${invalid.map((key) => JSON.stringify(key)).join(", ")}` } : {},
+    present: entries.length > 0,
+    values: unique(values)
+  };
+}
+function scalarListAliasValues(metadata, keys, label) {
+  const entries = topEntries(metadata, keys);
+  const values = [];
+  const invalid = [];
+  const add = (raw, ref) => {
+    const value = scalar(raw);
+    if (value) {
+      values.push(value);
+      return;
+    }
+    if (Array.isArray(raw) && raw.length > 0) {
+      raw.forEach((entry, index) => add(entry, `${ref}[${index}]`));
+      return;
+    }
+    invalid.push(ref);
+  };
+  for (const [key, raw] of entries) add(raw, key);
+  return {
+    ...invalid.length > 0 ? { error: `${label} entries must each contain one nonempty scalar; invalid: ${invalid.map((key) => JSON.stringify(key)).join(", ")}` } : {},
+    present: entries.length > 0,
+    values: unique(values)
+  };
+}
+function lifecycleAliasProjection(metadata, label, allowAcceptance = false) {
+  const aliases = scalarAliasValues(metadata, STRUCTURED_STATE_KEYS, label);
+  const projection = stateProjection(aliases.values);
+  const unsupported = aliases.values.filter((value) => lifecycle(value) === "unknown" && !(allowAcceptance && acceptance(value) !== "unknown"));
+  const lifecycleStates = [...new Set(aliases.values.map(lifecycle).filter((state) => state !== "unknown"))];
+  const errors = [
+    aliases.error,
+    ...unsupported.length > 0 ? [`${label} contains unsupported lifecycle values: ${unsupported.map((value) => JSON.stringify(value)).join(", ")}`] : [],
+    ...lifecycleStates.length > 1 ? [`${label} contains conflicting lifecycle values: ${aliases.values.map((value) => JSON.stringify(value)).join(", ")}`] : []
+  ].filter((error) => Boolean(error));
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    projection
+  };
+}
+function topLevelProjection(metadata) {
+  const projection = scalarAliasValues(metadata, ["top_level"], "top_level");
+  const normalized = projection.values.map(normalize);
+  const supported = /* @__PURE__ */ new Set(["0", "1", "false", "no", "true", "yes"]);
+  const errors = [
+    projection.error,
+    ...normalized.length > 1 ? [`top_level aliases conflict: ${projection.values.map((value) => JSON.stringify(value)).join(", ")}`] : [],
+    ...normalized.some((value) => !supported.has(value)) ? [`top_level must be one of true, false, yes, no, 1, or 0; received ${projection.values.map((value) => JSON.stringify(value)).join(", ")}`] : []
+  ].filter((error) => Boolean(error));
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    value: normalized.length === 1 && (/* @__PURE__ */ new Set(["1", "true", "yes"])).has(normalized[0] ?? "")
+  };
+}
+function unsupportedStateAliasError(metadata, label) {
+  const supported = /* @__PURE__ */ new Set([
+    ...STRUCTURED_STATE_KEYS.map(keyToken),
+    ...EXPLICIT_ACCEPTANCE_FIELDS.map(keyToken)
+  ]);
+  const unsupported = Object.keys(metadata).filter((key) => {
+    const token = keyToken(key);
+    const words = normalize(key).split(" ");
+    return words.some((word) => STATE_HEADER_WORDS.has(word)) && !supported.has(token);
+  });
+  return unsupported.length > 0 ? `${label} contains unsupported state-like aliases: ${unsupported.map((key) => JSON.stringify(key)).join(", ")}` : void 0;
+}
+function deepEntries(value, path = []) {
+  const item = object2(value);
+  if (item) {
+    return Object.entries(item).flatMap(([key, child]) => deepEntries(child, [...path, keyToken(key)]));
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((child, index) => deepEntries(child, [...path, String(index)]));
+  }
+  return [{ path, value }];
+}
+function hasRawPlanningSignal(metadata, type) {
+  const keys = new Set(Object.keys(metadata).map(keyToken));
+  const recognized = /* @__PURE__ */ new Set([
+    ...STRUCTURED_CHILD_KEYS,
+    ...STRUCTURED_ID_KEYS,
+    ...STRUCTURED_STATE_KEYS,
+    "child_relationship_role",
+    "child_relationship_role_rationale",
+    "child_target_column",
+    "child_target_column_rationale",
+    "non_relationship_table_columns",
+    "non_relationship_table_rationale",
+    "non_relationship_table_target_columns",
+    "parent",
+    "parent_id",
+    "parent_ids",
+    "parents",
+    "parents_ids",
+    "relationship_role",
+    "relationship_role_rationale",
+    "relationship_target_column",
+    "relationship_target_column_rationale",
+    "rollup_target_column",
+    "rollup_target_column_rationale",
+    "top_level",
+    `${type}_id`
+  ]);
+  return [...keys].some((key) => recognized.has(key));
+}
+function pathLane(path) {
+  for (const part of path.split("/")) {
+    const state = planningLaneLifecycle(part);
+    if (state) return state;
+  }
+  return "unknown";
+}
+function acceptanceDeclarationKinds(value) {
+  const kinds = [];
+  const visit = (current) => {
+    const item = object2(current);
+    if (!item) {
+      if (Array.isArray(current)) current.forEach(visit);
+      return;
+    }
+    for (const [key, child] of Object.entries(item)) {
+      const token = keyToken(key);
+      const identityKind = ACCEPTANCE_ID_FIELDS.find((field) => token === field)?.replace(/_id$/, "");
+      if (identityKind) kinds.push(identityKind);
+      if ((/* @__PURE__ */ new Set(["artifact_type", "kind", "type"])).has(token)) {
+        const declaredType = keyToken(scalar(child) ?? "");
+        if (ACCEPTANCE_WORDS.has(declaredType)) kinds.push(declaredType);
+      }
+      for (const kind of ACCEPTANCE_KINDS) {
+        if (token === kind || token === `${kind}s` || ACCEPTANCE_VALUE_FIELDS.some((field) => token === `${kind}_${field}`)) {
+          kinds.push(kind);
+        }
+      }
+      visit(child);
+    }
+  };
+  visit(value);
+  return unique(kinds);
+}
+function hasNestedCanonicalPlanningSignal(metadata) {
+  const semanticKeys = new Set([
+    ...ACCEPTANCE_ID_FIELDS,
+    ...EXPLICIT_ACCEPTANCE_FIELDS,
+    ...STRUCTURED_STATE_KEYS,
+    "artifact_id",
+    "child_id",
+    "epic_id",
+    "feature_id",
+    "parent",
+    "parent_id",
+    "parent_ids",
+    "parents",
+    "parents_ids",
+    "planning_artifact_id",
+    "review_of",
+    "reviewed_id",
+    "slice_id",
+    "story_id",
+    "subject_id",
+    "target_id",
+    "task_id",
+    "top_level",
+    "work_item_id"
+  ].map(keyToken));
+  return deepEntries(metadata).some((entry) => {
+    if (entry.path.length < 2) return false;
+    if (entry.path.some((part, index) => index > 0 && (semanticKeys.has(part) || ACCEPTANCE_WORDS.has(part) || ACCEPTANCE_WORDS.has(part.replace(/s$/, ""))))) return true;
+    const last = entry.path.at(-1) ?? "";
+    return (/* @__PURE__ */ new Set(["artifact_type", "kind", "type"])).has(last) && PLANNING_ARTIFACT_TYPES.has(keyToken(scalar(entry.value) ?? ""));
+  });
+}
+function inferredArtifactType(path, metadata, declaredType) {
+  const acceptanceKinds = ACCEPTANCE_ID_FIELDS.filter((key) => topEntries(metadata, [key]).length > 0).map((key) => key.replace(/_id$/, ""));
+  const outcomeKinds = ACCEPTANCE_KINDS.filter((kind) => topEntries(
+    metadata,
+    ACCEPTANCE_VALUE_FIELDS.map((field) => `${kind}_${field}`)
+  ).length > 0);
+  const declarationKinds = acceptanceDeclarationKinds(metadata);
+  const hasGenericOutcome = topEntries(metadata, ["outcome", "result", "verdict"]).length > 0;
+  const reviewRelation = topEntries(metadata, ["review_of", "reviewed_id"]).length > 0;
+  const genericRelation = topEntries(metadata, ["subject_id", "target_id"]).length > 0;
+  const genericIds = scalarAliasValues(metadata, ["id"], "generic identity").values;
+  const hierarchyRelationKeys = [
+    "epic",
+    "epic_id",
+    "feature",
+    "feature_id",
+    "parent",
+    "parent_id",
+    "parent_ids",
+    "slice",
+    "slice_id",
+    "story",
+    "story_id",
+    "task",
+    "task_id",
+    "work_item",
+    "work_item_id"
+  ];
+  const hierarchyRelation = genericIds.length > 0 && topEntries(metadata, hierarchyRelationKeys).some(([, raw]) => {
+    const value = scalar(raw);
+    return !value || !genericIds.some((id) => normalizedId(id) === normalizedId(value));
+  });
+  const relationType = reviewRelation ? "review" : genericRelation || hierarchyRelation ? "acceptance" : void 0;
+  const errors = [];
+  const hierarchyAliases = [...HIERARCHY_ARTIFACT_TYPES].map((kind) => ({ kind, projection: scalarAliasValues(metadata, [`${kind}_id`], `${kind} identity`) })).filter((entry) => entry.projection.present);
+  if (acceptanceKinds.length > 1) {
+    errors.push(`acceptance identity aliases imply multiple artifact types: ${acceptanceKinds.map((value) => JSON.stringify(value)).join(", ")}`);
+  }
+  if (relationType && outcomeKinds.length > 1) {
+    errors.push(`acceptance outcome aliases imply multiple artifact types: ${outcomeKinds.map((value) => JSON.stringify(value)).join(", ")}`);
+  }
+  if (relationType && declarationKinds.length > 1) {
+    errors.push(`acceptance declarations imply multiple artifact types: ${declarationKinds.map((value) => JSON.stringify(value)).join(", ")}`);
+  }
+  if (reviewRelation && outcomeKinds.length === 1 && outcomeKinds[0] !== "review") {
+    errors.push(`review parentage conflicts with ${JSON.stringify(outcomeKinds[0])} outcome aliases`);
+  }
+  const strongAcceptanceType = acceptanceKinds.length === 1 ? acceptanceKinds[0] : reviewRelation ? "review" : relationType && declarationKinds.length === 1 ? declarationKinds[0] : relationType && (hasGenericOutcome || declarationKinds.length > 0) ? relationType : void 0;
+  let inferredHierarchyType;
+  if (!strongAcceptanceType && hierarchyAliases.length > 0 && (!declaredType || !PLANNING_ARTIFACT_TYPES.has(declaredType))) {
+    for (const entry of hierarchyAliases) if (entry.projection.error) errors.push(entry.projection.error);
+    if (declaredType) {
+      errors.push(`custom artifact type ${JSON.stringify(declaredType)} cannot silently reinterpret canonical hierarchy aliases: ${hierarchyAliases.map((entry) => JSON.stringify(`${entry.kind}_id`)).join(", ")}`);
+    } else if (hierarchyAliases.length !== 1) {
+      errors.push(`type-unresolved artifact declares multiple canonical hierarchy aliases: ${hierarchyAliases.map((entry) => JSON.stringify(`${entry.kind}_id`)).join(", ")}`);
+    } else {
+      const entry = hierarchyAliases[0];
+      const values = entry?.projection.values ?? [];
+      if (values.length !== 1) {
+        errors.push(`type-unresolved artifact cannot resolve ${JSON.stringify(`${entry?.kind ?? "artifact"}_id`)} to one identity`);
+      } else if (genericIds.length > 0 && !genericIds.some((id) => normalizedId(id) === normalizedId(values[0] ?? ""))) {
+        errors.push(`type-unresolved artifact has ambiguous generic identity ${JSON.stringify(genericIds[0])} and canonical ${JSON.stringify(`${entry?.kind ?? "artifact"}_id`)} ${JSON.stringify(values[0])}`);
+      } else {
+        inferredHierarchyType = entry?.kind;
+      }
+    }
+  }
+  const pathParts = path.split("/").slice(0, -1).map(normalize);
+  let pathType = "planning";
+  if (pathParts.some((part) => (/* @__PURE__ */ new Set(["acceptance", "acceptances"])).has(part))) pathType = "acceptance";
+  else if (pathParts.some((part) => (/* @__PURE__ */ new Set(["holdout", "holdouts"])).has(part))) pathType = "holdout";
+  else if (pathParts.includes("qa")) pathType = "qa";
+  else if (pathParts.some((part) => (/* @__PURE__ */ new Set(["review", "reviews", "story review", "story reviews"])).has(part))) pathType = "review";
+  else if (pathParts.some((part) => (/* @__PURE__ */ new Set(["stories", "story"])).has(part))) pathType = "story";
+  else if (pathParts.some((part) => (/* @__PURE__ */ new Set(["slices", "slice", "tasks", "task"])).has(part))) pathType = "slice";
+  else if (pathParts.some((part) => (/* @__PURE__ */ new Set(["epics", "epic"])).has(part))) pathType = "epic";
+  if (strongAcceptanceType) return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    strongAcceptanceType,
+    type: strongAcceptanceType
+  };
+  if (inferredHierarchyType) return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    type: inferredHierarchyType
+  };
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    type: pathType
+  };
+}
+function artifactType(path, metadata) {
+  const projection = scalarAliasValues(metadata, ["artifact_type", "kind", "type"], "artifact type");
+  const types = unique(projection.values.map(keyToken));
+  const inferred = inferredArtifactType(path, metadata, types.length === 1 ? types[0] : void 0);
+  if (types.length === 0) {
+    const errors2 = [projection.error, inferred.error].filter((error) => Boolean(error));
+    return { ...errors2.length > 0 ? { error: errors2.join("; ") } : {}, type: inferred.type };
+  }
+  const acceptanceKinds = ACCEPTANCE_ID_FIELDS.filter((key) => topEntries(metadata, [key]).length > 0).map((key) => key.replace(/_id$/, ""));
+  const errors = [
+    projection.error,
+    inferred.error,
+    ...types.length > 1 ? [`artifact type projections conflict: ${projection.values.map((value) => JSON.stringify(value)).join(", ")}`] : [],
+    ...acceptanceKinds.some((kind) => kind !== types[0]) ? [`artifact type ${JSON.stringify(types[0])} conflicts with acceptance identity aliases for ${acceptanceKinds.map((value) => JSON.stringify(value)).join(", ")}`] : [],
+    ...inferred.strongAcceptanceType && inferred.strongAcceptanceType !== types[0] ? [`artifact type ${JSON.stringify(types[0])} conflicts with acceptance-shaped metadata for ${JSON.stringify(inferred.strongAcceptanceType)}`] : []
+  ].filter((error) => Boolean(error));
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    type: types[0] ?? inferred.type
+  };
+}
+function artifactIdentity(path, type, metadata) {
+  const projection = scalarAliasValues(metadata, [`${type}_id`, "id"], "artifact identity");
+  const ids = unique(projection.values);
+  const errors = [
+    projection.error,
+    ...ids.length > 1 ? [`artifact identity projections conflict: ${projection.values.map((value) => JSON.stringify(value)).join(", ")}`] : []
+  ].filter((error) => Boolean(error));
+  return ids.length > 0 ? {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    explicit: true,
+    id: ids[0] ?? basename2(path, extname2(path))
+  } : {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    explicit: false,
+    id: basename2(path, extname2(path))
+  };
+}
+function acceptanceArtifact(path, type) {
+  if (/(^|_)(acceptance|holdout|qa|review)($|_)/.test(type)) return true;
+  return path.split("/").slice(0, -1).map(normalize).some((part) => (/* @__PURE__ */ new Set([
+    "acceptance",
+    "acceptances",
+    "holdout",
+    "holdouts",
+    "qa",
+    "review",
+    "reviews",
+    "story review",
+    "story reviews"
+  ])).has(part));
+}
+function parentReferenceKeys(type, isAcceptance) {
+  const keys = ["parent", "parent_id", "parent_ids", "parents", "parents_ids"];
+  if (isAcceptance) {
+    keys.push(...[
+      ["review_of", "reviewed_id", "subject_id", "target_id"],
+      ["story", "story_id"],
+      ["feature", "feature_id", "slice", "slice_id", "task", "task_id", "work_item", "work_item_id"],
+      ["epic", "epic_id"],
+      ["reviews"]
+    ].flat());
+  } else {
+    keys.push(...CANONICAL_PARENT_FIELDS[type] ?? []);
+  }
+  return unique(keys);
+}
+function parentReferences(metadata, type, isAcceptance, path) {
+  const keys = parentReferenceKeys(type, isAcceptance);
+  const ids = [];
+  const references = [];
+  const errors = [];
+  const referenceObjectKeys = [
+    ...STRUCTURED_ID_KEYS,
+    "epic",
+    "feature",
+    "item",
+    "parent",
+    "parent_id",
+    "parent_ids",
+    "parents",
+    "parents_ids",
+    "slice",
+    "story",
+    "task",
+    "work_item"
+  ];
+  const parseEntry = (value, ref) => {
+    const direct = scalar(value);
+    if (direct) {
+      ids.push(direct);
+      references.push({ id: direct, ref, state: "unknown" });
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        errors.push({
+          code: "planning_relationship_unresolved",
+          detail: "parent reference declares an empty target collection",
+          related: [ref]
+        });
+      }
+      for (const [index, entry] of value.entries()) parseEntry(entry, `${ref}[${index}]`);
+      return;
+    }
+    const item = object2(value);
+    const unsupportedState = item ? unsupportedStateAliasError(item, "parent reference") : void 0;
+    if (unsupportedState) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: unsupportedState,
+        related: [ref]
+      });
+    }
+    const identityScan = item ? scalarAliasValues(item, referenceObjectKeys, "parent reference identity") : { present: false, values: [] };
+    const candidates = identityScan.values;
+    if (identityScan.error) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: identityScan.error,
+        related: [ref]
+      });
+    }
+    if (candidates.length === 1) {
+      const id = candidates[0] ?? "";
+      const stateScan = lifecycleAliasProjection(item ?? {}, "parent reference lifecycle");
+      if (stateScan.error) {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: stateScan.error,
+          related: [ref]
+        });
+      }
+      ids.push(id);
+      references.push({ id, ref, state: stateScan.projection.state });
+      return;
+    }
+    errors.push({
+      code: candidates.length > 1 ? "planning_relationship_conflict" : "planning_relationship_unresolved",
+      detail: candidates.length > 1 ? `parent reference resolves to ${candidates.length} identities` : "parent reference has no scalar or recognized identity",
+      related: [ref]
+    });
+  };
+  for (const [key, value] of topEntries(metadata, keys)) parseEntry(value, `${path}#${keyToken(key)}`);
+  return { errors, ids: unique(ids), references };
+}
+function childRelationshipRole(metadata, type) {
+  const defaultRole = ROLLUP_ARTIFACT_TYPES.has(type) ? "rollup_projection" : "child_parentage";
+  const projection = scalarAliasValues(
+    metadata,
+    ["relationship_role", "child_relationship_role"],
+    "relationship role"
+  );
+  const rationale = scalarAliasValues(metadata, [
+    "relationship_role_rationale",
+    "child_relationship_role_rationale"
+  ], "relationship role rationale");
+  const errors = [projection.error, rationale.error].filter((error) => Boolean(error));
+  const values = projection.values;
+  if (values.length === 0) {
+    return { ...errors.length > 0 ? { error: errors.join("; ") } : {}, role: defaultRole };
+  }
+  const roles = /* @__PURE__ */ new Set();
+  const unsupported = [];
+  for (const value of values) {
+    const token = keyToken(value);
+    if (CHILD_PARENTAGE_ROLE_ALIASES.has(token)) {
+      roles.add("child_parentage");
+    } else if (ROLLUP_PROJECTION_ROLE_ALIASES.has(token)) {
+      roles.add("rollup_projection");
+    } else {
+      unsupported.push(value);
+    }
+  }
+  if (unsupported.length > 0 || roles.size !== 1) {
+    errors.push(`relationship_role must resolve to exactly one of child_parentage or rollup_projection; received ${values.map((value) => JSON.stringify(value)).join(", ")}`);
+    return { error: errors.join("; "), role: defaultRole };
+  }
+  const role = [...roles][0] ?? defaultRole;
+  if (role !== defaultRole && (HIERARCHY_ARTIFACT_TYPES.has(type) || ROLLUP_ARTIFACT_TYPES.has(type))) {
+    errors.push(`${JSON.stringify(type)} has immutable relationship role ${JSON.stringify(defaultRole)}`);
+    return { error: errors.join("; "), role: defaultRole };
+  }
+  if (role !== defaultRole && rationale.values.length === 0) {
+    errors.push(`relationship_role overrides the ${JSON.stringify(defaultRole)} default without relationship_role_rationale`);
+    return { error: errors.join("; "), role: defaultRole };
+  }
+  return { ...errors.length > 0 ? { error: errors.join("; ") } : {}, role };
+}
+function relationshipTargetHeaders(metadata, role) {
+  const defaults = role === "rollup_projection" ? ROLLUP_TARGET_HEADERS : PARENTAGE_TARGET_HEADERS;
+  const keys = role === "rollup_projection" ? ["relationship_target_column", "rollup_target_column"] : ["child_target_column", "relationship_target_column"];
+  const projection = scalarAliasValues(metadata, keys, "relationship target column");
+  const values = projection.values;
+  const rationaleKeys = role === "rollup_projection" ? ["relationship_target_column_rationale", "rollup_target_column_rationale"] : ["child_target_column_rationale", "relationship_target_column_rationale"];
+  const rationale = scalarAliasValues(metadata, rationaleKeys, "relationship target-column rationale");
+  const errors = [projection.error, rationale.error].filter((error) => Boolean(error));
+  if (values.length === 0) {
+    return { ...errors.length > 0 ? { error: errors.join("; ") } : {}, headers: defaults };
+  }
+  if (values.length > 1) {
+    errors.push(`relationship target column must resolve to exactly one header; received ${values.map((value) => JSON.stringify(value)).join(", ")}`);
+    return { error: errors.join("; "), headers: defaults };
+  }
+  if (rationale.values.length === 0) {
+    errors.push(`custom relationship target column ${JSON.stringify(values[0])} requires a target-column rationale`);
+    return { error: errors.join("; "), headers: defaults };
+  }
+  const custom = normalize(values[0] ?? "");
+  if (STATE_HEADERS.has(custom)) {
+    errors.push(`relationship target column ${JSON.stringify(values[0])} overlaps the lifecycle vocabulary`);
+    return { error: errors.join("; "), headers: defaults };
+  }
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    headers: /* @__PURE__ */ new Set([...defaults, custom])
+  };
+}
+function nonRelationshipTableHeaders(metadata, role) {
+  const projection = scalarListAliasValues(metadata, [
+    "non_relationship_table_columns",
+    "non_relationship_table_target_columns"
+  ], "non-relationship table columns");
+  const rationale = scalarAliasValues(
+    metadata,
+    ["non_relationship_table_rationale"],
+    "non-relationship table rationale"
+  );
+  const errors = [projection.error, rationale.error].filter((error) => Boolean(error));
+  if (!projection.present) {
+    return { ...errors.length > 0 ? { error: errors.join("; ") } : {}, headers: /* @__PURE__ */ new Set() };
+  }
+  const values = projection.values.map(normalize);
+  if (values.length === 0) {
+    errors.push("non-relationship table classification declares no target columns");
+    return { error: errors.join("; "), headers: /* @__PURE__ */ new Set() };
+  }
+  if (role !== "child_parentage") {
+    errors.push("rollup artifacts cannot suppress state-bearing tables as non-relationship");
+    return { error: errors.join("; "), headers: /* @__PURE__ */ new Set() };
+  }
+  if (rationale.values.length === 0) {
+    errors.push("non-relationship table classification requires non_relationship_table_rationale");
+    return { error: errors.join("; "), headers: /* @__PURE__ */ new Set() };
+  }
+  const overlaps = values.filter((value) => PARENTAGE_TARGET_HEADERS.has(value));
+  const lifecycleOverlaps = values.filter((value) => STATE_HEADERS.has(value));
+  if (overlaps.length > 0 || lifecycleOverlaps.length > 0) {
+    errors.push(`relationship or lifecycle columns cannot be suppressed: ${[...overlaps, ...lifecycleOverlaps].map((value) => JSON.stringify(value)).join(", ")}`);
+    return { error: errors.join("; "), headers: /* @__PURE__ */ new Set() };
+  }
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    headers: new Set(values)
+  };
+}
+function splitTableRow(line) {
+  const trimmed = line.trim();
+  const cells = [];
+  let cell = "";
+  let codeDelimiter = 0;
+  let endedWithDelimiter = false;
+  let index = 0;
+  while (index < trimmed.length) {
+    const character = trimmed[index] ?? "";
+    if (character === "`") {
+      let end = index + 1;
+      while (trimmed[end] === "`") end += 1;
+      const runLength = end - index;
+      cell += trimmed.slice(index, end);
+      if (codeDelimiter === 0) codeDelimiter = runLength;
+      else if (codeDelimiter === runLength) codeDelimiter = 0;
+      endedWithDelimiter = false;
+      index = end;
+      continue;
+    }
+    if (character === "\\" && codeDelimiter === 0) {
+      let end = index + 1;
+      while (trimmed[end] === "\\") end += 1;
+      const runLength = end - index;
+      const next = trimmed[end];
+      if (next === "|" || next === "`") {
+        cell += "\\".repeat(Math.floor(runLength / 2));
+        if (runLength % 2 === 1) {
+          cell += next;
+          endedWithDelimiter = false;
+          index = end + 1;
+          continue;
+        }
+      } else {
+        cell += "\\".repeat(runLength);
+      }
+      endedWithDelimiter = false;
+      index = end;
+      continue;
+    }
+    if (character === "|" && codeDelimiter === 0) {
+      cells.push(cell.trim());
+      cell = "";
+      endedWithDelimiter = true;
+      index += 1;
+      continue;
+    }
+    cell += character;
+    endedWithDelimiter = false;
+    index += 1;
+  }
+  cells.push(cell.trim());
+  if (trimmed.startsWith("|")) cells.shift();
+  if (endedWithDelimiter) cells.pop();
+  return cells;
+}
+function separatorRow(cells) {
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")));
+}
+function stateLikeHeader(value) {
+  return STATE_HEADER_WORDS.has(normalize(value).split(" ").at(-1) ?? "");
+}
+function scanBody(content) {
+  const range = frontmatterRange(content);
+  const lines2 = range?.lines ?? content.split(/\r?\n/);
+  const start = range ? range.end + 1 : 0;
+  const scanned = [];
+  let historicalLevel;
+  let fence;
+  let inHtmlComment = false;
+  const visibleText = (raw) => {
+    let remaining = raw;
+    let visible = "";
+    while (remaining.length > 0) {
+      if (inHtmlComment) {
+        const end = remaining.indexOf("-->");
+        if (end < 0) return visible;
+        inHtmlComment = false;
+        remaining = remaining.slice(end + 3);
+        continue;
+      }
+      const startComment = remaining.indexOf("<!--");
+      if (startComment < 0) return visible + remaining;
+      visible += remaining.slice(0, startComment);
+      remaining = remaining.slice(startComment + 4);
+      inHtmlComment = true;
+    }
+    return visible;
+  };
+  for (let index = start; index < lines2.length; index += 1) {
+    const text2 = visibleText(lines2[index] ?? "");
+    const fenceMarker = /^\s{0,3}(`{3,}|~{3,})/.exec(text2)?.[1];
+    if (fenceMarker) {
+      const character = fenceMarker[0] ?? "";
+      if (!fence) fence = { character, length: fenceMarker.length };
+      else if (character === fence.character && fenceMarker.length >= fence.length) fence = void 0;
+      scanned.push({ historical: true, lineNumber: index + 1, text: "" });
+      continue;
+    }
+    if (fence || inHtmlComment) {
+      scanned.push({ historical: true, lineNumber: index + 1, text: "" });
+      continue;
+    }
+    const heading = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text2);
+    if (heading) {
+      const level = (heading[1] ?? "").length;
+      if (historicalLevel !== void 0 && level <= historicalLevel) historicalLevel = void 0;
+      if (historicalLevel === void 0 && HISTORICAL_HEADINGS.test(heading[2] ?? "")) {
+        historicalLevel = level;
+      }
+    }
+    scanned.push({ historical: historicalLevel !== void 0, lineNumber: index + 1, text: text2 });
+  }
+  return scanned;
+}
+function tableChildren(lines2, path, role, targetHeaders, nonRelationshipHeaders) {
+  const children = [];
+  const errors = [];
+  for (let index = 0; index + 1 < lines2.length; index += 1) {
+    const header = lines2[index];
+    const separator = lines2[index + 1];
+    if (!header || !separator || header.historical || separator.historical) continue;
+    const headerLine = header.text;
+    const separatorLine = separator.text;
+    if (!headerLine.includes("|") || !separatorLine.includes("|")) continue;
+    const headers = splitTableRow(headerLine).map(normalize);
+    const childIndexes = headers.flatMap((header2, headerIndex) => targetHeaders.has(header2) ? [headerIndex] : []);
+    const stateIndexes = headers.flatMap((header2, headerIndex) => STATE_HEADERS.has(header2) ? [headerIndex] : []);
+    const unsupportedStateIndexes = headers.flatMap((header2, headerIndex) => stateLikeHeader(header2) && !STATE_HEADERS.has(header2) ? [headerIndex] : []);
+    const nonRelationshipIndexes = headers.flatMap((header2, headerIndex) => nonRelationshipHeaders.has(header2) ? [headerIndex] : []);
+    const childIndex = childIndexes[0] ?? -1;
+    const stateIndex = stateIndexes[0] ?? -1;
+    const hasSeparator = separatorRow(splitTableRow(separatorLine));
+    if (childIndexes.length > 1 || stateIndexes.length > 1) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: `relationship table must have exactly one target column and at most one state column; found ${childIndexes.length} targets and ${stateIndexes.length} state columns`,
+        related: [`${path}#table-header-${header.lineNumber}`]
+      });
+    }
+    if (childIndexes.length === 0 && nonRelationshipIndexes.length === 1) continue;
+    if (childIndexes.length === 0 && nonRelationshipIndexes.length > 1) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: `non-relationship table classification is ambiguous across ${nonRelationshipIndexes.length} columns`,
+        related: [`${path}#table-header-${header.lineNumber}`]
+      });
+      continue;
+    }
+    if (unsupportedStateIndexes.length > 0) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: `state-like table headers must use a recognized lifecycle column name; unsupported: ${unsupportedStateIndexes.map((headerIndex) => JSON.stringify(headers[headerIndex])).join(", ")}`,
+        related: [`${path}#table-header-${header.lineNumber}`]
+      });
+    }
+    if (childIndex < 0) {
+      if (stateIndex >= 0 || unsupportedStateIndexes.length > 0) {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: `${role} table has a state column but no recognized or declared target column (${headers.map((header2) => JSON.stringify(header2)).join(", ")})`,
+          related: [`${path}#table-header-${header.lineNumber}`]
+        });
+      }
+      continue;
+    }
+    let row = index + (hasSeparator ? 2 : 1);
+    while (row < lines2.length && !lines2[row]?.historical && (lines2[row]?.text ?? "").includes("|")) {
+      const bodyLine = lines2[row];
+      const cells = splitTableRow(bodyLine?.text ?? "");
+      const id = cells[childIndex]?.replace(/[`*]/g, "").trim();
+      const ref = `${path}#table-row-${bodyLine?.lineNumber ?? row + 1}`;
+      const stateValue = stateIndex < 0 ? void 0 : cells[stateIndex]?.trim();
+      if (!id) {
+        if (cells.some((cell) => cell.trim() !== "")) {
+          errors.push({
+            code: "planning_relationship_unresolved",
+            detail: "relationship table row has no target identity",
+            related: [ref]
+          });
+        }
+        row += 1;
+        continue;
+      }
+      const state = lifecycle(stateValue);
+      if (stateIndex >= 0 && state === "unknown") {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: `relationship table row has missing or unrecognized lifecycle ${JSON.stringify(stateValue ?? "")}`,
+          related: [ref]
+        });
+      }
+      children.push({ id, ref, state });
+      row += 1;
+    }
+    index = row - 1;
+  }
+  const uniqueProjections = /* @__PURE__ */ new Map();
+  for (const child of children) {
+    const key = `${normalizedId(child.id)}\0${child.state}`;
+    const prior = uniqueProjections.get(key);
+    if (!prior || child.ref.localeCompare(prior.ref) < 0) uniqueProjections.set(key, child);
+  }
+  return {
+    children: [...uniqueProjections.values()].sort((left, right) => normalizedId(left.id).localeCompare(normalizedId(right.id)) || left.state.localeCompare(right.state) || left.ref.localeCompare(right.ref)),
+    errors
+  };
+}
+function structuredChildren(metadata, path, parentKeys) {
+  const children = [];
+  const errors = [];
+  const parseEntry = (value, ref) => {
+    const direct = scalar(value);
+    if (direct) {
+      children.push({ id: direct, ref, state: "unknown" });
+      return;
+    }
+    const item = object2(value);
+    if (!item) {
+      errors.push({
+        code: "planning_relationship_unresolved",
+        detail: "structured relationship entry has no scalar or recognized identity",
+        related: [ref]
+      });
+      return;
+    }
+    const identityScan = scalarAliasValues(item, STRUCTURED_ID_KEYS, "structured relationship identity");
+    const ids = identityScan.values;
+    const unsupportedState = unsupportedStateAliasError(item, "structured relationship entry");
+    if (unsupportedState) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: unsupportedState,
+        related: [ref]
+      });
+    }
+    const nestedParentage = topEntries(item, [
+      "artifact_type",
+      "kind",
+      "parent",
+      "parent_id",
+      "parent_ids",
+      "parents",
+      "parents_ids",
+      "review_of",
+      "reviewed_id",
+      "subject_id",
+      "target_id",
+      "top_level",
+      "type"
+    ]);
+    if (nestedParentage.length > 0) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: `structured child projection cannot redeclare type, top-level status, or parentage: ${nestedParentage.map(([key]) => JSON.stringify(key)).join(", ")}`,
+        related: [ref]
+      });
+    }
+    if (identityScan.error) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: identityScan.error,
+        related: [ref]
+      });
+    }
+    if (ids.length !== 1) {
+      errors.push({
+        code: ids.length > 1 ? "planning_relationship_conflict" : "planning_relationship_unresolved",
+        detail: ids.length > 1 ? `structured relationship entry resolves to ${ids.length} identities` : "structured relationship entry has no recognized identity",
+        related: [ref]
+      });
+      return;
+    }
+    const stateScan = lifecycleAliasProjection(item, "structured relationship lifecycle");
+    if (stateScan.error) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: stateScan.error,
+        related: [ref]
+      });
+    }
+    children.push({ id: ids[0] ?? "", ref, state: stateScan.projection.state });
+  };
+  for (const [key, value] of Object.entries(metadata)) {
+    const token = keyToken(key);
+    if (!STRUCTURED_CHILD_KEYS.has(token) || parentKeys.has(token)) continue;
+    const ref = `${path}#${token}`;
+    if (Array.isArray(value)) {
+      for (const [index, entry] of value.entries()) parseEntry(entry, `${ref}[${index}]`);
+      continue;
+    }
+    parseEntry(value, ref);
+  }
+  return { children, errors };
+}
+function bodyProjection(lines2) {
+  const values = [];
+  for (const line of lines2) {
+    if (line.historical) continue;
+    const match = /^\s*(?:>\s*)*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\*\*)?(?:(?:current|implementation)[_ -]+)?(?:lifecycle|phase|stage|state|status)(?:\*\*)?\s*:\s*(.+?)\s*$/i.exec(line.text);
+    if (match?.[1]) values.push(match[1]);
+  }
+  return stateProjection(values);
+}
+function bodyAcceptanceObservations(lines2, path) {
+  const observations = [];
+  const kindPattern = "(acceptance|holdout|qa|review)";
+  const fieldPattern = "(?:(?:current|implementation)[ _-]+)?(?:lifecycle|outcome|phase|result|stage|state|status|verdict)";
+  const label = new RegExp(`^${kindPattern}(?:\\s+${fieldPattern})?\\s*:\\s*(.+?)\\s*$`, "i");
+  const acceptanceKind = (value) => ACCEPTANCE_KINDS.find((kind) => new RegExp(`\\b${kind}\\b`, "i").test(value));
+  for (const line of lines2) {
+    if (line.historical) continue;
+    const visible = line.text.replace(/^\s*(?:>\s*)*/, "").replace(/^\s*#{1,6}\s*/, "").replace(/^\s*[-*+]\s*/, "");
+    const unchecked = /^\[\s\]\s*(.+)$/i.exec(visible);
+    if (unchecked?.[1]) {
+      const kind = acceptanceKind(unchecked[1]);
+      if (kind) {
+        observations.push({
+          kind,
+          rationale: false,
+          ref: `${path}#line-${line.lineNumber}`,
+          state: "unrun"
+        });
+        continue;
+      }
+    }
+    const plain = visible.replace(/\*\*|__|`/g, "").trim();
+    const labelled = label.exec(plain);
+    if (labelled?.[1] && labelled[2]) {
+      observations.push({
+        kind: normalize(labelled[1]),
+        rationale: false,
+        ref: `${path}#line-${line.lineNumber}`,
+        state: acceptance(labelled[2])
+      });
+      continue;
+    }
+    if (/\bpending\b/i.test(plain)) {
+      const kind = acceptanceKind(plain);
+      if (kind) {
+        observations.push({
+          kind,
+          rationale: false,
+          ref: `${path}#line-${line.lineNumber}`,
+          state: "unrun"
+        });
+      }
+    }
+  }
+  return observations;
+}
+function validAcceptanceScope(value) {
+  const direct = scalar(value);
+  if (direct) return acceptance(direct) !== "unknown";
+  if (Array.isArray(value)) return value.length > 0 && value.every(validAcceptanceScope);
+  const item = object2(value);
+  if (!item || Object.keys(item).length === 0) return false;
+  const entries = Object.entries(item);
+  const outcomeTokens = /* @__PURE__ */ new Set([
+    ...ACCEPTANCE_VALUE_FIELDS.map(keyToken),
+    ...EXPLICIT_ACCEPTANCE_FIELDS.map(keyToken)
+  ]);
+  const directOutcomes = entries.filter(([key]) => outcomeTokens.has(keyToken(key)));
+  const decisiveTokens = new Set(DECISIVE_ACCEPTANCE_FIELDS.map(keyToken));
+  const decisiveOutcomes = directOutcomes.filter(([key]) => decisiveTokens.has(keyToken(key)));
+  const selectedOutcomes = decisiveOutcomes.length > 0 ? decisiveOutcomes : directOutcomes;
+  const nestedScopes = entries.filter(([key]) => {
+    const token = keyToken(key);
+    return ACCEPTANCE_KINDS.some((kind) => token === kind || token === `${kind}s`);
+  });
+  if (selectedOutcomes.length > 0) {
+    return selectedOutcomes.every(([, outcome]) => acceptance(scalar(outcome)) !== "unknown");
+  }
+  if (nestedScopes.length > 0) return true;
+  const collectionEntries = entries.filter(([key]) => !(/* @__PURE__ */ new Set(["justification", "rationale", "reason"])).has(keyToken(key)));
+  return collectionEntries.length > 0 && collectionEntries.every(([, child]) => object2(child) !== void 0 && validAcceptanceScope(child));
+}
+function unsupportedAcceptanceAliasError(metadata) {
+  const supported = /* @__PURE__ */ new Set([
+    ...ACCEPTANCE_VALUE_FIELDS.map(keyToken),
+    ...EXPLICIT_ACCEPTANCE_FIELDS.map(keyToken)
+  ]);
+  const unsupported = Object.keys(metadata).filter((key) => {
+    const token = keyToken(key);
+    const words = normalize(key).split(" ");
+    return words.some((word) => ACCEPTANCE_OUTCOME_WORDS.has(word)) && !supported.has(token);
+  });
+  return unsupported.length > 0 ? `acceptance scope contains unsupported outcome-like aliases: ${unsupported.map((key) => JSON.stringify(key)).join(", ")}` : void 0;
+}
+function acceptanceDeclarationErrors(metadata, path, artifactTypeValue, isAcceptance) {
+  const errors = [];
+  const fields = ACCEPTANCE_VALUE_FIELDS;
+  const kinds = ACCEPTANCE_KINDS;
+  const visit = (value, trail) => {
+    const item = object2(value);
+    if (!item) {
+      if (Array.isArray(value)) value.forEach((entry, index) => visit(entry, [...trail, String(index)]));
+      return;
+    }
+    const trailWords = trail.flatMap((part) => normalize(part).split(" "));
+    if (trailWords.some((word) => ACCEPTANCE_WORDS.has(word) || ACCEPTANCE_WORDS.has(word.replace(/s$/, "")))) {
+      const unsupportedState = unsupportedStateAliasError(item, "acceptance scope");
+      const unsupportedOutcome = unsupportedAcceptanceAliasError(item);
+      if (unsupportedState) {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: unsupportedState,
+          related: [`${path}#${trail.join(".")}`]
+        });
+      }
+      if (unsupportedOutcome) {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: unsupportedOutcome,
+          related: [`${path}#${trail.join(".")}`]
+        });
+      }
+    }
+    for (const [scopeKey, scopeValue] of Object.entries(item)) {
+      const scope = keyToken(scopeKey);
+      if (!kinds.some((kind) => scope === kind || scope === `${kind}s`)) continue;
+      if (!validAcceptanceScope(scopeValue)) {
+        errors.push({
+          code: "planning_relationship_unresolved",
+          detail: `acceptance scope ${JSON.stringify(scopeKey)} is empty or malformed`,
+          related: [`${path}#${[...trail, scope].join(".")}`]
+        });
+      }
+    }
+    for (const kind of kinds) {
+      const contextual = trailWords.some((word) => word === kind || word === `${kind}s`) || trail.length === 0 && isAcceptance && gateKind([artifactTypeValue, path]) === kind;
+      const prefixedKeys = fields.map((field) => `${kind}_${field}`);
+      const keys = contextual ? [...prefixedKeys, ...fields] : prefixedKeys;
+      const decisiveKeys = contextual ? [`${kind}_outcome`, `${kind}_result`, `${kind}_verdict`, "outcome", "result", "verdict"] : [`${kind}_outcome`, `${kind}_result`, `${kind}_verdict`];
+      const projection = scalarAliasValues(
+        item,
+        topEntries(item, decisiveKeys).length > 0 ? decisiveKeys : keys,
+        `${kind} outcome`
+      );
+      const rationaleFields = ["justification", "rationale", "reason"];
+      const prefixedRationaleKeys = rationaleFields.map((field) => `${kind}_${field}`);
+      const rationaleKeys = contextual ? [...prefixedRationaleKeys, ...rationaleFields] : prefixedRationaleKeys;
+      const rationale = scalarAliasValues(item, rationaleKeys, `${kind} rationale`);
+      if (!projection.present && !rationale.present) continue;
+      if (projection.error) {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: projection.error,
+          related: [`${path}#${[...trail, kind].join(".")}`]
+        });
+      }
+      const unknownOutcomes = projection.values.filter((value2) => acceptance(value2) === "unknown");
+      if (unknownOutcomes.length > 0) {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: `${kind} outcome contains unsupported values: ${unknownOutcomes.map((value2) => JSON.stringify(value2)).join(", ")}`,
+          related: [`${path}#${[...trail, kind].join(".")}`]
+        });
+      }
+      if (rationale.error) {
+        errors.push({
+          code: "planning_relationship_conflict",
+          detail: rationale.error,
+          related: [`${path}#${[...trail, kind, "rationale"].join(".")}`]
+        });
+      }
+    }
+    for (const [key, child] of Object.entries(item)) visit(child, [...trail, keyToken(key)]);
+  };
+  visit(metadata, []);
+  return errors;
+}
+function parseArtifact(source) {
+  const parsed = parseSource(source);
+  const typeProjection = artifactType(source.path, parsed.metadata);
+  const type = typeProjection.type;
+  const isAcceptance = acceptanceArtifact(source.path, type);
+  const lane = pathLane(source.path);
+  const declaredScan = lifecycleAliasProjection(parsed.metadata, "artifact lifecycle", isAcceptance);
+  const unsupportedStateError = unsupportedStateAliasError(parsed.metadata, "artifact");
+  const declaredProjection = declaredScan.projection;
+  const declared = declaredProjection.state;
+  const identity2 = artifactIdentity(source.path, type, parsed.metadata);
+  const nonArtifactRequested = isNonArtifactPlanningClass(source.declaredClass ?? "") || isNonArtifactPlanningClass(type);
+  const classificationRationale = scalarAliasValues(
+    parsed.metadata,
+    ["classification_rationale", "justification", "non_artifact_rationale", "rationale", "reason"],
+    "classification rationale"
+  );
+  const nonArtifactRationale = Boolean(source.classificationRationale?.trim()) || classificationRationale.values.length > 0;
+  const topLevelScan = topLevelProjection(parsed.metadata);
+  const topLevel = topLevelScan.value;
+  const extension = extname2(source.path).toLocaleLowerCase("und");
+  const scannedBody = (/* @__PURE__ */ new Set([".md", ".mdx", ".txt"])).has(extension) ? scanBody(source.content) : [];
+  const currentBody = bodyProjection(scannedBody);
+  const bodyGateObservations = bodyAcceptanceObservations(scannedBody, source.path);
+  const parentScan = parentReferences(parsed.metadata, type, isAcceptance, source.path);
+  const parentIds = parentScan.ids;
+  const relationshipRole = childRelationshipRole(parsed.metadata, type);
+  const targetHeaders = relationshipTargetHeaders(parsed.metadata, relationshipRole.role);
+  const nonRelationshipHeaders = nonRelationshipTableHeaders(parsed.metadata, relationshipRole.role);
+  const scannedTables = tableChildren(
+    scannedBody,
+    source.path,
+    relationshipRole.role,
+    targetHeaders.headers,
+    nonRelationshipHeaders.headers
+  );
+  const structuredRelationships = structuredChildren(
+    parsed.metadata,
+    source.path,
+    new Set(parentReferenceKeys(type, isAcceptance).map(keyToken))
+  );
+  const acceptanceErrors = acceptanceDeclarationErrors(parsed.metadata, source.path, type, isAcceptance);
+  const relationshipErrors = [
+    ...typeProjection.error ? [{ code: "planning_relationship_conflict", detail: typeProjection.error, related: [] }] : [],
+    ...identity2.error ? [{ code: "planning_relationship_conflict", detail: identity2.error, related: [] }] : [],
+    ...declaredScan.error ? [{ code: "planning_relationship_conflict", detail: declaredScan.error, related: [] }] : [],
+    ...unsupportedStateError ? [{ code: "planning_relationship_conflict", detail: unsupportedStateError, related: [] }] : [],
+    ...classificationRationale.error ? [{ code: "planning_relationship_conflict", detail: classificationRationale.error, related: [] }] : [],
+    ...topLevelScan.error ? [{ code: "planning_relationship_conflict", detail: topLevelScan.error, related: [] }] : [],
+    ...relationshipRole.error ? [{ code: "planning_relationship_conflict", detail: relationshipRole.error, related: [] }] : [],
+    ...targetHeaders.error ? [{ code: "planning_relationship_conflict", detail: targetHeaders.error, related: [] }] : [],
+    ...nonRelationshipHeaders.error ? [{ code: "planning_relationship_conflict", detail: nonRelationshipHeaders.error, related: [] }] : [],
+    ...parentScan.errors,
+    ...scannedTables.errors,
+    ...structuredRelationships.errors,
+    ...acceptanceErrors
+  ];
+  const table = [
+    ...scannedTables.children,
+    ...structuredRelationships.children
+  ];
+  const metadataHasAcceptanceSignal = deepEntries(parsed.metadata).some((entry) => [...ACCEPTANCE_WORDS].some((word) => entry.path.join("_").includes(word)));
+  const nestedCanonicalPlanningSignal = hasNestedCanonicalPlanningSignal(parsed.metadata);
+  const typedPlanningArtifact = PLANNING_ARTIFACT_TYPES.has(type);
+  const hasPlanningSignals = lane !== "unknown" || declaredProjection.values.length > 0 || currentBody.values.length > 0 || identity2.explicit || isAcceptance || parentIds.length > 0 || table.length > 0 || bodyGateObservations.length > 0 || metadataHasAcceptanceSignal || nestedCanonicalPlanningSignal || topLevel || typedPlanningArtifact || relationshipErrors.length > 0 || hasRawPlanningSignal(parsed.metadata, type) || topEntries(parsed.metadata, [
+    "child_relationship_role",
+    "child_target_column",
+    "relationship_role",
+    "relationship_target_column",
+    "rollup_target_column"
+  ]).length > 0;
+  const nonArtifact = nonArtifactRequested && nonArtifactRationale && !hasPlanningSignals;
+  const structuredSurface = parsed.structured || table.length > 0 || currentBody.values.length > 0;
+  const structured = parsed.parseError === void 0 && (nonArtifact || structuredSurface && hasPlanningSignals);
+  const state = lane !== "unknown" ? lane : declaredProjection.values.length > 0 ? declared : currentBody.state;
+  return {
+    acceptance: isAcceptance,
+    bodyGateObservations,
+    bodyProjection: currentBody,
+    childRelationshipRole: relationshipRole.role,
+    content: source.content,
+    declared,
+    declaredClass: lifecycle(source.declaredClass),
+    declaredProjection,
+    id: identity2.id,
+    lane,
+    metadata: parsed.metadata,
+    nonArtifact,
+    nonArtifactRationale,
+    nonArtifactRequested,
+    parentIds,
+    parentReferences: parentScan.references,
+    ...parsed.parseError === void 0 ? {} : { parseError: parsed.parseError },
+    path: source.path,
+    relationshipErrors,
+    state,
+    structured,
+    tableChildren: table,
+    topLevel,
+    type
+  };
+}
+function finding(code, artifact, detail, related = []) {
+  return { code, detail, path: artifact.path, related: [...new Set(related)].sort(), subject: artifact.id };
+}
+function gateKind(path, fallback = "acceptance") {
+  const words = path.flatMap((part) => normalize(part).split(" "));
+  for (const kind of ["holdout", "review", "qa", "acceptance"]) if (words.includes(kind)) return kind;
+  return fallback;
+}
+function gateHasRationale(metadata, kind, outcomePath) {
+  const outcomeContainer = outcomePath.slice(0, -1).join(".");
+  return deepEntries(metadata).some((entry) => {
+    const last = entry.path.at(-1) ?? "";
+    const rationaleFields = /* @__PURE__ */ new Set(["justification", "rationale", "reason"]);
+    const base = last.startsWith(`${kind}_`) ? last.slice(kind.length + 1) : last;
+    if (!rationaleFields.has(base) || !scalar(entry.value)) return false;
+    return entry.path.slice(0, -1).join(".") === outcomeContainer;
+  });
+}
+function embeddedGateObservations(parent) {
+  const candidates = [];
+  const stateFields = /* @__PURE__ */ new Set([
+    "current_lifecycle",
+    "current_phase",
+    "current_stage",
+    "current_state",
+    "current_status",
+    "implementation_status",
+    "lifecycle",
+    "phase",
+    "stage",
+    "state",
+    "status"
+  ]);
+  const outcomeFields = /* @__PURE__ */ new Set(["outcome", "result", "verdict"]);
+  for (const entry of deepEntries(parent.metadata)) {
+    const last = entry.path.at(-1) ?? "";
+    const joined = entry.path.join("_");
+    const hasAcceptance = [...ACCEPTANCE_WORDS].some((word) => joined.includes(word));
+    const scopeKind = [...entry.path].reverse().flatMap((part) => [...ACCEPTANCE_WORDS].filter((word) => part === word || part === `${word}s`)).at(0);
+    if (scopeKind && (last === scopeKind || last === `${scopeKind}s` || /^\d+$/.test(last))) {
+      candidates.push({
+        explicit: true,
+        kind: scopeKind,
+        rationale: gateHasRationale(parent.metadata, scopeKind, entry.path),
+        ref: `${parent.path}#${entry.path.join(".")}`,
+        scope: `${scopeKind}\0${entry.path.slice(0, -1).join(".")}`,
+        state: acceptance(scalar(entry.value))
+      });
+      continue;
+    }
+    const genericField = stateFields.has(last);
+    const explicitField = outcomeFields.has(last) || [...ACCEPTANCE_WORDS].some((word) => (/* @__PURE__ */ new Set([...outcomeFields, ...stateFields])).has(last.replace(`${word}_`, "")) && last.startsWith(`${word}_`));
+    const stateField = genericField || explicitField;
+    if (!hasAcceptance || !stateField) continue;
+    const kind = gateKind(entry.path);
+    candidates.push({
+      explicit: explicitField,
+      kind,
+      rationale: gateHasRationale(parent.metadata, kind, entry.path),
+      ref: `${parent.path}#${entry.path.join(".")}`,
+      scope: `${kind}\0${entry.path.slice(0, -1).join(".")}`,
+      state: acceptance(scalar(entry.value))
+    });
+  }
+  const explicitScopes = new Set(candidates.filter((candidate) => candidate.explicit).map((candidate) => candidate.scope));
+  return candidates.filter((candidate) => candidate.explicit || !explicitScopes.has(candidate.scope)).map(({ kind, rationale, ref, state }) => ({ kind, rationale, ref, state }));
+}
+function artifactGateObservations(artifact) {
+  const explicit = topEntries(artifact.metadata, EXPLICIT_ACCEPTANCE_FIELDS);
+  const selected = explicit.length > 0 ? explicit : topEntries(artifact.metadata, ["status"]);
+  const kind = gateKind([artifact.type, artifact.path], artifact.type);
+  const rationale = topValues(artifact.metadata, ["justification", "rationale", "reason"]).length > 0;
+  const direct = selected.length === 0 ? [{ kind, rationale, ref: artifact.path, state: "unknown" }] : selected.map(([, value]) => ({
+    kind,
+    rationale,
+    ref: artifact.path,
+    state: acceptance(scalar(value))
+  }));
+  return [...direct, ...embeddedGateObservations(artifact), ...artifact.bodyGateObservations];
+}
+function acceptanceGates(parent, artifacts) {
+  const observations = [...embeddedGateObservations(parent), ...parent.bodyGateObservations];
+  for (const artifact of artifacts) {
+    if (!artifact.acceptance || artifact.state === "archived") continue;
+    if (!artifact.parentIds.some((id) => normalizedId(id) === normalizedId(parent.id))) continue;
+    observations.push(...artifactGateObservations(artifact));
+  }
+  const grouped = /* @__PURE__ */ new Map();
+  for (const observation of observations) {
+    const current = grouped.get(observation.kind) ?? [];
+    current.push(observation);
+    grouped.set(observation.kind, current);
+  }
+  return [...grouped.entries()].map(([kind, values]) => {
+    const states = [...new Set(values.map((value) => value.state))].sort();
+    const unreasonedExemption = values.some((value) => value.state === "not_applicable" && !value.rationale);
+    const state = states.includes("failed") ? "failed" : states.includes("unrun") ? "unrun" : states.includes("unknown") || unreasonedExemption ? "unknown" : states.includes("not_applicable") ? "not_applicable" : "passed";
+    return {
+      kind,
+      refs: unique(values.map((value) => value.ref)).sort(),
+      state,
+      states
+    };
+  }).sort((left, right) => left.kind.localeCompare(right.kind));
+}
+function sameProjection(left, right) {
+  return left === "unknown" || right === "unknown" || left === right;
+}
+function addRelationship(childrenByParent, parent, child) {
+  const children = childrenByParent.get(parent) ?? /* @__PURE__ */ new Set();
+  children.add(child);
+  childrenByParent.set(parent, children);
+}
+function relationshipCycles(childrenByParent) {
+  const nodes = /* @__PURE__ */ new Set();
+  for (const [parent, children] of childrenByParent) {
+    nodes.add(parent);
+    for (const child of children) nodes.add(child);
+  }
+  const indexByNode = /* @__PURE__ */ new Map();
+  const lowLink = /* @__PURE__ */ new Map();
+  const onStack = /* @__PURE__ */ new Set();
+  const stack = [];
+  const cycles = [];
+  let nextIndex = 0;
+  const visit = (node) => {
+    const nodeIndex = nextIndex;
+    nextIndex += 1;
+    indexByNode.set(node, nodeIndex);
+    lowLink.set(node, nodeIndex);
+    stack.push(node);
+    onStack.add(node);
+    const children = [...childrenByParent.get(node) ?? []].sort((left, right) => left.path.localeCompare(right.path));
+    for (const child of children) {
+      if (!indexByNode.has(child)) {
+        visit(child);
+        lowLink.set(node, Math.min(lowLink.get(node) ?? nodeIndex, lowLink.get(child) ?? nodeIndex));
+      } else if (onStack.has(child)) {
+        lowLink.set(node, Math.min(lowLink.get(node) ?? nodeIndex, indexByNode.get(child) ?? nodeIndex));
+      }
+    }
+    if (lowLink.get(node) !== nodeIndex) return;
+    const component = [];
+    while (stack.length > 0) {
+      const member = stack.pop();
+      if (!member) break;
+      onStack.delete(member);
+      component.push(member);
+      if (member === node) break;
+    }
+    const selfLoop = component.length === 1 && Boolean(childrenByParent.get(node)?.has(node));
+    if (component.length > 1 || selfLoop) {
+      cycles.push(component.sort((left, right) => left.path.localeCompare(right.path)));
+    }
+  };
+  for (const node of [...nodes].sort((left, right) => left.path.localeCompare(right.path))) {
+    if (!indexByNode.has(node)) visit(node);
+  }
+  return cycles.sort((left, right) => (left[0]?.path ?? "").localeCompare(right[0]?.path ?? ""));
+}
+function isPlanningTextPath(path) {
+  return TEXT_EXTENSIONS.has(extname2(path).toLocaleLowerCase("und"));
+}
+function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 ? 1 : 0) {
+  const artifacts = sources.map(parseArtifact);
+  const findings = [];
+  for (const artifact of artifacts) {
+    if (artifact.nonArtifactRequested && !artifact.nonArtifact) {
+      findings.push(finding(
+        "planning_input_unparsed",
+        artifact,
+        artifact.nonArtifactRationale ? "non-artifact classification conflicts with lifecycle, identity, relationship, table-child, or acceptance signals" : "non-artifact classification requires an explicit structured rationale and cannot be established by class label alone"
+      ));
+    } else if (!artifact.structured && !artifact.nonArtifact) {
+      findings.push(finding(
+        "planning_input_unparsed",
+        artifact,
+        `planning input could not be structurally interpreted: ${artifact.parseError ?? "no lifecycle, relationship, or explicit non-artifact classification"}`
+      ));
+    }
+    if (artifact.structured && !artifact.nonArtifact) {
+      for (const error of artifact.relationshipErrors) {
+        findings.push(finding(
+          error.code,
+          artifact,
+          error.detail,
+          error.related
+        ));
+      }
+    }
+    if (artifact.declaredClass === "archived" && artifact.lane !== "archived" && artifact.declared !== "archived") {
+      findings.push(finding(
+        "archive_classification_conflict",
+        artifact,
+        "bundle class claims archive but neither physical lane nor artifact lifecycle proves archival state"
+      ));
+    }
+    if (!artifact.structured || artifact.nonArtifact) continue;
+    const declaredProjection = artifact.declaredProjection;
+    const declaredStates = declaredProjection.states.filter((state) => state !== "unknown");
+    if (declaredProjection.values.length > 0 && artifact.declared === "unknown") {
+      findings.push(finding(
+        "lifecycle_state_unknown",
+        artifact,
+        declaredStates.length > 1 ? `declared lifecycle fields have conflicting recognized projections: ${declaredStates.join(", ")}` : declaredStates.length === 1 ? `declared lifecycle fields mix recognized and unrecognized projections: ${declaredProjection.values.map((value) => JSON.stringify(value)).join(", ")}` : `declared lifecycle ${declaredProjection.values.map((value) => JSON.stringify(value)).join(", ")} is outside the recognized vocabulary`
+      ));
+    } else if (declaredProjection.values.length === 0 && artifact.state === "unknown" && !artifact.acceptance) {
+      findings.push(finding(
+        "lifecycle_state_unknown",
+        artifact,
+        "planning artifact has no recognized lifecycle in its lane, metadata, or current body"
+      ));
+    }
+    if (artifact.lane !== "unknown" && artifact.declared !== "unknown" && !sameProjection(artifact.lane, artifact.declared)) {
+      findings.push(finding(
+        "lane_status_conflict",
+        artifact,
+        `physical lane is ${artifact.lane} but declared lifecycle is ${artifact.declared}`
+      ));
+    }
+    const bodyProjection2 = artifact.bodyProjection;
+    const bodyStates = bodyProjection2.states.filter((state) => state !== "unknown");
+    if (bodyProjection2.values.length > 0 && bodyProjection2.state === "unknown") {
+      findings.push(finding(
+        "body_projection_conflict",
+        artifact,
+        bodyStates.length > 1 ? `current body has conflicting recognized lifecycle projections: ${bodyStates.join(", ")}` : `current body includes an unrecognized lifecycle projection: ${bodyProjection2.values.map((value) => JSON.stringify(value)).join(", ")}`
+      ));
+    } else if (bodyProjection2.state !== "unknown" && artifact.state !== "unknown" && !sameProjection(artifact.state, bodyProjection2.state)) {
+      findings.push(finding(
+        "body_projection_conflict",
+        artifact,
+        `effective lifecycle is ${artifact.state} but current body projects ${bodyProjection2.state}`
+      ));
+    }
+  }
+  const byId = /* @__PURE__ */ new Map();
+  for (const artifact of artifacts) {
+    if (!artifact.structured || artifact.nonArtifact) continue;
+    const key = normalizedId(artifact.id);
+    const current = byId.get(key) ?? [];
+    current.push(artifact);
+    byId.set(key, current);
+  }
+  for (const duplicates of byId.values()) {
+    if (duplicates.length < 2) continue;
+    for (const artifact of duplicates) {
+      findings.push(finding(
+        "duplicate_artifact_id",
+        artifact,
+        `artifact id ${JSON.stringify(artifact.id)} resolves from ${duplicates.length} artifacts`,
+        duplicates.filter((item) => item !== artifact).map((item) => item.path)
+      ));
+    }
+  }
+  for (const artifact of artifacts) {
+    if (!artifact.structured || artifact.acceptance || artifact.nonArtifact) continue;
+    if (artifact.childRelationshipRole !== "child_parentage" || !LEAF_ARTIFACT_TYPES.has(artifact.type) || artifact.tableChildren.length === 0) continue;
+    findings.push(finding(
+      "planning_relationship_conflict",
+      artifact,
+      `leaf ${artifact.type} artifact declares ${artifact.tableChildren.length} child projection${artifact.tableChildren.length === 1 ? "" : "s"}`,
+      artifact.tableChildren.map((child) => child.ref)
+    ));
+  }
+  const childrenByParent = /* @__PURE__ */ new Map();
+  const explicitParents = /* @__PURE__ */ new Map();
+  const archiveBoundaryEdges = /* @__PURE__ */ new Set();
+  const archiveCompatible = (parent, child, ref) => {
+    const parentArchived = parent.state === "archived";
+    const childArchived = child.state === "archived";
+    if (parentArchived === childArchived) return true;
+    const key = `${parent.path}\0${child.path}`;
+    if (!archiveBoundaryEdges.has(key)) {
+      archiveBoundaryEdges.add(key);
+      findings.push(finding(
+        "planning_relationship_conflict",
+        child,
+        `partial archive graph: child is ${childArchived ? "archived" : "live"} but parent ${JSON.stringify(parent.id)} is ${parentArchived ? "archived" : "live"}`,
+        [parent.path, ref]
+      ));
+    }
+    return false;
+  };
+  for (const child of artifacts) {
+    if (!child.structured || child.acceptance || child.nonArtifact) continue;
+    const resolved = /* @__PURE__ */ new Set();
+    for (const observation of child.parentReferences) {
+      const parentId = observation.id;
+      const matches = (byId.get(normalizedId(parentId)) ?? []).filter((item) => !item.acceptance && !item.nonArtifact);
+      if (matches.length === 0) {
+        findings.push(finding(
+          "orphan_parent_reference",
+          child,
+          `declared parent ${JSON.stringify(parentId)} does not resolve to an artifact`
+        ));
+        continue;
+      }
+      if (matches.length > 1) {
+        findings.push(finding(
+          "planning_relationship_conflict",
+          child,
+          `declared parent ${JSON.stringify(parentId)} resolves ambiguously to ${matches.length} artifacts`,
+          matches.map((item) => item.path)
+        ));
+        continue;
+      }
+      const parent = matches[0];
+      if (!parent) continue;
+      if (observation.state !== "unknown" && parent.state !== "unknown" && !sameProjection(observation.state, parent.state)) {
+        findings.push(finding(
+          "parent_child_projection_conflict",
+          child,
+          `declared parent ${JSON.stringify(parent.id)} is ${parent.state} but the parent reference projects ${observation.state}`,
+          [parent.path, observation.ref]
+        ));
+      }
+      if (!archiveCompatible(parent, child, observation.ref)) continue;
+      resolved.add(parent);
+      addRelationship(childrenByParent, parent, child);
+    }
+    explicitParents.set(child, resolved);
+    if (child.topLevel && child.parentReferences.length > 0) {
+      findings.push(finding(
+        "planning_relationship_conflict",
+        child,
+        "top-level artifact also declares parentage",
+        child.parentReferences.map((reference) => reference.ref)
+      ));
+    }
+    if (resolved.size > 1) {
+      findings.push(finding(
+        "planning_relationship_conflict",
+        child,
+        `child resolves to ${resolved.size} distinct explicit parents`,
+        [...resolved].map((item) => item.path)
+      ));
+    }
+  }
+  for (const gate of artifacts) {
+    if (!gate.structured || !gate.acceptance || gate.nonArtifact) continue;
+    if (gate.parentIds.length === 0) {
+      findings.push(finding(
+        "planning_relationship_unresolved",
+        gate,
+        "acceptance artifact is not paired to a parent"
+      ));
+      continue;
+    }
+    const matchedParents = /* @__PURE__ */ new Map();
+    for (const observation of gate.parentReferences) {
+      for (const parent of byId.get(normalizedId(observation.id)) ?? []) {
+        if (parent.acceptance || parent.nonArtifact) continue;
+        matchedParents.set(parent.path, parent);
+        if (observation.state !== "unknown" && parent.state !== "unknown" && !sameProjection(observation.state, parent.state)) {
+          findings.push(finding(
+            "parent_child_projection_conflict",
+            gate,
+            `declared parent ${JSON.stringify(parent.id)} is ${parent.state} but the acceptance reference projects ${observation.state}`,
+            [parent.path, observation.ref]
+          ));
+        }
+      }
+    }
+    const eligibleParents = [...matchedParents.values()].filter((parent) => gate.state === "archived" || archiveCompatible(parent, gate, `${gate.path}#parent`)).sort((left, right) => left.path.localeCompare(right.path));
+    if (matchedParents.size === 0) {
+      findings.push(finding(
+        "orphan_parent_reference",
+        gate,
+        `acceptance parent references do not resolve: ${gate.parentIds.map((id) => JSON.stringify(id)).join(", ")}`
+      ));
+    } else if (eligibleParents.length === 0) {
+      findings.push(finding(
+        "planning_relationship_unresolved",
+        gate,
+        "live acceptance artifact resolves only to archived parents",
+        [...matchedParents.keys()].sort()
+      ));
+    } else if (eligibleParents.length > 1) {
+      findings.push(finding(
+        "planning_relationship_conflict",
+        gate,
+        `acceptance artifact resolves to ${eligibleParents.length} parents`,
+        eligibleParents.map((parent) => parent.path)
+      ));
+    }
+  }
+  for (const parent of artifacts) {
+    if (!parent.structured || parent.acceptance || parent.nonArtifact) continue;
+    for (const tableChild of parent.tableChildren) {
+      const matches = (byId.get(normalizedId(tableChild.id)) ?? []).filter((item) => !item.acceptance && !item.nonArtifact);
+      if (matches.length === 0) {
+        findings.push(finding(
+          "planning_relationship_unresolved",
+          parent,
+          `declared child ${JSON.stringify(tableChild.id)} does not resolve to an artifact`,
+          [tableChild.ref]
+        ));
+        continue;
+      }
+      if (matches.length > 1) {
+        findings.push(finding(
+          "planning_relationship_conflict",
+          parent,
+          `declared child ${JSON.stringify(tableChild.id)} resolves ambiguously to ${matches.length} artifacts`,
+          [tableChild.ref, ...matches.map((item) => item.path)]
+        ));
+        continue;
+      }
+      const child = matches[0];
+      if (!child) continue;
+      if (tableChild.state !== "unknown" && child.state !== "unknown" && !sameProjection(tableChild.state, child.state)) {
+        findings.push(finding(
+          "parent_child_projection_conflict",
+          parent,
+          `${child.id} is ${child.state} but the ${parent.childRelationshipRole === "rollup_projection" ? "rollup" : "parent"} projects ${tableChild.state}`,
+          [child.path, tableChild.ref]
+        ));
+      }
+      if (parent.childRelationshipRole === "rollup_projection") continue;
+      if (!archiveCompatible(parent, child, tableChild.ref)) continue;
+      if (child.topLevel) {
+        findings.push(finding(
+          "planning_relationship_conflict",
+          child,
+          `top-level artifact is projected as a child of ${JSON.stringify(parent.id)}`,
+          [parent.path, tableChild.ref]
+        ));
+      }
+      const parents = explicitParents.get(child) ?? /* @__PURE__ */ new Set();
+      if (parents.size > 0 && !parents.has(parent)) {
+        findings.push(finding(
+          "planning_relationship_conflict",
+          child,
+          `${parent.id} projects this child but its explicit parent resolves elsewhere`,
+          [parent.path, tableChild.ref, ...[...parents].map((item) => item.path)]
+        ));
+      }
+      addRelationship(childrenByParent, parent, child);
+    }
+  }
+  for (const cycle of relationshipCycles(childrenByParent)) {
+    for (const member of cycle) {
+      findings.push(finding(
+        "planning_relationship_conflict",
+        member,
+        `planning relationship cycle contains ${cycle.length} artifact${cycle.length === 1 ? "" : "s"}`,
+        cycle.filter((artifact) => artifact !== member).map((artifact) => artifact.path)
+      ));
+    }
+  }
+  for (const child of artifacts) {
+    if (!child.structured || child.acceptance || child.nonArtifact || child.topLevel) continue;
+    if (!LEAF_ARTIFACT_TYPES.has(child.type)) continue;
+    const parents = [...childrenByParent.entries()].filter(([, children]) => children.has(child)).map(([parent]) => parent);
+    if (parents.length === 0) {
+      findings.push(finding(
+        "planning_relationship_unresolved",
+        child,
+        "leaf planning artifact is not paired to exactly one parent; declare parent_id, place it in an exact parent child table, or mark top_level: true",
+        child.parentIds
+      ));
+    } else if (parents.length > 1) {
+      findings.push(finding(
+        "planning_relationship_conflict",
+        child,
+        `leaf planning artifact resolves to ${parents.length} parents`,
+        parents.map((parent) => parent.path)
+      ));
+    }
+  }
+  for (const parent of artifacts) {
+    if (!parent.structured || parent.acceptance || parent.state === "archived" || parent.nonArtifact) continue;
+    const children = [...childrenByParent.get(parent) ?? []].sort((left, right) => left.path.localeCompare(right.path));
+    const started = children.filter((child) => (/* @__PURE__ */ new Set(["active", "done"])).has(child.state));
+    const unfinished = children.filter((child) => child.state !== "done");
+    if (parent.state === "done" && unfinished.length > 0) {
+      findings.push(finding(
+        "parent_child_projection_conflict",
+        parent,
+        `parent is done while ${unfinished.length}/${children.length} direct children are not done`,
+        unfinished.map((child) => child.path)
+      ));
+    }
+    if (parent.declared === "preexecution" && started.length > 0) {
+      findings.push(finding(
+        "preexecution_parent_has_started_children",
+        parent,
+        `parent is preexecution while ${started.length}/${children.length} direct children have started`,
+        started.map((child) => child.path)
+      ));
+    }
+    const gates = acceptanceGates(parent, artifacts);
+    for (const gate of gates) {
+      if (gate.states.length > 1) {
+        findings.push(finding(
+          "acceptance_gate_identity_conflict",
+          parent,
+          `${gate.kind} gate has conflicting projections: ${gate.states.join(", ")}`,
+          gate.refs
+        ));
+      }
+      if (gate.state === "unknown") {
+        findings.push(finding(
+          "acceptance_gate_unknown",
+          parent,
+          gate.states.includes("not_applicable") ? `${gate.kind} gate claims not_applicable without a structured rationale` : `${gate.kind} gate state is missing or outside the recognized vocabulary`,
+          gate.refs
+        ));
+      }
+    }
+    const allChildrenDone = children.length > 0 && children.every((child) => child.state === "done");
+    if (allChildrenDone && gates.length === 0) {
+      findings.push(finding(
+        "acceptance_gate_undiscovered",
+        parent,
+        `all ${children.length} direct children are done but no acceptance gate can be identified`,
+        children.map((child) => child.path)
+      ));
+    }
+    const unrun = gates.filter((gate) => gate.state === "unrun");
+    const failed = gates.filter((gate) => gate.state === "failed");
+    if (allChildrenDone && unrun.length > 0) {
+      findings.push(finding(
+        "acceptance_cascade_unexecuted",
+        parent,
+        `all ${children.length} direct children are done but ${unrun.length}/${gates.length} acceptance gates are unexecuted`,
+        unrun.flatMap((gate) => gate.refs)
+      ));
+    }
+    if (failed.length > 0) {
+      findings.push(finding(
+        "acceptance_failure_unpaid",
+        parent,
+        `${failed.length}/${gates.length} acceptance gates record failure`,
+        failed.flatMap((gate) => gate.refs)
+      ));
+    }
+    if (!allChildrenDone && parent.state === "done" && unrun.length > 0) {
+      findings.push(finding(
+        "completed_parent_unexecuted_acceptance",
+        parent,
+        `completed parent has ${unrun.length}/${gates.length} unexecuted acceptance gates`,
+        unrun.flatMap((gate) => gate.refs)
+      ));
+    }
+    if (allChildrenDone && gates.length > 0 && gates.every((gate) => (/* @__PURE__ */ new Set(["not_applicable", "passed"])).has(gate.state)) && parent.declared !== "done") {
+      findings.push(finding(
+        "parent_completion_stale",
+        parent,
+        `all ${children.length} direct children and all ${gates.length} acceptance gates are complete but the parent is ${parent.declared}`,
+        gates.flatMap((gate) => gate.refs)
+      ));
+    }
+  }
+  const ordered = findings.sort((left, right) => left.code.localeCompare(right.code) || left.path.localeCompare(right.path) || left.detail.localeCompare(right.detail));
+  const counts = Object.fromEntries(
+    FINDING_CODES.map((code) => [code, ordered.filter((item) => item.code === code).length])
+  );
+  const status = planningRootCount === 0 ? "not_applicable" : ordered.length > 0 ? "fail" : "pass";
+  return {
+    artifactCount: artifacts.length,
+    counts,
+    exitCode: ordered.length > 0 ? 1 : 0,
+    findings: ordered,
+    planningRootCount,
+    status,
+    structuredArtifactCount: artifacts.filter((artifact) => artifact.structured).length
+  };
+}
+function auditPlanningRepository(repository) {
+  const root = resolve2(repository);
+  assertDirectory(root);
+  const planningRoots = discoverPlanningRoots(root);
+  const sources = [];
+  const appendEntry = (entry) => {
+    const relativePath = relative2(root, entry.path).split(sep2).join("/");
+    if (entry.kind !== "file" || !isPlanningTextPath(entry.path)) {
+      sources.push({ content: "", path: relativePath });
+      return;
+    }
+    let content = "";
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync2(entry.path));
+    } catch {
+      sources.push({ content: "", path: relativePath });
+      return;
+    }
+    sources.push({ content: content.includes("\0") ? "" : content, path: relativePath });
+  };
+  for (const rootText of planningRoots) {
+    const rootPath = resolve2(root, rootText);
+    const rootStat = lstatSync2(rootPath);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      appendEntry({ kind: rootStat.isFile() ? "file" : rootStat.isSymbolicLink() ? "symlink" : "other", path: rootPath });
+      continue;
+    }
+    for (const entry of listEntriesRecursively(rootPath)) appendEntry(entry);
+  }
+  return auditPlanningArtifacts(sources, planningRoots.length);
+}
+
 // src/closeout/bundle.ts
 var execFileAsync = promisify(execFile);
 var HEX64 = /^[0-9a-f]{64}$/;
@@ -572,7 +2932,6 @@ var PLANNING_NAMES = /* @__PURE__ */ new Set([
   "slices",
   "issues"
 ]);
-var PLANNING_LANES = /* @__PURE__ */ new Set(["backlog", "active", "in-progress", "done", "archive", "archived"]);
 var PLANNING_KINDS = /* @__PURE__ */ new Set(["repo_files", "external_snapshot", "none"]);
 var GATE_KINDS = /* @__PURE__ */ new Set([
   "isolated_clone",
@@ -596,7 +2955,7 @@ var LOCAL_ACTION_KINDS = /* @__PURE__ */ new Set([
   "handoff_update"
 ]);
 var EXTERNAL_CLAIMS = /* @__PURE__ */ new Set(["ci_green_on_push", "deployed", "independently_qa_accepted"]);
-function object2(value) {
+function object3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 function array2(value) {
@@ -630,9 +2989,9 @@ function executedText(value) {
   return !(/* @__PURE__ */ new Set(["not run", "not executed", "not measured", "claim", "anything", "pass"])).has(value.trim().split(/\s+/).join(" ").toLocaleLowerCase("und"));
 }
 function posix(path) {
-  return path.split(sep).join("/");
+  return path.split(sep3).join("/");
 }
-function compareCodePoints(left, right) {
+function compareCodePoints2(left, right) {
   const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
   const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
   for (let index = 0; index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
@@ -642,22 +3001,22 @@ function compareCodePoints(left, right) {
   return leftPoints.length - rightPoints.length;
 }
 function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
+  return createHash2("sha256").update(bytes).digest("hex");
 }
 function stableEqual(left, right) {
   if (Object.is(left, right)) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
     return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => stableEqual(value, right[index]));
   }
-  const leftObject = object2(left);
-  const rightObject = object2(right);
+  const leftObject = object3(left);
+  const rightObject = object3(right);
   if (!leftObject || !rightObject) return false;
   const leftKeys = Object.keys(leftObject).sort();
   const rightKeys = Object.keys(rightObject).sort();
   return stableEqual(leftKeys, rightKeys) && leftKeys.every((key) => stableEqual(leftObject[key], rightObject[key]));
 }
 function requireObject(value, keys, path, errors) {
-  const item = object2(value);
+  const item = object3(value);
   if (!item) {
     errors.push(`${path}: expected object`);
     return void 0;
@@ -691,14 +3050,14 @@ var nodeFilePort = {
     return realpath(path);
   },
   async walk(root) {
-    const rootPath = resolve(root);
+    const rootPath = resolve3(root);
     const rows = [];
     async function visit(directory) {
       const entries = await readdir(directory, { withFileTypes: true });
       for (const entry of entries) {
         if (IGNORED_WALK.has(entry.name)) continue;
-        const absolute = resolve(directory, entry.name);
-        const rel = posix(relative(rootPath, absolute));
+        const absolute = resolve3(directory, entry.name);
+        const rel = posix(relative3(rootPath, absolute));
         if (entry.isSymbolicLink()) rows.push({ absolute, relative: rel, kind: "symlink" });
         else if (entry.isDirectory()) {
           rows.push({ absolute, relative: rel, kind: "directory" });
@@ -707,7 +3066,7 @@ var nodeFilePort = {
       }
     }
     await visit(rootPath);
-    return rows.sort((a, b) => compareCodePoints(a.relative, b.relative));
+    return rows.sort((a, b) => compareCodePoints2(a.relative, b.relative));
   }
 };
 var nodeGitPort = {
@@ -729,21 +3088,21 @@ var nodeGitPort = {
 };
 var nodeBundlePorts = { files: nodeFilePort, git: nodeGitPort };
 async function contained(files, root, candidate) {
-  if (!text(candidate) || isAbsolute(candidate)) return void 0;
-  const lexical = resolve(root, candidate);
-  const rel = relative(resolve(root), lexical);
-  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return void 0;
+  if (!text(candidate) || isAbsolute2(candidate)) return void 0;
+  const lexical = resolve3(root, candidate);
+  const rel = relative3(resolve3(root), lexical);
+  if (rel === ".." || rel.startsWith(`..${sep3}`) || isAbsolute2(rel)) return void 0;
   try {
     const rootReal = await files.realpath(root);
     let existing = lexical;
     const tail = [];
-    while (!await files.exists(existing) && dirname(existing) !== existing) {
-      tail.unshift(basename(existing));
-      existing = dirname(existing);
+    while (!await files.exists(existing) && dirname2(existing) !== existing) {
+      tail.unshift(basename3(existing));
+      existing = dirname2(existing);
     }
-    const targetReal = resolve(await files.realpath(existing), ...tail);
-    const realRel = relative(rootReal, targetReal);
-    if (realRel === ".." || realRel.startsWith(`..${sep}`) || isAbsolute(realRel)) return void 0;
+    const targetReal = resolve3(await files.realpath(existing), ...tail);
+    const realRel = relative3(rootReal, targetReal);
+    if (realRel === ".." || realRel.startsWith(`..${sep3}`) || isAbsolute2(realRel)) return void 0;
     return targetReal;
   } catch {
     return lexical;
@@ -769,8 +3128,8 @@ async function loadRef(files, base, value, path, errors, allowPlaceholders) {
   }
   try {
     const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    if (!object2(parsed)) errors.push(`${path}.path: expected JSON object`);
-    const data = object2(parsed);
+    if (!object3(parsed)) errors.push(`${path}.path: expected JSON object`);
+    const data = object3(parsed);
     return data ? { data, file: target } : { file: target };
   } catch (error) {
     errors.push(`${path}.path: ${error instanceof Error ? error.message : String(error)}`);
@@ -784,28 +3143,38 @@ async function evidenceRef(files, base, ref, path, errors, allowPlaceholders, re
   }
   return loaded.data;
 }
-async function repositoryIdentity(repo, git2) {
+async function repositoryIdentity2(repo, git2) {
   const remote = (await git2.run(repo, ["config", "--get", "remote.origin.url"], [0, 1])).stdout;
   if (remote && !remote.startsWith("/") && !remote.startsWith("file://")) {
     const path = remote.includes("://") ? new URL(remote).pathname.replace(/^\/+|\/+$/g, "") : remote.split(":", 2).at(-1) ?? "";
     const normalized = path.replace(/\.git$/, "").replace(/\/+$/, "");
     if (normalized.includes("/")) return normalized;
   }
-  return basename(repo);
+  return basename3(repo);
 }
-async function discoverPlanningRoots(repo, files) {
+async function discoverPlanningRoots2(repo, files) {
   const rows = await files.walk(repo);
-  const directories = rows.filter((row) => row.kind === "directory" && row.relative.split("/").length <= 4);
+  const directories = rows.filter((row) => row.kind === "directory");
+  const childrenByDirectory = /* @__PURE__ */ new Map();
+  for (const row of directories) {
+    const parent = dirname2(row.relative);
+    const children = childrenByDirectory.get(parent) ?? /* @__PURE__ */ new Set();
+    children.add(basename3(row.relative).toLocaleLowerCase("und"));
+    childrenByDirectory.set(parent, children);
+  }
   const candidates = /* @__PURE__ */ new Set();
+  for (const row of rows) {
+    if (row.kind !== "directory" && isCanonicalPlanningFileName(row.relative)) {
+      candidates.add(row.relative);
+    }
+  }
   for (const row of directories) {
     const parts = row.relative.split("/");
     if (PLANNING_NAMES.has(parts.at(-1)?.toLocaleLowerCase("und") ?? "")) candidates.add(row.relative);
-    const children = new Set(
-      directories.filter((other) => dirname(other.relative) === row.relative).map((other) => basename(other.relative).toLocaleLowerCase("und"))
-    );
-    if ([...children].filter((name) => PLANNING_LANES.has(name)).length >= 2) candidates.add(row.relative);
+    const children = childrenByDirectory.get(row.relative) ?? /* @__PURE__ */ new Set();
+    if ([...children].filter((name) => PLANNING_LANE_NAMES.has(name)).length >= 2) candidates.add(row.relative);
   }
-  const minimal = [...candidates].sort((a, b) => a.split("/").length - b.split("/").length || compareCodePoints(a, b));
+  const minimal = [...candidates].sort((a, b) => a.split("/").length - b.split("/").length || compareCodePoints2(a, b));
   return new Set(minimal.filter((candidate, index) => !minimal.slice(0, index).some((parent) => candidate === parent || candidate.startsWith(`${parent}/`))));
 }
 async function validateCriteria(bundle, report, base, files, clean, allowPlaceholders, errors) {
@@ -840,7 +3209,7 @@ async function validateCriteria(bundle, report, base, files, clean, allowPlaceho
   if (!allowPlaceholders && (typeof proof.request_sha256 !== "string" || !HEX64.test(proof.request_sha256))) errors.push(`${path}.request_sha256: required lowercase SHA-256`);
   if (proof.discovered_count !== ids.length) errors.push(`${path}: discovered_count (${String(proof.discovered_count)}) != criteria_ids (${ids.length})`);
   if (proof.none_found !== (ids.length === 0)) errors.push(`${path}.none_found: must be true exactly when discovered_count is zero`);
-  const reportIds = array2(report.acceptance_criteria).map((item) => object2(item)?.id).filter(text).sort();
+  const reportIds = array2(report.acceptance_criteria).map((item) => object3(item)?.id).filter(text).sort();
   if (!stableEqual([...ids].sort(), reportIds)) errors.push(`${path}.criteria_ids: must equal report acceptance_criteria ids`);
   const records = await Promise.all(refs.map((ref, index) => evidenceRef(files, base, ref, `${path}.source_refs[${index}]`, errors, allowPlaceholders, "mister-clean.criteria-source")));
   for (const [index, record] of records.entries()) if (record && (!Array.isArray(record.criteria_ids) || !array2(record.criteria_ids).every(text))) {
@@ -860,13 +3229,15 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
     errors.push(`${path}.systems: required nonempty array`);
     return;
   }
-  const discovered = repo ? await discoverPlanningRoots(repo, files) : /* @__PURE__ */ new Set();
+  const discovered = repo ? await discoverPlanningRoots2(repo, files) : /* @__PURE__ */ new Set();
   const declared = /* @__PURE__ */ new Set();
-  const none = systems.filter((item) => object2(item)?.kind === "none");
+  const none = systems.filter((item) => object3(item)?.kind === "none");
   if (none.length && systems.length !== 1) errors.push(`${path}.systems: kind=none is only valid as the sole discovered planning system`);
   if (repo && none.length && discovered.size) errors.push(`${path}.systems: kind=none contradicts live planning candidates ${JSON.stringify([...discovered].sort())}`);
   const systemIds = /* @__PURE__ */ new Set();
   const globalArtifacts = /* @__PURE__ */ new Set();
+  const planningSourcePaths = /* @__PURE__ */ new Set();
+  const planningSources = [];
   for (const [index, raw] of systems.entries()) {
     const spath = `${path}.systems[${index}]`;
     const system = requireObject(raw, ["id", "kind", "sources", "schema_sources", "validators", "corpus"], spath, errors);
@@ -907,6 +3278,11 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
       if (!text(artifact.class)) {
         errors.push(`${apath}.class: required explicit class`);
         unclassified += 1;
+      } else if ((/* @__PURE__ */ new Set(["not assessed", "not_assessed", "unclassified", "unknown"])).has(identity(artifact.class))) {
+        unclassified += 1;
+      }
+      if (text(artifact.class) && isNonArtifactPlanningClass(artifact.class) && !text(artifact.classification_rationale)) {
+        errors.push(`${apath}.classification_rationale: non-artifact class requires an explicit rationale`);
       }
       if (!allowPlaceholders && (typeof artifact.sha256 !== "string" || !HEX64.test(artifact.sha256))) errors.push(`${apath}.sha256: required lowercase SHA-256`);
       if (repo && system.kind === "repo_files" && text(artifact.path)) {
@@ -928,28 +3304,52 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
           errors.push(`${spath}.corpus.roots: missing or outside repository: ${JSON.stringify(root)}`);
           continue;
         }
-        if (await files.isFile(target)) live.add(posix(relative(repositoryRoot, target)));
-        else (await files.walk(target)).filter((row) => row.kind === "file").forEach((row) => live.add(posix(relative(repositoryRoot, row.absolute))));
+        if (await files.isFile(target)) live.add(posix(relative3(repositoryRoot, target)));
+        else (await files.walk(target)).filter((row) => row.kind !== "directory").forEach((row) => live.add(posix(relative3(repositoryRoot, row.absolute))));
       }
       if (!stableEqual([...live].sort(), [...seen].sort())) errors.push(`${spath}.corpus: live census mismatch missing_from_bundle=${JSON.stringify([...live].filter((item) => !seen.has(item)).sort())} absent_from_live=${JSON.stringify([...seen].filter((item) => !live.has(item)).sort())}`);
       if (clean) {
         for (const rawArtifact of artifacts) {
-          const artifact = object2(rawArtifact);
-          if (!artifact || !text(artifact.path) || String(artifact.class).toLocaleLowerCase("und").match(/^archiv(ed|e)$/)) continue;
-          if (!(/* @__PURE__ */ new Set([".md", ".txt", ".yaml", ".yml", ".json"])).has(extname(artifact.path).toLocaleLowerCase("und"))) continue;
+          const artifact = object3(rawArtifact);
+          if (!artifact || !text(artifact.path)) continue;
+          if (!isPlanningTextPath(artifact.path)) {
+            if (!text(artifact.class) || !isNonArtifactPlanningClass(artifact.class) || !text(artifact.classification_rationale)) {
+              errors.push(`${spath}.corpus: unsupported planning entry ${artifact.path} requires an explicit non-artifact class and classification_rationale`);
+            }
+            continue;
+          }
           const target = await contained(files, repo, artifact.path);
           if (!target || !await files.exists(target)) continue;
           let content;
           try {
             content = await files.readText(target);
           } catch {
+            errors.push(`${spath}.corpus: planning entry ${artifact.path} is not valid UTF-8 text`);
+            continue;
+          }
+          if (content.includes("\0")) {
+            errors.push(`${spath}.corpus: planning entry ${artifact.path} contains binary NUL bytes`);
             continue;
           }
           const earlyDone = /\b(implementation|dev|code)\b/i.test(content) && /\b(done|complete|completed|merged)\b/i.test(content);
           const laterUnrun = /\b(review|qa|acceptance|holdout)\b/i.test(content) && /\b(not[_ -]?run|pending|todo|backlog|unexecuted)\b/i.test(content);
           if (earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
+          if (planningSourcePaths.has(artifact.path)) continue;
+          planningSourcePaths.add(artifact.path);
+          planningSources.push({
+            ...text(artifact.classification_rationale) ? { classificationRationale: artifact.classification_rationale } : {},
+            content,
+            declaredClass: String(artifact.class),
+            path: artifact.path
+          });
         }
       }
+    }
+  }
+  if (clean && repo) {
+    const audit = auditPlanningArtifacts(planningSources, declared.size);
+    for (const finding2 of audit.findings) {
+      errors.push(`${path}.corpus: ${finding2.code} at ${finding2.path} (${finding2.subject}): ${finding2.detail}; related=${JSON.stringify(finding2.related)}`);
     }
   }
   if (repo) {
@@ -961,11 +3361,11 @@ async function validateChangeInventory(bundle, report, manifest, repo, git2, bas
   const path = "$.change_inventory";
   const inventory = requireObject(bundle.change_inventory, ["start_commit", "subject_commit", "changes"], path, errors);
   if (!inventory) return;
-  const subject = object2(report.repo)?.commit;
+  const subject = object3(report.repo)?.commit;
   if (!allowPlaceholders && inventory.subject_commit !== subject) errors.push(`${path}.subject_commit: must equal report repo.commit`);
-  const startSnapshot = object2(object2(object2(bundle.successor_readiness)?.snapshots)?.start)?.object;
+  const startSnapshot = object3(object3(object3(bundle.successor_readiness)?.snapshots)?.start)?.object;
   if (!allowPlaceholders && inventory.start_commit !== startSnapshot) errors.push(`${path}.start_commit: must equal start snapshot object`);
-  const actions = new Map(array2(manifest.actions).map((raw) => object2(raw)).filter(Boolean).map((item) => [String(item.id), item]));
+  const actions = new Map(array2(manifest.actions).map((raw) => object3(raw)).filter(Boolean).map((item) => [String(item.id), item]));
   const reported = /* @__PURE__ */ new Map();
   if (!Array.isArray(inventory.changes)) {
     errors.push(`${path}.changes: required array`);
@@ -975,7 +3375,7 @@ async function validateChangeInventory(bundle, report, manifest, repo, git2, bas
     const cpath = `${path}.changes[${index}]`;
     const change = requireObject(raw, ["status", "path", "action_ids", "exclusion"], cpath, errors);
     if (!change || !text(change.path)) continue;
-    if (isAbsolute(change.path) || change.path.split(/[\\/]/).includes("..") || reported.has(change.path)) errors.push(`${cpath}.path: required unique repository-relative path`);
+    if (isAbsolute2(change.path) || change.path.split(/[\\/]/).includes("..") || reported.has(change.path)) errors.push(`${cpath}.path: required unique repository-relative path`);
     reported.set(change.path, String(change.status));
     if (!(/* @__PURE__ */ new Set(["A", "M", "D", "T"])).has(String(change.status))) errors.push(`${cpath}.status: expected A, M, D, or T`);
     if (!Array.isArray(change.action_ids) || !array2(change.action_ids).every(text)) errors.push(`${cpath}.action_ids: required string array`);
@@ -997,7 +3397,7 @@ async function validateChangeInventory(bundle, report, manifest, repo, git2, bas
           status: change.status,
           start_commit: inventory.start_commit,
           subject_commit: subject,
-          request_sha256: object2(bundle.criteria_discovery)?.request_sha256
+          request_sha256: object3(bundle.criteria_discovery)?.request_sha256
         };
         for (const [key, value] of Object.entries(expected)) if (record[key] !== value) errors.push(`${cpath}.exclusion: bound exclusion disagrees on ${key}`);
         for (const key of ["actor", "scope", "rationale"]) if (!text(record[key])) errors.push(`${cpath}.exclusion: requires ${key}`);
@@ -1015,10 +3415,10 @@ async function validateChangeInventory(bundle, report, manifest, repo, git2, bas
 }
 async function validateBoundExecutionRecords(bundle, report, manifest, repo, git2, base, files, allowPlaceholders, errors) {
   for (const [index, raw] of array2(manifest.actions).entries()) {
-    const action = object2(raw);
+    const action = object3(raw);
     if (!action) continue;
-    for (const [evidenceIndex, rawEvidence] of array2(object2(action.outcome)?.evidence).entries()) {
-      const evidence = object2(rawEvidence);
+    for (const [evidenceIndex, rawEvidence] of array2(object3(action.outcome)?.evidence).entries()) {
+      const evidence = object3(rawEvidence);
       if (!evidence) continue;
       const epath = `$.manifest.actions[${JSON.stringify(action.id)}].outcome.evidence[${evidenceIndex}]`;
       const record = await evidenceRef(files, base, evidence.evidence_ref, `${epath}.evidence_ref`, errors, allowPlaceholders, "mister-clean.action-result");
@@ -1037,11 +3437,11 @@ async function validateBoundExecutionRecords(bundle, report, manifest, repo, git
     }
   }
   for (const [index, raw] of array2(report.completion_debts).entries()) {
-    const debt = object2(raw);
+    const debt = object3(raw);
     if (!debt) continue;
     if (debt.state === "satisfied") {
       for (const [evidenceIndex, rawEvidence] of array2(debt.evidence).entries()) {
-        const evidence = object2(rawEvidence);
+        const evidence = object3(rawEvidence);
         if (!evidence) continue;
         const epath = `$.report.completion_debts[${index}].evidence[${evidenceIndex}]`;
         const record = await evidenceRef(files, base, evidence.evidence_ref, `${epath}.evidence_ref`, errors, allowPlaceholders, "mister-clean.debt-result");
@@ -1059,21 +3459,21 @@ async function validateBoundExecutionRecords(bundle, report, manifest, repo, git
       }
     }
     if (debt.state === "accepted_exception") {
-      const exception = object2(debt.exception) ?? {};
+      const exception = object3(debt.exception) ?? {};
       const epath = `$.report.completion_debts[${index}].exception.ref`;
       const record = await evidenceRef(files, base, exception.ref, epath, errors, allowPlaceholders, "mister-clean.operator-ruling");
       if (record && !allowPlaceholders) {
         for (const field of ["actor", "at", "scope", "rationale"]) if (record[field] !== exception[field]) errors.push(`${epath}: ruling disagrees on ${field}`);
         if (record.debt_id !== debt.id) errors.push(`${epath}: ruling debt_id mismatch`);
-        if (record.request_sha256 !== object2(bundle.criteria_discovery)?.request_sha256) errors.push(`${epath}: ruling must bind the exact operative request`);
+        if (record.request_sha256 !== object3(bundle.criteria_discovery)?.request_sha256) errors.push(`${epath}: ruling must bind the exact operative request`);
       }
     }
   }
-  for (const [name, raw] of Object.entries(object2(report.claims) ?? {})) {
-    const claim = object2(raw);
+  for (const [name, raw] of Object.entries(object3(report.claims) ?? {})) {
+    const claim = object3(raw);
     if (claim?.state !== "established") continue;
     for (const [index, rawEvidence] of array2(claim.evidence).entries()) {
-      const evidence = object2(rawEvidence);
+      const evidence = object3(rawEvidence);
       if (!evidence) continue;
       const epath = `$.report.claims.${name}.evidence[${index}]`;
       if (name === "committed_locally") {
@@ -1082,7 +3482,7 @@ async function validateBoundExecutionRecords(bundle, report, manifest, repo, git
         if (repo && !allowPlaceholders) {
           const result = await git2.run(repo, ["ls-remote", String(evidence.remote ?? ""), String(evidence.ref ?? "")], [0, 2, 128]);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
-          if (observed !== evidence.commit || evidence.commit !== object2(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
+          if (observed !== evidence.commit || evidence.commit !== object3(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
         }
       } else if (EXTERNAL_CLAIMS.has(name)) {
         errors.push(`${epath}: local closure bundles cannot establish external claim ${name}; use not_established/not_applicable until a trusted adapter is configured`);
@@ -1148,7 +3548,7 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
                 surface: field,
                 identity: row.path,
                 commit: row.head,
-                request_sha256: object2(bundle.criteria_discovery)?.request_sha256
+                request_sha256: object3(bundle.criteria_discovery)?.request_sha256
               };
               for (const [key, value] of Object.entries(expected)) if (record[key] !== value) errors.push(`${rpath}.policy_ref: bound topology ruling disagrees on ${key}`);
               for (const key of ["actor", "scope", "rationale", "next_action"]) if (!text(record[key])) errors.push(`${rpath}.policy_ref: topology ruling requires ${key}`);
@@ -1164,7 +3564,7 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
                 surface: field,
                 identity: row.name,
                 commit: row.commit,
-                request_sha256: object2(bundle.criteria_discovery)?.request_sha256
+                request_sha256: object3(bundle.criteria_discovery)?.request_sha256
               };
               for (const [key, value] of Object.entries(expected)) if (record[key] !== value) errors.push(`${rpath}.policy_ref: bound topology ruling disagrees on ${key}`);
               for (const key of ["actor", "scope", "rationale", "next_action"]) if (!text(record[key])) errors.push(`${rpath}.policy_ref: topology ruling requires ${key}`);
@@ -1189,7 +3589,7 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
       if (!Number.isInteger(topology[field]) || Number(topology[field]) < 0) errors.push(`${path}.topology.${field}: required nonnegative integer`);
       else if (clean && topology[field] !== 0) errors.push(`${path}.topology.${field}: CLEAN requires zero`);
     }
-    const reportedBlocking = array2(topology.processes).filter((raw) => object2(raw)?.blocking === true).length;
+    const reportedBlocking = array2(topology.processes).filter((raw) => object3(raw)?.blocking === true).length;
     if (topology.blocking_processes !== reportedBlocking) errors.push(`${path}.topology.blocking_processes: must equal blocking process rows (${reportedBlocking})`);
     if (topology.unowned !== reportedUnowned) errors.push(`${path}.topology.unowned: must equal unowned topology rows (${reportedUnowned})`);
     if (clean && array2(topology.stashes).length) errors.push(`${path}.topology.stashes: CLEAN requires zero stashes`);
@@ -1250,8 +3650,8 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
     }
   }
   if (clean && !gates.some((raw) => {
-    const gate = object2(raw);
-    return gate?.kind === "isolated_clone" && gate.object === object2(report.repo)?.commit;
+    const gate = object3(raw);
+    return gate?.kind === "isolated_clone" && gate.object === object3(report.repo)?.commit;
   })) errors.push(`${path}.gates: CLEAN requires an isolated_clone gate bound to the subject commit`);
   const debris = requireObject(successor.debris, ["removed", "retained", "unclassified", "evidence"], `${path}.debris`, errors);
   if (debris) {
@@ -1297,8 +3697,8 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
     if (clean && review.findings_total !== review.findings_paid) errors.push(`${path}.final_review: findings_total must equal findings_paid`);
     const record = await evidenceRef(files, base, review.evidence_ref, `${path}.final_review.evidence_ref`, errors, allowPlaceholders, "mister-clean.independent-review");
     if (record && !allowPlaceholders) {
-      const criteria = object2(bundle.criteria_discovery);
-      const planning = object2(bundle.planning_discovery);
+      const criteria = object3(bundle.criteria_discovery);
+      const planning = object3(bundle.planning_discovery);
       const expected = {
         mechanism: review.mechanism,
         status: review.status,
@@ -1306,9 +3706,9 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
         implementer: review.implementer,
         reviewer_execution: review.reviewer_execution,
         implementer_execution: review.implementer_execution,
-        candidate_commit: object2(report.repo)?.commit,
+        candidate_commit: object3(report.repo)?.commit,
         criteria_ids: criteria?.criteria_ids,
-        planning_system_ids: array2(planning?.systems).map((item) => object2(item)?.id).filter((item) => item !== void 0),
+        planning_system_ids: array2(planning?.systems).map((item) => object3(item)?.id).filter((item) => item !== void 0),
         findings_total: review.findings_total,
         findings_paid: review.findings_paid,
         unresolved: review.unresolved
@@ -1325,20 +3725,20 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
     return;
   }
   try {
-    const top = await files.realpath(resolve((await git2.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
-    const requestedRoot = await files.realpath(resolve(repo));
+    const top = await files.realpath(resolve3((await git2.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
+    const requestedRoot = await files.realpath(resolve3(repo));
     if (top !== requestedRoot) errors.push(`$.live_repo: expected worktree root ${top}, got ${requestedRoot}`);
     const head = (await git2.run(repo, ["rev-parse", "HEAD"])).stdout;
-    const subject = object2(report.repo)?.commit;
+    const subject = object3(report.repo)?.commit;
     if ((await git2.run(repo, ["cat-file", "-e", `${String(subject ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push("$.report.repo.commit: subject commit does not exist in live repository");
-    const custody = object2(bundle.custody) ?? {};
+    const custody = object3(bundle.custody) ?? {};
     if (custody.mode !== "sidecar") errors.push("$.custody.mode: only sidecar is supported");
     else if (head !== subject) errors.push(`$.custody: sidecar validation requires live HEAD ${head} == subject ${String(subject)}`);
-    if (object2(report.repo)?.id !== await repositoryIdentity(repo, git2)) errors.push("$.report.repo.id: does not match independently resolved live repository identity");
+    if (object3(report.repo)?.id !== await repositoryIdentity2(repo, git2)) errors.push("$.report.repo.id: does not match independently resolved live repository identity");
     if ((await git2.run(repo, ["status", "--porcelain=v1", "--untracked-files=all"])).stdout) errors.push("$.report.repo: CLEAN requires a clean live working tree");
-    const successor = object2(bundle.successor_readiness) ?? {};
-    const observation = object2(successor.target_observation) ?? {};
-    const target = object2(report.target_binding) ?? {};
+    const successor = object3(bundle.successor_readiness) ?? {};
+    const observation = object3(successor.target_observation) ?? {};
+    const target = object3(report.target_binding) ?? {};
     if (observation.local_ref !== target.target_ref) errors.push("$.successor_readiness.target_observation.local_ref: must equal report target_binding.target_ref");
     const liveTarget = (await git2.run(repo, ["rev-parse", String(observation.local_ref ?? "")])).stdout;
     if (liveTarget !== target.target_commit) errors.push("$.report.target_binding.target_commit: live target differs");
@@ -1359,12 +3759,12 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
     if (upstream && observation.kind !== "remote_ref_resolution") errors.push("$.successor_readiness.target_observation: configured upstream forbids local-only target proof");
     if (upstream) {
       if (observation.local_ref !== upstream) errors.push(`$.successor_readiness.target_observation.local_ref: must equal configured upstream ${upstream}`);
-      const branch = String(object2(report.repo)?.branch ?? "");
+      const branch = String(object3(report.repo)?.branch ?? "");
       const remoteName = (await git2.run(repo, ["config", "--get", `branch.${branch}.remote`], [0, 1])).stdout;
       const mergeRef = (await git2.run(repo, ["config", "--get", `branch.${branch}.merge`], [0, 1])).stdout;
       if (observation.remote !== remoteName || observation.remote_ref !== mergeRef) errors.push("$.successor_readiness.target_observation: remote/ref tuple differs from configured upstream");
     } else if (remotes.length && observation.kind === "local_ref_resolution") errors.push("$.successor_readiness.target_observation: CLEAN cannot use local-only target proof while remotes exist");
-    const topology = object2(successor.topology) ?? {};
+    const topology = object3(successor.topology) ?? {};
     const worktreeOutput = (await git2.run(repo, ["worktree", "list", "--porcelain"])).stdout;
     const liveWorktrees = worktreeOutput.split(/\n\n+/).filter(Boolean).map((block) => {
       const row = {};
@@ -1377,15 +3777,15 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
     });
     const reportedWorktrees = /* @__PURE__ */ new Map();
     for (const raw of array2(topology.worktrees)) {
-      const row = object2(raw);
-      if (row && text(row.path)) reportedWorktrees.set(await files.realpath(resolve(row.path)), row);
+      const row = object3(raw);
+      if (row && text(row.path)) reportedWorktrees.set(await files.realpath(resolve3(row.path)), row);
     }
     const liveWorktreePaths = /* @__PURE__ */ new Set();
     let dirty = 0;
     let unowned = 0;
     let unmerged = 0;
     for (const row of liveWorktrees) {
-      const livePath = await files.realpath(resolve(row.worktree ?? ""));
+      const livePath = await files.realpath(resolve3(row.worktree ?? ""));
       liveWorktreePaths.add(livePath);
       const reported = reportedWorktrees.get(livePath) ?? {};
       if (!owned(reported.owner)) unowned += 1;
@@ -1398,7 +3798,7 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
     if (!stableEqual([...liveWorktreePaths].sort(), [...reportedWorktrees.keys()].sort())) errors.push("$.successor_readiness.topology.worktrees: live path set differs");
     const branchLines = (await git2.run(repo, ["for-each-ref", "--format=%(refname:short)%09%(objectname)", "refs/heads"])).stdout.split("\n").filter(Boolean);
     const liveBranches = new Map(branchLines.map((line) => line.split("	", 2)));
-    const reportedBranches = new Map(array2(topology.branches).map(object2).filter(Boolean).map((row) => [String(row.name), row]));
+    const reportedBranches = new Map(array2(topology.branches).map(object3).filter(Boolean).map((row) => [String(row.name), row]));
     if (!stableEqual([...liveBranches.keys()].sort(), [...reportedBranches.keys()].sort())) errors.push("$.successor_readiness.topology.branches: live branch set differs");
     for (const [name, commit] of liveBranches) {
       const reported = reportedBranches.get(name) ?? {};
@@ -1409,7 +3809,7 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
     }
     const remoteLines = (await git2.run(repo, ["for-each-ref", "--format=%(refname)%09%(objectname)", "refs/remotes"])).stdout.split("\n").filter((line) => line && !line.split("	", 1)[0].endsWith("/HEAD"));
     const liveRemoteRefs = new Map(remoteLines.map((line) => line.split("	", 2)));
-    const reportedRemoteRefs = new Map(array2(topology.remote_refs).map(object2).filter(Boolean).map((row) => [String(row.name), row]));
+    const reportedRemoteRefs = new Map(array2(topology.remote_refs).map(object3).filter(Boolean).map((row) => [String(row.name), row]));
     if (!stableEqual([...liveRemoteRefs.keys()].sort(), [...reportedRemoteRefs.keys()].sort())) errors.push("$.successor_readiness.topology.remote_refs: live remote-ref set differs");
     for (const [name, commit] of liveRemoteRefs) {
       const reported = reportedRemoteRefs.get(name) ?? {};
@@ -1421,7 +3821,7 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
     const liveStashes = (await git2.run(repo, ["stash", "list", "--format=%gd%09%H%09%gs"])).stdout.split("\n").filter(Boolean);
     if (!stableEqual(topology.stashes, liveStashes)) errors.push("$.successor_readiness.topology.stashes: live stash set differs");
     if (topology.dirty !== dirty || topology.unowned !== unowned || topology.unmerged !== unmerged) errors.push(`$.successor_readiness.topology: live counts dirty=${dirty} unowned=${unowned} unmerged=${unmerged} differ`);
-    const current = object2(successor.current_state) ?? {};
+    const current = object3(successor.current_state) ?? {};
     if (text(current.path)) {
       const relCurrent = current.path;
       const currentPath = await contained(files, repo, relCurrent);
@@ -1431,18 +3831,18 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
       else if ((await git2.run(repo, ["cat-file", "-e", `${String(subject)}:${relCurrent}`], [0, 128])).code !== 0) errors.push("$.successor_readiness.current_state.path: must exist in the subject commit");
     }
     if (current.commit !== subject) errors.push("$.successor_readiness.current_state.commit: must equal subject commit");
-    for (const [index, entry] of array2(object2(successor.handoff)?.entrypoints).entries()) {
+    for (const [index, entry] of array2(object3(successor.handoff)?.entrypoints).entries()) {
       const resolved = await contained(files, repo, entry);
-      if (!text(entry) || isAbsolute(entry) || entry === ".git" || entry.startsWith(".git/") || !resolved || !await files.isFile(resolved)) errors.push(`$.successor_readiness.handoff.entrypoints[${index}]: must be an existing repository-relative file outside .git`);
+      if (!text(entry) || isAbsolute2(entry) || entry === ".git" || entry.startsWith(".git/") || !resolved || !await files.isFile(resolved)) errors.push(`$.successor_readiness.handoff.entrypoints[${index}]: must be an existing repository-relative file outside .git`);
     }
     for (const name of ["start", "end"]) {
-      const snapshot = object2(object2(successor.snapshots)?.[name]) ?? {};
+      const snapshot = object3(object3(successor.snapshots)?.[name]) ?? {};
       const commit = String(snapshot.object ?? "");
       if (!/^[0-9a-f]{40}$/.test(commit) || (await git2.run(repo, ["cat-file", "-e", `${commit}^{commit}`], [0, 128])).code !== 0) errors.push(`$.successor_readiness.snapshots.${name}.object: must be an existing full commit`);
     }
-    if (object2(object2(successor.snapshots)?.end)?.object !== subject) errors.push("$.successor_readiness.snapshots.end.object: must equal subject commit");
+    if (object3(object3(successor.snapshots)?.end)?.object !== subject) errors.push("$.successor_readiness.snapshots.end.object: must equal subject commit");
     for (const [index, raw] of array2(manifest.actions).entries()) {
-      const action = object2(raw);
+      const action = object3(raw);
       if (action && LOCAL_ACTION_KINDS.has(String(action.kind))) {
         const actionPath = await contained(files, repo, action.target);
         if (!actionPath) errors.push(`$.manifest.actions[${index}].target: resolves outside repository through traversal or symlink`);
@@ -1463,7 +3863,7 @@ async function validateBundle(data, bundlePath, options = {}) {
   if (bundle.record_type !== "mister-clean.closure-bundle") errors.push("$.record_type: expected mister-clean.closure-bundle");
   if (bundle.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
   for (const field of ["run_id", "request_ref"]) if (!text(bundle[field])) errors.push(`$.${field}: required`);
-  const base = dirname(resolve(bundlePath));
+  const base = dirname2(resolve3(bundlePath));
   const reportLoad = await loadRef(ports.files, base, bundle.report, "$.report", errors, allowPlaceholders);
   const manifestLoad = await loadRef(ports.files, base, bundle.manifest, "$.manifest", errors, allowPlaceholders);
   const report = reportLoad.data;
@@ -1472,13 +3872,13 @@ async function validateBundle(data, bundlePath, options = {}) {
   errors.push(...validateReport(report, allowPlaceholders, true).map((error) => `$.report::${error}`));
   errors.push(...validateManifest(manifest, allowPlaceholders).map((error) => `$.manifest::${error}`));
   if (!allowPlaceholders && !iso(report.generated_at)) errors.push("$.report.generated_at: required ISO-8601 timestamp");
-  if (!allowPlaceholders && !iso(object2(report.target_binding)?.measured_at)) errors.push("$.report.target_binding.measured_at: required ISO-8601 timestamp");
-  if (bundle.request_ref !== object2(report.authorization_basis)?.ref) errors.push("$.request_ref: must equal report authorization_basis.ref");
+  if (!allowPlaceholders && !iso(object3(report.target_binding)?.measured_at)) errors.push("$.report.target_binding.measured_at: required ISO-8601 timestamp");
+  if (bundle.request_ref !== object3(report.authorization_basis)?.ref) errors.push("$.request_ref: must equal report authorization_basis.ref");
   if (bundle.request_ref !== manifest.request_ref) errors.push("$.request_ref: must equal manifest request_ref");
-  for (const field of ["id", "commit"]) if (object2(report.repo)?.[field] !== object2(manifest.repo)?.[field]) errors.push(`$.report/manifest.repo.${field}: must match`);
+  for (const field of ["id", "commit"]) if (object3(report.repo)?.[field] !== object3(manifest.repo)?.[field]) errors.push(`$.report/manifest.repo.${field}: must match`);
   if (report.mode !== manifest.mode) errors.push("$.report/manifest.mode: must match");
-  const reportActions = array2(report.actions).map(object2).filter(Boolean);
-  const manifestActions = array2(manifest.actions).map(object2).filter(Boolean);
+  const reportActions = array2(report.actions).map(object3).filter(Boolean);
+  const manifestActions = array2(manifest.actions).map(object3).filter(Boolean);
   const reportIds = reportActions.map((item) => item.id);
   const manifestIds = manifestActions.map((item) => item.id);
   if (new Set(reportIds).size !== reportActions.length) errors.push("$.report.actions: every action requires a unique id");
@@ -1492,14 +3892,14 @@ async function validateBundle(data, bundlePath, options = {}) {
   const custody = requireObject(bundle.custody, ["mode", "subject_commit", "evidence_root", "evidence_paths"], "$.custody", errors);
   if (custody) {
     if (custody.mode !== "sidecar") errors.push("$.custody.mode: only sidecar is supported");
-    if (!allowPlaceholders && custody.subject_commit !== object2(report.repo)?.commit) errors.push("$.custody.subject_commit: must equal report repo.commit");
-    if (!Array.isArray(custody.evidence_paths) || !array2(custody.evidence_paths).every((entry) => text(entry) && !isAbsolute(entry) && !entry.split(/[\\/]/).includes(".."))) errors.push("$.custody.evidence_paths: required repository-relative string array");
+    if (!allowPlaceholders && custody.subject_commit !== object3(report.repo)?.commit) errors.push("$.custody.subject_commit: must equal report repo.commit");
+    if (!Array.isArray(custody.evidence_paths) || !array2(custody.evidence_paths).every((entry) => text(entry) && !isAbsolute2(entry) && !entry.split(/[\\/]/).includes(".."))) errors.push("$.custody.evidence_paths: required repository-relative string array");
     if (custody.evidence_root !== null || !stableEqual(custody.evidence_paths, [])) errors.push("$.custody: sidecar mode requires null evidence_root and empty evidence_paths");
   }
-  let repo = options.repoPath ? resolve(options.repoPath) : void 0;
+  let repo = options.repoPath ? resolve3(options.repoPath) : void 0;
   if (verifyLive && !allowPlaceholders && !repo) {
     const probe = await ports.git.run(base, ["rev-parse", "--show-toplevel"], [0, 128]);
-    if (probe.code === 0 && probe.stdout) repo = resolve(probe.stdout);
+    if (probe.code === 0 && probe.stdout) repo = resolve3(probe.stdout);
     else errors.push("$.live_repo: pass --repo or store the bundle inside the repository");
   }
   const repoExists = repo ? await ports.files.exists(repo) : false;
@@ -1528,14 +3928,14 @@ async function validateBundleFile(bundlePath, options = {}) {
 }
 
 // src/closeout/inspection.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 import {
   readFile as readFile2,
   readdir as readdir2,
   readlink,
   stat
 } from "fs/promises";
-import { basename as basename2, relative as relative2, resolve as resolve2, sep as sep2 } from "path";
+import { basename as basename4, relative as relative4, resolve as resolve4, sep as sep4 } from "path";
 var STACK_MARKERS = {
   node: ["package.json"],
   "node-bun": ["bun.lock", "bun.lockb"],
@@ -1582,9 +3982,9 @@ var PUBLIC_SAFETY_RULES = [
   ]
 ];
 function toPosix(path) {
-  return path.split(sep2).join("/");
+  return path.split(sep4).join("/");
 }
-function compareCodePoints2(left, right) {
+function compareCodePoints3(left, right) {
   const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
   const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
   for (let index = 0; index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
@@ -1605,14 +4005,14 @@ async function exists(path) {
   }
 }
 async function walkFiles(root, excluded) {
-  const absoluteRoot = resolve2(root);
+  const absoluteRoot = resolve4(root);
   const files = [];
   async function visit(directory) {
     const entries = await readdir2(directory, { withFileTypes: true });
     for (const entry of entries) {
       if (excluded.has(entry.name)) continue;
-      const absolute = resolve2(directory, entry.name);
-      const rel = toPosix(relative2(absoluteRoot, absolute));
+      const absolute = resolve4(directory, entry.name);
+      const rel = toPosix(relative4(absoluteRoot, absolute));
       if (entry.isSymbolicLink()) {
         files.push({ absolute, relative: rel, symlink: true });
       } else if (entry.isDirectory()) {
@@ -1623,7 +4023,7 @@ async function walkFiles(root, excluded) {
     }
   }
   await visit(absoluteRoot);
-  return files.sort((left, right) => compareCodePoints2(left.relative, right.relative));
+  return files.sort((left, right) => compareCodePoints3(left.relative, right.relative));
 }
 async function containsShellFile(root) {
   try {
@@ -1633,10 +4033,10 @@ async function containsShellFile(root) {
   }
 }
 async function detectStack(root) {
-  const absoluteRoot = resolve2(root);
+  const absoluteRoot = resolve4(root);
   const ecosystems = [];
   for (const [ecosystem, markers] of Object.entries(STACK_MARKERS)) {
-    if ((await Promise.all(markers.map((marker) => exists(resolve2(absoluteRoot, marker))))).some(Boolean)) {
+    if ((await Promise.all(markers.map((marker) => exists(resolve4(absoluteRoot, marker))))).some(Boolean)) {
       ecosystems.push(ecosystem);
     }
   }
@@ -1681,21 +4081,21 @@ async function scanPublicSafety(root, customTerms = []) {
   return findings.length === 0 ? { findings, exitCode: 0, status: "pass" } : { findings, exitCode: 1, status: "fail" };
 }
 async function generateManifest(root) {
-  const absoluteRoot = resolve2(root);
+  const absoluteRoot = resolve4(root);
   const entries = [];
   const files = await walkFiles(absoluteRoot, MANIFEST_EXCLUDED_DIRS);
   for (const file of files) {
     if (MANIFEST_EXCLUDED_FILES.has(file.relative)) continue;
-    if (basename2(file.relative).endsWith(".pyc") || basename2(file.relative).endsWith(".skill")) continue;
+    if (basename4(file.relative).endsWith(".pyc") || basename4(file.relative).endsWith(".skill")) continue;
     if (hasExcludedPart(file.relative, MANIFEST_EXCLUDED_DIRS)) continue;
     if (file.symlink && !(await stat(file.absolute)).isFile()) continue;
     const bytes = await readFile2(file.absolute);
     entries.push({
       path: `./${file.relative}`,
-      sha256: createHash2("sha256").update(bytes).digest("hex")
+      sha256: createHash3("sha256").update(bytes).digest("hex")
     });
   }
-  entries.sort((left, right) => compareCodePoints2(left.path, right.path));
+  entries.sort((left, right) => compareCodePoints3(left.path, right.path));
   return {
     entries,
     content: entries.map((entry) => `${entry.sha256}  ${entry.path}`).join("\n") + (entries.length ? "\n" : ""),
@@ -1705,194 +4105,8 @@ async function generateManifest(root) {
 
 // src/closeout/prepare.ts
 import { createHash as createHash4 } from "crypto";
-import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "fs";
-import { join as join2, relative as relative4, resolve as resolve4, sep as sep4 } from "path";
-
-// src/closeout/repository.ts
-import { createHash as createHash3 } from "crypto";
-import { execFileSync, spawnSync } from "child_process";
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  realpathSync,
-  readdirSync,
-  statSync,
-  writeFileSync
-} from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join, relative as relative3, resolve as resolve3, sep as sep3 } from "path";
-import { fileURLToPath } from "url";
-var PLANNING_DIRECTORY_NAMES = /* @__PURE__ */ new Set([
-  "planning",
-  "plans",
-  "roadmap",
-  "project-management",
-  "work-items",
-  "work_items",
-  "tasks",
-  "stories",
-  "epics",
-  "slices",
-  "issues"
-]);
-var PLANNING_LANE_NAMES = /* @__PURE__ */ new Set([
-  "backlog",
-  "active",
-  "in-progress",
-  "done",
-  "archive",
-  "archived"
-]);
-var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
-  ".git",
-  "node_modules",
-  "vendor",
-  ".venv",
-  "venv",
-  "dist",
-  "build",
-  ".cache"
-]);
-function compareCodePoints3(left, right) {
-  const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
-  const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
-  for (let index = 0; index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
-    const difference = (leftPoints[index] ?? 0) - (rightPoints[index] ?? 0);
-    if (difference) return difference;
-  }
-  return leftPoints.length - rightPoints.length;
-}
-function runGit(repository, args, allowedStatuses = [0]) {
-  const result = spawnSync("git", ["-C", repository, ...args], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  const status = result.status ?? 1;
-  const stdout = result.stdout.trim();
-  const stderr = result.stderr.trim();
-  if (result.error) throw result.error;
-  if (!allowedStatuses.includes(status)) {
-    throw new Error(stderr || `git ${args.join(" ")} exited ${status}`);
-  }
-  return { status, stdout, stderr };
-}
-function git(repository, ...args) {
-  return runGit(repository, args).stdout;
-}
-function isGitAncestor(repository, ancestor, descendant) {
-  return runGit(repository, ["merge-base", "--is-ancestor", ancestor, descendant], [0, 1]).status === 0;
-}
-function sha256Bytes(value) {
-  return createHash3("sha256").update(value).digest("hex");
-}
-function sha256File(path) {
-  return sha256Bytes(readFileSync(path));
-}
-function readJson(path) {
-  const value = JSON.parse(readFileSync(path, "utf8"));
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${path}: expected a JSON object`);
-  }
-  return value;
-}
-function writeJson(path, value) {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}
-`, "utf8");
-}
-function packageRoot(fromUrl = import.meta.url) {
-  const sourcePath = fileURLToPath(fromUrl);
-  const here = dirname2(existsSync(sourcePath) ? realpathSync(sourcePath) : sourcePath);
-  const candidates = [resolve3(here, "..", ".."), resolve3(here, "..")];
-  const found = candidates.find((candidate) => existsSync(join(candidate, "assets", "closure-bundle.json")));
-  if (!found) throw new Error("Cannot locate Mister Clean package assets");
-  return found;
-}
-function repositoryIdentity2(repository) {
-  const remote = runGit(repository, ["config", "--get", "remote.origin.url"], [0, 1]).stdout;
-  if (remote && !remote.startsWith("/") && !remote.startsWith("file://")) {
-    let value;
-    if (remote.includes("://")) {
-      value = new URL(remote).pathname.replace(/^\/+|\/+$/g, "");
-    } else {
-      value = remote.split(":", 2).at(-1) ?? remote;
-    }
-    value = value.replace(/\.git$/, "").replace(/\/+$/, "");
-    if (value.includes("/")) return value;
-  }
-  return repository.split(sep3).filter(Boolean).at(-1) ?? repository;
-}
-function childDirectories(directory) {
-  try {
-    return readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name).sort();
-  } catch {
-    return [];
-  }
-}
-function discoverPlanningRoots2(repository) {
-  const candidates = /* @__PURE__ */ new Set();
-  function visit(directory, depth) {
-    if (depth > 4) return;
-    const relativePath = relative3(repository, directory);
-    const name = directory.split(sep3).at(-1)?.toLocaleLowerCase() ?? "";
-    if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
-      candidates.add(directory);
-      return;
-    }
-    const names = childDirectories(directory).filter((child) => !PLANNING_IGNORED_NAMES.has(child));
-    const laneCount = names.filter((child) => PLANNING_LANE_NAMES.has(child.toLocaleLowerCase())).length;
-    if (laneCount >= 2 && relativePath !== "") {
-      candidates.add(directory);
-      return;
-    }
-    for (const child of names) visit(join(directory, child), depth + 1);
-  }
-  visit(repository, 0);
-  const ordered = [...candidates].sort((left, right) => {
-    const depth = left.split(sep3).length - right.split(sep3).length;
-    return depth || compareCodePoints3(left, right);
-  });
-  const minimal = [];
-  for (const candidate of ordered) {
-    if (!minimal.some((root) => candidate === root || candidate.startsWith(`${root}${sep3}`))) {
-      minimal.push(candidate);
-    }
-  }
-  return minimal.map((root) => relative3(repository, root).split(sep3).join("/")).sort();
-}
-function parseWorktrees(repository) {
-  const output = git(repository, "worktree", "list", "--porcelain", "-z");
-  if (!output) return [];
-  const records = [];
-  let current = {};
-  for (const item of output.split("\0")) {
-    if (!item) continue;
-    if (item.startsWith("worktree ") && current.worktree) {
-      records.push(current);
-      current = {};
-    }
-    const separator = item.indexOf(" ");
-    const rawKey = separator === -1 ? item : item.slice(0, separator);
-    const key = rawKey === "HEAD" ? "head" : rawKey.toLocaleLowerCase();
-    if (separator === -1) current[key] = "true";
-    else current[key] = item.slice(separator + 1);
-  }
-  if (current.worktree) records.push(current);
-  return records;
-}
-function listFilesRecursively(root) {
-  const files = [];
-  function visit(directory) {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path);
-      else if (entry.isFile()) files.push(path);
-    }
-  }
-  visit(root);
-  return files.sort();
-}
-
-// src/closeout/prepare.ts
+import { existsSync as existsSync2, lstatSync as lstatSync3, mkdirSync, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "fs";
+import { join as join2, relative as relative5, resolve as resolve5, sep as sep5 } from "path";
 function asObject(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
   return value;
@@ -1905,15 +4119,13 @@ function isoTimestamp2(date) {
 }
 function planningClass(path) {
   const parts = path.split("/").map((part) => part.toLocaleLowerCase());
-  for (const lane of ["backlog", "active", "in-progress", "done", "archive", "archived"]) {
-    if (parts.includes(lane)) return lane;
-  }
+  for (const part of parts) if (PLANNING_LANE_NAMES.has(part)) return part;
   return "planning";
 }
 function loadTemplate(root, name) {
   return structuredClone(readJson(join2(root, "assets", name)));
 }
-function unique(values) {
+function unique2(values) {
   return [...new Set(values)];
 }
 function splitLines(value) {
@@ -1925,9 +4137,9 @@ function prepareCloseout(options) {
   }
   if (!options.runId.trim()) throw new Error("runId is required");
   if (!options.requestRef.trim()) throw new Error("requestRef is required");
-  const requestedRepository = resolve4(options.repo);
-  const repository = resolve4(git(requestedRepository, "rev-parse", "--show-toplevel"));
-  const bundleDirectory = join2(resolve4(options.evidenceHome), "mister-clean", options.runId);
+  const requestedRepository = resolve5(options.repo);
+  const repository = resolve5(git(requestedRepository, "rev-parse", "--show-toplevel"));
+  const bundleDirectory = join2(resolve5(options.evidenceHome), "mister-clean", options.runId);
   if (existsSync2(bundleDirectory)) {
     throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
   }
@@ -1936,7 +4148,7 @@ function prepareCloseout(options) {
   const now = isoTimestamp2((options.now ?? (() => /* @__PURE__ */ new Date()))());
   const head = git(repository, "rev-parse", "HEAD");
   const branch = git(repository, "branch", "--show-current") || "detached";
-  const repoId = repositoryIdentity2(repository);
+  const repoId = repositoryIdentity(repository);
   const upstream = runGit(
     repository,
     ["rev-parse", "--symbolic-full-name", "@{upstream}"],
@@ -1955,7 +4167,7 @@ function prepareCloseout(options) {
   const left = Number(divergence[0] ?? 0);
   const right = Number(divergence[1] ?? 0);
   let requestBytes;
-  if (options.requestSource !== void 0) requestBytes = readFileSync2(options.requestSource);
+  if (options.requestSource !== void 0) requestBytes = readFileSync3(options.requestSource);
   else if (options.requestText !== void 0) requestBytes = Buffer.from(options.requestText, "utf8");
   else requestBytes = Buffer.from(options.requestRef, "utf8");
   const requestSha256 = sha2562(requestBytes);
@@ -1967,34 +4179,50 @@ function prepareCloseout(options) {
     requestSource = { path: "operative-request.txt", sha256: sha256File(path) };
     sourceKind = "exact_bytes";
   }
-  const criteriaIds = unique(options.criteria ?? []);
+  const criteriaIds = unique2(options.criteria ?? []);
   writeJson(join2(bundleDirectory, "criteria-source.json"), {
     record_type: "mister-clean.criteria-source",
     request_ref: options.requestRef,
     request_sha256: requestSha256,
     criteria_ids: criteriaIds
   });
-  const planningRoots = discoverPlanningRoots2(repository);
+  const planningRoots = discoverPlanningRoots(repository);
+  const planningAudit = auditPlanningRepository(repository);
+  const unclassifiedPlanningPaths = new Set(
+    planningAudit.findings.filter((finding2) => finding2.code === "planning_input_unparsed").map((finding2) => finding2.path)
+  );
+  writeJson(join2(bundleDirectory, "planning-audit.json"), planningAudit);
+  const planningAuditRef = {
+    path: "planning-audit.json",
+    sha256: sha256File(join2(bundleDirectory, "planning-audit.json"))
+  };
   let planningSystems;
   if (planningRoots.length) {
     planningSystems = planningRoots.map((rootText, index) => {
       const root = join2(repository, ...rootText.split("/"));
-      const artifacts = listFilesRecursively(root).filter((path) => !relative4(repository, path).split(sep4).includes(".git")).map((path) => {
-        const repoPath = relative4(repository, path).split(sep4).join("/");
-        return { path: repoPath, class: planningClass(repoPath), sha256: sha256File(path) };
+      const rootStat = lstatSync3(root);
+      const rootFiles = rootStat.isFile() ? [root] : rootStat.isDirectory() ? listFilesRecursively(root) : [];
+      const artifacts = rootFiles.filter((path) => !relative5(repository, path).split(sep5).includes(".git")).map((path) => {
+        const repoPath = relative5(repository, path).split(sep5).join("/");
+        return {
+          path: repoPath,
+          class: unclassifiedPlanningPaths.has(repoPath) ? "unclassified" : planningClass(repoPath),
+          sha256: sha256File(path)
+        };
       });
+      const unclassified = artifacts.filter((artifact) => artifact.class === "unclassified").length;
       return {
         id: `repository-planning-${index + 1}`,
         kind: "repo_files",
         sources: [rootText],
         schema_sources: ["repository lane/artifact convention; verify manually"],
-        validators: ["mister-clean live planning census"],
+        validators: ["mister-clean audit planning --json <repository>", "mister-clean live planning census"],
         corpus: {
           roots: [rootText],
           include_globs: ["**/*"],
           total: artifacts.length,
-          classified: artifacts.length,
-          unclassified: 0,
+          classified: artifacts.length - unclassified,
+          unclassified,
           artifacts
         }
       };
@@ -2019,7 +4247,7 @@ function prepareCloseout(options) {
     ];
   }
   const worktrees = parseWorktrees(repository).map((row) => {
-    const path = resolve4(row.worktree);
+    const path = resolve5(row.worktree);
     const dirtyCount = splitLines(git(path, "status", "--porcelain=v1", "--untracked-files=all")).length;
     return {
       path,
@@ -2088,12 +4316,32 @@ function prepareCloseout(options) {
     };
   }
   const report = loadTemplate(templates, "closeout-report.json");
+  const validationDebtClasses = /* @__PURE__ */ new Set([
+    "acceptance_cascade_unexecuted",
+    "acceptance_gate_unknown",
+    "completed_parent_unexecuted_acceptance"
+  ]);
+  const planningDebts = planningAudit.findings.map((finding2, index) => ({
+    id: `DEBT-PLANNING-${String(index + 1).padStart(4, "0")}`,
+    class: finding2.code,
+    procedure: `${finding2.code}: ${finding2.path}: ${finding2.detail}`,
+    state: "open",
+    disposition: validationDebtClasses.has(finding2.code) ? "autonomously_validate" : "autonomously_repair",
+    evidence: [{
+      kind: "planning_census",
+      object: finding2.subject,
+      command: "mister-clean audit planning --json <repository>",
+      result: finding2.code,
+      observed_at: now,
+      evidence_ref: planningAuditRef
+    }]
+  }));
   Object.assign(report, {
     generated_at: now,
     repo: { id: repoId, commit: head, branch },
     mode: "CLOSE",
     actions: [],
-    completion_debts: [],
+    completion_debts: planningDebts,
     residuals: [],
     acceptance_criteria: criteriaIds.map((id) => ({
       id,
@@ -2102,8 +4350,20 @@ function prepareCloseout(options) {
       evidence: ["not yet assessed"]
     })),
     verdict: "NOT_CLEAN",
-    debt_census: { discovered: 0, paid: 0, accepted_exception: 0 }
+    debt_census: { discovered: planningDebts.length, paid: 0, accepted_exception: 0 }
   });
+  if (planningDebts.length > 0) {
+    Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
+      state: "open",
+      evidence: [{ kind: "debt_census", object: head, command: "mister-clean audit planning --json <repository>", result: `${planningDebts.length} open planning debts`, observed_at: now }],
+      notes: ["Executable planning audit found payable successor-readiness debt."]
+    });
+    Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").planning_integrity, "closeout-report.dimensions.planning_integrity"), {
+      state: "open",
+      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning --json <repository>", result: `${planningDebts.length} findings`, observed_at: now }],
+      notes: ["Physical lanes, structured metadata, exact parent projections, and acceptance-gate identity do not yet agree."]
+    });
+  }
   asObject(report.authorization_basis, "closeout-report.authorization_basis").ref = options.requestRef;
   report.scope = { included: [`repository:${repoId}`], excluded: [], policy_sources: [] };
   report.target_binding = {
@@ -2160,7 +4420,7 @@ function prepareCloseout(options) {
       criteria_ids: criteriaIds
     },
     change_inventory: { start_commit: head, subject_commit: head, changes: [] },
-    planning_discovery: { unknown: false, systems: planningSystems }
+    planning_discovery: { unknown: unclassifiedPlanningPaths.size > 0, systems: planningSystems }
   });
   bundle.successor_readiness = {
     snapshots: {
@@ -2261,6 +4521,9 @@ var nodeCloseoutEngine = {
   },
   validateBundle: validateBundleFile,
   detectStack,
+  async auditPlanning(root) {
+    return auditPlanningRepository(root);
+  },
   async scanPublicSafety(root, denylistPath) {
     return scanPublicSafety(root, await loadDenylist(denylistPath));
   },
@@ -2304,16 +4567,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside(root, candidate) {
-  const rootPath = resolve5(root);
-  const candidatePath = resolve5(candidate);
-  const relation = relative5(
+  const rootPath = resolve6(root);
+  const candidatePath = resolve6(candidate);
+  const relation = relative6(
     existsSync3(rootPath) ? realpathSync2(rootPath) : rootPath,
     existsSync3(candidatePath) ? realpathSync2(candidatePath) : candidatePath
   );
-  return relation === "" || !relation.startsWith(`..${sep5}`) && relation !== ".." && !relation.startsWith("/");
+  return relation === "" || !relation.startsWith(`..${sep6}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson2(path) {
-  return JSON.parse(readFileSync3(path, "utf8"));
+  return JSON.parse(readFileSync4(path, "utf8"));
 }
 async function runPrepare(args, io) {
   const repo = removeOption(args, "--repo", true);
@@ -2395,7 +4658,7 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   assertNoArgs(args);
   if (!existsSync3(root) || !statSync2(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve5(root)}`);
+    io.stderr(`ERROR: not a directory: ${resolve6(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
@@ -2407,7 +4670,7 @@ async function runDetect(args, io) {
   if (listOnly) return 0;
   const reference = join3(packageRoot(import.meta.url), "references", "stack-adapters.md");
   if (!existsSync3(reference)) return 0;
-  const text2 = readFileSync3(reference, "utf8");
+  const text2 = readFileSync4(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text2.indexOf(header);
@@ -2419,12 +4682,28 @@ ${text2.slice(start, next < 0 ? void 0 : next).trimEnd()}`);
   return 0;
 }
 async function runAudit(args, io) {
-  if (args.shift() !== "public-safety") throw new UsageError("audit requires public-safety");
+  const kind = args.shift();
+  if (!(/* @__PURE__ */ new Set(["planning", "public-safety"])).has(String(kind))) {
+    throw new UsageError("audit requires planning or public-safety");
+  }
   const root = args[0]?.startsWith("--") === false ? args.shift() : process.cwd();
+  if (kind === "planning") {
+    const json = removeFlag(args, "--json");
+    assertNoArgs(args);
+    const result2 = await nodeCloseoutEngine.auditPlanning(root);
+    if (json) io.stdout(JSON.stringify(result2, null, 2));
+    else {
+      for (const finding2 of result2.findings) {
+        io.stdout(`${finding2.code}	${finding2.path}	${finding2.subject}	${finding2.detail}`);
+      }
+      io.stdout(`planning: ${result2.status.toLocaleUpperCase("und")} artifacts=${result2.artifactCount} structured=${result2.structuredArtifactCount} findings=${result2.findings.length}`);
+    }
+    return result2.exitCode;
+  }
   const denylist = removeOption(args, "--denylist-file");
   assertNoArgs(args);
   const result = await nodeCloseoutEngine.scanPublicSafety(root, denylist);
-  for (const finding of result.findings) io.stdout(`${finding.path}:${finding.line}: ${finding.rule}`);
+  for (const finding2 of result.findings) io.stdout(`${finding2.path}:${finding2.line}: ${finding2.rule}`);
   if (result.status === "fail") io.stderr(`public-safety: FAIL (${result.findings.length} finding(s))`);
   else io.stdout("public-safety: PASS");
   return result.exitCode;
@@ -2434,9 +4713,9 @@ async function runManifest(args, io) {
   const check = removeFlag(args, "--check");
   assertNoArgs(args);
   const result = await nodeCloseoutEngine.generateManifest(root);
-  const path = join3(resolve5(root), "MANIFEST.sha256");
+  const path = join3(resolve6(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync3(path) || readFileSync3(path, "utf8") !== result.content) {
+    if (!existsSync3(path) || readFileSync4(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -2448,7 +4727,7 @@ async function runManifest(args, io) {
   return 0;
 }
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ...");
+  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ... (audit: planning|public-safety)");
 }
 async function runCli(argv, io = defaultIO()) {
   const args = [...argv];
@@ -2472,7 +4751,7 @@ function isDirectInvocation(argvPath, moduleUrl) {
   try {
     return realpathSync2(argvPath) === realpathSync2(fileURLToPath2(moduleUrl));
   } catch {
-    const invokedPath = resolve5(argvPath);
+    const invokedPath = resolve6(argvPath);
     return invokedPath === fileURLToPath2(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }

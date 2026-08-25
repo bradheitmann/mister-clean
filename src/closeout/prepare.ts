@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
 import {
@@ -9,12 +9,14 @@ import {
   listFilesRecursively,
   packageRoot,
   parseWorktrees,
+  PLANNING_LANE_NAMES,
   readJson,
   repositoryIdentity,
   runGit,
   sha256File,
   writeJson,
 } from "./repository.js";
+import { auditPlanningRepository } from "./planning.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -55,9 +57,7 @@ function isoTimestamp(date: Date): string {
 
 function planningClass(path: string): string {
   const parts = path.split("/").map((part) => part.toLocaleLowerCase());
-  for (const lane of ["backlog", "active", "in-progress", "done", "archive", "archived"]) {
-    if (parts.includes(lane)) return lane;
-  }
+  for (const part of parts) if (PLANNING_LANE_NAMES.has(part)) return part;
   return "planning";
 }
 
@@ -134,28 +134,46 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   });
 
   const planningRoots = discoverPlanningRoots(repository);
+  const planningAudit = auditPlanningRepository(repository);
+  const unclassifiedPlanningPaths = new Set(
+    planningAudit.findings
+      .filter((finding) => finding.code === "planning_input_unparsed")
+      .map((finding) => finding.path),
+  );
+  writeJson(join(bundleDirectory, "planning-audit.json"), planningAudit);
+  const planningAuditRef = {
+    path: "planning-audit.json",
+    sha256: sha256File(join(bundleDirectory, "planning-audit.json")),
+  };
   let planningSystems: JsonObject[];
   if (planningRoots.length) {
     planningSystems = planningRoots.map((rootText, index) => {
       const root = join(repository, ...rootText.split("/"));
-      const artifacts = listFilesRecursively(root)
+      const rootStat = lstatSync(root);
+      const rootFiles = rootStat.isFile() ? [root] : rootStat.isDirectory() ? listFilesRecursively(root) : [];
+      const artifacts = rootFiles
         .filter((path) => !relative(repository, path).split(sep).includes(".git"))
         .map((path) => {
           const repoPath = relative(repository, path).split(sep).join("/");
-          return { path: repoPath, class: planningClass(repoPath), sha256: sha256File(path) };
+          return {
+            path: repoPath,
+            class: unclassifiedPlanningPaths.has(repoPath) ? "unclassified" : planningClass(repoPath),
+            sha256: sha256File(path),
+          };
         });
+      const unclassified = artifacts.filter((artifact) => artifact.class === "unclassified").length;
       return {
         id: `repository-planning-${index + 1}`,
         kind: "repo_files",
         sources: [rootText],
         schema_sources: ["repository lane/artifact convention; verify manually"],
-        validators: ["mister-clean live planning census"],
+        validators: ["mister-clean audit planning --json <repository>", "mister-clean live planning census"],
         corpus: {
           roots: [rootText],
           include_globs: ["**/*"],
           total: artifacts.length,
-          classified: artifacts.length,
-          unclassified: 0,
+          classified: artifacts.length - unclassified,
+          unclassified,
           artifacts,
         },
       };
@@ -258,12 +276,32 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   }
 
   const report = loadTemplate(templates, "closeout-report.json");
+  const validationDebtClasses = new Set([
+    "acceptance_cascade_unexecuted",
+    "acceptance_gate_unknown",
+    "completed_parent_unexecuted_acceptance",
+  ]);
+  const planningDebts = planningAudit.findings.map((finding, index) => ({
+    id: `DEBT-PLANNING-${String(index + 1).padStart(4, "0")}`,
+    class: finding.code,
+    procedure: `${finding.code}: ${finding.path}: ${finding.detail}`,
+    state: "open",
+    disposition: validationDebtClasses.has(finding.code) ? "autonomously_validate" : "autonomously_repair",
+    evidence: [{
+      kind: "planning_census",
+      object: finding.subject,
+      command: "mister-clean audit planning --json <repository>",
+      result: finding.code,
+      observed_at: now,
+      evidence_ref: planningAuditRef,
+    }],
+  }));
   Object.assign(report, {
     generated_at: now,
     repo: { id: repoId, commit: head, branch },
     mode: "CLOSE",
     actions: [],
-    completion_debts: [],
+    completion_debts: planningDebts,
     residuals: [],
     acceptance_criteria: criteriaIds.map((id) => ({
       id,
@@ -272,8 +310,20 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
       evidence: ["not yet assessed"],
     })),
     verdict: "NOT_CLEAN",
-    debt_census: { discovered: 0, paid: 0, accepted_exception: 0 },
+    debt_census: { discovered: planningDebts.length, paid: 0, accepted_exception: 0 },
   });
+  if (planningDebts.length > 0) {
+    Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
+      state: "open",
+      evidence: [{ kind: "debt_census", object: head, command: "mister-clean audit planning --json <repository>", result: `${planningDebts.length} open planning debts`, observed_at: now }],
+      notes: ["Executable planning audit found payable successor-readiness debt."],
+    });
+    Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").planning_integrity, "closeout-report.dimensions.planning_integrity"), {
+      state: "open",
+      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning --json <repository>", result: `${planningDebts.length} findings`, observed_at: now }],
+      notes: ["Physical lanes, structured metadata, exact parent projections, and acceptance-gate identity do not yet agree."],
+    });
+  }
   asObject(report.authorization_basis, "closeout-report.authorization_basis").ref = options.requestRef;
   report.scope = { included: [`repository:${repoId}`], excluded: [], policy_sources: [] };
   report.target_binding = {
@@ -333,7 +383,7 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
       criteria_ids: criteriaIds,
     },
     change_inventory: { start_commit: head, subject_commit: head, changes: [] },
-    planning_discovery: { unknown: false, systems: planningSystems },
+    planning_discovery: { unknown: unclassifiedPlanningPaths.size > 0, systems: planningSystems },
   });
   bundle.successor_readiness = {
     snapshots: {

@@ -17,6 +17,10 @@ import {
   type PrepareCloseoutOptions,
   type PreparedCloseout,
 } from "./prepare.js";
+import {
+  auditPlanningRepository,
+  type PlanningAuditResult,
+} from "./planning.js";
 import { validateManifest, validateReport } from "./records.js";
 
 export type CloseoutRecordKind = "manifest" | "report";
@@ -26,6 +30,7 @@ export interface CloseoutEngine {
   validateRecord(kind: CloseoutRecordKind, data: unknown, allowPlaceholders?: boolean): readonly string[];
   validateBundle(path: string, options?: BundleValidationOptions): Promise<BundleValidationResult>;
   detectStack(root: string): Promise<StackDetectionResult>;
+  auditPlanning(root: string): Promise<PlanningAuditResult>;
   scanPublicSafety(root: string, denylistPath?: string): Promise<PublicSafetyScanResult>;
   generateManifest(root: string): Promise<ManifestResult>;
 }
@@ -43,6 +48,9 @@ export const nodeCloseoutEngine: CloseoutEngine = {
   },
   validateBundle: validateBundleFile,
   detectStack,
+  async auditPlanning(root) {
+    return auditPlanningRepository(root);
+  },
   async scanPublicSafety(root, denylistPath) {
     return scanPublicSafety(root, await loadDenylist(denylistPath));
   },

@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 6.0.0
+  version: 6.1.0
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v6.0.0
+# Mister Clean — v6.1.0
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -303,6 +303,74 @@ directive's baseline SHAs and path preflights match the live tree (stale →
 retire with a top banner, never leave executable-looking); every reference
 from a live artifact resolves (guides, north stars, renamed stories).
 Classify every evidence reference per the §5 vocabulary.
+
+Run `mister-clean audit planning <repository> --json` before reasoning from
+parent status. Its executable graph audit parses Markdown/MDX YAML frontmatter
+and top-level JSON/YAML objects; discovers planning directories plus exact
+canonical files (`ROADMAP`, `STATUS`, `PLAN`, `TASKS`, `BACKLOG`, `CURRENT`)
+without promoting an entire generic docs directory; derives readiness from
+exact direct-child IDs;
+compares lane, current-body, and parent-table projections; groups duplicate
+projections of the same acceptance gate; and fails closed on malformed
+structured input, unsupported lifecycle or gate states, contradictory or
+unresolved parentage, unproved archive classifications, missing gates after
+completed children, and unexecuted or failed acceptance. A nonzero result is
+payable planning debt and forbids CLEAN. The audit is a conservative floor,
+not a claim that arbitrary repository-specific schemas were understood; run
+their validators and inspect any system the gate cannot structurally infer.
+Every planning item must be structurally placed in one verified lifecycle and
+relationship graph or explicitly classified as non-artifact guidance. A leaf
+task/slice has exactly one parent unless it declares `top_level: true`; a
+parent whose children are complete has an explicit acceptance gate even when
+the parent already says done. `not_applicable` is a gate state, not silence,
+and requires a structured rationale. A `guidance`, `template`, `schema`,
+`reference`, or `non_artifact` label also requires a rationale and is invalid
+if the file contains lifecycle, identity, relationship, child-table, or
+acceptance signals — classification never suppresses live planning debt.
+Relationship-bearing surfaces must declare or inherit one semantic role:
+ordinary work artifacts use `child_parentage`, while `index`, `status_index`,
+and `rollup` artifacts use `rollup_projection`. Parentage creates graph edges;
+rollups resolve each exact target and reconcile its projected state without
+becoming another parent. Repository-specific overrides use
+`relationship_role: child_parentage|rollup_projection` and must include
+`relationship_role_rationale`; built-in hierarchy and rollup types cannot be
+relabelled. Canonical rollup target columns are recognized directly. A custom
+column requires `rollup_target_column` plus
+`rollup_target_column_rationale`; custom parent-table columns use
+`child_target_column` plus `child_target_column_rationale`. A state-bearing
+relationship table without a recognized or declared target column fails
+closed. Ambiguous identities, missing targets, stale rollup states, unknown
+roles, and unexplained overrides are payable debt.
+Markdown rows and structured relationship collections are entry-total: every
+entry resolves to one identity, every supplied state is recognized, and every
+projection agrees. Snake/camel/Pascal key styles map to the same schema. A
+hierarchy artifact may classify a genuine checklist or decision-table target
+column with `non_relationship_table_columns` and
+`non_relationship_table_rationale`; rollups and canonical relationship or
+lifecycle columns cannot be suppressed this way. A parent marked done while
+any direct child is not done is contradictory payable debt regardless of a
+passing acceptance label.
+Every declared singular artifact type, identity, lifecycle, role, target,
+rationale, or `top_level` alias contains one nonempty scalar, and equivalent
+aliases reconcile to one value. Inference and defaults apply only when the
+corresponding alias is absent. Duplicate JSON keys, unsupported state-like
+aliases, and compound lifecycle prose fail closed. Own identity comes only
+from the role-specific `<type>_id` or generic `id`; a parent's ID never becomes
+the child's fallback identity. Singular/plural and snake/camel/Pascal
+child-parent aliases are entry-total. Lifecycle carried by a parent-reference
+object must agree with the resolved parent. Acceptance discovery traverses
+supported structured scopes and parent relations recursively; every declared
+outcome scope is validated, and a `not_applicable` rationale authorizes only
+its own scope. Structured JSON/YAML is not rescanned as prose. Markdown code
+fences and HTML comments are inert examples, while visible heading and
+blockquote status labels, acceptance labels, pending review language, and
+unchecked acceptance items remain current projections. Nested canonical work
+declarations and absent/custom-type hierarchy aliases must reconcile or fail;
+they never disappear inside generic metadata or a non-artifact label.
+Unsupported, binary, special, and symlinked entries in a discovered planning
+root are part of the census, not invisible debris. The standalone audit fails
+them closed; CLEAN bundle validation requires every live entry and permits an
+unsupported regular file only as an explicitly reasoned non-artifact.
 
 **Planning integrity:** census against the schema; pairing parity
 (artifact-level); parentage using the schema's *actual* fields (verify the

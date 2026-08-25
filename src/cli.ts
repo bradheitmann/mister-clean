@@ -171,8 +171,24 @@ async function runDetect(args: string[], io: CliIO): Promise<number> {
 }
 
 async function runAudit(args: string[], io: CliIO): Promise<number> {
-  if (args.shift() !== "public-safety") throw new UsageError("audit requires public-safety");
+  const kind = args.shift();
+  if (!new Set(["planning", "public-safety"]).has(String(kind))) {
+    throw new UsageError("audit requires planning or public-safety");
+  }
   const root = args[0]?.startsWith("--") === false ? (args.shift() as string) : process.cwd();
+  if (kind === "planning") {
+    const json = removeFlag(args, "--json");
+    assertNoArgs(args);
+    const result = await nodeCloseoutEngine.auditPlanning(root);
+    if (json) io.stdout(JSON.stringify(result, null, 2));
+    else {
+      for (const finding of result.findings) {
+        io.stdout(`${finding.code}\t${finding.path}\t${finding.subject}\t${finding.detail}`);
+      }
+      io.stdout(`planning: ${result.status.toLocaleUpperCase("und")} artifacts=${result.artifactCount} structured=${result.structuredArtifactCount} findings=${result.findings.length}`);
+    }
+    return result.exitCode;
+  }
   const denylist = removeOption(args, "--denylist-file");
   assertNoArgs(args);
   const result = await nodeCloseoutEngine.scanPublicSafety(root, denylist);
@@ -202,7 +218,7 @@ async function runManifest(args: string[], io: CliIO): Promise<number> {
 }
 
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ...");
+  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ... (audit: planning|public-safety)");
 }
 
 export async function runCli(argv: readonly string[], io: CliIO = defaultIO()): Promise<number> {

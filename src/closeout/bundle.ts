@@ -8,11 +8,18 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { access, lstat, readFile, readdir, realpath } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
 import { findPlaceholders, isoTimestamp, validateManifest, validateReport } from "./records.js";
 import { canonicalIdentity } from "./normalization.js";
+import { isCanonicalPlanningFileName, PLANNING_LANE_NAMES } from "./repository.js";
+import {
+  auditPlanningArtifacts,
+  isNonArtifactPlanningClass,
+  isPlanningTextPath,
+  type PlanningSource,
+} from "./planning.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -66,7 +73,6 @@ const PLANNING_NAMES = new Set([
   "planning", "plans", "roadmap", "project-management", "work-items",
   "work_items", "tasks", "stories", "epics", "slices", "issues",
 ]);
-const PLANNING_LANES = new Set(["backlog", "active", "in-progress", "done", "archive", "archived"]);
 const PLANNING_KINDS = new Set(["repo_files", "external_snapshot", "none"]);
 const GATE_KINDS = new Set([
   "isolated_clone", "repository_tests", "lint", "typecheck", "build",
@@ -282,17 +288,25 @@ async function repositoryIdentity(repo: string, git: GitPort): Promise<string> {
 
 async function discoverPlanningRoots(repo: string, files: FilePort): Promise<Set<string>> {
   const rows = await files.walk(repo);
-  const directories = rows.filter((row) => row.kind === "directory" && row.relative.split("/").length <= 4);
+  const directories = rows.filter((row) => row.kind === "directory");
+  const childrenByDirectory = new Map<string, Set<string>>();
+  for (const row of directories) {
+    const parent = dirname(row.relative);
+    const children = childrenByDirectory.get(parent) ?? new Set<string>();
+    children.add(basename(row.relative).toLocaleLowerCase("und"));
+    childrenByDirectory.set(parent, children);
+  }
   const candidates = new Set<string>();
+  for (const row of rows) {
+    if (row.kind !== "directory" && isCanonicalPlanningFileName(row.relative)) {
+      candidates.add(row.relative);
+    }
+  }
   for (const row of directories) {
     const parts = row.relative.split("/");
     if (PLANNING_NAMES.has(parts.at(-1)?.toLocaleLowerCase("und") ?? "")) candidates.add(row.relative);
-    const children = new Set(
-      directories
-        .filter((other) => dirname(other.relative) === row.relative)
-        .map((other) => basename(other.relative).toLocaleLowerCase("und")),
-    );
-    if ([...children].filter((name) => PLANNING_LANES.has(name)).length >= 2) candidates.add(row.relative);
+    const children = childrenByDirectory.get(row.relative) ?? new Set<string>();
+    if ([...children].filter((name) => PLANNING_LANE_NAMES.has(name)).length >= 2) candidates.add(row.relative);
   }
   const minimal = [...candidates].sort((a, b) => a.split("/").length - b.split("/").length || compareCodePoints(a, b));
   return new Set(minimal.filter((candidate, index) => !minimal.slice(0, index).some((parent) => candidate === parent || candidate.startsWith(`${parent}/`))));
@@ -357,6 +371,8 @@ async function validatePlanning(
   if (repo && none.length && discovered.size) errors.push(`${path}.systems: kind=none contradicts live planning candidates ${JSON.stringify([...discovered].sort())}`);
   const systemIds = new Set<string>();
   const globalArtifacts = new Set<string>();
+  const planningSourcePaths = new Set<string>();
+  const planningSources: PlanningSource[] = [];
   for (const [index, raw] of systems.entries()) {
     const spath = `${path}.systems[${index}]`;
     const system = requireObject(raw, ["id", "kind", "sources", "schema_sources", "validators", "corpus"], spath, errors);
@@ -394,7 +410,16 @@ async function validatePlanning(
         if (globalArtifacts.has(artifact.path)) errors.push(`${apath}.path: artifact appears in more than one planning system`);
         globalArtifacts.add(artifact.path);
       }
-      if (!text(artifact.class)) { errors.push(`${apath}.class: required explicit class`); unclassified += 1; }
+      if (!text(artifact.class)) {
+        errors.push(`${apath}.class: required explicit class`);
+        unclassified += 1;
+      } else if (new Set(["not assessed", "not_assessed", "unclassified", "unknown"]).has(identity(artifact.class))) {
+        unclassified += 1;
+      }
+      if (text(artifact.class) && isNonArtifactPlanningClass(artifact.class)
+        && !text(artifact.classification_rationale)) {
+        errors.push(`${apath}.classification_rationale: non-artifact class requires an explicit rationale`);
+      }
       if (!allowPlaceholders && (typeof artifact.sha256 !== "string" || !HEX64.test(artifact.sha256))) errors.push(`${apath}.sha256: required lowercase SHA-256`);
       if (repo && system.kind === "repo_files" && text(artifact.path)) {
         const target = await contained(files, repo, artifact.path);
@@ -413,23 +438,52 @@ async function validatePlanning(
         const target = await contained(files, repo, root);
         if (!target || !(await files.exists(target))) { errors.push(`${spath}.corpus.roots: missing or outside repository: ${JSON.stringify(root)}`); continue; }
         if (await files.isFile(target)) live.add(posix(relative(repositoryRoot, target)));
-        else (await files.walk(target)).filter((row) => row.kind === "file").forEach((row) => live.add(posix(relative(repositoryRoot, row.absolute))));
+        else (await files.walk(target)).filter((row) => row.kind !== "directory").forEach((row) => live.add(posix(relative(repositoryRoot, row.absolute))));
       }
       if (!stableEqual([...live].sort(), [...seen].sort())) errors.push(`${spath}.corpus: live census mismatch missing_from_bundle=${JSON.stringify([...live].filter((item) => !seen.has(item)).sort())} absent_from_live=${JSON.stringify([...seen].filter((item) => !live.has(item)).sort())}`);
       if (clean) {
         for (const rawArtifact of artifacts) {
           const artifact = object(rawArtifact);
-          if (!artifact || !text(artifact.path) || String(artifact.class).toLocaleLowerCase("und").match(/^archiv(ed|e)$/)) continue;
-          if (!new Set([".md", ".txt", ".yaml", ".yml", ".json"]).has(extname(artifact.path).toLocaleLowerCase("und"))) continue;
+          if (!artifact || !text(artifact.path)) continue;
+          if (!isPlanningTextPath(artifact.path)) {
+            if (!text(artifact.class) || !isNonArtifactPlanningClass(artifact.class)
+              || !text(artifact.classification_rationale)) {
+              errors.push(`${spath}.corpus: unsupported planning entry ${artifact.path} requires an explicit non-artifact class and classification_rationale`);
+            }
+            continue;
+          }
           const target = await contained(files, repo, artifact.path);
           if (!target || !(await files.exists(target))) continue;
           let content: string;
-          try { content = await files.readText(target); } catch { continue; }
+          try { content = await files.readText(target); } catch {
+            errors.push(`${spath}.corpus: planning entry ${artifact.path} is not valid UTF-8 text`);
+            continue;
+          }
+          if (content.includes("\0")) {
+            errors.push(`${spath}.corpus: planning entry ${artifact.path} contains binary NUL bytes`);
+            continue;
+          }
           const earlyDone = /\b(implementation|dev|code)\b/i.test(content) && /\b(done|complete|completed|merged)\b/i.test(content);
           const laterUnrun = /\b(review|qa|acceptance|holdout)\b/i.test(content) && /\b(not[_ -]?run|pending|todo|backlog|unexecuted)\b/i.test(content);
           if (earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
+          if (planningSourcePaths.has(artifact.path)) continue;
+          planningSourcePaths.add(artifact.path);
+          planningSources.push({
+            ...(text(artifact.classification_rationale)
+              ? { classificationRationale: artifact.classification_rationale }
+              : {}),
+            content,
+            declaredClass: String(artifact.class),
+            path: artifact.path,
+          });
         }
       }
+    }
+  }
+  if (clean && repo) {
+    const audit = auditPlanningArtifacts(planningSources, declared.size);
+    for (const finding of audit.findings) {
+      errors.push(`${path}.corpus: ${finding.code} at ${finding.path} (${finding.subject}): ${finding.detail}; related=${JSON.stringify(finding.related)}`);
     }
   }
   if (repo) {

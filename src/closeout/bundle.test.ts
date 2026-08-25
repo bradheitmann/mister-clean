@@ -8,6 +8,8 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { validateBundle, validateBundleFile } from "./bundle.js";
+import { auditPlanningRepository, type PlanningAuditResult } from "./planning.js";
+import { prepareCloseout } from "./prepare.js";
 import { validateReport } from "./records.js";
 
 const execute = promisify(execFile);
@@ -15,6 +17,8 @@ const temporaryRoots: string[] = [];
 
 type RecordValue = Record<string, unknown>;
 const NOW = "2026-08-25T09:00:00Z";
+const DONE_PLANNING = "---\nartifact_type: story\nstory_id: FIXTURE-DONE\nstatus: done\n---\n";
+const NEXT_PLANNING = "---\nartifact_type: story\nstory_id: FIXTURE-NEXT\nstatus: backlog\n---\n";
 
 async function git(repo: string, ...args: string[]): Promise<string> {
   return (await execute("git", ["-C", repo, ...args], { encoding: "utf8" })).stdout.trim();
@@ -93,8 +97,8 @@ async function fixture(): Promise<Fixture> {
   await git(repo, "config", "user.name", "Bundle Test");
   await git(repo, "config", "user.email", "bundle.invalid");
   await Promise.all([
-    put(join(repo, "planning/done/done.md"), "done\n"),
-    put(join(repo, "planning/backlog/next.md"), "roadmap\n"),
+    put(join(repo, "planning/done/done.md"), DONE_PLANNING),
+    put(join(repo, "planning/backlog/next.md"), NEXT_PLANNING),
     put(join(repo, "CURRENT-STATE.md"), "Current and successor-ready.\n"),
   ]);
   await git(repo, "add", ".");
@@ -165,8 +169,8 @@ async function fixture(): Promise<Fixture> {
       corpus: {
         roots: ["planning"], include_globs: ["**/*.md"], total: 2, classified: 2, unclassified: 0,
         artifacts: [
-          { path: "planning/done/done.md", class: "done", sha256: digest("done\n") },
-          { path: "planning/backlog/next.md", class: "roadmap", sha256: digest("roadmap\n") },
+          { path: "planning/done/done.md", class: "done", sha256: digest(DONE_PLANNING) },
+          { path: "planning/backlog/next.md", class: "backlog", sha256: digest(NEXT_PLANNING) },
         ],
       },
     }] },
@@ -288,6 +292,52 @@ async function fixture(): Promise<Fixture> {
   return value;
 }
 
+async function installCrossRootPlanning(
+  value: Fixture,
+  childParentId: string,
+): Promise<void> {
+  const parentPath = "product/plans/done/CROSS-PARENT.md";
+  const childPath = "delivery/tasks/done/CROSS-CHILD.md";
+  const parentContent = "---\nartifact_type: story\nstory_id: CROSS-PARENT\nstatus: done\nholdout_status: pass\n---\n";
+  const childContent = `---\nartifact_type: slice\nslice_id: CROSS-CHILD\nparent_id: ${childParentId}\nstatus: done\n---\n`;
+  await rm(join(value.repo, "planning"), { recursive: true, force: true });
+  await Promise.all([
+    put(join(value.repo, parentPath), parentContent),
+    put(join(value.repo, childPath), childContent),
+  ]);
+  await git(value.repo, "add", "-A");
+  await git(value.repo, "commit", "-m", `cross-root planning for ${childParentId}`);
+  rebind(value, await git(value.repo, "rev-parse", "HEAD"));
+  (value.bundle.planning_discovery as RecordValue).systems = [
+    {
+      id: "product-plans", kind: "repo_files", sources: ["product/plans"],
+      schema_sources: ["fixture convention"], validators: ["bundle live census"],
+      corpus: {
+        roots: ["product/plans"], include_globs: ["**/*.md"], total: 1, classified: 1, unclassified: 0,
+        artifacts: [{ path: parentPath, class: "done", sha256: digest(parentContent) }],
+      },
+    },
+    {
+      id: "delivery-tasks", kind: "repo_files", sources: ["delivery/tasks"],
+      schema_sources: ["fixture convention"], validators: ["bundle live census"],
+      corpus: {
+        roots: ["delivery/tasks"], include_globs: ["**/*.md"], total: 1, classified: 1, unclassified: 0,
+        artifacts: [{ path: childPath, class: "done", sha256: digest(childContent) }],
+      },
+    },
+  ];
+}
+
+async function preparedPlanningAudit(value: Fixture, runId: string): Promise<PlanningAuditResult> {
+  const prepared = prepareCloseout({
+    repo: value.repo,
+    evidenceHome: join(value.root, "prepared"),
+    runId,
+    requestRef: `request-${runId}`,
+  });
+  return JSON.parse(await readFile(join(prepared.bundleDirectory, "planning-audit.json"), "utf8")) as PlanningAuditResult;
+}
+
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -327,6 +377,181 @@ describe("validateBundle", () => {
     await value.persist();
     const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
     expect(result.errors.some((error) => error.includes("live census mismatch"))).toBe(true);
+  });
+
+  it("requires unsupported planning entries to be explicitly classified as non-artifacts", async () => {
+    const value = await fixture();
+    const start = value.head;
+    const path = "planning/CURRENT.org";
+    const content = "* Current planning state\n";
+    await put(join(value.repo, path), content);
+    await git(value.repo, "add", ".");
+    await git(value.repo, "commit", "-m", "add unsupported planning entry");
+    rebind(value, await git(value.repo, "rev-parse", "HEAD"), start);
+    const corpus = (((value.bundle.planning_discovery as RecordValue).systems as RecordValue[])[0]!.corpus as RecordValue);
+    (corpus.artifacts as RecordValue[]).push({ path, class: "active", sha256: digest(content) });
+    corpus.total = 3;
+    corpus.classified = 3;
+    await value.persist();
+
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors.some((error) => error.includes(
+      `unsupported planning entry ${path} requires an explicit non-artifact class and classification_rationale`,
+    ))).toBe(true);
+  });
+
+  it("includes planning symlinks in the live census instead of silently dropping them", async () => {
+    const value = await fixture();
+    const start = value.head;
+    await symlink("backlog/next.md", join(value.repo, "planning", "LINK.md"));
+    await git(value.repo, "add", ".");
+    await git(value.repo, "commit", "-m", "add planning symlink");
+    rebind(value, await git(value.repo, "rev-parse", "HEAD"), start);
+    await value.persist();
+
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors.some((error) =>
+      error.includes("live census mismatch") && error.includes("planning/LINK.md"))).toBe(true);
+  });
+
+  it("discovers a planning root below more than five directory levels", async () => {
+    const value = await fixture();
+    const deepRoot = "one/two/three/four/five/six/planning";
+    const deepPath = `${deepRoot}/backlog/DEEP.md`;
+    await put(join(value.repo, deepPath), "---\nartifact_type: story\nstory_id: DEEP\nstatus: backlog\n---\n");
+    await git(value.repo, "add", ".");
+    await git(value.repo, "commit", "-m", "add deep planning root");
+    rebind(value, await git(value.repo, "rev-parse", "HEAD"));
+    await value.persist();
+
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors).toContain(
+      `$.planning_discovery.systems: independently discovered planning roots are not fully covered: [${JSON.stringify(deepRoot)}]`,
+    );
+  });
+
+  it("independently discovers a canonical planning file outside reserved directories", async () => {
+    const value = await fixture();
+    const start = value.head;
+    const roadmap = "docs/ROADMAP.md";
+    await put(join(value.repo, roadmap), "# Roadmap\n\nAcceptance remains pending.\n");
+    await git(value.repo, "add", ".");
+    await git(value.repo, "commit", "-m", "add canonical roadmap file");
+    rebind(value, await git(value.repo, "rev-parse", "HEAD"), start);
+    await value.persist();
+
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors).toContain(
+      `$.planning_discovery.systems: independently discovered planning roots are not fully covered: [${JSON.stringify(roadmap)}]`,
+    );
+  });
+
+  it("keeps standalone, prepare, and bundle semantics invariant for a cross-root relationship", async () => {
+    const value = await fixture();
+    await installCrossRootPlanning(value, "CROSS-PARENT");
+
+    const standalone = auditPlanningRepository(value.repo);
+    const prepared = await preparedPlanningAudit(value, "cross-root-valid");
+    expect(standalone.findings).toEqual([]);
+    expect(prepared).toEqual(standalone);
+
+    await value.persist();
+    await expect(validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo }))
+      .resolves.toEqual({ errors: [], ok: true });
+  });
+
+  it("keeps a missing cross-root target invariant across standalone, prepare, and bundle", async () => {
+    const value = await fixture();
+    await installCrossRootPlanning(value, "MISSING-PARENT");
+
+    const standalone = auditPlanningRepository(value.repo);
+    const prepared = await preparedPlanningAudit(value, "cross-root-missing");
+    expect(standalone.findings.map((finding) => finding.code)).toEqual([
+      "orphan_parent_reference",
+      "planning_relationship_unresolved",
+    ]);
+    expect(prepared).toEqual(standalone);
+
+    await value.persist();
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    const semanticErrors = result.errors.filter((error) => error.startsWith("$.planning_discovery.corpus: "));
+    expect(semanticErrors).toHaveLength(standalone.findings.length);
+    for (const finding of standalone.findings) {
+      expect(semanticErrors.some((error) => error.includes(
+        `${finding.code} at ${finding.path} (${finding.subject}): ${finding.detail}`,
+      ))).toBe(true);
+    }
+  });
+
+  it("does not let a bundle archive a live planning artifact by label alone", async () => {
+    const value = await fixture();
+    const system = ((value.bundle.planning_discovery as RecordValue).systems as RecordValue[])[0]!;
+    const artifacts = (system.corpus as RecordValue).artifacts as RecordValue[];
+    artifacts.find((artifact) => artifact.path === "planning/backlog/next.md")!.class = "archived";
+    await value.persist();
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors.some((error) => error.includes("archive_classification_conflict"))).toBe(true);
+  });
+
+  it("does not let a reasoned guidance label suppress live planning signals", async () => {
+    const value = await fixture();
+    const system = ((value.bundle.planning_discovery as RecordValue).systems as RecordValue[])[0]!;
+    const artifacts = (system.corpus as RecordValue).artifacts as RecordValue[];
+    const target = artifacts.find((artifact) => artifact.path === "planning/backlog/next.md")!;
+    target.class = "guidance";
+    target.classification_rationale = "claimed prose";
+    await value.persist();
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors.some((error) => error.includes("non-artifact classification conflicts"))).toBe(true);
+  });
+
+  it("refuses a CLEAN bundle when its live planning graph contains an unpaid cascade", async () => {
+    const value = await fixture();
+    const start = value.head;
+    const parentPath = "planning/active/WORK-CASCADE.md";
+    const childPath = "planning/done/TASK-CASCADE.md";
+    const parentContent = "---\nartifact_type: story\nstory_id: WORK-CASCADE\nstatus: active\nholdout_status: not_run\n---\n";
+    const childContent = "---\nartifact_type: slice\nslice_id: TASK-CASCADE\nparent_id: WORK-CASCADE\nstatus: done\n---\n";
+    await Promise.all([
+      put(join(value.repo, parentPath), parentContent),
+      put(join(value.repo, childPath), childContent),
+    ]);
+    await git(value.repo, "add", ".");
+    await git(value.repo, "commit", "-m", "add unpaid acceptance cascade");
+    const head = await git(value.repo, "rev-parse", "HEAD");
+    rebind(value, head, start);
+
+    const corpus = (((value.bundle.planning_discovery as RecordValue).systems as RecordValue[])[0]!.corpus as RecordValue);
+    const artifacts = corpus.artifacts as RecordValue[];
+    artifacts.push(
+      { path: parentPath, class: "active", sha256: digest(parentContent) },
+      { path: childPath, class: "done", sha256: digest(childContent) },
+    );
+    corpus.total = 4;
+    corpus.classified = 4;
+
+    const parentAction = executedAction(parentPath);
+    const childAction = executedAction(childPath);
+    parentAction.id = "A-CASCADE-PARENT";
+    childAction.id = "A-CASCADE-CHILD";
+    ((((parentAction.outcome as RecordValue).evidence as RecordValue[])[0]!.evidence_ref) as RecordValue).path = "action-result-A-CASCADE-PARENT.json";
+    ((((childAction.outcome as RecordValue).evidence as RecordValue[])[0]!.evidence_ref) as RecordValue).path = "action-result-A-CASCADE-CHILD.json";
+    const actions = [parentAction, childAction];
+    value.report.actions = actions;
+    value.manifest.actions = actions;
+    value.manifest.execution_state = "executed";
+    value.bundle.change_inventory = {
+      start_commit: start,
+      subject_commit: head,
+      changes: [
+        { status: "A", path: parentPath, action_ids: ["A-CASCADE-PARENT"], exclusion: null },
+        { status: "A", path: childPath, action_ids: ["A-CASCADE-CHILD"], exclusion: null },
+      ],
+    };
+
+    await value.persist();
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors.some((error) => error.includes("acceptance_cascade_unexecuted"))).toBe(true);
   });
 
   it("requires handoff entrypoints to be files, not directories", async () => {

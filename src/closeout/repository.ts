@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface GitResult {
@@ -28,6 +28,11 @@ export interface WorktreeRecord {
   readonly prunable?: string;
 }
 
+export interface RecursiveEntry {
+  readonly kind: "file" | "other" | "symlink";
+  readonly path: string;
+}
+
 const PLANNING_DIRECTORY_NAMES = new Set([
   "planning",
   "plans",
@@ -42,14 +47,54 @@ const PLANNING_DIRECTORY_NAMES = new Set([
   "issues",
 ]);
 
-const PLANNING_LANE_NAMES = new Set([
-  "backlog",
-  "active",
-  "in-progress",
-  "done",
-  "archive",
-  "archived",
+const PLANNING_FILE_STEMS = new Set([
+  "backlog", "current", "milestones", "plan", "planning",
+  "project-plan", "project_plan", "roadmap", "status", "tasks", "todo", "work-items", "work_items",
 ]);
+
+const PLANNING_FILE_EXTENSIONS = new Set([
+  ".json", ".md", ".mdx", ".txt", ".yaml", ".yml",
+]);
+
+export function isCanonicalPlanningFileName(path: string): boolean {
+  const name = basename(path);
+  const extension = extname(name).toLocaleLowerCase("und");
+  if (!PLANNING_FILE_EXTENSIONS.has(extension)) return false;
+  const stem = name.slice(0, -extension.length).toLocaleLowerCase("und");
+  return PLANNING_FILE_STEMS.has(stem);
+}
+
+export type PlanningLaneLifecycle = "active" | "archived" | "done" | "preexecution";
+
+export const PLANNING_LANE_LIFECYCLES: ReadonlyMap<string, PlanningLaneLifecycle> = new Map([
+  ["backlog", "preexecution"],
+  ["todo", "preexecution"],
+  ["to-do", "preexecution"],
+  ["to_do", "preexecution"],
+  ["ready", "preexecution"],
+  ["planned", "preexecution"],
+  ["active", "active"],
+  ["doing", "active"],
+  ["in-progress", "active"],
+  ["in_progress", "active"],
+  ["inprogress", "active"],
+  ["failed", "active"],
+  ["done", "done"],
+  ["complete", "done"],
+  ["completed", "done"],
+  ["closed", "done"],
+  ["history", "archived"],
+  ["historical", "archived"],
+  ["archive", "archived"],
+  ["archived", "archived"],
+  ["superseded", "archived"],
+]);
+
+export const PLANNING_LANE_NAMES: ReadonlySet<string> = new Set(PLANNING_LANE_LIFECYCLES.keys());
+
+export function planningLaneLifecycle(name: string): PlanningLaneLifecycle | undefined {
+  return PLANNING_LANE_LIFECYCLES.get(name.toLocaleLowerCase("und"));
+}
 
 const PLANNING_IGNORED_NAMES = new Set([
   ".git",
@@ -143,12 +188,10 @@ export function repositoryIdentity(repository: string): string {
   return repository.split(sep).filter(Boolean).at(-1) ?? repository;
 }
 
-function childDirectories(directory: string): string[] {
+function childEntries(directory: string) {
   try {
     return readdirSync(directory, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
-      .map((entry) => entry.name)
-      .sort();
+      .sort((left, right) => left.name.localeCompare(right.name));
   } catch {
     return [];
   }
@@ -157,24 +200,32 @@ function childDirectories(directory: string): string[] {
 export function discoverPlanningRoots(repository: string): string[] {
   const candidates = new Set<string>();
 
-  function visit(directory: string, depth: number): void {
-    if (depth > 4) return;
+  function visit(directory: string): void {
     const relativePath = relative(repository, directory);
     const name = directory.split(sep).at(-1)?.toLocaleLowerCase() ?? "";
     if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
       candidates.add(directory);
       return;
     }
-    const names = childDirectories(directory).filter((child) => !PLANNING_IGNORED_NAMES.has(child));
+    const entries = childEntries(directory)
+      .filter((entry) => !PLANNING_IGNORED_NAMES.has(entry.name));
+    for (const entry of entries) {
+      if ((entry.isFile() || entry.isSymbolicLink()) && isCanonicalPlanningFileName(entry.name)) {
+        candidates.add(join(directory, entry.name));
+      }
+    }
+    const names = entries
+      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+      .map((entry) => entry.name);
     const laneCount = names.filter((child) => PLANNING_LANE_NAMES.has(child.toLocaleLowerCase())).length;
     if (laneCount >= 2 && relativePath !== "") {
       candidates.add(directory);
       return;
     }
-    for (const child of names) visit(join(directory, child), depth + 1);
+    for (const child of names) visit(join(directory, child));
   }
 
-  visit(repository, 0);
+  visit(repository);
   const ordered = [...candidates].sort((left, right) => {
     const depth = left.split(sep).length - right.split(sep).length;
     return depth || compareCodePoints(left, right);
@@ -209,17 +260,25 @@ export function parseWorktrees(repository: string): WorktreeRecord[] {
   return records;
 }
 
-export function listFilesRecursively(root: string): string[] {
-  const files: string[] = [];
+export function listEntriesRecursively(root: string): RecursiveEntry[] {
+  const entries: RecursiveEntry[] = [];
   function visit(directory: string): void {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path);
-      else if (entry.isFile()) files.push(path);
+      else if (entry.isSymbolicLink()) entries.push({ kind: "symlink", path });
+      else if (entry.isFile()) entries.push({ kind: "file", path });
+      else entries.push({ kind: "other", path });
     }
   }
   visit(root);
-  return files.sort();
+  return entries.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+export function listFilesRecursively(root: string): string[] {
+  return listEntriesRecursively(root)
+    .filter((entry) => entry.kind === "file")
+    .map((entry) => entry.path);
 }
 
 export function assertDirectory(path: string): void {

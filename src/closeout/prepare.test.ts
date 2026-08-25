@@ -85,6 +85,35 @@ describe("prepareCloseout", () => {
     expect((bundle.criteria_discovery as Record<string, unknown>).criteria_ids).toEqual(["criterion-1"]);
     expect(systems).toHaveLength(1);
     expect(systems[0]?.id).toBe("repository-planning-1");
+    expect(planning.unknown).toBe(true);
+    const corpus = systems[0]?.corpus as Record<string, unknown>;
+    expect(corpus.unclassified).toBe(1);
+  });
+
+  it("captures a canonical planning file as an exact repo-files root", () => {
+    const { evidence, repo } = fixture("roadmap-file");
+    mkdirSync(join(repo, "docs"));
+    writeFileSync(join(repo, "docs", "ROADMAP.md"), "# Roadmap\n\nAcceptance remains pending.\n");
+    writeFileSync(join(repo, "docs", "architecture.md"), "# Architecture\n");
+    commit(repo);
+
+    const prepared = prepareCloseout({
+      repo,
+      evidenceHome: evidence,
+      runId: "roadmap-file",
+      requestRef: "request-1",
+    });
+    const bundle = json(prepared.bundlePath);
+    const planning = bundle.planning_discovery as Record<string, unknown>;
+    const systems = planning.systems as Array<Record<string, unknown>>;
+    expect(systems).toHaveLength(1);
+    expect(systems[0]?.kind).toBe("repo_files");
+    expect(systems[0]?.sources).toEqual(["docs/ROADMAP.md"]);
+    const corpus = systems[0]?.corpus as Record<string, unknown>;
+    expect((corpus.artifacts as Array<Record<string, unknown>>).map((item) => item.path)).toEqual([
+      "docs/ROADMAP.md",
+    ]);
+    expect(corpus.unclassified).toBe(1);
   });
 
   it("treats a missing current-state document as payable scaffold state", () => {

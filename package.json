@@ -1,6 +1,6 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Successor-readiness skill and read-only MCP server for paying repository completion debt.",
   "type": "module",
   "license": "MIT",
@@ -64,6 +64,7 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
     "agents": "0.21.0",
+    "yaml": "2.9.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

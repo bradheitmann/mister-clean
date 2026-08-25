@@ -1,5 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -168,6 +170,28 @@ describe("unified TypeScript distribution contract", () => {
       readFile(join(ROOT, "dist", "cli.js")),
     ]);
     expect(standalone).toEqual(built);
+  });
+
+  it("keeps source and standalone planning behavior identical", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "mister-clean-cli-parity-"));
+    try {
+      await mkdir(join(fixture, "planning"));
+      await writeFile(join(fixture, "planning", "status.json"), JSON.stringify({
+        artifactType: "statusIndex",
+        id: "STATUS",
+        status: "active",
+        stories: [{ status: "MAYBE", storyId: "MISSING" }],
+      }));
+      const args = ["audit", "planning", fixture, "--json"];
+      const source = spawnSync("bun", [join(ROOT, "src", "cli.ts"), ...args], { encoding: "utf8" });
+      const standalone = spawnSync(process.execPath, [join(ROOT, "bin", "mister-clean.js"), ...args], { encoding: "utf8" });
+      expect(source.status).toBe(1);
+      expect(standalone.status).toBe(1);
+      expect(source.stderr).toBe(standalone.stderr);
+      expect(source.stdout).toBe(standalone.stdout);
+    } finally {
+      await rm(fixture, { recursive: true });
+    }
   });
 
   it("documents the unified CLI instead of requiring Python script paths", () => {

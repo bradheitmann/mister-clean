@@ -50,6 +50,44 @@ describe("unified Mister Clean CLI", () => {
     expect(JSON.stringify(output)).not.toContain(secret);
   });
 
+  it("makes child-established planning cascade debt exit-relevant", async () => {
+    const root = fixture("planning-audit");
+    mkdirSync(join(root, "planning", "stories"), { recursive: true });
+    mkdirSync(join(root, "planning", "done"), { recursive: true });
+    mkdirSync(join(root, "planning", "holdouts"), { recursive: true });
+    writeFileSync(join(root, "planning", "stories", "WORK.md"), "---\nartifact_type: story\nstory_id: WORK\nstatus: IN_PROGRESS\nholdout_status: NOT_RUN\n---\n");
+    writeFileSync(join(root, "planning", "done", "TASK.md"), "---\nartifact_type: slice\nslice_id: TASK\nparent_id: WORK\nstatus: Done\n---\n");
+    writeFileSync(join(root, "planning", "holdouts", "HOLDOUT.md"), "---\nartifact_type: holdout\nstory_id: WORK\nresult: NOT_RUN\n---\n");
+    const output = capture();
+    const code = await runCli(["audit", "planning", root, "--json"], output.io);
+    expect(code).toBe(1);
+    const audit = JSON.parse(output.stdout.join("\n")) as { findings: Array<{ code: string; subject: string }> };
+    expect(audit.findings).toContainEqual(expect.objectContaining({ code: "acceptance_cascade_unexecuted", subject: "WORK" }));
+  });
+
+  it("returns an input failure when the planning root does not exist", async () => {
+    const root = join(fixture("missing-planning-root"), "not-there");
+    const output = capture();
+    const code = await runCli(["audit", "planning", root, "--json"], output.io);
+    expect(code).toBe(2);
+    expect(output.stderr).toEqual([`ERROR: not a directory: ${root}`]);
+  });
+
+  it("discovers common todo-doing-complete planning lanes", async () => {
+    const root = fixture("planning-lane-aliases");
+    mkdirSync(join(root, "coordination", "todo"), { recursive: true });
+    mkdirSync(join(root, "coordination", "doing"), { recursive: true });
+    mkdirSync(join(root, "coordination", "complete"), { recursive: true });
+    writeFileSync(join(root, "coordination", "todo", "next.md"), "---\nartifact_type: story\nstatus: todo\n---\n");
+    writeFileSync(join(root, "coordination", "doing", "current.md"), "---\nartifact_type: story\nstatus: doing\n---\n");
+    writeFileSync(join(root, "coordination", "complete", "past.md"), "---\nartifact_type: story\nstatus: complete\n---\n");
+    const output = capture();
+    const code = await runCli(["audit", "planning", root, "--json"], output.io);
+    expect(code).toBe(0);
+    const audit = JSON.parse(output.stdout.join("\n")) as { artifactCount: number; planningRootCount: number; status: string };
+    expect(audit).toEqual(expect.objectContaining({ artifactCount: 3, planningRootCount: 1, status: "pass" }));
+  });
+
   it("writes and then verifies a deterministic manifest", async () => {
     const root = fixture("manifest");
     mkdirSync(join(root, "src"));
