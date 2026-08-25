@@ -29,7 +29,9 @@ describe("Mister Clean Worker routes", () => {
       context,
     );
     expect(dashboard.status).toBe(200);
-    expect(dashboard.headers.get("content-security-policy")).toContain("frame-ancestors");
+    expect(dashboard.headers.get("content-security-policy")).toContain(
+      "frame-ancestors 'self' https://bradheitmann.ai https://www.bradheitmann.ai http://localhost:* http://127.0.0.1:*",
+    );
     expect(await dashboard.text()).toContain("MISTER_CLEAN_DASHBOARD_STATE");
 
     const styles = await worker.fetch(

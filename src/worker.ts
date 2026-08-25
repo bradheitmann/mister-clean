@@ -10,6 +10,14 @@ const baseHeaders = {
   "x-content-type-options": "nosniff",
 } as const;
 
+const dashboardFrameAncestors = [
+  "'self'",
+  "https://bradheitmann.ai",
+  "https://www.bradheitmann.ai",
+  "http://localhost:*",
+  "http://127.0.0.1:*",
+].join(" ");
+
 function response(body: BodyInit | null, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(baseHeaders)) headers.set(name, value);
@@ -57,7 +65,7 @@ export default {
     }
     if (url.pathname === "/dashboard/") {
       return materialResponse("assets/codebase-state-dashboard/index.html", "text/html; charset=utf-8", {
-        "content-security-policy": "default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'self' https://bradheitmann.ai https://www.bradheitmann.ai",
+        "content-security-policy": `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors ${dashboardFrameAncestors}`,
       });
     }
     if (url.pathname === "/dashboard/dashboard-tokens.css") {

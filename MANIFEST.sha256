@@ -1,7 +1,7 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
 bbb594f98df1594539a692b1f7f58eb012a66c6258f45a48d66852708eb5da36  ./README.md
 1561a8c43a26d38c2a77b905402ce64d4d84b91084b1fbe47853a5af8150654a  ./SECURITY.md
-0594368814c1f13cac2d80c270cf8545c9f1bc500034f6a849424a5ef47cfabc  ./SKILL.md
+ac1c28b3714ad110a8312c5beb847525f8739109efd4a9824dc7baf8ffc507cb  ./SKILL.md
 2113f1bd68724902aeab40922f37625922712ca458d56a5845c4adaa0402f054  ./agents/openai.yaml
 76346e98d54d20f5f581c935d3f9908948ccf0305659cd25b1099de53f5d16b7  ./assets/action-manifest.json
 345bb2f1d30dc744e3efe190d7132d5a615affa33c1059a86555358d2fdfb1cf  ./assets/closeout-report.json
@@ -10,13 +10,13 @@ f8dadd8f5a177f2852bbbe729b280bdd86f1de201a47abcf8795d24418241ef0  ./assets/codeb
 469c9fb7193886b1731b8e21ce936cce32c8c9eacf9511199af4cfe497c1319b  ./assets/codebase-state-dashboard/index.html
 97b530b1e9ea4900c93e51cddd9ba39f87c911c0a52d25080228f96498eb4732  ./bin/mister-clean.js
 e40cf03c54bdfbae2735fe997370c984e3d52a34f53c0d387ec7894b9b2ed2ce  ./dist/server.d.ts
-e50dbc6ddeb94ac4793cfe9881c577496a357ac7799dc2da0ced19119ecda952  ./dist/server.js
+6daa0c779297b726cd120570fd532f1eb36580ab629adafdaf35eda266883217  ./dist/server.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
-66620654f3caeaadd4f3f47fb4381faac83dfbbef154ddadb064aea0a4049e5b  ./dist/stdio.js
+00d1ff7045978aa0904c36cb43ce9dbc2152c06d024fabdff8f9c915d3aa5f95  ./dist/stdio.js
 610d169be597d80184e65c0e79f37b174a961d014a61c3fb28051a924892bc76  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 4ce64da2f88ee7fafdabf42784a9c83167851106e41b32e22f2c44a644d610de  ./examples/example-report.md
-d89ca0a858033dbfabb55b4f9fa6bf59af01a3022c48e03689ecc6ac7e3d170c  ./package.json
+59ad2dce7ae9dc3b203d58a50002b41f6047f233c2704b2b8dc039e19084600b  ./package.json
 57e950ff16e45b7a4bb24b782f78339ef1c28fe71499648305f85daeb5d985aa  ./references/authorization-and-modes.md
 a98cc01163b51c0eaa5e00b6c3779d96a73ffb0dfeecefa392d7dfe23f83d45a  ./references/behavioral-evals.md
 767f4e59096c3a646cbab7ffc5d546ec832b58ce42fd2663bebec7e5fcf26ec2  ./references/code-hygiene-rubric.md
