@@ -92,6 +92,13 @@ describe("invocation contract", () => {
     expect(evaluations).toContain("Late mutation after the evidence freeze (v6.1.4)");
     expect(evaluations).toContain("never permits an internally inconsistent or parent-bound evidence bundle");
   });
+
+  it("requires generated planning-debt sidecars to use a portable executable command", async () => {
+    const evaluations = await readFile(join(ROOT, "references", "behavioral-evals.md"), "utf8");
+    expect(evaluations).toContain("Planning-debt scaffold must validate live (v6.1.5)");
+    expect(evaluations).toContain("mister-clean audit planning . --json");
+    expect(evaluations).not.toContain("mister-clean audit planning --json <repository>");
+  });
 });
 
 describe("stack-adapter contract", () => {

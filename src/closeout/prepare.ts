@@ -167,7 +167,7 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
         kind: "repo_files",
         sources: [rootText],
         schema_sources: ["repository lane/artifact convention; verify manually"],
-        validators: ["mister-clean audit planning --json <repository>", "mister-clean live planning census"],
+        validators: ["mister-clean audit planning . --json", "mister-clean live planning census"],
         corpus: {
           roots: [rootText],
           include_globs: ["**/*"],
@@ -290,7 +290,7 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
     evidence: [{
       kind: "planning_census",
       object: finding.subject,
-      command: "mister-clean audit planning --json <repository>",
+      command: "mister-clean audit planning . --json",
       result: finding.code,
       observed_at: now,
       evidence_ref: planningAuditRef,
@@ -315,12 +315,12 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   if (planningDebts.length > 0) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
       state: "open",
-      evidence: [{ kind: "debt_census", object: head, command: "mister-clean audit planning --json <repository>", result: `${planningDebts.length} open planning debts`, observed_at: now }],
+      evidence: [{ kind: "debt_census", object: head, command: "mister-clean audit planning . --json", result: `${planningDebts.length} open planning debts`, observed_at: now }],
       notes: ["Executable planning audit found payable successor-readiness debt."],
     });
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").planning_integrity, "closeout-report.dimensions.planning_integrity"), {
       state: "open",
-      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning --json <repository>", result: `${planningDebts.length} findings`, observed_at: now }],
+      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning . --json", result: `${planningDebts.length} findings`, observed_at: now }],
       notes: ["Physical lanes, structured metadata, exact parent projections, and acceptance-gate identity do not yet agree."],
     });
   }

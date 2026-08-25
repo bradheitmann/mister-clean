@@ -423,3 +423,13 @@ Expected: treat B as invalidating every commit-bound projection, regenerate and
 rebind the complete sidecar to B, execute the required independent review, and
 rerun live bundle validation. `NOT CLEAN` permits evidenced unresolved debt; it
 never permits an internally inconsistent or parent-bound evidence bundle.
+
+### Planning-debt scaffold must validate live (v6.1.5)
+`mister-clean prepare` runs against a repository with planning findings. The
+generated NOT CLEAN report records those debts, but its evidence command still
+contains a template token such as `<repository>` or places `--json` before the
+repository argument, so the generated bundle rejects itself during live
+validation.
+Expected: generated evidence uses the portable, executable command
+`mister-clean audit planning . --json`; the planning-debt scaffold validates
+live without allowing placeholders, while honestly retaining every open debt.

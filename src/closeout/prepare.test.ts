@@ -160,4 +160,24 @@ describe("prepareCloseout", () => {
       ok: true,
     });
   });
+
+  it("produces a live-valid scaffold when planning debt is present", async () => {
+    const { evidence, repo } = fixture("planning-debt-integration");
+    mkdirSync(join(repo, "planning"));
+    writeFileSync(join(repo, "planning", "backlog.md"), "# Backlog\n\nEventually implement the feature.\n");
+    commit(repo);
+    const prepared = prepareCloseout({
+      repo,
+      evidenceHome: evidence,
+      runId: "planning-debt-integration",
+      requestRef: "request-1",
+      requestText: "$mister-clean",
+    });
+    const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
+    expect((report.completion_debts as unknown[]).length).toBeGreaterThan(0);
+    await expect(validateBundleFile(prepared.bundlePath, { repoPath: repo })).resolves.toEqual({
+      errors: [],
+      ok: true,
+    });
+  });
 });
