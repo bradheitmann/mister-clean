@@ -73,6 +73,10 @@ function splitLines(value: string): string[] {
   return value ? value.split(/\r?\n/) : [];
 }
 
+function evidenceLabel(value: string): string {
+  return value.replaceAll("<", "‹").replaceAll(">", "›");
+}
+
 export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseout {
   if (options.requestSource !== undefined && options.requestText !== undefined) {
     throw new Error("requestSource and requestText are mutually exclusive");
@@ -284,7 +288,7 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   const planningDebts = planningAudit.findings.map((finding, index) => ({
     id: `DEBT-PLANNING-${String(index + 1).padStart(4, "0")}`,
     class: finding.code,
-    procedure: `${finding.code}: ${finding.path}: ${finding.detail}`,
+    procedure: `Reconcile ${finding.code} at ${evidenceLabel(finding.path)} for ${evidenceLabel(finding.subject)}`,
     state: "open",
     disposition: validationDebtClasses.has(finding.code) ? "autonomously_validate" : "autonomously_repair",
     evidence: [{

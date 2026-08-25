@@ -163,8 +163,15 @@ describe("prepareCloseout", () => {
 
   it("produces a live-valid scaffold when planning debt is present", async () => {
     const { evidence, repo } = fixture("planning-debt-integration");
-    mkdirSync(join(repo, "planning"));
-    writeFileSync(join(repo, "planning", "backlog.md"), "# Backlog\n\nEventually implement the feature.\n");
+    mkdirSync(join(repo, "planning", "done"), { recursive: true });
+    writeFileSync(join(repo, "planning", "done", "TASK.md"), `---
+artifact_type: task
+task_id: TASK
+status: done
+top_level: true
+---
+Status: <name>
+`);
     commit(repo);
     const prepared = prepareCloseout({
       repo,
@@ -174,7 +181,10 @@ describe("prepareCloseout", () => {
       requestText: "$mister-clean",
     });
     const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
-    expect((report.completion_debts as unknown[]).length).toBeGreaterThan(0);
+    const debts = report.completion_debts as Array<Record<string, unknown>>;
+    expect(debts.length).toBeGreaterThan(0);
+    expect(debts.some((debt) => String(debt.procedure).includes("body_projection_conflict"))).toBe(true);
+    expect(debts.some((debt) => String(debt.procedure).includes("<name>"))).toBe(false);
     await expect(validateBundleFile(prepared.bundlePath, { repoPath: repo })).resolves.toEqual({
       errors: [],
       ok: true,

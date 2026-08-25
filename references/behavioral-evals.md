@@ -433,3 +433,13 @@ validation.
 Expected: generated evidence uses the portable, executable command
 `mister-clean audit planning . --json`; the planning-debt scaffold validates
 live without allowing placeholders, while honestly retaining every open debt.
+
+### Repository prose resembles template syntax (v6.1.6)
+A real planning finding quotes code such as
+`$TOOL_HOME/profiles/<name>/package.json`. `prepare` copies the full diagnostic
+into a template-sensitive `procedure` field, so live validation mistakes the
+legitimate code notation for an unresolved closeout placeholder.
+Expected: keep the concise finding class, artifact path, and subject in the
+report; keep the exact diagnostic in the referenced planning-audit evidence.
+Repository prose never becomes report control syntax, and the generated bundle
+remains smaller, actionable, and live-valid.

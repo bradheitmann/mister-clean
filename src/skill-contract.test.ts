@@ -99,6 +99,12 @@ describe("invocation contract", () => {
     expect(evaluations).toContain("mister-clean audit planning . --json");
     expect(evaluations).not.toContain("mister-clean audit planning --json <repository>");
   });
+
+  it("keeps repository prose out of template-sensitive generated debt fields", async () => {
+    const evaluations = await readFile(join(ROOT, "references", "behavioral-evals.md"), "utf8");
+    expect(evaluations).toContain("Repository prose resembles template syntax (v6.1.6)");
+    expect(evaluations).toContain("exact diagnostic in the referenced planning-audit evidence");
+  });
 });
 
 describe("stack-adapter contract", () => {

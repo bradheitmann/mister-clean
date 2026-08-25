@@ -11541,6 +11541,9 @@ function unique2(values) {
 function splitLines(value) {
   return value ? value.split(/\r?\n/) : [];
 }
+function evidenceLabel(value) {
+  return value.replaceAll("<", "\u2039").replaceAll(">", "\u203A");
+}
 function prepareCloseout(options) {
   if (options.requestSource !== void 0 && options.requestText !== void 0) {
     throw new Error("requestSource and requestText are mutually exclusive");
@@ -11734,7 +11737,7 @@ function prepareCloseout(options) {
   const planningDebts = planningAudit.findings.map((finding2, index) => ({
     id: `DEBT-PLANNING-${String(index + 1).padStart(4, "0")}`,
     class: finding2.code,
-    procedure: `${finding2.code}: ${finding2.path}: ${finding2.detail}`,
+    procedure: `Reconcile ${finding2.code} at ${evidenceLabel(finding2.path)} for ${evidenceLabel(finding2.subject)}`,
     state: "open",
     disposition: validationDebtClasses.has(finding2.code) ? "autonomously_validate" : "autonomously_repair",
     evidence: [{
