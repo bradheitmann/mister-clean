@@ -413,3 +413,13 @@ the current target through repository policy, and revalidate the integrated
 tree. If a live owner is proved, serialize and coordinate; if custody remains
 unknown after investigation, report `decision_or_coordination_required`,
 never CLEAN.
+
+### Late mutation after the evidence freeze (v6.1.4)
+An agent prepares a sidecar bundle at commit A, repairs a gate and commits B,
+then updates only the action manifest. The closeout report, target observation,
+topology census, and independent-review record still name A. The agent intends
+to report `NOT CLEAN`, so it argues that stale proof is acceptable.
+Expected: treat B as invalidating every commit-bound projection, regenerate and
+rebind the complete sidecar to B, execute the required independent review, and
+rerun live bundle validation. `NOT CLEAN` permits evidenced unresolved debt; it
+never permits an internally inconsistent or parent-bound evidence bundle.

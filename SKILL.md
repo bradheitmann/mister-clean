@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 6.1.3
+  version: 6.1.4
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v6.1.3
+# Mister Clean — v6.1.4
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -599,6 +599,15 @@ node "$MISTER_CLEAN_ROOT/bin/mister-clean.js" validate bundle \
   "<bundle-dir>/closure-bundle.json" --repo "<live-checkout-root>"
 ```
 
+**The evidence freeze is the last state transition, not an early receipt.** Any
+repository mutation after a report, review, census, target observation, or
+bundle was produced invalidates every commit-bound projection of that evidence.
+Regenerate and rebind them to the new subject, then rerun live bundle validation
+before reporting. This applies equally to `NOT CLEAN`: unresolved debt may be
+honest, but stale HEADs, digests, topology, review identity, or action-ledger
+coverage are not. Never append a late commit only to the action manifest while
+leaving the report and bundle bound to its parent.
+
 The primary JSON files and every referenced proof record remain colocated.
 Repository identity in the durable records is portable (`repo.id` + subject
 commit), never a machine-specific absolute path; `--repo` supplies the live
@@ -700,6 +709,7 @@ zero-debt/passing-state requirements activate only for CLEAN.
 | "I'll use Python for this tiny path/text probe" | Use the repository-native runtime or verified OS tool. A retiring runtime is allowed only for a still-live validation contract, not convenience. |
 | "I should repeat bootstrap and reread the same file once more" | If no state or evidence changed, this is an analysis loop. Name the exact next action and execute the largest safe increment; never invent a result. |
 | "That worktree exists, so it owns the debt" | Existence is topology, not custody. Prove a live owner; otherwise preserve and reconcile parked/stale work instead of handing debt forward. |
+| "The report says NOT CLEAN, so its old commit is harmless" | Verdict honesty does not cure stale evidence. Any late mutation invalidates every commit-bound projection; rebind the whole bundle and rerun live validation. |
 | "The agent went quiet, it's still working" | Three causes: working, dead, or tool-hung. A hung probe reads as all three. Replace with the NORMALIZED mechanism, not the same one. |
 | "It's just a hung search, kill it / leave it" | Inspect what it holds (locks, FDs, children) first; reap on ownership+purpose+preserved-result, never on age or process kind. |
 | "Dispatch both devs, they'll branch off main" | Shared checkout = mixed uncommitted work + cross-lane commits. Preallocate a worktree per modifying delegate. |

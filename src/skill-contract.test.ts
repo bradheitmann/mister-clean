@@ -83,6 +83,15 @@ describe("invocation contract", () => {
     expect(claims).toContain("Validation results are tuples, not exit codes");
     expect(skill).toContain("Advisory checks may inform cleanup but never establish CLEAN");
   });
+
+  it("invalidates all commit-bound proof after any late mutation, even for NOT CLEAN", async () => {
+    const evaluations = await readFile(join(ROOT, "references", "behavioral-evals.md"), "utf8");
+    expect(skill).toContain("The evidence freeze is the last state transition");
+    expect(skill).toContain("This applies equally to `NOT CLEAN`");
+    expect(skill).toContain("leaving the report and bundle bound to its parent");
+    expect(evaluations).toContain("Late mutation after the evidence freeze (v6.1.4)");
+    expect(evaluations).toContain("never permits an internally inconsistent or parent-bound evidence bundle");
+  });
 });
 
 describe("stack-adapter contract", () => {
