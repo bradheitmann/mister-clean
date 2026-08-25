@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 6.1.1
+  version: 6.1.2
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v6.1.1
+# Mister Clean — v6.1.2
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -240,6 +240,17 @@ Map every dirty or unmerged worktree to owner + branch + candidate SHA +
 disposition — unmapped is a blocking finding, and a clean primary checkout
 never speaks for the others.
 
+**A worktree's existence is not evidence of a live owner.** Classify each
+noncurrent lane `active`, `parked`, `stale`, or `unknown` from durable
+claims/checkpoints, current session or process evidence, and observed
+progress. A parked or stale lane cannot own completion debt indefinitely: if
+it is in scope, preserve its unique commits and reconcile them into the
+current target through repository policy. Serialize/coordinate with a proven
+active owner. Use `decision_or_coordination_required` only when ownership is
+still unknown after investigation or a live owner cannot safely coordinate;
+never use "another worktree owns it" as an off-ramp without live-owner
+evidence.
+
 Identify the repository, branch and commit, applicable policy, the
 **procedure graph** (what this system declares as paired or
 mandatory-sequential — cite every edge to policy, tracker workflow, or
@@ -261,6 +272,18 @@ repo and a silent agent. Normalize discovery tools, time-bound probes, and
 distinguish repo-slowness from tool-shadowing from harness-latency before
 trusting any probe or its silence:
 [references/tool-liveness.md](references/tool-liveness.md).
+
+**Bind the repository-native toolchain before any install or helper script.**
+Infer the canonical package manager and runtime from operator/repository
+policy, `packageManager`, lockfiles, workspace configuration, and established
+runners. Use that manager; never create a competing lockfile as a side effect
+of closeout. Prefer already-present repository-native or verified OS tools for
+simple inspection. Do not invoke Python or another auxiliary/retiring runtime
+merely to resolve a path, parse text, or enumerate files when the repository's
+runtime, `realpath`/`pwd -P`, `rg`, or an existing script can do it. If the
+current work removes a runtime, using it is permitted only when a still-live
+validation contract requires it; scope and record that use. Convenience is
+not a requirement.
 
 **The successor rule:** the next team's systems may differ entirely. Your
 validators will not travel — the artifact pattern must carry the standard by
@@ -673,6 +696,10 @@ zero-debt/passing-state requirements activate only for CLEAN.
 | "Skip that flaky test for now" | Skipped without owner + exit condition is deferred debt in disguise. |
 | "I fixed it everywhere, done" | A repaired systemic defect without its ratchet gate returns. Enforce via an established runner + negative control, or record why not. |
 | "The probe is taking a while, the repo must be big" | Or the tool is shadowed/hung. Time-bound it; `type -a` the tool; prefer rg / absolute binary. |
+| "The repo has `pnpm-lock.yaml`, but `npm install` is convenient" | Bind the canonical manager first. A second manager or lockfile is new debt created by cleanup. |
+| "I'll use Python for this tiny path/text probe" | Use the repository-native runtime or verified OS tool. A retiring runtime is allowed only for a still-live validation contract, not convenience. |
+| "I should repeat bootstrap and reread the same file once more" | If no state or evidence changed, this is an analysis loop. Name the exact next action and execute the largest safe increment; never invent a result. |
+| "That worktree exists, so it owns the debt" | Existence is topology, not custody. Prove a live owner; otherwise preserve and reconcile parked/stale work instead of handing debt forward. |
 | "The agent went quiet, it's still working" | Three causes: working, dead, or tool-hung. A hung probe reads as all three. Replace with the NORMALIZED mechanism, not the same one. |
 | "It's just a hung search, kill it / leave it" | Inspect what it holds (locks, FDs, children) first; reap on ownership+purpose+preserved-result, never on age or process kind. |
 | "Dispatch both devs, they'll branch off main" | Shared checkout = mixed uncommitted work + cross-lane commits. Preallocate a worktree per modifying delegate. |

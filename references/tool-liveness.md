@@ -8,6 +8,23 @@ mechanism-claims-more-than-it-measures applied to the closeout's own hands:
 before trusting a probe's result (or its silence), verify the probe ran the
 program you meant.
 
+## 0. Bind the repository-native toolchain
+
+Before installing dependencies or writing an inspection helper, identify the
+repository's canonical package manager and runtime from policy,
+`packageManager`, lockfiles, workspace configuration, and established runners.
+Use that manager. `pnpm-lock.yaml` means `pnpm`; `bun.lock` plus a Bun policy
+means Bun; do not run `npm install` in either and create a competing dependency
+graph or lockfile. If signals disagree, resolve the conflict before install.
+
+Prefer the repository's existing runtime or a verified OS primitive for small
+probes. Path resolution, text filtering, and file enumeration do not justify
+an ad hoc Python/other-interpreter script when `realpath`, `pwd -P`, `rg`,
+Node/Bun, or an existing repository script already performs the operation.
+When the task is removing a runtime, invocation of that runtime is itself
+closeout-sensitive: permit it only for a still-live migration/validation
+contract, scope it to that proof, and record why it remains necessary.
+
 ## 1. Normalize discovery tools at session start
 
 - Prefer `rg` (ripgrep) for content search: faster, .gitignore-aware, and
@@ -227,12 +244,15 @@ freeze was meant to close, reintroduced by the freeze's own tooling. This is
 §1 and §15-of-verification-doctrine (unreachable/masked work) in the packaging
 lane.
 **Rules for the freeze step:**
-- Enumerate and delete with absolute binaries or in-process code, never a bare
-  `find`/`grep`: `/usr/bin/find ... -print`, or `os.walk` + `os.remove`.
+- Enumerate and delete with absolute binaries or repository-native in-process
+  code, never a bare `find`/`grep`: `/usr/bin/find ... -print`, or the
+  repository's existing runtime and file APIs. Do not introduce an auxiliary
+  interpreter solely for cleanup.
 - A shell `rm -rf` may additionally be refused by a repo's damage-control gate
   (a PreToolUse hook matching destructive patterns). Prefer `git clean -fdX`
-  for ignored litter, or a precise in-process delete (`os.remove` per matched
-  path) — both are auditable and neither trips a blanket `rm -rf` rule.
+  for ignored litter, or a precise in-process unlink per matched path through
+  the repository-native file API — both are auditable and
+  neither trips a blanket `rm -rf` rule.
 - Build the archive from the SAME file list the manifest hashes (one
   enumeration, reused), so the packaged set and the checksummed set cannot
   diverge. Excluding `.DS_Store` and caches happens in that single enumeration.

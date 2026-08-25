@@ -24,6 +24,17 @@ On continuation (same agent, a successor agent, or the orchestrator):
 4. Continue paying from the exact next action. **Continuation is never
    deferral** — a resumed run inherits the founding contract whole.
 
+## Forward-motion watchdog
+
+Measure progress by changed repository/evidence state, not by another plan or
+another read. If two consecutive cycles repeat bootstrap, reread the same
+inputs, or restate the same intended patch without producing a new diff,
+executed gate, ledger fact, or hard-boundary proof, name the loop and take the
+largest safe executable increment. Do not restart discovery, fabricate a
+commit/result, or substitute a placeholder. If the current agent still cannot
+move, checkpoint the exact next action and replace/reassign it through the
+orchestrator; the work remains open.
+
 ## Concurrency lock — no double payment
 
 Before paying any debt, CLAIM it in the ledger (debt id + payer + timestamp).

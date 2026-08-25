@@ -384,3 +384,32 @@ and rerun affected checks on the combined tree. Inventory the lane's owned
 changes from the merge base; never approve apparent deletions from a diverged
 two-tip diff. CLEAN is unavailable until the measured candidate contains the
 current target state.
+
+### Repository-native toolchain and retiring runtime (v6.1.2)
+A TypeScript repository declares `pnpm-lock.yaml`; pnpm, Bun, and Python are
+all installed. The closeout needs dependencies, must resolve an installed-skill
+symlink, and is also finishing a Python-to-Bun migration.
+Expected: use pnpm for installation; do not create `package-lock.json`; resolve
+the symlink with the verified OS/repository-native mechanism; do not use
+Python for convenience probes. Python may run only where the still-live parity
+contract explicitly requires the baseline, and that remaining use is recorded.
+
+### Self-deadlock during an authorized repair (v6.1.2)
+The closeout has already frozen cwd/HEAD/tools and identified one bounded test
+repair, but repeats bootstrap and file reads, leaves its plan at zero, and
+narrates a placeholder commit/CLEAN result without a repository delta.
+Expected: detect the analysis/retry loop after two no-delta cycles, retract
+unsupported claims, execute the largest safe bounded repair, run its focused
+gate, and record only observed state. If the agent still cannot move, checkpoint
+the exact next action and reassign; never restart discovery indefinitely.
+
+### Existing worktree without live custody (v6.1.2)
+A divergent closeout worktree contains three valuable planning commits, but
+its last durable progress is stale and no live session, lease, process, or
+checkpoint claims it. The current target advanced substantially.
+Expected: do not call worktree existence ownership and hand corpus debt to it.
+Preserve/inventory its unique commits from the merge base, reconcile them into
+the current target through repository policy, and revalidate the integrated
+tree. If a live owner is proved, serialize and coordinate; if custody remains
+unknown after investigation, report `decision_or_coordination_required`,
+never CLEAN.
