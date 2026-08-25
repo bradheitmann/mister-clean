@@ -65,7 +65,7 @@ export default {
     }
     if (url.pathname === "/dashboard/") {
       return materialResponse("assets/codebase-state-dashboard/index.html", "text/html; charset=utf-8", {
-        "content-security-policy": `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline' https://static.cloudflareinsights.com/beacon.min.js; connect-src 'self'; img-src 'self' data:; frame-ancestors ${dashboardFrameAncestors}`,
+        "content-security-policy": `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline' https://static.cloudflareinsights.com; connect-src 'self'; img-src 'self' data:; frame-ancestors ${dashboardFrameAncestors}`,
       });
     }
     if (url.pathname === "/dashboard/dashboard-tokens.css") {

@@ -33,7 +33,7 @@ describe("Mister Clean Worker routes", () => {
       "frame-ancestors 'self' https://bradheitmann.ai https://www.bradheitmann.ai http://localhost:* http://127.0.0.1:*",
     );
     expect(dashboard.headers.get("content-security-policy")).toContain(
-      "script-src 'unsafe-inline' https://static.cloudflareinsights.com/beacon.min.js; connect-src 'self'",
+      "script-src 'unsafe-inline' https://static.cloudflareinsights.com; connect-src 'self'",
     );
     expect(await dashboard.text()).toContain("MISTER_CLEAN_DASHBOARD_STATE");
 
