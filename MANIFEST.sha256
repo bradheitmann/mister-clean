@@ -16,7 +16,7 @@ be9821c6d0b84b9960a9cf11e7f834eadbd2e3f762ba84a193e83daaccd34629  ./env.d.ts
 610d169be597d80184e65c0e79f37b174a961d014a61c3fb28051a924892bc76  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 4ce64da2f88ee7fafdabf42784a9c83167851106e41b32e22f2c44a644d610de  ./examples/example-report.md
-1513723d1164e38741e3331b087a007e6995c67ada28a6feb4ed5859a6fb9e39  ./package.json
+d60e960995d3d3c7c0654f20cc662679828a30491f047b7d428a2f538994e595  ./package.json
 57e950ff16e45b7a4bb24b782f78339ef1c28fe71499648305f85daeb5d985aa  ./references/authorization-and-modes.md
 f4ad66b1578811e5e14df4283c75418552dea7fae477454231ad93eb52b8fa1a  ./references/behavioral-evals.md
 767f4e59096c3a646cbab7ffc5d546ec832b58ce42fd2663bebec7e5fcf26ec2  ./references/code-hygiene-rubric.md

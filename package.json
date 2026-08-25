@@ -51,14 +51,14 @@
     "audit:public": "bun src/cli.ts audit public-safety .",
     "build:materials": "bun scripts/generate_materials.mjs",
     "build": "bun run build:materials && tsc --noEmit && tsup src/server.ts src/stdio.ts src/cli.ts --format esm --dts --splitting false --clean && bun run sync:cli",
-    "check": "bun run test && bun run build && bun run pack:check && bun run pack:smoke && bun run audit:public",
+    "check": "bun run test && bun run pack:check && bun run pack:smoke && bun run audit:public",
     "deploy": "bun run build:materials && wrangler deploy",
     "dev": "bun run build:materials && wrangler dev",
     "pack:check": "bun pm pack --dry-run",
     "pack:smoke": "node scripts/verify_packed_cli.mjs",
     "prepack": "bun run build",
     "sync:cli": "bun scripts/sync_cli.mjs",
-    "test": "bun run build:materials && vitest run",
+    "test": "bun run build && vitest run",
     "types": "wrangler types env.d.ts --include-runtime false"
   },
   "dependencies": {
