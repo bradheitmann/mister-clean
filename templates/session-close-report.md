@@ -6,6 +6,14 @@ an unpaid row without a recorded ruling}
 
 > The end state of this session is the starting state of the next one.
 
+## Do-no-harm check
+
+`regression-delta.json`: baseline {commit} → close {commit} · baseline debt
+paid/open {n}/{n} · newly exposed pre-existing paid/open {n}/{n} · concurrent
+external paid/open {n}/{n} · introduced by this run paid/open {n}/**0 required
+for CLEAN** · action boundaries closed {n}/{n}. Any nonzero introduced-open
+count is paid or safely rolled back before another action begins.
+
 ## Paired-work check — no half-executed procedures left behind
 
 | Started this session (first half) | Its second half | State at close |

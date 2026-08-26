@@ -52,6 +52,20 @@ const DIMENSION_EVIDENCE_KINDS: Record<string, Set<string>> = {
   handoff_readiness: new Set(["successor_readiness"]),
 };
 const PLACEHOLDER = /<[^<>]+>/;
+export const REGRESSION_POLICY = "zero_open_run_introduced_debt";
+export const REGRESSION_COUNT_FIELDS = [
+  "baseline_findings",
+  "closing_findings",
+  "baseline_paid",
+  "baseline_open",
+  "newly_discovered_preexisting_paid",
+  "newly_discovered_preexisting_open",
+  "concurrent_external_paid",
+  "concurrent_external_open",
+  "introduced_by_run_paid",
+  "introduced_by_run_open",
+  "action_checks",
+] as const;
 
 type ObjectRecord = Record<string, unknown>;
 
@@ -148,6 +162,52 @@ function validateAuthorizationBasis(value: unknown, path: string, errors: string
   if (basis.standing !== true) errors.push(`${path}.standing: expected true`);
 }
 
+function validateRegressionControl(
+  value: unknown,
+  path: string,
+  errors: string[],
+  clean: boolean,
+  allowPlaceholders: boolean,
+): void {
+  requireKeys(value, [
+    "policy", "baseline_object", "closing_object", ...REGRESSION_COUNT_FIELDS, "evidence_ref",
+  ], path, errors);
+  const control = object(value);
+  if (!control) return;
+  if (control.policy !== REGRESSION_POLICY) errors.push(`${path}.policy: expected ${REGRESSION_POLICY}`);
+  for (const field of ["baseline_object", "closing_object"] as const) {
+    if (!nonempty(control[field])) errors.push(`${path}.${field}: required`);
+  }
+  for (const field of REGRESSION_COUNT_FIELDS) {
+    if (!Number.isInteger(control[field]) || Number(control[field]) < 0) {
+      errors.push(`${path}.${field}: required nonnegative integer`);
+    }
+  }
+  const countsValid = REGRESSION_COUNT_FIELDS.every((field) => Number.isInteger(control[field]) && Number(control[field]) >= 0);
+  if (countsValid) {
+    const baseline = Number(control.baseline_findings);
+    const expectedBaseline = Number(control.baseline_paid) + Number(control.baseline_open);
+    if (baseline !== expectedBaseline) {
+      errors.push(`${path}.baseline_findings (${baseline}) must equal baseline_paid + baseline_open (${expectedBaseline})`);
+    }
+    const closing = Number(control.closing_findings);
+    const expectedClosing = Number(control.baseline_open)
+      + Number(control.newly_discovered_preexisting_open)
+      + Number(control.concurrent_external_open)
+      + Number(control.introduced_by_run_open);
+    if (closing !== expectedClosing) {
+      errors.push(`${path}.closing_findings (${closing}) must equal all open origin buckets (${expectedClosing})`);
+    }
+  }
+  const referenceHasPlaceholder = findPlaceholders(control.evidence_ref, `${path}.evidence_ref`).length > 0;
+  if (!(allowPlaceholders && referenceHasPlaceholder) && !digestRef(control.evidence_ref)) {
+    errors.push(`${path}.evidence_ref: required digest-bound regression-delta reference {path,sha256}`);
+  }
+  if (clean && control.introduced_by_run_open !== 0) {
+    errors.push(`${path}.introduced_by_run_open: CLEAN requires zero cleanup-introduced open debt`);
+  }
+}
+
 function validateEstablishedClaim(name: string, evidence: unknown[], errors: string[]): void {
   const objects = evidence.map(object).filter((entry): entry is ObjectRecord => !!entry);
   const required: Record<string, string[]> = {
@@ -174,10 +234,10 @@ function validateEstablishedClaim(name: string, evidence: unknown[], errors: str
 export function validateReport(data: unknown, allowPlaceholders = false, bundleContext = false): string[] {
   const errors: string[] = [];
   const report = object(data);
-  requireKeys(data, ["record_type", "schema_version", "generated_at", "repo", "target_binding", "mode", "authorization_basis", "scope", "dimensions", "completion_debts", "claims", "actions", "residuals", "handoff_assessment", "verdict"], "$", errors);
+  requireKeys(data, ["record_type", "schema_version", "generated_at", "repo", "target_binding", "mode", "authorization_basis", "scope", "dimensions", "completion_debts", "claims", "actions", "residuals", "handoff_assessment", "regression_control", "verdict"], "$", errors);
   if (!report || errors.length > 0) return errors.map(error => error.startsWith("$.") ? error : error.replace("$.", "$."));
   if (report.record_type !== "mister-clean.closeout") errors.push("$.record_type: expected mister-clean.closeout");
-  if (report.schema_version !== "1.1") errors.push("$.schema_version: expected 1.1");
+  if (report.schema_version !== "1.2") errors.push("$.schema_version: expected 1.2");
   if (!MODES.has(String(report.mode))) errors.push(`$.mode: unsupported value ${JSON.stringify(report.mode)}`);
   validateAuthorizationBasis(report.authorization_basis, "$.authorization_basis", errors);
   const repo = object(report.repo) ?? {};
@@ -226,6 +286,7 @@ export function validateReport(data: unknown, allowPlaceholders = false, bundleC
   if (recommendation === "proceed" && dimensions) { const unresolved = REQUIRED_DIMENSIONS.filter(name => ["open", "blocked", "not_assessed"].includes(String(object(dimensions[name])?.state))); if (unresolved.length) errors.push(`$.handoff_assessment: unconditional proceed conflicts with unresolved dimensions: ${unresolved.sort().join(", ")}`); }
   const verdict = report.verdict;
   if (!VERDICTS.has(String(verdict))) errors.push(`$.verdict: required, CLEAN or NOT_CLEAN (got ${JSON.stringify(verdict)})`);
+  validateRegressionControl(report.regression_control, "$.regression_control", errors, verdict === "CLEAN", allowPlaceholders);
   if (verdict === "CLEAN" && !bundleContext) errors.push("$.verdict: CLEAN requires validation through a live-bound mister-clean.closure-bundle; a standalone report is structural evidence only");
   const seenIds = new Set<string>(); const decisionRows: string[] = [];
   for (const [index, raw] of debts.entries()) {

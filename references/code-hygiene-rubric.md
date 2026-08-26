@@ -4,7 +4,9 @@ Imported from the `code-hygiene` skill by vNext ruling (2026-08-24, America/Denv
 Mister Clean's stronger semantics. **Deliberately NOT imported** (they
 conflict with invocation-as-authority and pay-until-paid): the bounded
 cleanup packet, the 20-finding cap, the 2-iteration cap, the bonus-cleanup
-quota, the no-new-failures baseline, and AUDIT-by-default. Severity orders
+quota, and AUDIT-by-default. The `code-hygiene` **no-new-failures baseline is
+imported and strengthened**: no cleanup-introduced regression may survive an
+atomic action boundary, even when total debt falls. Severity orders
 work; it never permits leaving payable debt.
 
 ## 1. The ten dimensions — inspected clean, or paid/dispositioned

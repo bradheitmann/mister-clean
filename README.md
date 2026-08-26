@@ -10,6 +10,12 @@ Invocation is standing authorization for the procedures documented in the
 skill. Ordinary in-scope cleanup is performed, not queued; hard safety and
 ownership boundaries remain hard boundaries.
 
+Its first rule is do no harm: every atomic cleanup action reruns the affected
+hygiene comparators, and zero cleanup-introduced debt may cross an action,
+commit, checkpoint, or handoff boundary. Net improvement never excuses a new
+regression; the closeout bundle binds the before/after debt classification and
+per-action checks in `regression-delta.json`.
+
 ## Use the skill
 
 Install this repository as a skill in an agent harness, then invoke:
@@ -26,7 +32,7 @@ when the current repository makes them relevant.
 Run the local stdio server:
 
 ```sh
-npx -y --package @bradheitmann/mister-clean mister-clean-mcp
+pnpm dlx --package @bradheitmann/mister-clean mister-clean-mcp
 ```
 
 Or connect a Streamable HTTP client to:

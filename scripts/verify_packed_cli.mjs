@@ -25,7 +25,7 @@ try {
 
   // Agent skill registries copy the published skill surface without running a
   // package-manager install. Exercise that exact no-node_modules shape before
-  // testing the ordinary npm consumer path.
+  // testing the ordinary pnpm consumer path.
   execFileSync("tar", ["-xzf", archive, "-C", standalone], { stdio: "pipe" });
   const unpacked = join(standalone, "package");
   const standaloneOutput = execFileSync(
@@ -52,15 +52,15 @@ try {
     throw new Error(`unexpected standalone manifest output: ${standaloneManifest}`);
   }
 
-  execFileSync("npm", ["install", archive, "--ignore-scripts", "--no-audit", "--no-fund"], {
+  execFileSync("pnpm", ["add", archive, "--ignore-scripts"], {
     cwd: consumer,
     stdio: "pipe",
   });
   const installed = join(consumer, "node_modules", "@bradheitmann", "mister-clean");
+  const installedCli = join(consumer, "node_modules", ".bin", "mister-clean");
   const output = execFileSync(
-    process.execPath,
+    installedCli,
     [
-      join(consumer, "node_modules", ".bin", "mister-clean"),
       "validate",
       "bundle",
       join(installed, "assets", "closure-bundle.json"),
@@ -71,8 +71,8 @@ try {
   );
   if (!output.includes("PASS kind=bundle")) throw new Error(`unexpected CLI output: ${output}`);
   const installedManifest = execFileSync(
-    process.execPath,
-    [join(consumer, "node_modules", ".bin", "mister-clean"), "manifest", installed, "--package", "--check"],
+    installedCli,
+    ["manifest", installed, "--package", "--check"],
     { cwd: consumer, encoding: "utf8" },
   );
   if (!installedManifest.includes("manifest: PASS")) {

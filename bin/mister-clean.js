@@ -7465,6 +7465,20 @@ var DIMENSION_EVIDENCE_KINDS = {
   handoff_readiness: /* @__PURE__ */ new Set(["successor_readiness"])
 };
 var PLACEHOLDER = /<[^<>]+>/;
+var REGRESSION_POLICY = "zero_open_run_introduced_debt";
+var REGRESSION_COUNT_FIELDS = [
+  "baseline_findings",
+  "closing_findings",
+  "baseline_paid",
+  "baseline_open",
+  "newly_discovered_preexisting_paid",
+  "newly_discovered_preexisting_open",
+  "concurrent_external_paid",
+  "concurrent_external_open",
+  "introduced_by_run_paid",
+  "introduced_by_run_open",
+  "action_checks"
+];
 function object(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
@@ -7546,6 +7560,46 @@ function validateAuthorizationBasis(value, path, errors) {
   if (basis.scope !== "named_repository_and_current_task") errors.push(`${path}.scope: expected named_repository_and_current_task`);
   if (basis.standing !== true) errors.push(`${path}.standing: expected true`);
 }
+function validateRegressionControl(value, path, errors, clean, allowPlaceholders) {
+  requireKeys(value, [
+    "policy",
+    "baseline_object",
+    "closing_object",
+    ...REGRESSION_COUNT_FIELDS,
+    "evidence_ref"
+  ], path, errors);
+  const control = object(value);
+  if (!control) return;
+  if (control.policy !== REGRESSION_POLICY) errors.push(`${path}.policy: expected ${REGRESSION_POLICY}`);
+  for (const field of ["baseline_object", "closing_object"]) {
+    if (!nonempty(control[field])) errors.push(`${path}.${field}: required`);
+  }
+  for (const field of REGRESSION_COUNT_FIELDS) {
+    if (!Number.isInteger(control[field]) || Number(control[field]) < 0) {
+      errors.push(`${path}.${field}: required nonnegative integer`);
+    }
+  }
+  const countsValid = REGRESSION_COUNT_FIELDS.every((field) => Number.isInteger(control[field]) && Number(control[field]) >= 0);
+  if (countsValid) {
+    const baseline = Number(control.baseline_findings);
+    const expectedBaseline = Number(control.baseline_paid) + Number(control.baseline_open);
+    if (baseline !== expectedBaseline) {
+      errors.push(`${path}.baseline_findings (${baseline}) must equal baseline_paid + baseline_open (${expectedBaseline})`);
+    }
+    const closing = Number(control.closing_findings);
+    const expectedClosing = Number(control.baseline_open) + Number(control.newly_discovered_preexisting_open) + Number(control.concurrent_external_open) + Number(control.introduced_by_run_open);
+    if (closing !== expectedClosing) {
+      errors.push(`${path}.closing_findings (${closing}) must equal all open origin buckets (${expectedClosing})`);
+    }
+  }
+  const referenceHasPlaceholder = findPlaceholders(control.evidence_ref, `${path}.evidence_ref`).length > 0;
+  if (!(allowPlaceholders && referenceHasPlaceholder) && !digestRef(control.evidence_ref)) {
+    errors.push(`${path}.evidence_ref: required digest-bound regression-delta reference {path,sha256}`);
+  }
+  if (clean && control.introduced_by_run_open !== 0) {
+    errors.push(`${path}.introduced_by_run_open: CLEAN requires zero cleanup-introduced open debt`);
+  }
+}
 function validateEstablishedClaim(name, evidence, errors) {
   const objects = evidence.map(object).filter((entry) => !!entry);
   const required = {
@@ -7571,10 +7625,10 @@ function validateEstablishedClaim(name, evidence, errors) {
 function validateReport(data, allowPlaceholders = false, bundleContext = false) {
   const errors = [];
   const report = object(data);
-  requireKeys(data, ["record_type", "schema_version", "generated_at", "repo", "target_binding", "mode", "authorization_basis", "scope", "dimensions", "completion_debts", "claims", "actions", "residuals", "handoff_assessment", "verdict"], "$", errors);
+  requireKeys(data, ["record_type", "schema_version", "generated_at", "repo", "target_binding", "mode", "authorization_basis", "scope", "dimensions", "completion_debts", "claims", "actions", "residuals", "handoff_assessment", "regression_control", "verdict"], "$", errors);
   if (!report || errors.length > 0) return errors.map((error) => error.startsWith("$.") ? error : error.replace("$.", "$."));
   if (report.record_type !== "mister-clean.closeout") errors.push("$.record_type: expected mister-clean.closeout");
-  if (report.schema_version !== "1.1") errors.push("$.schema_version: expected 1.1");
+  if (report.schema_version !== "1.2") errors.push("$.schema_version: expected 1.2");
   if (!MODES.has(String(report.mode))) errors.push(`$.mode: unsupported value ${JSON.stringify(report.mode)}`);
   validateAuthorizationBasis(report.authorization_basis, "$.authorization_basis", errors);
   const repo = object(report.repo) ?? {};
@@ -7652,6 +7706,7 @@ function validateReport(data, allowPlaceholders = false, bundleContext = false) 
   }
   const verdict = report.verdict;
   if (!VERDICTS.has(String(verdict))) errors.push(`$.verdict: required, CLEAN or NOT_CLEAN (got ${JSON.stringify(verdict)})`);
+  validateRegressionControl(report.regression_control, "$.regression_control", errors, verdict === "CLEAN", allowPlaceholders);
   if (verdict === "CLEAN" && !bundleContext) errors.push("$.verdict: CLEAN requires validation through a live-bound mister-clean.closure-bundle; a standalone report is structural evidence only");
   const seenIds = /* @__PURE__ */ new Set();
   const decisionRows = [];
@@ -10773,6 +10828,147 @@ async function validateChangeInventory(bundle, report, manifest, repo, git2, bas
     if (!stableEqual([...live.entries()].sort(), [...reported.entries()].sort())) errors.push(`${path}.changes: live start-to-subject diff differs`);
   }
 }
+async function validateRegressionDelta(bundle, report, manifest, base, files, clean, allowPlaceholders, errors) {
+  const path = "$.report.regression_control";
+  const control = requireObject(report.regression_control, [
+    "policy",
+    "baseline_object",
+    "closing_object",
+    ...REGRESSION_COUNT_FIELDS,
+    "evidence_ref"
+  ], path, errors);
+  if (!control) return;
+  const record = await evidenceRef(
+    files,
+    base,
+    control.evidence_ref,
+    `${path}.evidence_ref`,
+    errors,
+    allowPlaceholders,
+    "mister-clean.regression-delta"
+  );
+  if (!record) return;
+  const recordPath = `${path}.evidence_ref`;
+  requireObject(record, [
+    "record_type",
+    "schema_version",
+    "policy",
+    "baseline_object",
+    "closing_object",
+    ...REGRESSION_COUNT_FIELDS.filter((field) => field !== "action_checks"),
+    "action_checks"
+  ], recordPath, errors);
+  if (record.schema_version !== "1.0") errors.push(`${recordPath}.schema_version: expected 1.0`);
+  if (record.policy !== REGRESSION_POLICY) {
+    errors.push(`${recordPath}.policy: expected ${REGRESSION_POLICY}`);
+  }
+  for (const field of ["policy", "baseline_object", "closing_object", ...REGRESSION_COUNT_FIELDS]) {
+    const recordValue = field === "action_checks" ? array2(record.action_checks).length : record[field];
+    if (control[field] !== recordValue) errors.push(`${recordPath}: bound regression record disagrees on ${field}`);
+  }
+  const snapshots = object3(object3(bundle.successor_readiness)?.snapshots);
+  const startObject = object3(snapshots?.start)?.object;
+  const endObject = object3(snapshots?.end)?.object;
+  const closingObject = object3(report.repo)?.commit;
+  if (record.baseline_object !== startObject) errors.push(`${recordPath}.baseline_object: must equal successor start snapshot`);
+  if (record.closing_object !== endObject || record.closing_object !== closingObject) {
+    errors.push(`${recordPath}.closing_object: must equal successor end snapshot and report repo.commit`);
+  }
+  for (const field of REGRESSION_COUNT_FIELDS.filter((name) => name !== "action_checks")) {
+    if (!Number.isInteger(record[field]) || Number(record[field]) < 0) {
+      errors.push(`${recordPath}.${field}: required nonnegative integer`);
+    }
+  }
+  const countsValid = REGRESSION_COUNT_FIELDS.filter((field) => field !== "action_checks").every((field) => Number.isInteger(record[field]) && Number(record[field]) >= 0);
+  if (countsValid) {
+    const baselineExpected = Number(record.baseline_paid) + Number(record.baseline_open);
+    if (record.baseline_findings !== baselineExpected) {
+      errors.push(`${recordPath}.baseline_findings: must equal baseline_paid + baseline_open (${baselineExpected})`);
+    }
+    const closingExpected = Number(record.baseline_open) + Number(record.newly_discovered_preexisting_open) + Number(record.concurrent_external_open) + Number(record.introduced_by_run_open);
+    if (record.closing_findings !== closingExpected) {
+      errors.push(`${recordPath}.closing_findings: must equal all open origin buckets (${closingExpected})`);
+    }
+  }
+  if (!Array.isArray(record.action_checks)) errors.push(`${recordPath}.action_checks: required array`);
+  const checks = array2(record.action_checks);
+  const manifestActions = array2(manifest.actions).map(object3).filter((item) => !!item);
+  const expectedActionIds = manifestActions.filter((action) => manifest.execution_state === "executed" || action.status === "executed" || action.status === "failed").map((action) => action.id);
+  const checkedActionIds = [];
+  let introducedPaid = 0;
+  let introducedOpen = 0;
+  const interruptedAt = [];
+  for (const [index, raw] of checks.entries()) {
+    const checkPath = `${recordPath}.action_checks[${index}]`;
+    const check = requireObject(raw, [
+      "action_id",
+      "before_object",
+      "after_object",
+      "comparators",
+      "introduced",
+      "paid_before_boundary",
+      "open_at_boundary",
+      "boundary_status",
+      "observed_at"
+    ], checkPath, errors);
+    if (!check) continue;
+    checkedActionIds.push(check.action_id);
+    for (const field of ["action_id", "before_object", "after_object"]) {
+      if (!text(check[field])) errors.push(`${checkPath}.${field}: required`);
+    }
+    if (!iso(check.observed_at)) errors.push(`${checkPath}.observed_at: required ISO-8601 timestamp`);
+    for (const field of ["introduced", "paid_before_boundary", "open_at_boundary"]) {
+      if (!Number.isInteger(check[field]) || Number(check[field]) < 0) errors.push(`${checkPath}.${field}: required nonnegative integer`);
+    }
+    if (Number.isInteger(check.introduced) && Number.isInteger(check.paid_before_boundary) && Number.isInteger(check.open_at_boundary)) {
+      const accounted = Number(check.paid_before_boundary) + Number(check.open_at_boundary);
+      if (check.introduced !== accounted) errors.push(`${checkPath}.introduced: must equal paid_before_boundary + open_at_boundary (${accounted})`);
+      introducedPaid += Number(check.paid_before_boundary);
+      introducedOpen += Number(check.open_at_boundary);
+    }
+    if (!Array.isArray(check.comparators) || array2(check.comparators).length === 0) {
+      errors.push(`${checkPath}.comparators: required nonempty array`);
+    }
+    for (const [comparatorIndex, rawComparator] of array2(check.comparators).entries()) {
+      const comparatorPath = `${checkPath}.comparators[${comparatorIndex}]`;
+      const comparator = requireObject(rawComparator, [
+        "id",
+        "command",
+        "scope",
+        "detector",
+        "before_result",
+        "after_result"
+      ], comparatorPath, errors);
+      if (comparator) for (const field of ["id", "command", "scope", "detector", "before_result", "after_result"]) {
+        if (!text(comparator[field])) errors.push(`${comparatorPath}.${field}: required`);
+      }
+    }
+    if (check.boundary_status === "closed") {
+      if (check.open_at_boundary !== 0) errors.push(`${checkPath}: closed boundary requires open_at_boundary=0`);
+    } else if (check.boundary_status === "interrupted") {
+      interruptedAt.push(index);
+      if (check.open_at_boundary === 0) errors.push(`${checkPath}: interrupted boundary requires open_at_boundary>0`);
+      if (clean) errors.push(`${checkPath}: CLEAN forbids an interrupted action boundary`);
+      const action = manifestActions.find((candidate) => candidate.id === check.action_id);
+      if (action?.status !== "failed") errors.push(`${checkPath}: interrupted boundary requires a failed action status`);
+    } else errors.push(`${checkPath}.boundary_status: expected closed or interrupted`);
+  }
+  if (!stableEqual(checkedActionIds, expectedActionIds)) {
+    errors.push(`${recordPath}.action_checks: ordered action ids must exactly cover every executed or failed action`);
+  }
+  if (interruptedAt.some((index) => index !== checks.length - 1) || interruptedAt.length > 1) {
+    errors.push(`${recordPath}.action_checks: exactly one interrupted boundary may appear, and only as the final observed action`);
+  }
+  if (introducedPaid !== record.introduced_by_run_paid) {
+    errors.push(`${recordPath}.introduced_by_run_paid: must equal action-check total (${introducedPaid})`);
+  }
+  if (introducedOpen !== record.introduced_by_run_open) {
+    errors.push(`${recordPath}.introduced_by_run_open: must equal action-check total (${introducedOpen})`);
+  }
+  if (clean && record.introduced_by_run_open !== 0) {
+    errors.push(`${recordPath}.introduced_by_run_open: CLEAN requires zero`);
+  }
+}
 async function validateBoundExecutionRecords(bundle, report, manifest, repo, git2, base, files, allowPlaceholders, errors) {
   for (const [index, raw] of array2(manifest.actions).entries()) {
     const action = object3(raw);
@@ -11268,6 +11464,7 @@ async function validateBundle(data, bundlePath, options = {}) {
   await validateCriteria(bundle, report, base, ports.files, clean, allowPlaceholders, errors);
   await validateBoundExecutionRecords(bundle, report, manifest, structuralRepo, ports.git, base, ports.files, allowPlaceholders, errors);
   await validateChangeInventory(bundle, report, manifest, structuralRepo, ports.git, base, ports.files, clean, allowPlaceholders, errors);
+  await validateRegressionDelta(bundle, report, manifest, base, ports.files, clean, allowPlaceholders, errors);
   await validatePlanning(bundle, structuralRepo, ports.files, clean, allowPlaceholders, errors);
   await validateSuccessor(bundle, report, base, ports.files, clean, allowPlaceholders, errors);
   if (!allowPlaceholders) for (const path of findPlaceholders(bundle)) errors.push(`${path}: unresolved template placeholder`);
@@ -11789,6 +11986,35 @@ function prepareCloseout(options) {
     target_incorporated: left === 0 && mergeBase === targetCommit,
     measured_at: now,
     evidence: [`git merge-base + rev-list --left-right --count => ${left}/${right}`]
+  };
+  const regressionCounts = {
+    policy: REGRESSION_POLICY,
+    baseline_object: head,
+    closing_object: head,
+    baseline_findings: planningDebts.length,
+    closing_findings: planningDebts.length,
+    baseline_paid: 0,
+    baseline_open: planningDebts.length,
+    newly_discovered_preexisting_paid: 0,
+    newly_discovered_preexisting_open: 0,
+    concurrent_external_paid: 0,
+    concurrent_external_open: 0,
+    introduced_by_run_paid: 0,
+    introduced_by_run_open: 0
+  };
+  writeJson(join2(bundleDirectory, "regression-delta.json"), {
+    record_type: "mister-clean.regression-delta",
+    schema_version: "1.0",
+    ...regressionCounts,
+    action_checks: []
+  });
+  report.regression_control = {
+    ...regressionCounts,
+    action_checks: 0,
+    evidence_ref: {
+      path: "regression-delta.json",
+      sha256: sha256File(join2(bundleDirectory, "regression-delta.json"))
+    }
   };
   const manifest = loadTemplate(templates, "action-manifest.json");
   manifest.repo = { id: repoId, commit: head };

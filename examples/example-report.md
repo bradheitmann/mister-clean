@@ -11,6 +11,14 @@ The repository is ready for a successor with no prior session context. The
 current-state document names the entry point, constraints, validation commands,
 and next safe action. No payable completion debt or unresolved decision remains.
 
+## 1b. No-harm delta
+
+The digest-bound regression delta compares the same detector set at baseline
+and close on `9f3a2d1`. Baseline debt: 2 paid / 0 open. Newly discovered
+pre-existing: 0 / 0. Concurrent external: 0 / 0. Introduced by this run: 1
+paid inside its atomic action / **0 open**. All 4 executed action boundaries
+closed with the same affected comparators and zero introduced debt remaining.
+
 ## 2. Explicit acceptance criteria
 
 | ID | Source | Met | Evidence |

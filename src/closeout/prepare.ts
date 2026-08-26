@@ -17,6 +17,7 @@ import {
   writeJson,
 } from "./repository.js";
 import { auditPlanningRepository } from "./planning.js";
+import { REGRESSION_POLICY } from "./records.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -340,6 +341,36 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
     target_incorporated: left === 0 && mergeBase === targetCommit,
     measured_at: now,
     evidence: [`git merge-base + rev-list --left-right --count => ${left}/${right}`],
+  };
+
+  const regressionCounts = {
+    policy: REGRESSION_POLICY,
+    baseline_object: head,
+    closing_object: head,
+    baseline_findings: planningDebts.length,
+    closing_findings: planningDebts.length,
+    baseline_paid: 0,
+    baseline_open: planningDebts.length,
+    newly_discovered_preexisting_paid: 0,
+    newly_discovered_preexisting_open: 0,
+    concurrent_external_paid: 0,
+    concurrent_external_open: 0,
+    introduced_by_run_paid: 0,
+    introduced_by_run_open: 0,
+  };
+  writeJson(join(bundleDirectory, "regression-delta.json"), {
+    record_type: "mister-clean.regression-delta",
+    schema_version: "1.0",
+    ...regressionCounts,
+    action_checks: [],
+  });
+  report.regression_control = {
+    ...regressionCounts,
+    action_checks: 0,
+    evidence_ref: {
+      path: "regression-delta.json",
+      sha256: sha256File(join(bundleDirectory, "regression-delta.json")),
+    },
   };
 
   const manifest = loadTemplate(templates, "action-manifest.json");

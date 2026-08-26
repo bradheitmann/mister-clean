@@ -19,6 +19,23 @@ open procedures that would mislead them.}
 **Verdict gate:** any unpaid completion debt without a recorded operator
 ruling forces NOT CLEAN, regardless of everything below.
 
+## No-harm delta
+
+Baseline object: {commit} · Closing object: {commit} · Comparator identity:
+{tool/version/digest + scope}. Counts from the digest-bound
+`regression-delta.json`, never from unlike branches or detector versions.
+
+| Origin | Paid | Open at close |
+|---|---:|---:|
+| Baseline | | |
+| Newly discovered pre-existing (start-object replay proved) | | |
+| Concurrent external | | |
+| Introduced by this run | | **0 required for CLEAN** |
+
+Action boundaries: {N/N closed with zero introduced debt open; list any final
+interrupted boundary}. Net improvement does not excuse an introduced
+regression.
+
 ## Explicit acceptance criteria
 
 Any criterion the OPERATOR stated explicitly (a named brand form, an exact

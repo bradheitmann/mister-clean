@@ -27,7 +27,7 @@ function report(overrides: Dict = {}): Dict {
   }
   return {
     record_type: "mister-clean.closeout",
-    schema_version: "1.1",
+    schema_version: "1.2",
     generated_at: "2026-08-25T10:00:00Z",
     repo: { id: "example/repo", commit },
     target_binding: {
@@ -45,6 +45,14 @@ function report(overrides: Dict = {}): Dict {
     residuals: [],
     acceptance_criteria: [],
     debt_census: { discovered: 0, paid: 0, accepted_exception: 0 },
+    regression_control: {
+      policy: "zero_open_run_introduced_debt", baseline_object: commit, closing_object: commit,
+      baseline_findings: 0, closing_findings: 0, baseline_paid: 0, baseline_open: 0,
+      newly_discovered_preexisting_paid: 0, newly_discovered_preexisting_open: 0,
+      concurrent_external_paid: 0, concurrent_external_open: 0,
+      introduced_by_run_paid: 0, introduced_by_run_open: 0, action_checks: 0,
+      evidence_ref: { path: "regression-delta.json", sha256: digest },
+    },
     handoff_assessment: { recommendation: "proceed", reasons: ["handoff recorded"], conditions: [] },
     verdict: "CLEAN",
     ...overrides,
@@ -151,6 +159,15 @@ describe("validateReport", () => {
     expect(validateReport(value)).toContain("$.debt_census: required for CLEAN (discovered/paid/accepted_exception ints; empty ledger is not a census)");
     const action = { id: "A1", status: "planned" };
     expect(validateReport(report({ actions: [action] })).some(error => error.includes("unfinished/failed action"))).toBe(true);
+  });
+
+  it("refuses CLEAN when cleanup-introduced debt remains open", () => {
+    const value = report();
+    const control = value.regression_control as Dict;
+    Object.assign(control, { closing_findings: 1, introduced_by_run_open: 1 });
+    expect(validateReport(value, false, true)).toContain(
+      "$.regression_control.introduced_by_run_open: CLEAN requires zero cleanup-introduced open debt",
+    );
   });
 
   it("rejects placeholders unless explicitly validating a template", () => {

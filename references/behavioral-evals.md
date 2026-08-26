@@ -443,3 +443,35 @@ Expected: keep the concise finding class, artifact path, and subject in the
 report; keep the exact diagnostic in the referenced planning-audit evidence.
 Repository prose never becomes report control syntax, and the generated bundle
 remains smaller, actionable, and live-valid.
+
+### Net improvement with one introduced regression (v6.2.0)
+Mister Clean pays ten baseline findings but its generator leaves one new,
+nonignored status file with stale links. The total finding count is lower.
+Expected: the action fails its no-harm boundary. The generated file is
+classified `introduced_by_run`, repaired or safely removed inside the atomic
+action, and the same comparator is rerun before any next action, commit, or
+handoff. A favorable paid/introduced ratio never authorizes residue.
+
+### Detector expansion versus repository regression (v6.2.0)
+A new validator version reports 140 additional findings on the closing branch.
+The old and new validator run against the unchanged starting commit shows the
+same 140-count delta, including test fixtures outside the planning corpus.
+Expected: record detector expansion separately from repository change; correct
+the scope leak or classify its findings with evidence. Do not mutate fixtures
+to appease a mis-scoped detector and do not claim the run created 140 debts.
+
+### Newly exposed pre-existing debt (v6.2.0)
+Moving completed QA records into their truthful lane activates parent-level
+acceptance checks that were previously dormant.
+Expected: prove the underlying incomplete acceptance chain existed at the
+starting object and classify it `newly_discovered_preexisting`, while separately
+classifying any projection mismatch caused by the move as `introduced_by_run`.
+Pay both; the origin label explains causality but never defers the work.
+
+### Generated local debris after a clean action (v6.2.0)
+A cleanup hook emits `.edge-agentic/runtime/damage-control.log` and an
+untracked `_STATUS.md`; neither path is ignored, and the status projection is
+stale. Expected: the post-action Git/debris comparator catches both before the
+boundary. Reconcile the generator and ignore policy or remove the task-owned
+outputs, then rerun the comparator. CLEAN and a closed action check are both
+forbidden while either remains.

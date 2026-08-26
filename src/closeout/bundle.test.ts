@@ -43,10 +43,10 @@ function ref(path: string): RecordValue {
 
 function executedAction(target = "CURRENT-STATE.md"): RecordValue {
   return {
-    id: "A-1", kind: "doc_update", target, purpose: "prepare successor state", risk: "low",
+    id: "A-1", kind: "doc_update", target, purpose: "prepare successor state", risk: "reversible_local",
     authorization: { state: "granted", source: "skill_invocation", ref: "request-1" },
     preconditions: ["repository inspected"], verification: ["target verified"], status: "executed",
-    outcome: { state: "verified", evidence: [{ kind: "file_digest", object: target, command: "verify target digest", result: "pass", observed_at: NOW, evidence_ref: ref("action-result-A-1.json") }] },
+    outcome: { state: "verified", evidence: [{ kind: "git_change", object: target, command: "verify target digest", result: "pass", observed_at: NOW, evidence_ref: ref("action-result-A-1.json") }] },
   };
 }
 
@@ -73,6 +73,9 @@ function rebind(value: Fixture, subject: string, start = subject): void {
   (((ready.topology as RecordValue).branches as RecordValue[])[0]!).commit = subject;
   (ready.current_state as RecordValue).commit = subject;
   ((ready.gates as RecordValue[])[0]!).object = subject;
+  const control = value.report.regression_control as RecordValue;
+  Object.assign(control, { baseline_object: start, closing_object: subject });
+  Object.assign(value.regression, { baseline_object: start, closing_object: subject });
 }
 
 interface Fixture {
@@ -84,6 +87,7 @@ interface Fixture {
   report: RecordValue;
   manifest: RecordValue;
   bundle: RecordValue;
+  regression: RecordValue;
   persist(): Promise<void>;
 }
 
@@ -119,7 +123,7 @@ async function fixture(): Promise<Fixture> {
   ]));
   const report: RecordValue = {
     record_type: "mister-clean.closeout",
-    schema_version: "1.1",
+    schema_version: "1.2",
     generated_at: now,
     repo: { id: "repo", commit: head, branch: "main" },
     target_binding: {
@@ -145,6 +149,14 @@ async function fixture(): Promise<Fixture> {
     handoff_assessment: { recommendation: "proceed", reasons: ["bundle verified"], conditions: [] },
     verdict: "CLEAN",
     debt_census: { discovered: 0, paid: 0, accepted_exception: 0 },
+    regression_control: {
+      policy: "zero_open_run_introduced_debt", baseline_object: head, closing_object: head,
+      baseline_findings: 0, closing_findings: 0, baseline_paid: 0, baseline_open: 0,
+      newly_discovered_preexisting_paid: 0, newly_discovered_preexisting_open: 0,
+      concurrent_external_paid: 0, concurrent_external_open: 0,
+      introduced_by_run_paid: 0, introduced_by_run_open: 0, action_checks: 0,
+      evidence_ref: ref("regression-delta.json"),
+    },
   };
   const manifest: RecordValue = {
     record_type: "mister-clean.action-manifest", schema_version: "1.0",
@@ -208,9 +220,17 @@ async function fixture(): Promise<Fixture> {
       },
     },
   };
+  const regression: RecordValue = {
+    record_type: "mister-clean.regression-delta", schema_version: "1.0",
+    policy: "zero_open_run_introduced_debt", baseline_object: head, closing_object: head,
+    baseline_findings: 0, closing_findings: 0, baseline_paid: 0, baseline_open: 0,
+    newly_discovered_preexisting_paid: 0, newly_discovered_preexisting_open: 0,
+    concurrent_external_paid: 0, concurrent_external_open: 0,
+    introduced_by_run_paid: 0, introduced_by_run_open: 0, action_checks: [],
+  };
 
   const value: Fixture = {
-    root, repo, proof, head, report, manifest, bundle, bundlePath: join(proof, "bundle.json"),
+    root, repo, proof, head, report, manifest, bundle, regression, bundlePath: join(proof, "bundle.json"),
     async persist() {
       const criteria = bundle.criteria_discovery as RecordValue;
       const successor = bundle.successor_readiness as RecordValue;
@@ -219,6 +239,7 @@ async function fixture(): Promise<Fixture> {
       const review = successor.final_review as RecordValue;
       const debris = successor.debris as RecordValue;
       const records: Record<string, unknown> = {
+        "regression-delta.json": regression,
         "criteria-source.json": {
           record_type: "mister-clean.criteria-source", request_ref: bundle.request_ref,
           request_sha256: criteria.request_sha256, criteria_ids: criteria.criteria_ids,
@@ -276,6 +297,7 @@ async function fixture(): Promise<Fixture> {
       if (gate) (gate.evidence_ref as RecordValue).sha256 = digest(await readFile(join(proof, "gate-result.json")));
       (review.evidence_ref as RecordValue).sha256 = digest(await readFile(join(proof, "independent-review.json")));
       ((debris.evidence as RecordValue[])[0]!).sha256 = digest(await readFile(join(proof, "debris-census.json")));
+      (((report.regression_control as RecordValue).evidence_ref) as RecordValue).sha256 = digest(await readFile(join(proof, "regression-delta.json")));
       for (const raw of manifest.actions as RecordValue[]) {
         for (const evidence of ((((raw.outcome as RecordValue | undefined)?.evidence ?? []) as RecordValue[]))) {
           const evidenceReference = evidence.evidence_ref as RecordValue;
@@ -346,6 +368,67 @@ describe("validateBundle", () => {
   it("accepts a live-bound sidecar bundle", async () => {
     const value = await fixture();
     await expect(validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo })).resolves.toEqual({ errors: [], ok: true });
+  });
+
+  it("accepts temporary action harm only when it is paid before the boundary", async () => {
+    const value = await fixture();
+    const action = executedAction();
+    value.report.actions = [action];
+    value.manifest.actions = [action];
+    value.manifest.execution_state = "executed";
+    const control = value.report.regression_control as RecordValue;
+    Object.assign(control, { introduced_by_run_paid: 1, action_checks: 1 });
+    Object.assign(value.regression, {
+      introduced_by_run_paid: 1,
+      action_checks: [{
+        action_id: "A-1", before_object: value.head, after_object: value.head,
+        comparators: [{
+          id: "git-status", command: "git status --porcelain=v2", scope: "repository",
+          detector: "git fixture", before_result: "clean", after_result: "clean",
+        }],
+        introduced: 1, paid_before_boundary: 1, open_at_boundary: 0,
+        boundary_status: "closed", observed_at: NOW,
+      }],
+    });
+    await value.persist();
+    await expect(validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo })).resolves.toEqual({ errors: [], ok: true });
+  });
+
+  it("refuses CLEAN when an action leaves cleanup-introduced debt open", async () => {
+    const value = await fixture();
+    const action = executedAction();
+    action.status = "failed";
+    value.report.actions = [structuredClone(action)];
+    value.manifest.actions = [structuredClone(action)];
+    const control = value.report.regression_control as RecordValue;
+    Object.assign(control, { closing_findings: 1, introduced_by_run_open: 1, action_checks: 1 });
+    Object.assign(value.regression, {
+      closing_findings: 1, introduced_by_run_open: 1,
+      action_checks: [{
+        action_id: "A-1", before_object: value.head, after_object: value.head,
+        comparators: [{
+          id: "git-status", command: "git status --porcelain=v2", scope: "repository",
+          detector: "git fixture", before_result: "clean", after_result: "untracked generated file",
+        }],
+        introduced: 1, paid_before_boundary: 0, open_at_boundary: 1,
+        boundary_status: "interrupted", observed_at: NOW,
+      }],
+    });
+    await value.persist();
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors.some((error) => error.includes("CLEAN requires zero cleanup-introduced open debt"))).toBe(true);
+    expect(result.errors.some((error) => error.includes("CLEAN forbids an interrupted action boundary"))).toBe(true);
+  });
+
+  it("requires a no-harm action check for every executed action", async () => {
+    const value = await fixture();
+    const action = executedAction();
+    value.report.actions = [structuredClone(action)];
+    value.manifest.actions = [structuredClone(action)];
+    value.manifest.execution_state = "executed";
+    await value.persist();
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors.some((error) => error.includes("ordered action ids must exactly cover every executed or failed action"))).toBe(true);
   });
 
   it("binds the portable repository identity to the live repository", async () => {
