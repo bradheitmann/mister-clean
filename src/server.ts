@@ -71,6 +71,14 @@ function materialUri(id: string): string {
   return `mister-clean://materials/${encodeURIComponent(id)}`;
 }
 
+function orchestrationGoal(repository: string, mode: string): string {
+  const template = getMaterial("templates/orchestration-goal.md");
+  if (!template) throw new Error("Bundled orchestration-goal template is unavailable");
+  return template.content
+    .replaceAll("{mode}", mode)
+    .replaceAll("{repository}", repository);
+}
+
 function asText(format: "markdown" | "json", markdown: string, value: object): string {
   return format === "json" ? JSON.stringify(value, null, 2) : markdown;
 }
@@ -220,7 +228,11 @@ export function createMisterCleanServer(): McpServer {
         "Prepare a local repository for a successor team under Mister Clean's standing-authority and successor-readiness contracts.",
       argsSchema: z
         .object({
-          repository: z.string().min(1).max(500).describe("Local repository path or unambiguous repository name."),
+          repository: z
+            .string()
+            .min(1)
+            .max(500)
+            .describe("Local repository path or unambiguous repository name."),
           mode: z.enum(["CLOSE", "CLEAN", "CONFORM", "AUDIT"]).default("CLOSE"),
         })
         .strict(),
@@ -236,6 +248,32 @@ export function createMisterCleanServer(): McpServer {
               `${materialUri("SKILL.md")} completely before acting, then follow its progressive-disclosure routes. ` +
               "The invocation is standing authorization for the documented in-scope procedures; pay actionable debt rather than queuing it. " +
               "Respect the skill's hard safety, ownership, and external-effect boundaries, and do not claim CLEAN without its evidence gates.",
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "mister_clean_orchestration_goal",
+    {
+      title: "Create an optional persistent Mister Clean goal",
+      description:
+        "Instantiate Mister Clean's optional, non-authoritative persistent-goal template for a long-running repository closeout.",
+      argsSchema: z
+        .object({
+          repository: z.string().min(1).max(500).describe("Local repository path or unambiguous repository name."),
+          mode: z.enum(["CLOSE", "CLEAN", "CONFORM", "AUDIT"]).default("CLOSE"),
+        })
+        .strict(),
+    },
+    ({ repository, mode }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: orchestrationGoal(repository, mode),
           },
         },
       ],

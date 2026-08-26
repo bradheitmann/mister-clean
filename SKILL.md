@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 6.2.0
+  version: 6.2.1
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team. Invoking
@@ -17,7 +17,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v6.2.0
+# Mister Clean — v6.2.1
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -144,6 +144,14 @@ establish the integrated result. Prevent two cleanup agents from paying
 the same debt concurrently (claim debts in the ledger before paying). A
 pacing ceiling limits SIMULTANEOUS work, not TOTAL work. Protocol:
 [references/persistence-and-continuation.md](references/persistence-and-continuation.md).
+
+When a harness supports persistent goal state and the close is likely to span
+turns, the operator may seed it with
+[templates/orchestration-goal.md](templates/orchestration-goal.md). The
+template is optional, non-authoritative orchestration state: bare invocation
+still starts the complete procedure, the goal never proves CLEAN, should not be
+committed unless repository policy designates it, and never widens this skill's
+scope or hard boundaries.
 
 ## Authority contract
 

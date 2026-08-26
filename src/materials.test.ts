@@ -7,7 +7,9 @@ describe("Mister Clean materials", () => {
     const materials = listMaterials();
     expect(materials.length).toBeGreaterThan(20);
     expect(materials.map((material) => material.id)).toContain("SKILL.md");
+    expect(materials.map((material) => material.id)).toContain("templates/orchestration-goal.md");
     expect(getMaterial("SKILL.md")?.content).toContain("Founding contract");
+    expect(getMaterial("templates/orchestration-goal.md")?.content).toContain("Monotonic loop contract");
     expect(listMaterials("reference").every((material) => material.category === "reference")).toBe(true);
   });
 

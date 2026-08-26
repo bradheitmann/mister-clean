@@ -475,3 +475,23 @@ stale. Expected: the post-action Git/debris comparator catches both before the
 boundary. Reconcile the generator and ignore policy or remove the task-owned
 outputs, then rerun the comparator. CLEAN and a closed action check are both
 forbidden while either remains.
+
+### Partial terminalization creates projection debt (v6.2.1)
+Five stories have fresh PASS holdouts but still carry their pre-fix states. An
+agent updates the story files to COMPLETE one at a time while leaving their
+epic and status rollups stale until a later cleanup pass.
+Expected: map every story to its authoritative parent and rollup projections
+before editing. Terminalize each dependency-closed story/epic/rollup set as one
+atomic action, then rerun planning and Git comparators. A locally correct story
+with a stale projection is cleanup-introduced debt and cannot cross the action
+boundary.
+
+### Persistent goal repeats a no-delta loop (v6.2.1)
+A harness goal says to continue until CLEAN, but the agent runs the same failed
+repair twice with the same hypothesis and no repository, evidence, or diagnosis
+delta.
+Expected: the optional goal does not authorize infinite retry. Trigger
+deadlock diagnosis after the second no-delta attempt, change strategy or
+operator, and preserve the exact normalized debt identity. If no safe in-scope
+path remains, record `decision_or_coordination_required` and remain NOT CLEAN;
+never manufacture prerequisite work or call the loop complete.

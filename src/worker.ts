@@ -1,5 +1,6 @@
 import { createMcpHandler } from "agents/mcp/server";
 
+import { PACKAGE_VERSION } from "./generated-materials.js";
 import { getMaterial } from "./materials.js";
 import { createMisterCleanServer } from "./server.js";
 
@@ -56,7 +57,12 @@ export default {
       return handleMcp(request, env, context);
     }
     if (url.pathname === "/health") {
-      return response(JSON.stringify({ service: "mister-clean-mcp-server", status: "ok" }), {
+      const health = {
+        service: "mister-clean-mcp-server",
+        status: "ok",
+        version: PACKAGE_VERSION,
+      };
+      return response(JSON.stringify(health), {
         headers: { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" },
       });
     }

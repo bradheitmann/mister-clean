@@ -27,6 +27,12 @@ $mister-clean
 The entrypoint is [SKILL.md](SKILL.md). It routes to focused references only
 when the current repository makes them relevant.
 
+For a closeout expected to span multiple agent turns, the optional
+[persistent orchestration-goal template](templates/orchestration-goal.md) keeps
+the pay-until-paid loop, no-harm boundary, and terminal condition stable across
+continuations. It is not required for invocation and never establishes CLEAN
+by itself.
+
 ## Use the MCP server
 
 Run the local stdio server:
@@ -42,9 +48,9 @@ https://mister-clean.bradheitmann.ai/mcp
 ```
 
 The MCP server is intentionally read-only. It exposes the canonical skill,
-references, templates, examples, and closeout prompt; the invoking agent does
-the authorized work locally where repository policy and ownership can be
-verified.
+references, templates, examples, closeout prompt, and optional persistent-goal
+prompt; the invoking agent does the authorized work locally where repository
+policy and ownership can be verified.
 
 ## Validate a closeout
 

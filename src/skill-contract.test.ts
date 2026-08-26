@@ -14,6 +14,7 @@ const skill = await readFile(join(ROOT, "SKILL.md"), "utf8");
 const authority = await readFile(join(ROOT, "references", "authorization-and-modes.md"), "utf8");
 const openai = await readFile(join(ROOT, "agents", "openai.yaml"), "utf8");
 const dashboard = await readFile(join(ROOT, "assets", "codebase-state-dashboard", "index.html"), "utf8");
+const orchestrationGoal = await readFile(join(ROOT, "templates", "orchestration-goal.md"), "utf8");
 const tokensPath = join(ROOT, "assets", "codebase-state-dashboard", "dashboard-tokens.css");
 const manifest = JSON.parse(await readFile(join(ROOT, "assets", "action-manifest.json"), "utf8")) as Record<string, unknown>;
 const packageJson = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")) as {
@@ -61,6 +62,15 @@ describe("invocation contract", () => {
 
   it("does not treat process ownership alone as authority to terminate it", () => {
     expect(skill).toContain("Ownership alone is not a reason to terminate it");
+  });
+
+  it("ships an optional persistent goal with monotonic progress and unchanged authority", () => {
+    expect(skill).toContain("templates/orchestration-goal.md");
+    expect(orchestrationGoal).toContain("a bare\n`$mister-clean` invocation remains sufficient authorization");
+    expect(orchestrationGoal).toContain("introduced_by_run_open` is zero");
+    expect(orchestrationGoal).toContain("After two consecutive attempts");
+    expect(orchestrationGoal).toContain("The goal does not widen Mister Clean's scope");
+    expect(orchestrationGoal).toContain("terminalizing a story and updating its epic and\n   rollup are one transaction");
   });
 
   it("requires a closing candidate to contain the current target", async () => {

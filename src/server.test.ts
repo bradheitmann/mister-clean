@@ -18,7 +18,7 @@ describe("Mister Clean MCP server", () => {
     await Promise.all([client.close(), server.close()]);
   });
 
-  it("advertises two bounded read-only tools and one closeout prompt", async () => {
+  it("advertises two bounded read-only tools and the closeout prompts", async () => {
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "mister_clean_list_materials",
@@ -28,7 +28,10 @@ describe("Mister Clean MCP server", () => {
     expect(tools.tools.every((tool) => tool.annotations?.destructiveHint === false)).toBe(true);
 
     const prompts = await client.listPrompts();
-    expect(prompts.prompts.map((prompt) => prompt.name)).toEqual(["mister_clean_closeout"]);
+    expect(prompts.prompts.map((prompt) => prompt.name)).toEqual([
+      "mister_clean_closeout",
+      "mister_clean_orchestration_goal",
+    ]);
   });
 
   it("lists and reads canonical content through the protocol", async () => {
@@ -88,5 +91,20 @@ describe("Mister Clean MCP server", () => {
     expect(content?.type).toBe("text");
     expect(content?.type === "text" ? content.text : "").toContain("standing authorization");
     expect(content?.type === "text" ? content.text : "").toContain("hard safety");
+  });
+
+  it("instantiates the optional persistent goal without making it evidence", async () => {
+    const prompt = await client.getPrompt({
+      name: "mister_clean_orchestration_goal",
+      arguments: { repository: "example-repository", mode: "CLOSE" },
+    });
+    const content = prompt.messages[0]?.content;
+    const text = content?.type === "text" ? content.text : "";
+    expect(text).toContain("$mister-clean");
+    expect(text).toContain("example-repository");
+    expect(text).toContain("zero cleanup-introduced debt");
+    expect(text).toContain("not evidence of cleanliness");
+    expect(text).not.toContain("{repository}");
+    expect(text).not.toContain("{mode}");
   });
 });

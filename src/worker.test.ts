@@ -19,7 +19,11 @@ describe("Mister Clean Worker routes", () => {
     );
     expect(result.status).toBe(200);
     expect(result.headers.get("cache-control")).toBe("no-store");
-    await expect(result.json()).resolves.toEqual({ service: "mister-clean-mcp-server", status: "ok" });
+    await expect(result.json()).resolves.toEqual({
+      service: "mister-clean-mcp-server",
+      status: "ok",
+      version: "6.2.1",
+    });
   });
 
   it("serves the bundled dashboard and its public token pack", async () => {
