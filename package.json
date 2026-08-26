@@ -1,7 +1,7 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "6.2.1",
-  "description": "Successor-readiness skill and read-only MCP server for paying repository completion debt.",
+  "version": "6.3.0",
+  "description": "Agent skill for paying repository debt and preventing unclean commits.",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -13,7 +13,12 @@
   },
   "files": [
     "agents/*.yaml",
-    "assets/**",
+    "assets/action-manifest.json",
+    "assets/closeout-report.json",
+    "assets/closure-bundle.json",
+    "assets/regression-delta.json",
+    "assets/codebase-state-dashboard/index.html",
+    "assets/codebase-state-dashboard/dashboard-tokens.css",
     "bin/mister-clean.js",
     "dist/server.*",
     "dist/stdio.*",
@@ -58,6 +63,8 @@
     "pack:check": "bun pm pack --dry-run",
     "pack:smoke": "node scripts/verify_packed_cli.mjs",
     "prepack": "bun run build",
+    "report:case-study": "bun scripts/render_case_study_report.mjs",
+    "report:history": "bun scripts/generate_codebase_history.mjs",
     "sync:cli": "bun scripts/sync_cli.mjs",
     "test": "bun run build && vitest run",
     "types": "wrangler types env.d.ts --include-runtime false"

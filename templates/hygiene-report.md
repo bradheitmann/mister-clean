@@ -1,6 +1,6 @@
 # HYGIENE REPORT — {repo} @ {commit} — {date}
 
-Mode: {AUDIT | CLEAN | CONFORM} · Operator: {agent/model/harness} · Session: {id}
+Mode: {AUDIT | CLEAN | CLOSE | CONFORM | GUARD} · Operator: {agent/model/harness} · Session: {id}
 Systems (Phase 0): planning = {system + artifact root} · procedure graph =
 {the pairs this system declares} · orchestration = {topology} ·
 management = {layer or none} · enforcement = {hooks/gates + latest run conclusions}

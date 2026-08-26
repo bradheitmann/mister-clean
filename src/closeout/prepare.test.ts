@@ -161,6 +161,42 @@ describe("prepareCloseout", () => {
     });
   });
 
+  it("prepares an initialized exact-tree GUARD instead of requiring hand-authored machinery", async () => {
+    const { evidence, repo } = fixture("guard");
+    writeFileSync(join(repo, "README.md"), "fixture\n");
+    commit(repo);
+    const prepared = prepareCloseout({
+      repo,
+      evidenceHome: evidence,
+      runId: "guard",
+      requestRef: "request-guard",
+      requestText: "$mister-clean guard",
+      mode: "GUARD",
+      now: () => new Date("2026-08-25T12:00:00.000Z"),
+    });
+    const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
+    const manifest = json(join(prepared.bundleDirectory, "action-manifest.json"));
+    expect(report.mode).toBe("GUARD");
+    expect(manifest.mode).toBe("GUARD");
+    expect(manifest.guard).toEqual(expect.objectContaining({
+      status: "initialized",
+      baseline_commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+      candidate_tree: null,
+      writers_frozen: false,
+    }));
+    expect((manifest.guard as Record<string, unknown>).commit_barrier).toEqual({
+      state: "closed",
+      approved_tree: null,
+      receipt_ids: [],
+      opened_at: null,
+      crossed_action_id: null,
+    });
+    await expect(validateBundleFile(prepared.bundlePath, { repoPath: repo })).resolves.toEqual({
+      errors: [],
+      ok: true,
+    });
+  });
+
   it("produces a live-valid scaffold when planning debt is present", async () => {
     const { evidence, repo } = fixture("planning-debt-integration");
     mkdirSync(join(repo, "planning", "done"), { recursive: true });
@@ -170,7 +206,7 @@ task_id: TASK
 status: done
 top_level: true
 ---
-Status: <name>
+Status: active
 `);
     commit(repo);
     const prepared = prepareCloseout({
@@ -182,12 +218,58 @@ Status: <name>
     });
     const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
     const debts = report.completion_debts as Array<Record<string, unknown>>;
+    const accounting = report.planning_accounting as Record<string, unknown>;
     expect(debts.length).toBeGreaterThan(0);
-    expect(debts.some((debt) => String(debt.procedure).includes("body_projection_conflict"))).toBe(true);
-    expect(debts.some((debt) => String(debt.procedure).includes("<name>"))).toBe(false);
+    expect(debts.some((debt) => String(debt.class).includes("body_projection_conflict"))).toBe(true);
+    expect(debts.every((debt) => Number(debt.observation_count) >= 1)).toBe(true);
+    expect(accounting.raw_finding_count).toBeGreaterThanOrEqual(debts.length);
+    expect(accounting.root_debt_count).toBe(debts.length);
     await expect(validateBundleFile(prepared.bundlePath, { repoPath: repo })).resolves.toEqual({
       errors: [],
       ok: true,
     });
+  });
+
+  it("carries unproved construction and composition-root claims into the payable debt ledger", async () => {
+    const { evidence, repo } = fixture("semantic-debt-integration");
+    mkdirSync(join(repo, "planning"));
+    writeFileSync(join(repo, "planning", "SECURITY.md"), "The credential validator is a security choke point and must be safe by construction.\n");
+    commit(repo);
+    const prepared = prepareCloseout({
+      repo,
+      evidenceHome: evidence,
+      runId: "semantic-debt-integration",
+      requestRef: "request-1",
+      requestText: "$mister-clean",
+    });
+    const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
+    const debts = report.completion_debts as Array<Record<string, unknown>>;
+    const semantic = report.semantic_accounting as Record<string, unknown>;
+    const dimensions = report.dimensions as Record<string, Record<string, unknown>>;
+    expect(debts).toContainEqual(expect.objectContaining({
+      class: "semantic_probe_unassigned",
+      disposition: "autonomously_validate",
+      state: "open",
+    }));
+    expect(semantic).toEqual(expect.objectContaining({ candidate_probe_count: 1, finding_count: 1 }));
+    expect(dimensions.verification?.state).toBe("open");
+    expect(json(join(prepared.bundleDirectory, "semantic-audit.json"))).toEqual(expect.objectContaining({ status: "fail" }));
+    await expect(validateBundleFile(prepared.bundlePath, { repoPath: repo })).resolves.toEqual({
+      errors: [],
+      ok: true,
+    });
+  });
+
+  it("does not execute semantic probes without an explicitly supplied manifest", () => {
+    const { evidence, repo } = fixture("semantic-execute-guard");
+    writeFileSync(join(repo, "README.md"), "fixture\n");
+    commit(repo);
+    expect(() => prepareCloseout({
+      repo,
+      evidenceHome: evidence,
+      runId: "semantic-execute-guard",
+      requestRef: "request-1",
+      executeSemanticProbes: true,
+    })).toThrow(/requires semanticManifestPath/);
   });
 });

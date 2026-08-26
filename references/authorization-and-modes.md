@@ -80,6 +80,18 @@ Use for a specifically bounded cleanup. Execute the requested cleanup and the ad
 
 Use for a named historical or generated corpus. Require a source schema, destination schema, exact corpus, exclusions, preservation strategy, validation, and rollback path. Use append-only amendments or normalized views for immutable evidence.
 
+### GUARD
+
+Use for an active implementation candidate before any accepted ref advances.
+Invocation retains its ordinary repair authority, but the immutable staged tree
+is the review unit: DEV, QA, Mister Clean, holdout, deterministic gates, and
+the no-harm comparator must bind the same tree. A repair is authorized; it also
+mints a new tree and invalidates every prior receipt. Only the recorded
+integrator may cross the commit barrier, and only after the schema-1.2 guard
+record passes. Read
+[continuous-clean-development.md](continuous-clean-development.md) before the
+first candidate is minted.
+
 ### AUDIT
 
 Use only when the user explicitly asks for read-only analysis, review, inspection, or no changes. It may propose actions but does not mutate repository or external state.

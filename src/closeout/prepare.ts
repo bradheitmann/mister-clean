@@ -18,6 +18,7 @@ import {
 } from "./repository.js";
 import { auditPlanningRepository } from "./planning.js";
 import { REGRESSION_POLICY } from "./records.js";
+import { auditSemanticRepository } from "./semantic.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -28,7 +29,10 @@ export interface PrepareCloseoutOptions {
   readonly requestRef: string;
   readonly requestSource?: string;
   readonly requestText?: string;
+  readonly semanticManifestPath?: string;
+  readonly executeSemanticProbes?: boolean;
   readonly criteria?: readonly string[];
+  readonly mode?: "CLOSE" | "GUARD";
   readonly now?: () => Date;
   readonly templateRoot?: string;
 }
@@ -84,6 +88,11 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   }
   if (!options.runId.trim()) throw new Error("runId is required");
   if (!options.requestRef.trim()) throw new Error("requestRef is required");
+  if (options.executeSemanticProbes && options.semanticManifestPath === undefined) {
+    throw new Error("executeSemanticProbes requires semanticManifestPath");
+  }
+  const mode = options.mode ?? "CLOSE";
+  if (!new Set(["CLOSE", "GUARD"]).has(mode)) throw new Error(`unsupported prepare mode: ${mode}`);
 
   const requestedRepository = resolve(options.repo);
   const repository = resolve(git(requestedRepository, "rev-parse", "--show-toplevel"));
@@ -149,6 +158,15 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   const planningAuditRef = {
     path: "planning-audit.json",
     sha256: sha256File(join(bundleDirectory, "planning-audit.json")),
+  };
+  const semanticAudit = auditSemanticRepository(repository, {
+    execute: options.executeSemanticProbes ?? false,
+    ...(options.semanticManifestPath === undefined ? {} : { manifestPath: options.semanticManifestPath }),
+  });
+  writeJson(join(bundleDirectory, "semantic-audit.json"), semanticAudit);
+  const semanticAuditRef = {
+    path: "semantic-audit.json",
+    sha256: sha256File(join(bundleDirectory, "semantic-audit.json")),
   };
   let planningSystems: JsonObject[];
   if (planningRoots.length) {
@@ -286,27 +304,65 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
     "acceptance_gate_unknown",
     "completed_parent_unexecuted_acceptance",
   ]);
-  const planningDebts = planningAudit.findings.map((finding, index) => ({
-    id: `DEBT-PLANNING-${String(index + 1).padStart(4, "0")}`,
-    class: finding.code,
-    procedure: `Reconcile ${finding.code} at ${evidenceLabel(finding.path)} for ${evidenceLabel(finding.subject)}`,
+  const planningDebts = planningAudit.root_debts.map((debt) => ({
+    id: debt.id.replace("ROOT-", "DEBT-"),
+    class: debt.class,
+    cause_key: debt.cause_key,
+    observation_count: debt.observation_count,
+    raw_finding_ids: debt.raw_finding_ids,
+    affected_paths: debt.affected_paths,
+    repair_boundary: debt.repair_boundary,
+    causal_evidence: debt.causal_evidence,
+    procedure: `Reconcile ${debt.affected_projection_field} across ${evidenceLabel(debt.repair_boundary)}`,
     state: "open",
-    disposition: validationDebtClasses.has(finding.code) ? "autonomously_validate" : "autonomously_repair",
+    disposition: debt.class.split("+").some((code) => validationDebtClasses.has(code))
+      ? "autonomously_validate"
+      : "autonomously_repair",
     evidence: [{
       kind: "planning_census",
-      object: finding.subject,
+      object: debt.cause_key,
       command: "mister-clean audit planning . --json",
-      result: finding.code,
+      result: `${debt.observation_count} raw observations: ${debt.class}`,
       observed_at: now,
       evidence_ref: planningAuditRef,
     }],
   }));
+  const semanticCommand = options.semanticManifestPath === undefined
+    ? "mister-clean audit semantic . --json"
+    : `mister-clean audit semantic . --manifest semantic-probe-manifest${options.executeSemanticProbes ? " --execute" : ""} --json`;
+  const semanticDebts = semanticAudit.findings.map((finding) => ({
+    id: `DEBT-SEMANTIC-${sha256(Buffer.from(`${finding.candidate_id}\0${finding.code}\0${finding.refs.join("\0")}\0${finding.detail.replaceAll(/\s+/g, " ")}`, "utf8")).slice(0, 16).toUpperCase()}`,
+    class: finding.code,
+    cause_key: finding.candidate_id,
+    observation_count: 1,
+    affected_paths: unique(finding.refs.map((ref) => ref.split("#line-", 1)[0] ?? ref)),
+    procedure: finding.classification === "confirmed_product_defect"
+      ? `Repair ${finding.kind.replaceAll("_", " ")} and rerun its bound semantic probe`
+      : finding.classification === "operate_time_pending"
+        ? `Execute and record the owned operate-time proof for ${finding.candidate_id}`
+        : `Bind and execute complete adversarial coverage for ${finding.candidate_id}`,
+    state: "open",
+    disposition: finding.classification === "confirmed_product_defect"
+      ? "autonomously_repair"
+      : finding.classification === "operate_time_pending"
+        ? "decision_or_coordination_required"
+        : "autonomously_validate",
+    evidence: [{
+      kind: "gate_result",
+      object: head,
+      command: semanticCommand,
+      result: `${finding.code}: ${finding.detail}`,
+      observed_at: now,
+      evidence_ref: semanticAuditRef,
+    }],
+  }));
+  const completionDebts = [...planningDebts, ...semanticDebts];
   Object.assign(report, {
     generated_at: now,
     repo: { id: repoId, commit: head, branch },
-    mode: "CLOSE",
+    mode,
     actions: [],
-    completion_debts: planningDebts,
+    completion_debts: completionDebts,
     residuals: [],
     acceptance_criteria: criteriaIds.map((id) => ({
       id,
@@ -315,18 +371,43 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
       evidence: ["not yet assessed"],
     })),
     verdict: "NOT_CLEAN",
-    debt_census: { discovered: planningDebts.length, paid: 0, accepted_exception: 0 },
+    debt_census: { discovered: completionDebts.length, paid: 0, accepted_exception: 0 },
+    planning_accounting: {
+      raw_finding_count: planningAudit.raw_finding_count,
+      root_debt_count: planningAudit.root_debt_count,
+      suppressed_by_typed_nonartifact_count: planningAudit.suppressed_by_typed_nonartifact_count,
+      candidate_probe_count: planningAudit.candidate_probe_count,
+      evidence_ref: planningAuditRef,
+    },
+    semantic_accounting: {
+      candidate_probe_count: semanticAudit.candidate_probe_count,
+      executed_probe_count: semanticAudit.executed_probe_count,
+      resolved_probe_count: semanticAudit.resolved_probe_count,
+      confirmed_failure_count: semanticAudit.confirmed_failure_count,
+      pending_probe_count: semanticAudit.pending_probe_count,
+      finding_count: semanticAudit.findings.length,
+      evidence_ref: semanticAuditRef,
+    },
   });
-  if (planningDebts.length > 0) {
+  if (completionDebts.length > 0) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
       state: "open",
-      evidence: [{ kind: "debt_census", object: head, command: "mister-clean audit planning . --json", result: `${planningDebts.length} open planning debts`, observed_at: now }],
-      notes: ["Executable planning audit found payable successor-readiness debt."],
+      evidence: [{ kind: "debt_census", object: head, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${semanticDebts.length} semantic)`, observed_at: now }],
+      notes: ["Executable planning and semantic audits found payable successor-readiness debt."],
     });
+  }
+  if (planningDebts.length > 0) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").planning_integrity, "closeout-report.dimensions.planning_integrity"), {
       state: "open",
-      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning . --json", result: `${planningDebts.length} findings`, observed_at: now }],
+      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning . --json", result: `${planningAudit.raw_finding_count} raw findings / ${planningDebts.length} root debts`, observed_at: now }],
       notes: ["Physical lanes, structured metadata, exact parent projections, and acceptance-gate identity do not yet agree."],
+    });
+  }
+  if (semanticDebts.length > 0) {
+    Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").verification, "closeout-report.dimensions.verification"), {
+      state: "open",
+      evidence: [{ kind: "validation_summary", object: head, command: semanticCommand, result: `${semanticDebts.length} unproved, pending, or failed semantic probes`, observed_at: now }],
+      notes: ["Critical construction and composition-root claims require bound, executed evidence; prose and isolated unit tests are insufficient."],
     });
   }
   asObject(report.authorization_basis, "closeout-report.authorization_basis").ref = options.requestRef;
@@ -347,10 +428,10 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
     policy: REGRESSION_POLICY,
     baseline_object: head,
     closing_object: head,
-    baseline_findings: planningDebts.length,
-    closing_findings: planningDebts.length,
+    baseline_findings: completionDebts.length,
+    closing_findings: completionDebts.length,
     baseline_paid: 0,
-    baseline_open: planningDebts.length,
+    baseline_open: completionDebts.length,
     newly_discovered_preexisting_paid: 0,
     newly_discovered_preexisting_open: 0,
     concurrent_external_paid: 0,
@@ -360,7 +441,7 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   };
   writeJson(join(bundleDirectory, "regression-delta.json"), {
     record_type: "mister-clean.regression-delta",
-    schema_version: "1.0",
+    schema_version: "1.2",
     ...regressionCounts,
     action_checks: [],
   });
@@ -377,6 +458,31 @@ export function prepareCloseout(options: PrepareCloseoutOptions): PreparedCloseo
   manifest.repo = { id: repoId, commit: head };
   manifest.request_ref = options.requestRef;
   asObject(manifest.authorization_basis, "action-manifest.authorization_basis").ref = options.requestRef;
+  manifest.mode = mode;
+  if (mode === "GUARD") {
+    manifest.guard = {
+      status: "initialized",
+      baseline_commit: head,
+      candidate_tree: null,
+      minted_at: null,
+      staged_paths: [],
+      writers_frozen: false,
+      receipts: [],
+      deterministic_gates: null,
+      no_harm: null,
+      commit_barrier: {
+        state: "closed",
+        approved_tree: null,
+        receipt_ids: [],
+        opened_at: null,
+        crossed_action_id: null,
+      },
+    };
+  }
+  const coordination = asObject(manifest.coordination, "action-manifest.coordination");
+  coordination.dispatcher = `mister-clean:${options.runId}`;
+  coordination.integrator = `mister-clean:${options.runId}`;
+  coordination.target = { ref: targetRef, expected_commit: targetCommit, observed_at: now };
 
   writeJson(join(bundleDirectory, "debris-census.json"), {
     record_type: "mister-clean.debris-census",

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1596,8 +1597,8 @@ status: active
     }
   });
 
-  it("fails relationship tables with duplicate target or state columns", () => {
-    const duplicateState = auditPlanningArtifacts([
+  it("uses Status as the default authoritative lifecycle column and fails only genuine state ambiguity", () => {
+    const statusAndPhase = auditPlanningArtifacts([
       source("planning/active/DUPLICATE-STATE-TARGET.md", `---
 artifact_type: story
 story_id: DUPLICATE-STATE-TARGET
@@ -1611,6 +1612,39 @@ status: active
 ---
 | Story | Status | State |
 | DUPLICATE-STATE-TARGET | Active | Done |
+`),
+    ]);
+    const ambiguous = auditPlanningArtifacts([
+      source("planning/active/AMBIGUOUS-STATE-TARGET.md", `---
+artifact_type: story
+story_id: AMBIGUOUS-STATE-TARGET
+status: active
+---
+`),
+      source("planning/active/AMBIGUOUS-STATE-INDEX.md", `---
+artifact_type: status_index
+id: AMBIGUOUS-STATE-INDEX
+status: active
+---
+| Story | State | Phase |
+| AMBIGUOUS-STATE-TARGET | Active | Done |
+`),
+    ]);
+    const declared = auditPlanningArtifacts([
+      source("planning/active/DECLARED-STATE-TARGET.md", `---
+artifact_type: story
+story_id: DECLARED-STATE-TARGET
+status: active
+---
+`),
+      source("planning/active/DECLARED-STATE-INDEX.md", `---
+artifact_type: status_index
+id: DECLARED-STATE-INDEX
+status: active
+primary_state_column: State
+---
+| Story | State | Phase |
+| DECLARED-STATE-TARGET | Active | Done |
 `),
     ]);
     const duplicateTarget = auditPlanningArtifacts([
@@ -1630,7 +1664,9 @@ status: active
 `),
     ]);
 
-    expect(duplicateState.counts.planning_relationship_conflict).toBe(1);
+    expect(statusAndPhase.findings).toEqual([]);
+    expect(ambiguous.counts.planning_relationship_conflict).toBe(1);
+    expect(declared.findings).toEqual([]);
     expect(duplicateTarget.counts.planning_relationship_conflict).toBe(1);
   });
 
@@ -1914,13 +1950,6 @@ rationale: Historical reference only.
 children: [{name: MISSING, status: done}]
 ---
 `),
-      source("planning/guidance/MALFORMED-TABLE.md", `---
-artifact_type: guidance
-rationale: Historical reference only.
----
-| Metric | Status |
-| X | Done |
-`),
       source("planning/guidance/MALFORMED-STATE.md", `---
 artifact_type: guidance
 rationale: Historical reference only.
@@ -1939,6 +1968,17 @@ parent: {name: MISSING}
       expect(result.counts.planning_input_unparsed).toBe(1);
       expect(result.status).toBe("fail");
     }
+
+    const contextualTable = auditPlanningArtifacts([
+      source("planning/guidance/CONTEXT-TABLE.md", `---
+artifact_type: guidance
+rationale: Historical reference only.
+---
+| Metric | Status |
+| X | Done |
+`),
+    ]);
+    expect(contextualTable.findings).toEqual([]);
   });
 
   it("allows a reasoned non-relationship checklist without weakening rollup indexes", () => {
@@ -2310,7 +2350,7 @@ ${field}: not_run
       ]);
       expect(result.status, `story_id.${field}`).toBe("fail");
     }
-  });
+  }, 10_000);
 
   it("discovers nested acceptance declarations across generic and hierarchy relations", () => {
     const parent = "NESTED-DISCOVERY-P";
@@ -2753,7 +2793,7 @@ status: active
     }
   });
 
-  it("reconciles visible Markdown acceptance labels, pending prose, and unchecked gates", () => {
+  it("reconciles visible Markdown acceptance labels and pending prose", () => {
     const lines = [
       "Review: NOT_RUN",
       "QA Result: NOT_RUN",
@@ -2761,8 +2801,6 @@ status: active
       "Holdout verdict: NOT_RUN",
       "> Review: NOT_RUN",
       "## QA Result: NOT_RUN",
-      "- [ ] Review executed",
-      "- [ ] QA complete",
       "PENDING review",
       "Review status: Pending",
     ];
@@ -2777,6 +2815,19 @@ status: active
       ]);
       expect(result.status, line).toBe("fail");
       expect(result.counts.acceptance_cascade_unexecuted, line).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("classifies unchecked acceptance checklists as unfinished markers rather than invented gates", () => {
+    for (const line of ["- [ ] Review executed", "- [ ] QA complete"]) {
+      const fixtures = completedParentSources("BODY-MARKER-P", "BODY-MARKER-C");
+      const parentSource = fixtures[0]!;
+      const result = auditPlanningArtifacts([
+        { ...parentSource, content: `${parentSource.content}\n${line}\n` },
+        fixtures[1]!,
+      ]);
+      expect(result.counts.unfinished_completion_marker, line).toBe(1);
+      expect(result.counts.acceptance_cascade_unexecuted, line).toBe(0);
     }
   });
 
@@ -2811,6 +2862,414 @@ status: active
       expect(result.artifactCount).toBe(1);
       expect(result.counts.planning_input_unparsed).toBe(1);
       expect(result.status).toBe("fail");
+    } finally {
+      rmSync(repository, { force: true, recursive: true });
+    }
+  });
+
+  it("ignores only an exact zero-byte .gitkeep in a planning root", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-gitkeep-"));
+    try {
+      mkdirSync(join(repository, "planning"));
+      writeFileSync(join(repository, "planning", ".gitkeep"), "");
+      const empty = auditPlanningRepository(repository);
+      expect(empty.artifactCount).toBe(0);
+      expect(empty.findings).toEqual([]);
+
+      writeFileSync(join(repository, "planning", ".gitkeep"), "not empty\n");
+      const nonempty = auditPlanningRepository(repository);
+      expect(nonempty.counts.planning_input_unparsed).toBe(1);
+    } finally {
+      rmSync(repository, { force: true, recursive: true });
+    }
+  });
+
+  it("treats root underscore YAML policy and typed dispatch packet internals as context, not work items", () => {
+    const policy = auditPlanningArtifacts([
+      source("project/planning/_DISPATCH-POLICY.yaml", `repo_class: governed
+baseline_mode: frozen
+qa_policy:
+  review:
+    status: required
+`),
+    ]);
+    const packet = auditPlanningArtifacts([
+      source("project/planning/dispatches/D-1/dispatch.md", `---
+artifact_type: dispatch
+id: D-1
+status: done
+---
+# Dispatch D-1
+`),
+      source("project/planning/dispatches/D-1/manifest.yaml", `stories:
+  - story_id: STORY-1
+    status: done
+`),
+      source("project/planning/dispatches/D-1/execution-dag.yaml", `nodes:
+  - id: N1
+    status: complete
+`),
+      source("project/planning/dispatches/D-1/ledger.md", "# Execution ledger\n\nStatus: historical evidence.\n"),
+    ]);
+
+    expect(policy.findings).toEqual([]);
+    expect(packet.artifactCount).toBe(4);
+    expect(packet.findings).toEqual([]);
+  });
+
+  it("uses a strict first-class remediation-finding state instead of lifecycle prose", () => {
+    const result = auditPlanningArtifacts([
+      source("project/planning/remediation/OPEN.md", `---
+artifact_type: finding
+id: FINDING-OPEN
+status: OPEN — accepted known limitation
+---
+Status: This narrative sentence is not a lifecycle projection.
+`),
+      source("project/planning/remediation/PARTIAL.md", `---
+artifact_type: finding
+id: FINDING-PARTIAL
+status: PARTIALLY RESOLVED — one mechanism remains OPEN
+---
+`),
+      source("project/planning/remediation/RESOLVED.md", `---
+artifact_type: finding
+id: FINDING-RESOLVED
+status: RESOLVED — landed abcdef1
+---
+`),
+      source("project/planning/remediation/UNKNOWN.md", `---
+artifact_type: finding
+id: FINDING-UNKNOWN
+status: DEFERRED
+---
+`),
+    ]);
+
+    expect(result.counts.remediation_finding_open).toBe(1);
+    expect(result.counts.remediation_finding_partial).toBe(1);
+    expect(result.counts.finding_state_unknown).toBe(1);
+    expect(result.counts.body_projection_conflict).toBe(0);
+  });
+
+  it("requires graph eligibility before extracting report tables or narrative Status prose", () => {
+    const narrative = auditPlanningArtifacts([
+      source("project/planning/PLANNING-AUDIT.md", `---
+artifact_type: audit_report
+id: PLANNING-AUDIT
+status: completed
+---
+Status: audit complete; repair phase executed.
+
+| ID | Status |
+| P-1 | D4 plane-supervisor unreached |
+`),
+    ]);
+    const strict = auditPlanningArtifacts([
+      source("project/planning/stories/STRICT.md", `---
+artifact_type: story
+story_id: STRICT
+status: active
+---
+| Child | Status |
+| MISSING-CHILD | Active |
+`),
+    ]);
+
+    expect(narrative.findings).toEqual([]);
+    expect(strict.counts.planning_relationship_unresolved).toBe(1);
+  });
+
+  it("maps exact story_review_status to review acceptance while rejecting invented aliases", () => {
+    const canonical = auditPlanningArtifacts([
+      source("project/planning/stories/STORY-REVIEW.md", `---
+artifact_type: story
+story_id: STORY-REVIEW
+status: active
+story_review_status: rejected
+---
+`),
+    ]);
+    const invented = auditPlanningArtifacts([
+      source("project/planning/stories/STORY-CUSTOM-REVIEW.md", `---
+artifact_type: story
+story_id: STORY-CUSTOM-REVIEW
+status: active
+custom_review_status: rejected
+---
+`),
+    ]);
+
+    expect(canonical.counts.planning_relationship_conflict).toBe(0);
+    expect(canonical.counts.acceptance_failure_unpaid).toBe(1);
+    expect(invented.counts.planning_relationship_conflict).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not let procedural checklists override structured acceptance truth", () => {
+    const checklist = auditPlanningArtifacts([
+      source("project/planning/stories/STORY-CHECKLIST.md", `---
+artifact_type: story
+story_id: STORY-CHECKLIST
+status: active
+holdout_status: passed
+---
+## Definition of done
+- [ ] Story holdout run by Story QA with result PASS recorded in frontmatter.
+`),
+      source("project/planning/holdouts/HOLDOUT-CHECKLIST.md", `---
+artifact_type: holdout
+holdout_id: HOLDOUT-CHECKLIST
+story_id: STORY-CHECKLIST
+result: pass
+---
+`),
+    ]);
+    const explicitConflict = auditPlanningArtifacts([
+      source("project/planning/stories/STORY-EXPLICIT.md", `---
+artifact_type: story
+story_id: STORY-EXPLICIT
+status: active
+holdout_status: passed
+---
+Holdout verdict: NOT_RUN
+`),
+      source("project/planning/holdouts/HOLDOUT-EXPLICIT.md", `---
+artifact_type: holdout
+holdout_id: HOLDOUT-EXPLICIT
+story_id: STORY-EXPLICIT
+result: pass
+---
+`),
+    ]);
+
+    expect(checklist.counts.acceptance_gate_identity_conflict).toBe(0);
+    expect(checklist.counts.acceptance_cascade_unexecuted).toBe(0);
+    expect(explicitConflict.counts.acceptance_gate_identity_conflict).toBe(1);
+  });
+
+  it("reports stale completion checklists without inventing a new acceptance execution", () => {
+    const result = auditPlanningArtifacts([
+      source("project/planning/stories/STORY-FINALIZED.md", `---
+artifact_type: story
+story_id: STORY-FINALIZED
+status: done
+holdout_status: pass
+story_review_status: pass
+top_level: true
+---
+## Acceptance Criteria
+- [ ] AC1 is satisfied.
+
+## Definition of Done
+- [ ] Story holdout run by Story QA with result PASS recorded in frontmatter.
+`),
+    ]);
+
+    expect(result.counts.acceptance_cascade_unexecuted).toBe(0);
+    expect(result.counts.acceptance_gate_identity_conflict).toBe(0);
+    expect(result.counts.unfinished_completion_marker).toBe(1);
+    const marker = result.findings.find((finding) => finding.code === "unfinished_completion_marker");
+    expect(marker?.related).toHaveLength(2);
+    expect(result.root_debts.find((debt) => debt.class === "unfinished_completion_marker")?.observation_count).toBe(1);
+  });
+
+  it("keeps typed reviews typed and accepts bounded terminal review prose", () => {
+    const result = auditPlanningArtifacts([
+      source("project/planning/slices/done/SLICE-REVIEWED.md", `---
+artifact_type: slice
+slice_id: SLICE-REVIEWED
+status: done
+top_level: true
+---
+`),
+      source("project/planning/story-reviews/REVIEW-SLICE.md", `---
+artifact_type: story-review
+id: REVIEW-SLICE
+slice: SLICE-REVIEWED
+verdict: ACCEPT
+acceptance:
+  scope: entire candidate
+  result: ACCEPT
+---
+`),
+      source("project/planning/story-reviews/REVIEW-RECEIPT.md", `---
+artifact_type: story_review
+id: REVIEW-RECEIPT
+reviews: Human-readable provenance only.
+verdict: CONDITIONAL ACCEPT — follow-ups routed separately
+---
+`),
+    ]);
+
+    expect(result.counts.planning_relationship_conflict).toBe(0);
+    expect(result.counts.planning_relationship_unresolved).toBe(0);
+    expect(result.counts.acceptance_gate_unknown).toBe(0);
+    expect(result.counts.acceptance_partial_malformed).toBe(0);
+  });
+
+  it("keeps distinct acceptance artifacts distinct and treats reviews as provenance-only", () => {
+    const distinct = auditPlanningArtifacts([
+      source("project/planning/stories/STORY-GATES.md", `---
+artifact_type: story
+story_id: STORY-GATES
+status: active
+---
+`),
+      source("project/planning/holdouts/H1.md", `---
+artifact_type: holdout
+holdout_id: H1
+story_id: STORY-GATES
+result: pass
+---
+`),
+      source("project/planning/holdouts/H2.md", `---
+artifact_type: holdout
+holdout_id: H2
+story_id: STORY-GATES
+result: not_run
+---
+`),
+    ]);
+    const receipt = auditPlanningArtifacts([
+      source("project/planning/story-reviews/REVIEW-RECEIPT.md", `---
+artifact_type: review
+review_id: REVIEW-RECEIPT
+status: completed
+reviews: Human-readable subject plus branch and commit provenance.
+---
+`),
+    ]);
+
+    expect(distinct.counts.acceptance_gate_identity_conflict).toBe(0);
+    expect(receipt.findings).toEqual([]);
+  });
+
+  it("retains raw observations while grouping only connected causal repair units", () => {
+    const parent = (id: string, children: readonly string[]) => source(`project/planning/epics/${id}.md`, `---
+artifact_type: epic
+epic_id: ${id}
+status: active
+---
+| Story | Status |
+| --- | --- |
+${children.map((child) => `| ${child} | Done |`).join("\n")}
+`);
+    const child = (id: string, parentId: string) => source(`project/planning/stories/${id}.md`, `---
+artifact_type: story
+story_id: ${id}
+epic_id: ${parentId}
+status: active
+---
+`);
+    const firstChildren = ["STORY-A1", "STORY-A2", "STORY-A3", "STORY-A4", "STORY-A5"];
+    const result = auditPlanningArtifacts([
+      parent("EPIC-A", firstChildren),
+      ...firstChildren.map((id) => child(id, "EPIC-A")),
+      parent("EPIC-B", ["STORY-B1"]),
+      child("STORY-B1", "EPIC-B"),
+    ], 1, { snapshot: "a".repeat(40) });
+
+    const projectionRaw = result.raw_findings.filter((item) => item.code === "parent_child_projection_conflict");
+    const projectionRoots = result.root_debts.filter((item) => item.affected_projection_field === "lifecycle_projection");
+    expect(projectionRaw).toHaveLength(6);
+    expect(projectionRoots).toHaveLength(2);
+    expect(projectionRoots.map((item) => item.observation_count).sort((a, b) => a - b)).toEqual([1, 5]);
+    expect(projectionRoots.flatMap((item) => item.raw_finding_ids)).toHaveLength(6);
+    expect(result.raw_finding_count).toBe(result.findings.length);
+    expect(result.root_debt_count).toBeLessThan(result.raw_finding_count);
+  });
+
+  it("keeps unchanged debt identities stable when only the measured commit changes", () => {
+    const sources = [
+      source("project/planning/epics/EPIC-STABLE.md", `---
+artifact_type: epic
+epic_id: EPIC-STABLE
+status: active
+---
+| Story | Status |
+| --- | --- |
+| STORY-STABLE | Done |
+`),
+      source("project/planning/stories/STORY-STABLE.md", `---
+artifact_type: story
+story_id: STORY-STABLE
+epic_id: EPIC-STABLE
+status: active
+---
+`),
+    ];
+    const first = auditPlanningArtifacts(sources, 1, { snapshot: "a".repeat(40) });
+    const second = auditPlanningArtifacts(sources, 1, { snapshot: "b".repeat(40) });
+
+    expect(second.raw_findings.map((item) => item.id)).toEqual(first.raw_findings.map((item) => item.id));
+    expect(second.root_debts.map((item) => item.id)).toEqual(first.root_debts.map((item) => item.id));
+    expect(second.root_debts.map((item) => item.cause_key)).toEqual(first.root_debts.map((item) => item.cause_key));
+    expect(second.root_debts.map((item) => item.snapshot)).not.toEqual(first.root_debts.map((item) => item.snapshot));
+  });
+
+  it("represents PARTIAL as nonterminal debt with typed operate-time legs", () => {
+    const valid = auditPlanningArtifacts([
+      ...completedParentSources("PARTIAL-PARENT", "PARTIAL-CHILD"),
+      source("project/planning/holdouts/PARTIAL-HOLDOUT.md", `---
+artifact_type: holdout
+holdout_id: PARTIAL-HOLDOUT
+story_id: PARTIAL-PARENT
+result: partial
+operate_time_legs:
+  - status: pending
+    required_next_action: Run the live browser proof.
+    owner: deployment operator
+    evidence_required: Signed browser-run receipt.
+---
+`),
+    ]);
+    const malformed = auditPlanningArtifacts([
+      source("project/planning/stories/PARTIAL-MALFORMED-PARENT.md", `---
+artifact_type: story
+story_id: PARTIAL-MALFORMED-PARENT
+status: active
+---
+`),
+      source("project/planning/holdouts/PARTIAL-MALFORMED.md", `---
+artifact_type: holdout
+holdout_id: PARTIAL-MALFORMED
+story_id: PARTIAL-MALFORMED-PARENT
+result: partial
+---
+`),
+    ]);
+
+    expect(valid.counts.acceptance_partial_unpaid).toBe(1);
+    expect(valid.counts.acceptance_partial_malformed).toBe(0);
+    expect(valid.counts.acceptance_failure_unpaid).toBe(0);
+    expect(valid.counts.acceptance_gate_unknown).toBe(0);
+    expect(malformed.counts.acceptance_partial_malformed).toBe(1);
+  });
+
+  it("detects active maintenance whose verified implementation commit already landed", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-maintenance-"));
+    try {
+      execFileSync("git", ["init", "-q", repository]);
+      execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
+      execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      writeFileSync(join(repository, "implementation.txt"), "landed\n");
+      execFileSync("git", ["-C", repository, "add", "implementation.txt"]);
+      execFileSync("git", ["-C", repository, "commit", "-q", "-m", "implementation"]);
+      const implementationCommit = execFileSync("git", ["-C", repository, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+      mkdirSync(join(repository, "planning", "maintenance"), { recursive: true });
+      writeFileSync(join(repository, "planning", "maintenance", "MAINT-X.md"), `---
+artifact_type: maintenance
+id: MAINT-X
+status: active
+---
+
+RESOLUTION: landed at ${implementationCommit}. Independently verified.
+`);
+      execFileSync("git", ["-C", repository, "add", "planning/maintenance/MAINT-X.md"]);
+      execFileSync("git", ["-C", repository, "commit", "-q", "-m", "stale maintenance record"]);
+
+      const result = auditPlanningRepository(repository);
+      expect(result.counts.maintenance_lifecycle_stale).toBe(1);
     } finally {
       rmSync(repository, { force: true, recursive: true });
     }

@@ -1,10 +1,11 @@
 ---
 name: mister-clean
 metadata:
-  version: 6.2.1
+  version: 6.3.0
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
-  the available evidence, synchronized, and ready for the next team. Invoking
+  the available evidence, synchronized, and ready for the next team, or guard
+  an active implementation so unverified debt never enters accepted history. Invoking
   $mister-clean is standing authorization for its documented closeout
   procedures, including scoped cleanup, completion-debt payment, repairs,
   tests, commits, current-branch push, and safe reconciliation of task-owned
@@ -17,7 +18,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v6.2.1
+# Mister Clean — v6.3.0
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay
@@ -105,7 +106,9 @@ dispatch projections agree · every governed corpus partitions completely into
 explicit, schema-valid states with zero unclassified remainder ·
 current/start-here surfaces are present, fresh,
 commit-bound · every live branch and worktree has owner, purpose, candidate
-identity, disposition · required tests and gates pass · negative controls
+identity, disposition · every modifying lane is isolated and every material
+operation is parent-linked, object-bound, and integrated through a verified
+compare-and-swap transaction · required tests and gates pass · negative controls
 prove the gates fail on representative contradictions · ignored and external
 state is explicitly accounted for · historical limitations are ratified
 accepted exceptions, not ambiguous residuals · no unresolved principal
@@ -144,6 +147,17 @@ establish the integrated result. Prevent two cleanup agents from paying
 the same debt concurrently (claim debts in the ledger before paying). A
 pacing ceiling limits SIMULTANEOUS work, not TOTAL work. Protocol:
 [references/persistence-and-continuation.md](references/persistence-and-continuation.md).
+When more than one agent participates, use the unified isolation, operation,
+routing, and integration contract in
+[references/concurrent-remediation.md](references/concurrent-remediation.md).
+**Multi-writer admission gate:** before the first repository mutation, prove
+that the modifying agent owns a distinct worktree and branch. A bare invocation
+never authorizes a worker to write directly in a shared integration worktree.
+Only the recorded integrator may mutate the target ref, and only inside the
+short fenced-lease + compare-and-swap window. If an unexpected commit appears
+on the integration branch, freeze writers, preserve the object, rebind and
+review its provenance/diff before integrating or pushing; “keep the remote up
+to date” never means publish an object the integrator has not accepted.
 
 When a harness supports persistent goal state and the close is likely to span
 turns, the operator may seed it with
@@ -192,17 +206,30 @@ scope or hard boundaries.
 | `CLOSE` | Bare `$mister-clean`, "finish cleanup," "close this out," "make this handoff-ready" | Default. Execute the complete closeout loop. |
 | `CLEAN` | A specifically bounded cleanup request | Execute that cleanup plus the checks and reconciliation needed to leave it stable. |
 | `CONFORM` | Normalize a named historical or generated corpus | Provenance-preserving migration per [references/conformance-and-provenance.md](references/conformance-and-provenance.md). |
+| `GUARD` | `$mister-clean guard`, "clean this candidate before commit," or Mister Clean assigned inside an implementation pod | Gate one staged candidate tree through DEV, QA, authorized Mister Clean repair, and independent holdout before any accepted ref advances. Read [references/continuous-clean-development.md](references/continuous-clean-development.md). |
 | `AUDIT` | The user explicitly says audit, review, inspect only, or make no changes | Read-only evidence and recommendations. |
 
 Do not downgrade a bare invocation to AUDIT because the request is short. The
 skill name is the request.
+
+In `GUARD`, the immutable staged tree object is the review unit. Any byte change
+creates a new tree and expires every receipt for the prior tree. Mister Clean
+retains repair authority, but it never becomes the sole verifier of its own
+repair. The integrator creates or advances a commit/ref only after DEV, QA,
+Mister Clean, holdout, deterministic gates, and the no-harm comparator bind the
+same tree. For long campaigns that rotate models, harnesses, reasoning levels,
+roles, and task difficulty, read
+[evals/rotation-campaign.md](evals/rotation-campaign.md).
 
 ## Fast route
 
 1. Freeze the live Git, worktree, process, planning, request, and applicable
    hygiene-comparator baseline.
 2. Discover the repository's actual procedure graph and acceptance criteria.
-3. Start an empty, incremental action ledger; do not pre-plan the whole close.
+3. Start the schema-1.2 coordination transaction and empty incremental action
+   ledger; pass the multi-writer admission gate before any mutation; register
+   task boundaries and operation parents only as work becomes concrete. Do not
+   pre-plan the whole close.
 4. Pay executable debt before conformance and cosmetic cleanup; after each
    atomic action, rerun its comparators and repair or safely roll back every
    introduced regression before the next action.
@@ -361,11 +388,19 @@ canonical files (`ROADMAP`, `STATUS`, `PLAN`, `TASKS`, `BACKLOG`, `CURRENT`)
 without promoting an entire generic docs directory; derives readiness from
 exact direct-child IDs;
 compares lane, current-body, and parent-table projections; groups duplicate
-projections of the same acceptance gate; and fails closed on malformed
+projections only when they share a proven acceptance identity; retains every
+raw observation while grouping payable work into causally evidenced root
+debts; and fails closed on malformed
 structured input, unsupported lifecycle or gate states, contradictory or
 unresolved parentage, unproved archive classifications, missing gates after
 completed children, and unexecuted or failed acceptance. A nonzero result is
-payable planning debt and forbids CLEAN. The audit is a conservative floor,
+not automatically one debt per row: any raw finding forbids CLEAN until
+triaged, while each payable completion debt is one independently repairable
+cause with a `cause_key`, bound snapshot, impacted raw-finding IDs, affected
+paths, and repair boundary. Cross-artifact clustering requires a shared
+remedial record or a connected artifact component violating the same
+invariant; otherwise observations remain separate. Report raw-finding and
+root-debt cardinalities explicitly. The audit is a conservative floor,
 not a claim that arbitrary repository-specific schemas were understood; run
 their validators and inspect any system the gate cannot structurally infer.
 Every planning item must be structurally placed in one verified lifecycle and
@@ -413,8 +448,11 @@ supported structured scopes and parent relations recursively; every declared
 outcome scope is validated, and a `not_applicable` rationale authorizes only
 its own scope. Structured JSON/YAML is not rescanned as prose. Markdown code
 fences and HTML comments are inert examples, while visible heading and
-blockquote status labels, acceptance labels, pending review language, and
-unchecked acceptance items remain current projections. Nested canonical work
+blockquote status labels, acceptance labels, and pending review language remain
+current projections. Unchecked items in a completed artifact are current
+**unfinished-completion markers**: they are payable finalization debt, but they
+do not invent a second acceptance execution when stronger gate evidence exists.
+Nested canonical work
 declarations and absent/custom-type hierarchy aliases must reconcile or fail;
 they never disappear inside generic metadata or a non-artifact label.
 Unsupported, binary, special, and symlinked entries in a discovered planning
@@ -507,21 +545,39 @@ action `reversible_local` / `consequential_external` / `unrecoverable` —
 the last is outside this skill. The `kind` vocabulary is CLOSED and enforced
 by the validator: `agent_dispatch`, `acceptance_execute`, `local_edit`, `local_move`,
 `recoverable_delete`, `format`, `lint`, `test`, `build`, `generate`,
-`doc_update`, `planning_record_update`, `git_commit`, `git_push`,
+`doc_update`, `planning_record_update`, `git_commit`, `git_integrate`, `git_push`,
 `stash_preserve`, `stash_drop`, `branch_delete_local`,
 `branch_delete_remote`, `worktree_remove`, `process_signal`,
 `tracker_write`, `historical_conform`, `handoff_update`. Do not invent kinds;
-do not pause after validation. Execute. Keep the report's action rows exactly
+do not pause after validation. Execute. Schema 1.2 makes
+`coordination.lanes` the task-boundary/custody registry and `actions` the
+append-only operation DAG: each action names its lane, task, prior operations,
+before/after objects, and record time. The validator binds every local mutation
+to its lane's write set and versioned coordination-domain claims, requires a
+digest-bound cwd/HEAD/branch bootstrap,
+requires an exact atomic projection transaction for `planning_record_update`,
+and rejects `git_push` unless its direct candidate-producing parent, frozen
+writers, clean tree, review, zero-known-failure validation, no-harm proof, and
+fresh remote compare-and-swap observation all agree. `git_integrate`
+additionally records the short lease, fencing token, target compare-and-swap,
+and an invariant-level CAS for every domain the source plan read or wrote.
+GUARD manifests add the exact-tree four-role commit barrier. Schemas 1.0 and
+1.1 are legacy-readable only; start new runs on 1.2. Full contract:
+[references/concurrent-remediation.md](references/concurrent-remediation.md).
+Keep the report's action rows exactly
 equal to this canonical ledger; the live bundle rejects merely matching IDs.
 
 ### 4. Finish, conform, clean — in that order
 
 - **Isolate before dispatching modifying delegates:** each gets a unique
   preallocated worktree + branch from a recorded baseline, an authorized path
-  set, and a bootstrap that proves cwd/HEAD/branch before edits; reject
-  dispatch on path overlap with a live writer. `branch off main` without a
-  worktree is not isolation. Contract + collision response:
+  set, versioned coordination-domain claims (semantic conflict keys), and a bootstrap that proves cwd/HEAD/branch
+  before edits; reject dispatch on path or invariant overlap with a live
+  writer. Name one dispatcher and one active integration writer. `branch off
+  main` without a worktree is not isolation. Worktree mechanics:
   [references/write-lane-isolation.md](references/write-lane-isolation.md).
+  Unified routing, operation-accounting, local-inference, and integration
+  contract: [references/concurrent-remediation.md](references/concurrent-remediation.md).
 - **Finish:** pay every `open` debt through the system's own mechanism,
   honoring actual separation-of-duty rules — never self-certify a pair you
   implemented. The dispatch mechanism is paradigm-relative: in-session
@@ -590,10 +646,15 @@ that cannot fail is indistinguishable from an absent one. For CI, check run
 **conclusions on the measured commit** — wiring is not execution.
 
 Before final verification, resolve the target branch again and measure its
-relationship to the closing candidate from their merge base. If the target
-advanced, integrate it through repository policy (merge, rebase, or a fresh
-integration worktree), resolve the combined state, and rerun every affected
-check. The final candidate must contain the current target's reachable state;
+relationship to the closing candidate from their merge base. Integration is a
+mutex-plus-compare-and-swap action: acquire the target ref's short lease with a
+fresh fencing token, record the expected target object, re-resolve it at the
+mutation boundary, and reject/rebind rather than applying when it moved. Never
+hold the lease during implementation, agent waits, or long validation.
+Integrate candidates sequentially through the one active integration worktree.
+After each accepted candidate run focused checks; at the wave barrier rerun the
+full affected suite and same-detector no-harm delta on the combined object. The
+final candidate must contain the current target's reachable state;
 a two-tip `target..candidate` diff on diverged histories is not an owned-change
 inventory and must never be used to approve apparent deletions. Prove the
 integrated tree itself accounts for every target-only path and contains only
@@ -761,6 +822,7 @@ zero-debt/passing-state requirements activate only for CLEAN.
 | "The status index is generated by the hook" | Generated by WHOSE hook? A one-harness generator is a broken dependency for every other successor. |
 | "I fixed ten issues and created only one" | One cleanup-created regression is still harm. Keep the repair atomic: pay it or safely roll back before crossing the action boundary. Net improvement never purchases permission to leave new debt. |
 | "The new census is larger, so cleanup made things worse" | Maybe — or the detector exposed old debt, its scope leaked into fixtures, or another writer changed the subject. Compare the same object with the same detector, then classify every delta before acting. |
+| "I'll commit it so QA has a SHA to review" | The staged tree already has an immutable identity. Bind every role receipt to `git write-tree`; advance an accepted ref only after the exact-tree barrier passes. |
 
 ## Progressive references
 
@@ -772,9 +834,13 @@ zero-debt/passing-state requirements activate only for CLEAN.
 - [references/persistence-and-continuation.md](references/persistence-and-continuation.md) — checkpoints, resume/rebind, the debt-ledger mutex.
 - [references/tool-liveness.md](references/tool-liveness.md) — normalize/verify discovery tools, time-bound probes, replace stalled agents without repeating the mechanism.
 - [references/write-lane-isolation.md](references/write-lane-isolation.md) — preallocated per-delegate worktrees, collision response without work loss.
+- [references/continuous-clean-development.md](references/continuous-clean-development.md) — only when guarding active implementation: four-role exact-tree loop and no-unclean-commit barrier.
+- [references/semantic-boundary-probes.md](references/semantic-boundary-probes.md) — claim-level candidate binding, digest-backed N/A disposition, and anti-vacuity executable receipts.
 - [references/intelligent-momentum.md](references/intelligent-momentum.md) — why uniformity and finished procedures control future agents.
 - [references/situational-awareness.md](references/situational-awareness.md) — detecting planning system, procedure graph, topology, management layer, enforcement.
 - [references/verification-and-claims.md](references/verification-and-claims.md) — same-object rule, claim kinds, isolated checks.
 - [references/verification-doctrine.md](references/verification-doctrine.md) — seventeen principles, each with the failure that taught it.
 - [references/conformance-and-provenance.md](references/conformance-and-provenance.md) — historical normalization without provenance loss.
 - [references/behavioral-evals.md](references/behavioral-evals.md) — only when testing or revising this skill.
+- [evals/model-hygiene-trial.md](evals/model-hygiene-trial.md) — only when comparing runner models, harnesses, reasoning levels, or task-role fitness; use tuple-level coverage and matched contrasts, never an impressionistic leaderboard.
+- [evals/rotation-campaign.md](evals/rotation-campaign.md) — only when running a multi-round DEV/QA/Mister Clean/holdout campaign; tier-aware rotation, reasoning staircase, event capture, and failure-to-capability feedback.

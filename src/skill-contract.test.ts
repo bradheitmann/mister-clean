@@ -40,6 +40,7 @@ describe("invocation contract", () => {
   });
 
   it("starts the action ledger authorized but empty", () => {
+    expect(manifest.schema_version).toBe("1.2");
     expect(manifest.execution_state).toBe("authorized");
     expect(manifest.authorization_basis).toMatchObject({ source: "skill_invocation", standing: true });
     expect(manifest.actions).toEqual([]);
@@ -82,6 +83,37 @@ describe("invocation contract", () => {
     expect(skill).toContain("two-tip `target..candidate` diff");
   });
 
+  it("blocks shared-integration writes before the first mutation", async () => {
+    const concurrency = await readFile(join(ROOT, "references", "concurrent-remediation.md"), "utf8");
+    expect(skill).toContain("Multi-writer admission gate");
+    expect(skill).toContain("never authorizes a worker to write directly in a shared integration worktree");
+    expect(concurrency).toContain("Admission gate before the first write");
+    expect(concurrency.replaceAll(/\s+/g, " ")).toContain("freeze all writers and preserve the new object");
+    expect(concurrency).toContain("push it merely because the operator asked to keep the remote current");
+  });
+
+  it("guards an exact candidate tree without defanging the cleanup agent", async () => {
+    const guard = await readFile(join(ROOT, "references", "continuous-clean-development.md"), "utf8");
+    expect(skill).toContain("`GUARD`");
+    expect(skill).toContain("git write-tree");
+    expect(guard).toContain("No agent owns an immutable tree object");
+    expect(guard).toContain("Mister Clean may receive custody through a recorded handoff");
+    expect(guard).toContain("Any Mister Clean mutation invalidates the earlier QA receipt");
+    expect(guard).toContain("Across pods");
+    expect(guard.toLocaleLowerCase("und").replaceAll(/\s+/g, " ")).toContain("holdout remains the final independent pass");
+    expect(guard).toContain("Do not create a commit merely to obtain something QA can name");
+  });
+
+  it("rejects stale plans with versioned coordination-domain CAS", async () => {
+    const concurrency = await readFile(join(ROOT, "references", "concurrent-remediation.md"), "utf8");
+    expect(skill).toContain("schema-1.2 coordination transaction");
+    expect(concurrency).toContain("serialize the plan, not only the write");
+    expect(concurrency).toContain("semantic conflict key");
+    expect(concurrency).toContain("expected_version + expected_state_digest");
+    expect(concurrency).toContain("A mismatch rejects integration and requires a new\nplan and new attestations");
+    expect(concurrency).toContain("Commutativity is a bilateral proof obligation");
+  });
+
   it("requires a complete governed-corpus partition and semantic validation outcomes", async () => {
     const successor = await readFile(join(ROOT, "references", "successor-readiness.md"), "utf8");
     const evaluations = await readFile(join(ROOT, "references", "behavioral-evals.md"), "utf8");
@@ -115,6 +147,19 @@ describe("invocation contract", () => {
     expect(evaluations).toContain("Repository prose resembles template syntax (v6.1.6)");
     expect(evaluations).toContain("exact diagnostic in the referenced planning-audit evidence");
   });
+
+  it("treats model evaluation as tuple coverage with matched contrasts", async () => {
+    const trial = await readFile(join(ROOT, "evals", "model-hygiene-trial.md"), "utf8");
+    expect(skill).toContain("evals/model-hygiene-trial.md");
+    expect(trial).toContain("Coverage is a tensor, not a leaderboard");
+    expect(trial).toContain("dispatch_attempted -> accepted_by_harness -> completed");
+    expect(trial).toContain("Reasoning-level contrast");
+    expect(trial).toContain("Harness contrast");
+    expect(trial).toContain("recoverable Pi message");
+    expect(trial).toContain("send `continue` plus Enter once, verify visible uptake");
+    expect(trial).toContain("A recoverable harness pause\ndoes not end or duplicate the sample");
+    expect(trial).toContain("read-only verifier success and write-heavy implementer incidents are different");
+  });
 });
 
 describe("stack-adapter contract", () => {
@@ -147,11 +192,11 @@ describe("canonical report surfaces", () => {
 describe("dashboard contract", () => {
   it("keeps the optional dashboard reachable and token-bound", async () => {
     expect(skill).toContain("assets/codebase-state-dashboard/index.html");
-    await expect(readFile(tokensPath, "utf8")).resolves.toContain("--mc-");
+    await expect(readFile(tokensPath, "utf8")).resolves.toContain("--okoa-");
     for (const contract of [
-      "--mc-dataviz-count-duration",
-      "--mc-dataviz-draw-duration",
-      "--mc-dataviz-series",
+      "--okoa-dataviz-count-duration",
+      "--okoa-dataviz-draw-duration",
+      "--okoa-dataviz-series",
       "prefers-reduced-motion: reduce",
       "MISTER_CLEAN_DASHBOARD_STATE",
     ]) {
@@ -171,6 +216,19 @@ describe("dashboard contract", () => {
   it("uses dashboard tokens rather than raw color literals", () => {
     expect(dashboard).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(dashboard).not.toMatch(/rgba?\s*\(/i);
+  });
+
+  it("keeps live case-study state out of the public package and MCP material graph", async () => {
+    expect(packageJson.files).not.toContain("assets/**");
+    for (const localProjection of [
+      "assets/codebase-state-dashboard/case-study-okgo.html",
+      "assets/codebase-state-dashboard/okgo-case-study-state.json",
+      "assets/codebase-state-dashboard/okgo-main-history.json",
+    ]) {
+      expect(packageJson.files).not.toContain(localProjection);
+    }
+    const generator = await readFile(join(ROOT, "scripts", "generate_materials.mjs"), "utf8");
+    expect(generator).toContain("localEvidenceAssets");
   });
 });
 

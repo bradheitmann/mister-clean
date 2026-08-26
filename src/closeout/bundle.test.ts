@@ -16,7 +16,11 @@ const execute = promisify(execFile);
 const temporaryRoots: string[] = [];
 
 type RecordValue = Record<string, unknown>;
+const COMPARATOR_RESULT_BYTES = Symbol("comparator-result-bytes");
+type ComparatorObservationRecord = RecordValue & { [COMPARATOR_RESULT_BYTES]?: string };
 const NOW = "2026-08-25T09:00:00Z";
+const MIDDLE = "2026-08-25T09:00:01Z";
+const AFTER = "2026-08-25T09:00:02Z";
 const DONE_PLANNING = "---\nartifact_type: story\nstory_id: FIXTURE-DONE\nstatus: done\n---\n";
 const NEXT_PLANNING = "---\nartifact_type: story\nstory_id: FIXTURE-NEXT\nstatus: backlog\n---\n";
 
@@ -26,6 +30,30 @@ async function git(repo: string, ...args: string[]): Promise<string> {
 
 function digest(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function comparatorObservation(
+  phase: "before" | "intermediate" | "after",
+  object: string,
+  command: string,
+  detector: string,
+  findings: readonly string[],
+  result: string,
+  observedAt: string,
+): RecordValue {
+  const resultSha256 = digest(result);
+  return {
+    phase,
+    object,
+    command_sha256: digest(command),
+    detector_sha256: digest(detector),
+    result_sha256: resultSha256,
+    result_ref: { path: `comparator-results/${resultSha256}.txt`, sha256: resultSha256 },
+    finding_fingerprints: [...findings].sort(),
+    exit_code: 0,
+    observed_at: observedAt,
+    [COMPARATOR_RESULT_BYTES]: result,
+  };
 }
 
 async function put(path: string, value: string): Promise<void> {
@@ -160,6 +188,7 @@ async function fixture(): Promise<Fixture> {
   };
   const manifest: RecordValue = {
     record_type: "mister-clean.action-manifest", schema_version: "1.0",
+    legacy_schema_acknowledged: true,
     repo: { id: "repo", commit: head }, mode: "CLOSE", request_ref: request,
     authorization_basis: { source: "skill_invocation", ref: request, scope: "named_repository_and_current_task", standing: true },
     policy_sources: ["fixture-policy"],
@@ -221,7 +250,7 @@ async function fixture(): Promise<Fixture> {
     },
   };
   const regression: RecordValue = {
-    record_type: "mister-clean.regression-delta", schema_version: "1.0",
+    record_type: "mister-clean.regression-delta", schema_version: "1.2",
     policy: "zero_open_run_introduced_debt", baseline_object: head, closing_object: head,
     baseline_findings: 0, closing_findings: 0, baseline_paid: 0, baseline_open: 0,
     newly_discovered_preexisting_paid: 0, newly_discovered_preexisting_open: 0,
@@ -266,6 +295,17 @@ async function fixture(): Promise<Fixture> {
           retained: debris.retained, unclassified: debris.unclassified, observed_at: now,
         },
       };
+      for (const rawCheck of (regression.action_checks ?? []) as RecordValue[]) {
+        for (const rawComparator of (rawCheck.comparators ?? []) as RecordValue[]) {
+          for (const rawObservation of (rawComparator.observations ?? []) as RecordValue[]) {
+            const result = (rawObservation as ComparatorObservationRecord)[COMPARATOR_RESULT_BYTES];
+            const resultRef = rawObservation.result_ref as RecordValue | undefined;
+            if (typeof result === "string" && typeof resultRef?.path === "string") {
+              await put(join(proof, resultRef.path), result);
+            }
+          }
+        }
+      }
       if (gate) {
         records["gate-result.json"] = {
           record_type: "mister-clean.gate-result", gate_id: gate.id, object: gate.object,
@@ -373,6 +413,9 @@ describe("validateBundle", () => {
   it("accepts temporary action harm only when it is paid before the boundary", async () => {
     const value = await fixture();
     const action = executedAction();
+    const command = "git status --porcelain=v2";
+    const detector = "git fixture";
+    const generatedFile = digest("generated-file");
     value.report.actions = [action];
     value.manifest.actions = [action];
     value.manifest.execution_state = "executed";
@@ -383,20 +426,57 @@ describe("validateBundle", () => {
       action_checks: [{
         action_id: "A-1", before_object: value.head, after_object: value.head,
         comparators: [{
-          id: "git-status", command: "git status --porcelain=v2", scope: "repository",
-          detector: "git fixture", before_result: "clean", after_result: "clean",
+          id: "git-status", command, scope: "repository", detector,
+          observations: [
+            comparatorObservation("before", value.head, command, detector, [], "clean", NOW),
+            comparatorObservation("intermediate", digest("temporary action state"), command, detector, [generatedFile], "untracked generated file", MIDDLE),
+            comparatorObservation("after", value.head, command, detector, [], "clean", AFTER),
+          ],
         }],
         introduced: 1, paid_before_boundary: 1, open_at_boundary: 0,
-        boundary_status: "closed", observed_at: NOW,
+        boundary_status: "closed", observed_at: AFTER,
       }],
     });
     await value.persist();
     await expect(validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo })).resolves.toEqual({ errors: [], ok: true });
   });
 
+  it("requires preserved result bytes and binds result_sha256 to them", async () => {
+    const value = await fixture();
+    const action = executedAction();
+    const command = "git status --porcelain=v2";
+    const detector = "git fixture";
+    value.report.actions = [action];
+    value.manifest.actions = [action];
+    value.manifest.execution_state = "executed";
+    (value.report.regression_control as RecordValue).action_checks = 1;
+    const before = comparatorObservation("before", value.head, command, detector, [], "clean", NOW);
+    const after = comparatorObservation("after", value.head, command, detector, [], "clean", AFTER);
+    value.regression.action_checks = [{
+      action_id: "A-1", before_object: value.head, after_object: value.head,
+      comparators: [{ id: "git-status", command, scope: "repository", detector, observations: [before, after] }],
+      introduced: 0, paid_before_boundary: 0, open_at_boundary: 0,
+      boundary_status: "closed", observed_at: AFTER,
+    }];
+    await value.persist();
+
+    const resultPath = String((before.result_ref as RecordValue).path);
+    await rm(join(value.proof, resultPath));
+    const missing = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(missing.errors.some((error) => error.includes("result_ref.path: file not found"))).toBe(true);
+
+    before.result_sha256 = digest("fabricated clean output");
+    await value.persist();
+    const fabricated = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(fabricated.errors.some((error) => error.includes("result_sha256: must equal the digest-bound result_ref bytes"))).toBe(true);
+  });
+
   it("refuses CLEAN when an action leaves cleanup-introduced debt open", async () => {
     const value = await fixture();
     const action = executedAction();
+    const command = "git status --porcelain=v2";
+    const detector = "git fixture";
+    const generatedFile = digest("generated-file");
     action.status = "failed";
     value.report.actions = [structuredClone(action)];
     value.manifest.actions = [structuredClone(action)];
@@ -407,17 +487,48 @@ describe("validateBundle", () => {
       action_checks: [{
         action_id: "A-1", before_object: value.head, after_object: value.head,
         comparators: [{
-          id: "git-status", command: "git status --porcelain=v2", scope: "repository",
-          detector: "git fixture", before_result: "clean", after_result: "untracked generated file",
+          id: "git-status", command, scope: "repository", detector,
+          observations: [
+            comparatorObservation("before", value.head, command, detector, [], "clean", NOW),
+            comparatorObservation("after", value.head, command, detector, [generatedFile], "untracked generated file", AFTER),
+          ],
         }],
         introduced: 1, paid_before_boundary: 0, open_at_boundary: 1,
-        boundary_status: "interrupted", observed_at: NOW,
+        boundary_status: "interrupted", observed_at: AFTER,
       }],
     });
     await value.persist();
     const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
     expect(result.errors.some((error) => error.includes("CLEAN requires zero cleanup-introduced open debt"))).toBe(true);
     expect(result.errors.some((error) => error.includes("CLEAN forbids an interrupted action boundary"))).toBe(true);
+  });
+
+  it("rejects self-asserted zero harm when comparator fingerprints prove a new finding", async () => {
+    const value = await fixture();
+    const action = executedAction();
+    const command = "git status --porcelain=v2";
+    const detector = "git fixture";
+    const generatedFile = digest("generated-file");
+    value.report.actions = [action];
+    value.manifest.actions = [action];
+    value.manifest.execution_state = "executed";
+    (value.report.regression_control as RecordValue).action_checks = 1;
+    value.regression.action_checks = [{
+      action_id: "A-1", before_object: value.head, after_object: value.head,
+      comparators: [{
+        id: "git-status", command, scope: "repository", detector,
+        observations: [
+          comparatorObservation("before", value.head, command, detector, [], "clean", NOW),
+          comparatorObservation("after", value.head, command, detector, [generatedFile], "untracked generated file", AFTER),
+        ],
+      }],
+      introduced: 0, paid_before_boundary: 0, open_at_boundary: 0,
+      boundary_status: "closed", observed_at: AFTER,
+    }];
+    await value.persist();
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.errors).toContain("$.report.regression_control.evidence_ref.action_checks[0].introduced: must equal fingerprint-derived total (1)");
+    expect(result.errors).toContain("$.report.regression_control.evidence_ref.action_checks[0].open_at_boundary: must equal fingerprint-derived total (1)");
   });
 
   it("requires a no-harm action check for every executed action", async () => {

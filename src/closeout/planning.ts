@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
-import { basename, extname, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, relative, resolve, sep } from "node:path";
 
 import { parse as parseYaml } from "yaml";
 
@@ -7,6 +8,8 @@ import { foldCase } from "./normalization.js";
 import {
   assertDirectory,
   discoverPlanningRoots,
+  git,
+  isGitAncestor,
   listEntriesRecursively,
   planningLaneLifecycle,
 } from "./repository.js";
@@ -17,22 +20,30 @@ export type PlanningFindingCode =
   | "acceptance_gate_identity_conflict"
   | "acceptance_gate_undiscovered"
   | "acceptance_gate_unknown"
+  | "acceptance_partial_malformed"
+  | "acceptance_partial_unpaid"
   | "archive_classification_conflict"
   | "body_projection_conflict"
   | "completed_parent_unexecuted_acceptance"
   | "duplicate_artifact_id"
+  | "finding_state_unknown"
+  | "unfinished_completion_marker"
   | "lane_status_conflict"
   | "lifecycle_state_unknown"
+  | "maintenance_lifecycle_stale"
   | "orphan_parent_reference"
   | "parent_child_projection_conflict"
   | "parent_completion_stale"
   | "planning_input_unparsed"
   | "planning_relationship_conflict"
   | "planning_relationship_unresolved"
-  | "preexecution_parent_has_started_children";
+  | "preexecution_parent_has_started_children"
+  | "remediation_finding_open"
+  | "remediation_finding_partial";
 
 export interface PlanningSource {
   readonly classificationRationale?: string;
+  readonly compoundEnvelope?: string;
   readonly content: string;
   readonly declaredClass?: string;
   readonly path: string;
@@ -46,20 +57,52 @@ export interface PlanningFinding {
   readonly subject: string;
 }
 
+export interface PlanningRawFinding extends PlanningFinding {
+  readonly detector: "planning_graph";
+  readonly evidence_refs: readonly string[];
+  readonly id: string;
+  readonly snapshot: string;
+}
+
+export interface PlanningRootDebt {
+  readonly affected_paths: readonly string[];
+  readonly affected_projection_field: string;
+  readonly causal_evidence: {
+    readonly component_refs: readonly string[];
+    readonly kind: "connected_artifact_component" | "single_artifact";
+    readonly violated_invariant: string;
+  };
+  readonly cause_key: string;
+  readonly class: string;
+  readonly detector_family: "planning_graph";
+  readonly id: string;
+  readonly observation_count: number;
+  readonly raw_finding_ids: readonly string[];
+  readonly repair_boundary: string;
+  readonly snapshot: string;
+}
+
 export interface PlanningAuditResult {
   readonly artifactCount: number;
+  readonly candidate_probe_count: number;
   readonly counts: Readonly<Record<PlanningFindingCode, number>>;
   readonly exitCode: 0 | 1;
   readonly findings: readonly PlanningFinding[];
   readonly planningRootCount: number;
+  readonly raw_finding_count: number;
+  readonly raw_findings: readonly PlanningRawFinding[];
+  readonly root_debt_count: number;
+  readonly root_debts: readonly PlanningRootDebt[];
   readonly status: "pass" | "fail" | "not_applicable";
   readonly structuredArtifactCount: number;
+  readonly suppressed_by_typed_nonartifact_count: number;
 }
 
 type JsonObject = Record<string, unknown>;
 type Lifecycle = "active" | "archived" | "done" | "preexecution" | "unknown";
-type Acceptance = "failed" | "not_applicable" | "passed" | "unknown" | "unrun";
+type Acceptance = "failed" | "not_applicable" | "partial" | "passed" | "unknown" | "unrun";
 type ChildRelationshipRole = "child_parentage" | "rollup_projection";
+type FindingState = "fixed" | "open" | "partial" | "resolved" | "unknown";
 
 interface TableChild {
   readonly id: string;
@@ -86,6 +129,7 @@ interface TableScan {
 
 interface Artifact {
   readonly acceptance: boolean;
+  readonly acceptanceState: Acceptance;
   readonly bodyGateObservations: readonly GateObservation[];
   readonly bodyProjection: StateProjection;
   readonly content: string;
@@ -93,7 +137,10 @@ interface Artifact {
   readonly declaredClass: Lifecycle;
   readonly declaredProjection: StateProjection;
   readonly id: string;
+  readonly identityExplicit: boolean;
   readonly lane: Lifecycle;
+  readonly maintenanceCommit?: string;
+  readonly maintenanceTerminalEvidence: boolean;
   readonly metadata: JsonObject;
   readonly nonArtifact: boolean;
   readonly nonArtifactRequested: boolean;
@@ -102,23 +149,30 @@ interface Artifact {
   readonly parentReferences: readonly ParentReference[];
   readonly parseError?: string;
   readonly path: string;
+  readonly findingState: FindingState;
+  readonly operateTimeLegCount: number;
+  readonly operateTimeLegErrors: readonly string[];
   readonly state: Lifecycle;
   readonly structured: boolean;
   readonly tableChildren: readonly TableChild[];
   readonly topLevel: boolean;
   readonly type: string;
+  readonly unfinishedMarkers: readonly string[];
   readonly childRelationshipRole: ChildRelationshipRole;
   readonly relationshipErrors: readonly RelationshipError[];
 }
 
 interface GateObservation {
+  readonly identity: string;
   readonly kind: string;
   readonly rationale: boolean;
   readonly ref: string;
+  readonly strength: "structured" | "explicit" | "weak";
   readonly state: Acceptance;
 }
 
 interface AcceptanceGate {
+  readonly identity: string;
   readonly kind: string;
   readonly refs: readonly string[];
   readonly state: Acceptance;
@@ -159,6 +213,9 @@ const PREEXECUTION = new Set([
 ]);
 const ARCHIVED = new Set(["archive", "archived", "historical", "history", "superseded"]);
 const FAILED = new Set(["deny", "denied", "fail", "failed", "reject", "rejected", "revise"]);
+const PARTIAL = new Set([
+  "conditional", "conditional pass", "conditionally passed", "partial", "partially complete", "partially satisfied",
+]);
 const PASSED = new Set([...DONE, "approve"]);
 const UNRUN = new Set([
   "backlog", "blocked", "not executed", "not run", "notexecuted", "notrun", "pending",
@@ -174,7 +231,7 @@ const HIERARCHY_ARTIFACT_TYPES = new Set(["epic", "feature", "slice", "story", "
 const PLANNING_ARTIFACT_TYPES = new Set([
   ...HIERARCHY_ARTIFACT_TYPES,
   ...ROLLUP_ARTIFACT_TYPES,
-  "acceptance", "holdout", "qa", "review",
+  "acceptance", "dispatch", "finding", "holdout", "maintenance", "qa", "review",
 ]);
 const CHILD_PARENTAGE_ROLE_ALIASES = new Set(["child_parentage", "hierarchy", "parent", "parentage"]);
 const ROLLUP_PROJECTION_ROLE_ALIASES = new Set(["index", "projection", "rollup", "rollup_projection", "status_index"]);
@@ -241,12 +298,17 @@ const FINDING_CODES: readonly PlanningFindingCode[] = [
   "acceptance_gate_identity_conflict",
   "acceptance_gate_undiscovered",
   "acceptance_gate_unknown",
+  "acceptance_partial_malformed",
+  "acceptance_partial_unpaid",
   "archive_classification_conflict",
   "body_projection_conflict",
   "completed_parent_unexecuted_acceptance",
   "duplicate_artifact_id",
+  "finding_state_unknown",
+  "unfinished_completion_marker",
   "lane_status_conflict",
   "lifecycle_state_unknown",
+  "maintenance_lifecycle_stale",
   "orphan_parent_reference",
   "parent_child_projection_conflict",
   "parent_completion_stale",
@@ -254,6 +316,8 @@ const FINDING_CODES: readonly PlanningFindingCode[] = [
   "planning_relationship_conflict",
   "planning_relationship_unresolved",
   "preexecution_parent_has_started_children",
+  "remediation_finding_open",
+  "remediation_finding_partial",
 ];
 
 function object(value: unknown): JsonObject | undefined {
@@ -332,10 +396,125 @@ function acceptance(value: string | undefined): Acceptance {
   if (!value) return "unknown";
   const token = normalize(value);
   if (FAILED.has(token)) return "failed";
+  if (PARTIAL.has(token)) return "partial";
   if (UNRUN.has(token)) return "unrun";
   if (NOT_APPLICABLE.has(token)) return "not_applicable";
   if (PASSED.has(token)) return "passed";
   return "unknown";
+}
+
+function acceptanceForArtifact(
+  value: string | undefined,
+  artifactType: string,
+  kind = artifactType,
+): Acceptance {
+  const exact = acceptance(value);
+  if (exact !== "unknown") return exact;
+  if (artifactType !== "review" && kind !== "review") return "unknown";
+  const token = normalize(value ?? "");
+  if (/^conditional accept\b/.test(token)) return "passed";
+  if (/^(?:accept|accepted|approve|approved|pass|passed)\b/.test(token)) return "passed";
+  if (/^(?:reject|rejected|fail|failed)\b/.test(token)) return "failed";
+  return "unknown";
+}
+
+function findingState(value: string | undefined): FindingState {
+  const token = normalize(value ?? "");
+  if (/^partial(?:ly)?(?: resolved| complete)?\b/.test(token)) return "partial";
+  if (/^open\b/.test(token)) return "open";
+  if (/^fixed\b/.test(token)) return "fixed";
+  if (/^resolved\b/.test(token)) return "resolved";
+  return "unknown";
+}
+
+function findingStateProjection(metadata: JsonObject): {
+  readonly error?: string;
+  readonly lifecycle: Lifecycle;
+  readonly projection: StateProjection;
+  readonly state: FindingState;
+} {
+  const aliases = scalarAliasValues(metadata, ["finding_status", "status"], "finding state");
+  const states = aliases.values.map(findingState);
+  const recognized = [...new Set(states.filter((state) => state !== "unknown"))];
+  const errors = [
+    aliases.error,
+    ...(aliases.values.length === 0 ? ["finding state is missing"] : []),
+    ...(states.includes("unknown")
+      ? [`finding state must begin with OPEN, FIXED, RESOLVED, or PARTIAL; received ${aliases.values.map((value) => JSON.stringify(value)).join(", ")}`]
+      : []),
+    ...(recognized.length > 1
+      ? [`finding state projections conflict: ${aliases.values.map((value) => JSON.stringify(value)).join(", ")}`]
+      : []),
+  ].filter((error): error is string => Boolean(error));
+  const state = errors.length === 0 ? recognized[0] ?? "unknown" : "unknown";
+  const lifecycleState: Lifecycle = new Set<FindingState>(["fixed", "resolved"]).has(state)
+    ? "done"
+    : new Set<FindingState>(["open", "partial"]).has(state)
+      ? "active"
+      : "unknown";
+  return {
+    ...(errors.length > 0 ? { error: errors.join("; ") } : {}),
+    lifecycle: lifecycleState,
+    projection: {
+      state: lifecycleState,
+      states: lifecycleState === "unknown" ? ["unknown"] : [lifecycleState],
+      values: aliases.values,
+    },
+    state,
+  };
+}
+
+function operateTimeLegs(metadata: JsonObject): { readonly count: number; readonly errors: readonly string[] } {
+  const entries = topEntries(metadata, ["operate_time_legs"]);
+  if (entries.length === 0) return { count: 0, errors: [] };
+  const errors: string[] = [];
+  const legs = entries.flatMap(([key, raw]) => {
+    if (!Array.isArray(raw)) {
+      errors.push(`${key} must be a nonempty array of typed pending legs`);
+      return [];
+    }
+    return raw.map((value, index) => ({ ref: `${key}[${index}]`, value }));
+  });
+  if (legs.length === 0) errors.push("operate_time_legs must contain at least one pending leg");
+  for (const leg of legs) {
+    const item = object(leg.value);
+    if (!item) {
+      errors.push(`${leg.ref} must be an object`);
+      continue;
+    }
+    const state = scalarAliasValues(item, ["status", "state"], `${leg.ref} state`);
+    const action = scalarAliasValues(item, ["required_next_action", "next_action", "action"], `${leg.ref} next action`);
+    const owner = scalarAliasValues(item, ["owner", "owner_role"], `${leg.ref} owner`);
+    const evidence = scalarAliasValues(item, ["evidence_required", "evidence"], `${leg.ref} evidence`);
+    for (const scan of [state, action, owner, evidence]) if (scan.error) errors.push(scan.error);
+    if (state.values.length !== 1 || acceptance(state.values[0]) !== "unrun") {
+      errors.push(`${leg.ref} must declare exactly one pending or unrun state`);
+    }
+    if (action.values.length !== 1) errors.push(`${leg.ref} must declare exactly one required next action`);
+    if (owner.values.length !== 1) errors.push(`${leg.ref} must declare exactly one owner`);
+    if (evidence.values.length !== 1) errors.push(`${leg.ref} must declare exactly one evidence requirement`);
+  }
+  return { count: legs.length, errors };
+}
+
+function maintenanceEvidence(metadata: JsonObject, content: string): {
+  readonly commit?: string;
+  readonly terminal: boolean;
+} {
+  const declared = scalarAliasValues(
+    metadata,
+    ["completion_commit", "implementation_commit", "resolved_commit"],
+    "maintenance completion commit",
+  ).values[0];
+  const bodyMatch = /\bRESOLUTION\s*:\s*(?:landed|implemented|completed|fixed)(?:\s+at)?\s+([0-9a-f]{7,40})\b/i.exec(content);
+  const candidate = declared ?? bodyMatch?.[1];
+  const commit = candidate && /^[0-9a-f]{7,40}$/i.test(candidate) ? candidate : undefined;
+  const terminalMetadata = scalarAliasValues(
+    metadata,
+    ["deliverable_status", "implementation_status", "verification_status"],
+    "maintenance terminal evidence",
+  ).values.some((value) => lifecycle(value) === "done" || acceptance(value) === "passed");
+  return { ...(commit ? { commit } : {}), terminal: Boolean(commit && (bodyMatch || terminalMetadata)) };
 }
 
 function stateProjection(values: readonly string[]): StateProjection {
@@ -506,10 +685,13 @@ function topLevelProjection(metadata: JsonObject): { error?: string; value: bool
   };
 }
 
-function unsupportedStateAliasError(metadata: JsonObject, label: string): string | undefined {
+function unsupportedStateAliasError(metadata: JsonObject, label: string, type: string): string | undefined {
   const supported = new Set([
     ...STRUCTURED_STATE_KEYS.map(keyToken),
     ...EXPLICIT_ACCEPTANCE_FIELDS.map(keyToken),
+    "primary_state_column",
+    ...(type === "finding" ? ["finding_status"] : []),
+    ...(type === "story" ? ["story_review_status"] : []),
   ]);
   const unsupported = Object.keys(metadata).filter((key) => {
     const token = keyToken(key);
@@ -541,6 +723,7 @@ function hasRawPlanningSignal(metadata: JsonObject, type: string): boolean {
     "child_relationship_role", "child_relationship_role_rationale", "child_target_column",
     "child_target_column_rationale", "non_relationship_table_columns",
     "non_relationship_table_rationale", "non_relationship_table_target_columns", "parent", "parent_id",
+    "primary_state_column",
     "parent_ids", "parents", "parents_ids", "relationship_role", "relationship_role_rationale", "relationship_target_column",
     "relationship_target_column_rationale", "rollup_target_column", "rollup_target_column_rationale",
     "top_level", `${type}_id`,
@@ -704,7 +887,7 @@ function inferredArtifactType(
 
 function artifactType(path: string, metadata: JsonObject): { error?: string; type: string } {
   const projection = scalarAliasValues(metadata, ["artifact_type", "kind", "type"], "artifact type");
-  const types = unique(projection.values.map(keyToken));
+  const types = unique(projection.values.map(keyToken).map((value) => value === "story_review" ? "review" : value));
   const inferred = inferredArtifactType(path, metadata, types.length === 1 ? types[0] : undefined);
   if (types.length === 0) {
     const errors = [projection.error, inferred.error].filter((error): error is string => Boolean(error));
@@ -723,6 +906,7 @@ function artifactType(path: string, metadata: JsonObject): { error?: string; typ
       ? [`artifact type ${JSON.stringify(types[0])} conflicts with acceptance identity aliases for ${acceptanceKinds.map((value) => JSON.stringify(value)).join(", ")}`]
       : []),
     ...(inferred.strongAcceptanceType && inferred.strongAcceptanceType !== types[0]
+      && !(inferred.strongAcceptanceType === "acceptance" && ACCEPTANCE_WORDS.has(types[0] ?? ""))
       ? [`artifact type ${JSON.stringify(types[0])} conflicts with acceptance-shaped metadata for ${JSON.stringify(inferred.strongAcceptanceType)}`]
       : []),
   ].filter((error): error is string => Boolean(error));
@@ -737,7 +921,11 @@ function artifactIdentity(
   type: string,
   metadata: JsonObject,
 ): { error?: string; explicit: boolean; id: string } {
-  const projection = scalarAliasValues(metadata, [`${type}_id`, "id"], "artifact identity");
+  const projection = scalarAliasValues(
+    metadata,
+    type === "maintenance" ? ["maintenance_id", "maint_id", "id"] : [`${type}_id`, "id"],
+    "artifact identity",
+  );
   const ids = unique(projection.values);
   const errors = [
     projection.error,
@@ -773,7 +961,6 @@ function parentReferenceKeys(type: string, isAcceptance: boolean): string[] {
       ["story", "story_id"],
       ["feature", "feature_id", "slice", "slice_id", "task", "task_id", "work_item", "work_item_id"],
       ["epic", "epic_id"],
-      ["reviews"],
     ].flat());
   } else {
     keys.push(...(CANONICAL_PARENT_FIELDS[type] ?? []));
@@ -813,7 +1000,7 @@ function parentReferences(
       return;
     }
     const item = object(value);
-    const unsupportedState = item ? unsupportedStateAliasError(item, "parent reference") : undefined;
+    const unsupportedState = item ? unsupportedStateAliasError(item, "parent reference", "relationship") : undefined;
     if (unsupportedState) {
       errors.push({
         code: "planning_relationship_conflict",
@@ -986,6 +1173,19 @@ function nonRelationshipTableHeaders(
   };
 }
 
+function primaryStateColumn(metadata: JsonObject): { readonly error?: string; readonly header?: string } {
+  const projection = scalarAliasValues(metadata, ["primary_state_column"], "primary state column");
+  const errors = [projection.error].filter((error): error is string => Boolean(error));
+  if (projection.values.length > 1) {
+    errors.push(`primary_state_column must resolve to exactly one header; received ${projection.values.map((value) => JSON.stringify(value)).join(", ")}`);
+  }
+  const header = projection.values.length === 1 ? normalize(projection.values[0] ?? "") : undefined;
+  return {
+    ...(errors.length > 0 ? { error: errors.join("; ") } : {}),
+    ...(header ? { header } : {}),
+  };
+}
+
 function splitTableRow(line: string): string[] {
   const trimmed = line.trim();
   const cells: string[] = [];
@@ -1111,6 +1311,7 @@ function tableChildren(
   role: ChildRelationshipRole,
   targetHeaders: ReadonlySet<string>,
   nonRelationshipHeaders: ReadonlySet<string>,
+  primaryStateHeader?: string,
 ): TableScan {
   const children: TableChild[] = [];
   const errors: RelationshipError[] = [];
@@ -1129,15 +1330,20 @@ function tableChildren(
     const nonRelationshipIndexes = headers.flatMap((header, headerIndex) =>
       nonRelationshipHeaders.has(header) ? [headerIndex] : []);
     const childIndex = childIndexes[0] ?? -1;
-    const stateIndex = stateIndexes[0] ?? -1;
+    const declaredStateIndexes = primaryStateHeader
+      ? headers.flatMap((header, headerIndex) => header === primaryStateHeader ? [headerIndex] : [])
+      : [];
+    const statusIndexes = headers.flatMap((header, headerIndex) => header === "status" ? [headerIndex] : []);
+    const authoritativeStateIndexes = primaryStateHeader
+      ? declaredStateIndexes
+      : statusIndexes.length === 1
+        ? statusIndexes
+        : stateIndexes;
+    const stateIndex = authoritativeStateIndexes[0] ?? -1;
     const hasSeparator = separatorRow(splitTableRow(separatorLine));
-    if (childIndexes.length > 1 || stateIndexes.length > 1) {
-      errors.push({
-        code: "planning_relationship_conflict",
-        detail: `relationship table must have exactly one target column and at most one state column; found ${childIndexes.length} targets and ${stateIndexes.length} state columns`,
-        related: [`${path}#table-header-${header.lineNumber}`],
-      });
-    }
+    const ambiguousState = primaryStateHeader
+      ? declaredStateIndexes.length !== 1
+      : statusIndexes.length > 1 || (statusIndexes.length === 0 && stateIndexes.length > 1);
     if (childIndexes.length === 0 && nonRelationshipIndexes.length === 1) continue;
     if (childIndexes.length === 0 && nonRelationshipIndexes.length > 1) {
       errors.push({
@@ -1147,15 +1353,8 @@ function tableChildren(
       });
       continue;
     }
-    if (unsupportedStateIndexes.length > 0) {
-      errors.push({
-        code: "planning_relationship_conflict",
-        detail: `state-like table headers must use a recognized lifecycle column name; unsupported: ${unsupportedStateIndexes.map((headerIndex) => JSON.stringify(headers[headerIndex])).join(", ")}`,
-        related: [`${path}#table-header-${header.lineNumber}`],
-      });
-    }
     if (childIndex < 0) {
-      if (stateIndex >= 0 || unsupportedStateIndexes.length > 0) {
+      if (role === "rollup_projection" && (stateIndex >= 0 || unsupportedStateIndexes.length > 0)) {
         errors.push({
           code: "planning_relationship_conflict",
           detail: `${role} table has a state column but no recognized or declared target column (${headers.map((header) => JSON.stringify(header)).join(", ")})`,
@@ -1163,6 +1362,22 @@ function tableChildren(
         });
       }
       continue;
+    }
+    if (childIndexes.length > 1 || ambiguousState) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: primaryStateHeader
+          ? `relationship table must contain exactly one declared primary state column ${JSON.stringify(primaryStateHeader)}; found ${declaredStateIndexes.length}`
+          : `relationship table must have exactly one target column and one unambiguous authoritative lifecycle column; found ${childIndexes.length} targets and ${stateIndexes.length} lifecycle-like columns`,
+        related: [`${path}#table-header-${header.lineNumber}`],
+      });
+    }
+    if (unsupportedStateIndexes.length > 0 && stateIndex < 0) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: `state-like table headers must use a recognized lifecycle column name; unsupported: ${unsupportedStateIndexes.map((headerIndex) => JSON.stringify(headers[headerIndex])).join(", ")}`,
+        related: [`${path}#table-header-${header.lineNumber}`],
+      });
     }
     let row = index + (hasSeparator ? 2 : 1);
     while (row < lines.length && !lines[row]?.historical && (lines[row]?.text ?? "").includes("|")) {
@@ -1234,7 +1449,7 @@ function structuredChildren(
     }
     const identityScan = scalarAliasValues(item, STRUCTURED_ID_KEYS, "structured relationship identity");
     const ids = identityScan.values;
-    const unsupportedState = unsupportedStateAliasError(item, "structured relationship entry");
+    const unsupportedState = unsupportedStateAliasError(item, "structured relationship entry", "relationship");
     if (unsupportedState) {
       errors.push({
         code: "planning_relationship_conflict",
@@ -1299,7 +1514,7 @@ function bodyProjection(lines: readonly ScannedBodyLine[]): StateProjection {
   for (const line of lines) {
     if (line.historical) continue;
     const match = /^\s*(?:>\s*)*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\*\*)?(?:(?:current|implementation)[_ -]+)?(?:lifecycle|phase|stage|state|status)(?:\*\*)?\s*:\s*(.+?)\s*$/i.exec(line.text);
-    if (match?.[1]) values.push(match[1]);
+    if (match?.[1] && lifecycle(match[1]) !== "unknown") values.push(match[1]);
   }
   return stateProjection(values);
 }
@@ -1320,26 +1535,15 @@ function bodyAcceptanceObservations(
       .replace(/^\s*(?:>\s*)*/, "")
       .replace(/^\s*#{1,6}\s*/, "")
       .replace(/^\s*[-*+]\s*/, "");
-    const unchecked = /^\[\s\]\s*(.+)$/i.exec(visible);
-    if (unchecked?.[1]) {
-      const kind = acceptanceKind(unchecked[1]);
-      if (kind) {
-        observations.push({
-          kind,
-          rationale: false,
-          ref: `${path}#line-${line.lineNumber}`,
-          state: "unrun",
-        });
-        continue;
-      }
-    }
     const plain = visible.replace(/\*\*|__|`/g, "").trim();
     const labelled = label.exec(plain);
     if (labelled?.[1] && labelled[2]) {
       observations.push({
+        identity: `body:${path}:${normalize(labelled[1])}`,
         kind: normalize(labelled[1]),
         rationale: false,
         ref: `${path}#line-${line.lineNumber}`,
+        strength: "explicit",
         state: acceptance(labelled[2]),
       });
       continue;
@@ -1348,15 +1552,29 @@ function bodyAcceptanceObservations(
       const kind = acceptanceKind(plain);
       if (kind) {
         observations.push({
+          identity: `body:${path}:${kind}`,
           kind,
           rationale: false,
           ref: `${path}#line-${line.lineNumber}`,
+          strength: "weak",
           state: "unrun",
         });
       }
     }
   }
   return observations;
+}
+
+function unfinishedCompletionMarkers(lines: readonly ScannedBodyLine[], path: string): string[] {
+  const refs: string[] = [];
+  for (const line of lines) {
+    if (line.historical) continue;
+    const visible = line.text
+      .replace(/^\s*(?:>\s*)*/, "")
+      .replace(/^\s*[-*+]\s*/, "");
+    if (/^\[\s\]\s+\S/.test(visible)) refs.push(`${path}#line-${line.lineNumber}`);
+  }
+  return refs;
 }
 
 function validAcceptanceScope(value: unknown): boolean {
@@ -1420,7 +1638,7 @@ function acceptanceDeclarationErrors(
     }
     const trailWords = trail.flatMap((part) => normalize(part).split(" "));
     if (trailWords.some((word) => ACCEPTANCE_WORDS.has(word) || ACCEPTANCE_WORDS.has(word.replace(/s$/, "")))) {
-      const unsupportedState = unsupportedStateAliasError(item, "acceptance scope");
+      const unsupportedState = unsupportedStateAliasError(item, "acceptance scope", "acceptance");
       const unsupportedOutcome = unsupportedAcceptanceAliasError(item);
       if (unsupportedState) {
         errors.push({
@@ -1440,6 +1658,7 @@ function acceptanceDeclarationErrors(
     for (const [scopeKey, scopeValue] of Object.entries(item)) {
       const scope = keyToken(scopeKey);
       if (!kinds.some((kind) => scope === kind || scope === `${kind}s`)) continue;
+      if (trail.length === 0 && scope === "reviews") continue;
       if (!validAcceptanceScope(scopeValue)) {
         errors.push({
           code: "planning_relationship_unresolved",
@@ -1475,7 +1694,8 @@ function acceptanceDeclarationErrors(
           related: [`${path}#${[...trail, kind].join(".")}`],
         });
       }
-      const unknownOutcomes = projection.values.filter((value) => acceptance(value) === "unknown");
+      const unknownOutcomes = projection.values.filter((value) =>
+        acceptanceForArtifact(value, artifactTypeValue, kind) === "unknown");
       if (unknownOutcomes.length > 0) {
         errors.push({
           code: "planning_relationship_conflict",
@@ -1497,25 +1717,70 @@ function acceptanceDeclarationErrors(
   return errors;
 }
 
+const PLANNING_ROOT_DIRECTORY_NAMES = new Set([
+  "epics", "issues", "planning", "plans", "project management", "roadmap", "slices", "stories", "tasks", "work items",
+]);
+
+function implicitPlanningPolicy(source: PlanningSource, metadata: JsonObject): boolean {
+  const extension = extname(source.path).toLocaleLowerCase("und");
+  if (!new Set([".yaml", ".yml"]).has(extension) || !basename(source.path).startsWith("_")) return false;
+  const parent = normalize(source.path.split("/").at(-2) ?? "");
+  if (!PLANNING_ROOT_DIRECTORY_NAMES.has(parent)) return false;
+  const declarationKeys = [
+    "artifact_id", "artifact_type", "child_relationship_role", "epic_id", "feature_id", "id", "kind",
+    "maint_id", "maintenance_id", "parent", "parent_id", "parent_ids", "relationship_role", "slice_id",
+    "story_id", "task_id", "top_level", "type", "work_item_id",
+  ];
+  return topEntries(metadata, declarationKeys).length === 0;
+}
+
+function implicitPlanningEvidence(source: PlanningSource, metadata: JsonObject): boolean {
+  const declarationKeys = [
+    "artifact_id", "artifact_type", "epic_id", "feature_id", "holdout_id", "id", "kind", "maint_id",
+    "maintenance_id", "parent", "parent_id", "parent_ids", "qa_id", "relationship_role", "review_id",
+    "slice_id", "story_id", "task_id", "top_level", "type", "work_item_id",
+  ];
+  if (topEntries(metadata, declarationKeys).length > 0) return false;
+  const parts = source.path.split("/").slice(0, -1).map(normalize);
+  if (parts.some((part) => new Set(["evidence", "holdout evidence", "receipts", "verdict evidence"]).has(part))) return true;
+  const stem = normalize(basename(source.path, extname(source.path)));
+  return /(?:^| )(?:audit|readiness|verification report)$/.test(stem);
+}
+
+function emptyStateProjection(): StateProjection {
+  return { state: "unknown", states: [], values: [] };
+}
+
 function parseArtifact(source: PlanningSource): Artifact {
   const parsed = parseSource(source);
   const typeProjection = artifactType(source.path, parsed.metadata);
   const type = typeProjection.type;
   const isAcceptance = acceptanceArtifact(source.path, type);
   const lane = pathLane(source.path);
-  const declaredScan = lifecycleAliasProjection(parsed.metadata, "artifact lifecycle", isAcceptance);
-  const unsupportedStateError = unsupportedStateAliasError(parsed.metadata, "artifact");
+  const remediationState = type === "finding" ? findingStateProjection(parsed.metadata) : undefined;
+  const declaredScan = remediationState
+    ? {
+      ...(remediationState.error ? { error: remediationState.error } : {}),
+      projection: remediationState.projection,
+    }
+    : lifecycleAliasProjection(parsed.metadata, "artifact lifecycle", isAcceptance);
+  const unsupportedStateError = unsupportedStateAliasError(parsed.metadata, "artifact", type);
   const declaredProjection = declaredScan.projection;
   const declared = declaredProjection.state;
   const identity = artifactIdentity(source.path, type, parsed.metadata);
-  const nonArtifactRequested = isNonArtifactPlanningClass(source.declaredClass ?? "")
+  const contextualPolicy = implicitPlanningPolicy(source, parsed.metadata);
+  const contextualEvidence = implicitPlanningEvidence(source, parsed.metadata);
+  const contextualCompound = Boolean(source.compoundEnvelope);
+  const nonArtifactRequested = contextualPolicy || contextualEvidence || contextualCompound
+    || isNonArtifactPlanningClass(source.declaredClass ?? "")
     || isNonArtifactPlanningClass(type);
   const classificationRationale = scalarAliasValues(
     parsed.metadata,
     ["classification_rationale", "justification", "non_artifact_rationale", "rationale", "reason"],
     "classification rationale",
   );
-  const nonArtifactRationale = Boolean(source.classificationRationale?.trim())
+  const nonArtifactRationale = contextualPolicy || contextualEvidence || contextualCompound
+    || Boolean(source.classificationRationale?.trim())
     || classificationRationale.values.length > 0;
   const topLevelScan = topLevelProjection(parsed.metadata);
   const topLevel = topLevelScan.value;
@@ -1523,36 +1788,65 @@ function parseArtifact(source: PlanningSource): Artifact {
   const scannedBody = new Set([".md", ".mdx", ".txt"]).has(extension)
     ? scanBody(source.content)
     : [];
-  const currentBody = bodyProjection(scannedBody);
-  const bodyGateObservations = bodyAcceptanceObservations(scannedBody, source.path);
+  const explicitRelationshipRole = topEntries(
+    parsed.metadata,
+    ["child_relationship_role", "relationship_role"],
+  ).length > 0;
+  const graphEligible = HIERARCHY_ARTIFACT_TYPES.has(type) || ROLLUP_ARTIFACT_TYPES.has(type)
+    || lane !== "unknown" || explicitRelationshipRole;
+  const currentBody = graphEligible ? bodyProjection(scannedBody) : emptyStateProjection();
+  const bodyGateObservations = graphEligible || isAcceptance
+    ? bodyAcceptanceObservations(scannedBody, source.path)
+    : [];
+  const unfinishedMarkers = graphEligible && !isAcceptance
+    ? unfinishedCompletionMarkers(scannedBody, source.path)
+    : [];
   const parentScan = parentReferences(parsed.metadata, type, isAcceptance, source.path);
   const parentIds = parentScan.ids;
   const relationshipRole = childRelationshipRole(parsed.metadata, type);
   const targetHeaders = relationshipTargetHeaders(parsed.metadata, relationshipRole.role);
   const nonRelationshipHeaders = nonRelationshipTableHeaders(parsed.metadata, relationshipRole.role);
-  const scannedTables = tableChildren(
-    scannedBody,
-    source.path,
-    relationshipRole.role,
-    targetHeaders.headers,
-    nonRelationshipHeaders.headers,
-  );
+  const primaryState = primaryStateColumn(parsed.metadata);
+  const scannedTables = graphEligible
+    ? tableChildren(
+      scannedBody,
+      source.path,
+      relationshipRole.role,
+      targetHeaders.headers,
+      nonRelationshipHeaders.headers,
+      primaryState.header,
+    )
+    : { children: [], errors: [] };
   const structuredRelationships = structuredChildren(
     parsed.metadata,
     source.path,
     new Set(parentReferenceKeys(type, isAcceptance).map(keyToken)),
   );
   const acceptanceErrors = acceptanceDeclarationErrors(parsed.metadata, source.path, type, isAcceptance);
+  const operateTime = operateTimeLegs(parsed.metadata);
+  const acceptanceValues = topEntries(parsed.metadata, EXPLICIT_ACCEPTANCE_FIELDS);
+  const selectedAcceptanceValues = acceptanceValues.length > 0
+    ? acceptanceValues
+    : isAcceptance
+      ? topEntries(parsed.metadata, ["status"])
+      : [];
+  const acceptanceStates = [...new Set(selectedAcceptanceValues.map(([, value]) =>
+    acceptanceForArtifact(scalar(value), type, gateKind([type, source.path], type))))];
+  const acceptanceState = acceptanceStates.length === 1 ? acceptanceStates[0] ?? "unknown" : "unknown";
+  const maintenance = maintenanceEvidence(parsed.metadata, source.content);
   const relationshipErrors: RelationshipError[] = [
     ...(typeProjection.error ? [{ code: "planning_relationship_conflict" as const, detail: typeProjection.error, related: [] }] : []),
     ...(identity.error ? [{ code: "planning_relationship_conflict" as const, detail: identity.error, related: [] }] : []),
-    ...(declaredScan.error ? [{ code: "planning_relationship_conflict" as const, detail: declaredScan.error, related: [] }] : []),
+    ...(declaredScan.error && type !== "finding"
+      ? [{ code: "planning_relationship_conflict" as const, detail: declaredScan.error, related: [] }]
+      : []),
     ...(unsupportedStateError ? [{ code: "planning_relationship_conflict" as const, detail: unsupportedStateError, related: [] }] : []),
     ...(classificationRationale.error ? [{ code: "planning_relationship_conflict" as const, detail: classificationRationale.error, related: [] }] : []),
     ...(topLevelScan.error ? [{ code: "planning_relationship_conflict" as const, detail: topLevelScan.error, related: [] }] : []),
     ...(relationshipRole.error ? [{ code: "planning_relationship_conflict" as const, detail: relationshipRole.error, related: [] }] : []),
     ...(targetHeaders.error ? [{ code: "planning_relationship_conflict" as const, detail: targetHeaders.error, related: [] }] : []),
     ...(nonRelationshipHeaders.error ? [{ code: "planning_relationship_conflict" as const, detail: nonRelationshipHeaders.error, related: [] }] : []),
+    ...(primaryState.error ? [{ code: "planning_relationship_conflict" as const, detail: primaryState.error, related: [] }] : []),
     ...parentScan.errors,
     ...scannedTables.errors,
     ...structuredRelationships.errors,
@@ -1575,7 +1869,10 @@ function parseArtifact(source: PlanningSource): Artifact {
       "child_relationship_role", "child_target_column", "relationship_role", "relationship_target_column",
       "rollup_target_column",
     ]).length > 0;
-  const nonArtifact = nonArtifactRequested && nonArtifactRationale && !hasPlanningSignals;
+  const contextualNonArtifact = (contextualPolicy || contextualEvidence || contextualCompound)
+    && parsed.parseError === undefined;
+  const nonArtifact = contextualNonArtifact
+    || (nonArtifactRequested && nonArtifactRationale && !hasPlanningSignals);
   const structuredSurface = parsed.structured || table.length > 0 || currentBody.values.length > 0;
   const structured = parsed.parseError === undefined && (nonArtifact || (structuredSurface && hasPlanningSignals));
   const state = lane !== "unknown"
@@ -1585,6 +1882,7 @@ function parseArtifact(source: PlanningSource): Artifact {
       : currentBody.state;
   return {
     acceptance: isAcceptance,
+    acceptanceState,
     bodyGateObservations,
     bodyProjection: currentBody,
     childRelationshipRole: relationshipRole.role,
@@ -1593,7 +1891,10 @@ function parseArtifact(source: PlanningSource): Artifact {
     declaredClass: lifecycle(source.declaredClass),
     declaredProjection,
     id: identity.id,
+    identityExplicit: identity.explicit,
     lane,
+    ...(maintenance.commit ? { maintenanceCommit: maintenance.commit } : {}),
+    maintenanceTerminalEvidence: maintenance.terminal,
     metadata: parsed.metadata,
     nonArtifact,
     nonArtifactRationale,
@@ -1602,12 +1903,16 @@ function parseArtifact(source: PlanningSource): Artifact {
     parentReferences: parentScan.references,
     ...(parsed.parseError === undefined ? {} : { parseError: parsed.parseError }),
     path: source.path,
+    findingState: remediationState?.state ?? "unknown",
+    operateTimeLegCount: operateTime.count,
+    operateTimeLegErrors: operateTime.errors,
     relationshipErrors,
     state,
     structured,
     tableChildren: table,
     topLevel,
     type,
+    unfinishedMarkers,
   };
 }
 
@@ -1618,6 +1923,143 @@ function finding(
   related: readonly string[] = [],
 ): PlanningFinding {
   return { code, detail, path: artifact.path, related: [...new Set(related)].sort(), subject: artifact.id };
+}
+
+function affectedProjectionField(code: PlanningFindingCode): string {
+  if (new Set<PlanningFindingCode>([
+    "body_projection_conflict", "lane_status_conflict", "parent_child_projection_conflict",
+    "preexecution_parent_has_started_children",
+  ]).has(code)) return "lifecycle_projection";
+  if (new Set<PlanningFindingCode>([
+    "parent_completion_stale", "completed_parent_unexecuted_acceptance", "unfinished_completion_marker",
+  ]).has(code)) return "completion_rollup";
+  if (new Set<PlanningFindingCode>([
+    "acceptance_cascade_unexecuted", "acceptance_failure_unpaid", "acceptance_partial_malformed",
+    "acceptance_partial_unpaid", "acceptance_gate_undiscovered", "acceptance_gate_unknown",
+  ]).has(code)) return "acceptance_execution";
+  if (code === "acceptance_gate_identity_conflict") return "acceptance_identity";
+  if (new Set<PlanningFindingCode>([
+    "orphan_parent_reference", "planning_relationship_conflict", "planning_relationship_unresolved",
+  ]).has(code)) return "relationship_graph";
+  if (code === "duplicate_artifact_id") return "artifact_identity";
+  if (code === "archive_classification_conflict") return "archive_classification";
+  if (code === "lifecycle_state_unknown") return "lifecycle_state";
+  if (new Set<PlanningFindingCode>([
+    "finding_state_unknown", "remediation_finding_open", "remediation_finding_partial",
+  ]).has(code)) return "remediation_state";
+  if (code === "maintenance_lifecycle_stale") return "maintenance_lifecycle";
+  return "planning_input";
+}
+
+function stablePlanningId(prefix: string, parts: readonly string[]): string {
+  const digest = createHash("sha256")
+    .update(parts.map((part) => part.trim()).join("\0"))
+    .digest("hex")
+    .slice(0, 20)
+    .toUpperCase();
+  return `${prefix}-${digest}`;
+}
+
+function causalPlanningAccounting(
+  findings: readonly PlanningFinding[],
+  snapshot: string,
+): { readonly rawFindings: PlanningRawFinding[]; readonly rootDebts: PlanningRootDebt[] } {
+  const rawFindings = findings.map((item): PlanningRawFinding => ({
+    ...item,
+    detector: "planning_graph",
+    evidence_refs: [...new Set([item.path, ...item.related])].sort(),
+    id: stablePlanningId("RAW-PLANNING", [
+      "planning_graph",
+      item.code,
+      item.subject,
+      item.path,
+      item.detail.replaceAll(/\s+/g, " "),
+      ...[...new Set(item.related)].sort(),
+    ]),
+    snapshot,
+  }));
+  const parents = rawFindings.map((_, index) => index);
+  const findRoot = (index: number): number => {
+    let current = index;
+    while ((parents[current] ?? current) !== current) current = parents[current] ?? current;
+    let cursor = index;
+    while ((parents[cursor] ?? cursor) !== current) {
+      const next = parents[cursor] ?? cursor;
+      parents[cursor] = current;
+      cursor = next;
+    }
+    return current;
+  };
+  const unite = (left: number, right: number): void => {
+    const leftRoot = findRoot(left);
+    const rightRoot = findRoot(right);
+    if (leftRoot !== rightRoot) parents[rightRoot] = leftRoot;
+  };
+  const firstByInvariantRef = new Map<string, number>();
+  const boundSnapshot = snapshot !== "unbound";
+  for (const [index, item] of rawFindings.entries()) {
+    const invariant = affectedProjectionField(item.code);
+    const refs = boundSnapshot
+      ? item.evidence_refs
+        .map((ref) => ref.split("#", 1)[0] ?? ref)
+        .filter((ref) => ref.includes("/") || /\.[A-Za-z0-9]+$/.test(ref))
+      : [item.path];
+    for (const ref of [...new Set(refs)]) {
+      const key = `${invariant}\u0000${ref}`;
+      const prior = firstByInvariantRef.get(key);
+      if (prior === undefined) firstByInvariantRef.set(key, index);
+      else unite(prior, index);
+    }
+  }
+  const groups = new Map<number, PlanningRawFinding[]>();
+  for (const [index, item] of rawFindings.entries()) {
+    const root = findRoot(index);
+    const group = groups.get(root) ?? [];
+    group.push(item);
+    groups.set(root, group);
+  }
+  const orderedGroups = [...groups.values()].sort((left, right) => {
+    const leftItem = left[0];
+    const rightItem = right[0];
+    return affectedProjectionField(leftItem?.code ?? "planning_input_unparsed")
+      .localeCompare(affectedProjectionField(rightItem?.code ?? "planning_input_unparsed"))
+      || (leftItem?.path ?? "").localeCompare(rightItem?.path ?? "");
+  });
+  const rootDebts = orderedGroups.map((group): PlanningRootDebt => {
+    const projection = affectedProjectionField(group[0]?.code ?? "planning_input_unparsed");
+    const classes = [...new Set(group.map((item) => item.code))].sort();
+    const paths = [...new Set(group.flatMap((item) => [item.path, ...item.related]
+      .map((ref) => ref.split("#", 1)[0] ?? ref)
+      .filter((ref) => ref.includes("/") || /\.[A-Za-z0-9]+$/.test(ref))))].sort();
+    const componentRefs = [...new Set(group.flatMap((item) => item.evidence_refs))].sort();
+    const boundary = paths.length === 1
+      ? paths[0] ?? group[0]?.path ?? "unknown"
+      : `${paths.length}-artifact connected component rooted at ${paths[0] ?? "unknown"}`;
+    const causeKey = `planning:${projection}:${stablePlanningId("CAUSE", [
+      projection,
+      ...classes,
+      ...componentRefs,
+      ...group.map((item) => item.id).sort(),
+    ])}`;
+    return {
+      affected_paths: paths,
+      affected_projection_field: projection,
+      causal_evidence: {
+        component_refs: componentRefs,
+        kind: paths.length > 1 ? "connected_artifact_component" : "single_artifact",
+        violated_invariant: projection,
+      },
+      cause_key: causeKey,
+      class: classes.join("+"),
+      detector_family: "planning_graph",
+      id: stablePlanningId("ROOT-PLANNING", [causeKey, ...group.map((item) => item.id).sort()]),
+      observation_count: group.length,
+      raw_finding_ids: group.map((item) => item.id).sort(),
+      repair_boundary: boundary,
+      snapshot,
+    };
+  });
+  return { rawFindings, rootDebts };
 }
 
 function gateKind(path: readonly string[], fallback = "acceptance"): string {
@@ -1644,20 +2086,41 @@ function embeddedGateObservations(parent: Artifact): GateObservation[] {
     "implementation_status", "lifecycle", "phase", "stage", "state", "status",
   ]);
   const outcomeFields = new Set(["outcome", "result", "verdict"]);
+  const identityFor = (kind: string): string => {
+    const ids = scalarAliasValues(parent.metadata, [`${kind}_id`], `${kind} identity`).values;
+    return ids.length === 1
+      ? `id:${normalizedId(ids[0] ?? "")}`
+      : `embedded:${parent.path}:${kind}`;
+  };
   for (const entry of deepEntries(parent.metadata)) {
     const last = entry.path.at(-1) ?? "";
     const joined = entry.path.join("_");
     const hasAcceptance = [...ACCEPTANCE_WORDS].some((word) => joined.includes(word));
     const scopeKind = [...entry.path].reverse().flatMap((part) =>
       [...ACCEPTANCE_WORDS].filter((word) => part === word || part === `${word}s`)).at(0);
+    if (parent.type === "story" && entry.path.length === 1 && last === "story_review_status") {
+      candidates.push({
+        explicit: true,
+        identity: identityFor("review"),
+        kind: "review",
+        rationale: gateHasRationale(parent.metadata, "review", entry.path),
+        ref: `${parent.path}#story_review_status`,
+        scope: `review\u0000`,
+        strength: "structured",
+        state: acceptanceForArtifact(scalar(entry.value), parent.type, "review"),
+      });
+      continue;
+    }
     if (scopeKind && (last === scopeKind || last === `${scopeKind}s` || /^\d+$/.test(last))) {
       candidates.push({
         explicit: true,
+        identity: identityFor(scopeKind),
         kind: scopeKind,
         rationale: gateHasRationale(parent.metadata, scopeKind, entry.path),
         ref: `${parent.path}#${entry.path.join(".")}`,
         scope: `${scopeKind}\u0000${entry.path.slice(0, -1).join(".")}`,
-        state: acceptance(scalar(entry.value)),
+        strength: "structured",
+        state: acceptanceForArtifact(scalar(entry.value), parent.type, scopeKind),
       });
       continue;
     }
@@ -1671,63 +2134,114 @@ function embeddedGateObservations(parent: Artifact): GateObservation[] {
     const kind = gateKind(entry.path);
     candidates.push({
       explicit: explicitField,
+      identity: identityFor(kind),
       kind,
       rationale: gateHasRationale(parent.metadata, kind, entry.path),
       ref: `${parent.path}#${entry.path.join(".")}`,
       scope: `${kind}\u0000${entry.path.slice(0, -1).join(".")}`,
-      state: acceptance(scalar(entry.value)),
+      strength: "structured",
+      state: acceptanceForArtifact(scalar(entry.value), parent.type, kind),
     });
   }
   const explicitScopes = new Set(candidates.filter((candidate) => candidate.explicit).map((candidate) => candidate.scope));
   return candidates
     .filter((candidate) => candidate.explicit || !explicitScopes.has(candidate.scope))
-    .map(({ kind, rationale, ref, state }) => ({ kind, rationale, ref, state }));
+    .map(({ identity, kind, rationale, ref, state, strength }) => ({ identity, kind, rationale, ref, state, strength }));
 }
 
 function artifactGateObservations(artifact: Artifact): GateObservation[] {
   const explicit = topEntries(artifact.metadata, EXPLICIT_ACCEPTANCE_FIELDS);
   const selected = explicit.length > 0 ? explicit : topEntries(artifact.metadata, ["status"]);
   const kind = gateKind([artifact.type, artifact.path], artifact.type);
+  const identity = artifact.identityExplicit
+    ? `id:${normalizedId(artifact.id)}`
+    : `path:${artifact.path}`;
   const rationale = topValues(artifact.metadata, ["justification", "rationale", "reason"]).length > 0;
   const direct: GateObservation[] = selected.length === 0
-    ? [{ kind, rationale, ref: artifact.path, state: "unknown" }]
+    ? [{ identity, kind, rationale, ref: artifact.path, state: "unknown", strength: "structured" }]
     : selected.map(([, value]) => ({
+    identity,
     kind,
     rationale,
     ref: artifact.path,
-    state: acceptance(scalar(value)),
+    strength: "structured",
+    state: acceptanceForArtifact(scalar(value), artifact.type, kind),
   }));
-  return [...direct, ...embeddedGateObservations(artifact), ...artifact.bodyGateObservations];
+  const supporting = explicit.length > 0
+    ? embeddedGateObservations(artifact)
+    : [...embeddedGateObservations(artifact), ...artifact.bodyGateObservations];
+  return [...direct, ...supporting]
+    .map((observation) => ({ ...observation, identity }));
 }
 
 function acceptanceGates(parent: Artifact, artifacts: readonly Artifact[]): AcceptanceGate[] {
-  const observations = [...embeddedGateObservations(parent), ...parent.bodyGateObservations];
+  const embeddedParentObservations = embeddedGateObservations(parent);
+  const embeddedIdentitiesByKind = new Map<string, Set<string>>();
+  for (const observation of embeddedParentObservations) {
+    const identities = embeddedIdentitiesByKind.get(observation.kind) ?? new Set<string>();
+    identities.add(observation.identity);
+    embeddedIdentitiesByKind.set(observation.kind, identities);
+  }
+  const parentObservations = [
+    ...embeddedParentObservations,
+    ...parent.bodyGateObservations.map((observation) => {
+      const identities = [...(embeddedIdentitiesByKind.get(observation.kind) ?? [])];
+      return identities.length === 1 ? { ...observation, identity: identities[0] ?? observation.identity } : observation;
+    }),
+  ];
+  const childObservations: GateObservation[] = [];
   for (const artifact of artifacts) {
     if (!artifact.acceptance || artifact.state === "archived") continue;
     if (!artifact.parentIds.some((id) => normalizedId(id) === normalizedId(parent.id))) continue;
-    observations.push(...artifactGateObservations(artifact));
+    childObservations.push(...artifactGateObservations(artifact));
   }
+  const childIdentitiesByKind = new Map<string, Set<string>>();
+  for (const observation of childObservations) {
+    const identities = childIdentitiesByKind.get(observation.kind) ?? new Set<string>();
+    identities.add(observation.identity);
+    childIdentitiesByKind.set(observation.kind, identities);
+  }
+  const observations = [
+    ...parentObservations.map((observation) => {
+      if (!observation.identity.startsWith("embedded:") && !observation.identity.startsWith("body:")) return observation;
+      const identities = [...(childIdentitiesByKind.get(observation.kind) ?? [])];
+      return identities.length === 1 ? { ...observation, identity: identities[0] ?? observation.identity } : observation;
+    }),
+    ...childObservations,
+  ];
+  const kindsWithStrongEvidence = new Set(observations
+    .filter((observation) => observation.strength !== "weak")
+    .map((observation) => observation.kind));
+  const eligibleObservations = observations.filter((observation) =>
+    observation.strength !== "weak" || !kindsWithStrongEvidence.has(observation.kind));
   const grouped = new Map<string, GateObservation[]>();
-  for (const observation of observations) {
-    const current = grouped.get(observation.kind) ?? [];
+  for (const observation of eligibleObservations) {
+    const key = `${observation.kind}\u0000${observation.identity}`;
+    const current = grouped.get(key) ?? [];
     current.push(observation);
-    grouped.set(observation.kind, current);
+    grouped.set(key, current);
   }
-  return [...grouped.entries()].map(([kind, values]) => {
+  return [...grouped.entries()].map(([key, rawValues]) => {
+    const [kind = "acceptance", identity = "unknown"] = key.split("\u0000", 2);
+    const values = rawValues.some((value) => value.strength !== "weak")
+      ? rawValues.filter((value) => value.strength !== "weak")
+      : rawValues;
     const states = [...new Set(values.map((value) => value.state))].sort();
     const unreasonedExemption = values.some((value) => value.state === "not_applicable" && !value.rationale);
     const state: Acceptance = states.includes("failed") ? "failed"
-      : states.includes("unrun") ? "unrun"
+      : states.includes("partial") ? "partial"
+        : states.includes("unrun") ? "unrun"
         : states.includes("unknown") || unreasonedExemption ? "unknown"
           : states.includes("not_applicable") ? "not_applicable"
             : "passed";
     return {
+      identity,
       kind,
       refs: unique(values.map((value) => value.ref)).sort(),
       state,
       states,
     };
-  }).sort((left, right) => left.kind.localeCompare(right.kind));
+  }).sort((left, right) => left.kind.localeCompare(right.kind) || left.identity.localeCompare(right.identity));
 }
 
 function sameProjection(left: Lifecycle, right: Lifecycle): boolean {
@@ -1801,11 +2315,40 @@ export function isPlanningTextPath(path: string): boolean {
   return TEXT_EXTENSIONS.has(extname(path).toLocaleLowerCase("und"));
 }
 
+function contextualizeDispatchPacketSources(sources: readonly PlanningSource[]): PlanningSource[] {
+  const envelopeDirectories = new Set(sources.flatMap((source) => {
+    if (basename(source.path).toLocaleLowerCase("und") !== "dispatch.md") return [];
+    const parsed = parseSource(source);
+    if (parsed.parseError) return [];
+    const declaredTypes = scalarAliasValues(parsed.metadata, ["artifact_type", "kind", "type"], "dispatch type")
+      .values.map(keyToken);
+    return declaredTypes.length === 1 && declaredTypes[0] === "dispatch" ? [dirname(source.path)] : [];
+  }));
+  const internalName = (path: string): boolean => {
+    const name = basename(path).toLocaleLowerCase("und");
+    return /^(?:execution-dag|ledger|manifest)(?:\.[^.]+)?\.(?:json|md|yaml|yml)$/.test(name)
+      || /^(?:execution-dag|ledger|manifest)\.(?:json|md|yaml|yml)$/.test(name);
+  };
+  return sources.map((source) => {
+    const envelope = dirname(source.path);
+    if (!envelopeDirectories.has(envelope) || !internalName(source.path)) return source;
+    const parsed = parseSource(source);
+    if (parsed.parseError) return source;
+    return {
+      ...source,
+      classificationRationale: "Compound dispatch packet internal governed by its typed dispatch.md envelope.",
+      compoundEnvelope: `${envelope}/dispatch.md`,
+      declaredClass: "reference",
+    };
+  });
+}
+
 export function auditPlanningArtifacts(
   sources: readonly PlanningSource[],
   planningRootCount = sources.length > 0 ? 1 : 0,
+  options: { readonly repository?: string; readonly snapshot?: string } = {},
 ): PlanningAuditResult {
-  const artifacts = sources.map(parseArtifact);
+  const artifacts = contextualizeDispatchPacketSources(sources).map(parseArtifact);
   const findings: PlanningFinding[] = [];
 
   for (const artifact of artifacts) {
@@ -1831,6 +2374,62 @@ export function auditPlanningArtifacts(
           artifact,
           error.detail,
           error.related,
+        ));
+      }
+    }
+    if (artifact.structured && !artifact.nonArtifact && artifact.type === "finding") {
+      if (artifact.findingState === "unknown") {
+        findings.push(finding(
+          "finding_state_unknown",
+          artifact,
+          "remediation finding must begin its state with OPEN, FIXED, RESOLVED, or PARTIAL",
+        ));
+      } else if (artifact.findingState === "open") {
+        findings.push(finding(
+          "remediation_finding_open",
+          artifact,
+          "remediation finding remains OPEN",
+        ));
+      } else if (artifact.findingState === "partial") {
+        findings.push(finding(
+          "remediation_finding_partial",
+          artifact,
+          "remediation finding is only PARTIALLY resolved",
+        ));
+      }
+      continue;
+    }
+    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance) {
+      const malformedPartial = artifact.acceptanceState === "partial"
+        && (artifact.operateTimeLegCount === 0 || artifact.operateTimeLegErrors.length > 0);
+      const terminalWithPendingLeg = artifact.acceptanceState === "passed" && artifact.operateTimeLegCount > 0;
+      if (malformedPartial || terminalWithPendingLeg || artifact.operateTimeLegErrors.length > 0) {
+        findings.push(finding(
+          "acceptance_partial_malformed",
+          artifact,
+          malformedPartial
+            ? `PARTIAL requires at least one typed pending operate-time leg; ${artifact.operateTimeLegErrors.join("; ") || "none declared"}`
+            : terminalWithPendingLeg
+              ? "PASS cannot coexist with pending operate-time legs"
+              : artifact.operateTimeLegErrors.join("; "),
+        ));
+      }
+    }
+    if (artifact.structured && !artifact.nonArtifact && artifact.type === "maintenance"
+      && artifact.declared === "active" && artifact.maintenanceCommit
+      && artifact.maintenanceTerminalEvidence && options.repository) {
+      let landed = false;
+      try {
+        landed = isGitAncestor(options.repository, artifact.maintenanceCommit, "HEAD");
+      } catch {
+        landed = false;
+      }
+      if (landed) {
+        findings.push(finding(
+          "maintenance_lifecycle_stale",
+          artifact,
+          `maintenance remains active after its verified implementation commit ${artifact.maintenanceCommit} landed in the bound target`,
+          [artifact.maintenanceCommit],
         ));
       }
     }
@@ -1883,6 +2482,14 @@ export function auditPlanningArtifacts(
         "body_projection_conflict",
         artifact,
         `effective lifecycle is ${artifact.state} but current body projects ${bodyProjection.state}`,
+      ));
+    }
+    if (!artifact.acceptance && artifact.state === "done" && artifact.unfinishedMarkers.length > 0) {
+      findings.push(finding(
+        "unfinished_completion_marker",
+        artifact,
+        `completed artifact retains ${artifact.unfinishedMarkers.length} unchecked current marker${artifact.unfinishedMarkers.length === 1 ? "" : "s"}`,
+        artifact.unfinishedMarkers,
       ));
     }
   }
@@ -1997,9 +2604,25 @@ export function auditPlanningArtifacts(
     }
   }
 
+  const reaches = (ancestor: Artifact, descendant: Artifact): boolean => {
+    const pending = [ancestor];
+    const seen = new Set<Artifact>();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || seen.has(current)) continue;
+      if (current === descendant) return true;
+      seen.add(current);
+      pending.push(...(childrenByParent.get(current) ?? []));
+    }
+    return false;
+  };
+  const formsScopeChain = (parents: readonly Artifact[]): boolean => parents.every((left, index) =>
+    parents.slice(index + 1).every((right) => reaches(left, right) || reaches(right, left)));
+
   for (const gate of artifacts) {
     if (!gate.structured || !gate.acceptance || gate.nonArtifact) continue;
     if (gate.parentIds.length === 0) {
+      if (gate.type === "review" && topEntries(gate.metadata, ["reviews"]).length > 0) continue;
       findings.push(finding(
         "planning_relationship_unresolved",
         gate,
@@ -2009,8 +2632,17 @@ export function auditPlanningArtifacts(
     }
     const matchedParents = new Map<string, Artifact>();
     for (const observation of gate.parentReferences) {
-      for (const parent of byId.get(normalizedId(observation.id)) ?? []) {
-        if (parent.acceptance || parent.nonArtifact) continue;
+      const matches = (byId.get(normalizedId(observation.id)) ?? [])
+        .filter((parent) => !parent.acceptance && !parent.nonArtifact);
+      if (matches.length > 1) {
+        findings.push(finding(
+          "planning_relationship_conflict",
+          gate,
+          `acceptance parent ${JSON.stringify(observation.id)} resolves ambiguously to ${matches.length} artifacts`,
+          matches.map((parent) => parent.path),
+        ));
+      }
+      for (const parent of matches) {
         matchedParents.set(parent.path, parent);
         if (observation.state !== "unknown" && parent.state !== "unknown"
           && !sameProjection(observation.state, parent.state)) {
@@ -2039,11 +2671,11 @@ export function auditPlanningArtifacts(
         "live acceptance artifact resolves only to archived parents",
         [...matchedParents.keys()].sort(),
       ));
-    } else if (eligibleParents.length > 1) {
+    } else if (eligibleParents.length > 1 && !formsScopeChain(eligibleParents)) {
       findings.push(finding(
         "planning_relationship_conflict",
         gate,
-        `acceptance artifact resolves to ${eligibleParents.length} parents`,
+        `acceptance artifact resolves to ${eligibleParents.length} unrelated parent scopes`,
         eligibleParents.map((parent) => parent.path),
       ));
     }
@@ -2195,6 +2827,7 @@ export function auditPlanningArtifacts(
     }
     const unrun = gates.filter((gate) => gate.state === "unrun");
     const failed = gates.filter((gate) => gate.state === "failed");
+    const partial = gates.filter((gate) => gate.state === "partial");
     if (allChildrenDone && unrun.length > 0) {
       findings.push(finding(
         "acceptance_cascade_unexecuted",
@@ -2209,6 +2842,14 @@ export function auditPlanningArtifacts(
         parent,
         `${failed.length}/${gates.length} acceptance gates record failure`,
         failed.flatMap((gate) => gate.refs),
+      ));
+    }
+    if (partial.length > 0) {
+      findings.push(finding(
+        "acceptance_partial_unpaid",
+        parent,
+        `${partial.length}/${gates.length} acceptance gates are PARTIAL with named operate-time work remaining`,
+        partial.flatMap((gate) => gate.refs),
       ));
     }
     if (!allChildrenDone && parent.state === "done" && unrun.length > 0) {
@@ -2238,15 +2879,22 @@ export function auditPlanningArtifacts(
   const counts = Object.fromEntries(
     FINDING_CODES.map((code) => [code, ordered.filter((item) => item.code === code).length]),
   ) as Record<PlanningFindingCode, number>;
+  const accounting = causalPlanningAccounting(ordered, options.snapshot ?? "unbound");
   const status = planningRootCount === 0 ? "not_applicable" : ordered.length > 0 ? "fail" : "pass";
   return {
     artifactCount: artifacts.length,
+    candidate_probe_count: 0,
     counts,
     exitCode: ordered.length > 0 ? 1 : 0,
     findings: ordered,
     planningRootCount,
+    raw_finding_count: accounting.rawFindings.length,
+    raw_findings: accounting.rawFindings,
+    root_debt_count: accounting.rootDebts.length,
+    root_debts: accounting.rootDebts,
     status,
     structuredArtifactCount: artifacts.filter((artifact) => artifact.structured).length,
+    suppressed_by_typed_nonartifact_count: artifacts.filter((artifact) => artifact.nonArtifact).length,
   };
 }
 
@@ -2257,6 +2905,7 @@ export function auditPlanningRepository(repository: string): PlanningAuditResult
   const sources: PlanningSource[] = [];
   const appendEntry = (entry: { readonly kind: "file" | "other" | "symlink"; readonly path: string }): void => {
     const relativePath = relative(root, entry.path).split(sep).join("/");
+    if (entry.kind === "file" && basename(entry.path) === ".gitkeep" && lstatSync(entry.path).size === 0) return;
     if (entry.kind !== "file" || !isPlanningTextPath(entry.path)) {
       sources.push({ content: "", path: relativePath });
       return;
@@ -2279,5 +2928,11 @@ export function auditPlanningRepository(repository: string): PlanningAuditResult
     }
     for (const entry of listEntriesRecursively(rootPath)) appendEntry(entry);
   }
-  return auditPlanningArtifacts(sources, planningRoots.length);
+  let snapshot = "unbound";
+  try {
+    snapshot = git(root, "rev-parse", "HEAD");
+  } catch {
+    snapshot = "unbound";
+  }
+  return auditPlanningArtifacts(sources, planningRoots.length, { repository: root, snapshot });
 }

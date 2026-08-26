@@ -45,6 +45,23 @@ prevents false diagnosis and makes Mister Clean repair its own damage first.
 The run may not self-label a finding pre-existing without replay or equivalent
 start-object evidence.
 
+### Raw observations are not payable root debts
+
+Retain every atomic detector observation with its stable ID, detector, bound
+snapshot, subject path, and evidence references. A nonzero raw observation
+count forbids CLEAN until triage, but it does not authorize one completion-debt
+row per symptom.
+
+A payable root debt is one independently repairable cause. It records a stable
+`cause_key`, normalized affected field/invariant, all impacted raw-finding IDs,
+affected paths, observation count, and repair boundary. Cross-artifact grouping
+requires causal evidence: a common remedial commit or range, one declared
+reconciliation record, or one connected artifact component violating the same
+invariant on the same bound snapshot. Without that evidence, cluster only
+within one artifact. Expose `raw_finding_count`, `root_debt_count`,
+`suppressed_by_typed_nonartifact_count`, and `candidate_probe_count`
+separately; never substitute one cardinality for another.
+
 ## 3. Keep detector change separate from repository change
 
 Never compare different branches, commits, scopes, or detector versions as if
@@ -60,7 +77,7 @@ subject, and evidence location. Human-readable wording is not identity.
 ## 4. Regression-delta record
 
 The closeout report binds a digest-referenced
-`mister-clean.regression-delta` sidecar. It records:
+`mister-clean.regression-delta` schema-1.2 sidecar. It records:
 
 - baseline and closing objects;
 - baseline findings split into paid and still open;
@@ -69,6 +86,11 @@ The closeout report binds a digest-referenced
 - one ordered no-harm check for every executed action, including its before and
   after snapshot, exact comparators, introduced/paid/open counts, timestamp,
   and boundary status.
+
+Every comparator observation also binds the exact raw output bytes through a
+bundle-contained `{path, sha256}` `result_ref`; `result_sha256` must equal that
+file's independently recomputed digest. A plausible hash with missing or
+different result bytes is not evidence and cannot close an action boundary.
 
 The arithmetic must reconcile. A `closed` action boundary has zero open debt.
 An `interrupted` boundary is honest only in a NOT CLEAN report, as the last

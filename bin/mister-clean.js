@@ -3994,10 +3994,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep7, value } = collItem;
+        const { start, key, sep: sep8, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep7?.[0],
+          next: key ?? sep8?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -4011,7 +4011,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep7) {
+          if (!keyProps.anchor && !keyProps.tag && !sep8) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map.comment)
@@ -4035,7 +4035,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep7 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep8 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -4051,7 +4051,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep7, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep8, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -4142,7 +4142,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep7 = "";
+        let sep8 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -4156,13 +4156,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep7 + cb;
-              sep7 = "";
+                comment += sep8 + cb;
+              sep8 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep7 += source;
+                sep8 += source;
               hasSpace = true;
               break;
             default:
@@ -4205,18 +4205,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep7, value } = collItem;
+        const { start, key, sep: sep8, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep7?.[0],
+          next: key ?? sep8?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep7 && !value) {
+          if (!props.anchor && !props.tag && !sep8 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -4270,8 +4270,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep7 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep7, null, props, onError);
+        if (!isMap && !sep8 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep8, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -4283,7 +4283,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep7 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep8 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -4294,8 +4294,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep7)
-                for (const st of sep7) {
+              if (sep8)
+                for (const st of sep8) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -4312,7 +4312,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep7, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep8, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -4492,7 +4492,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep7 = "";
+      let sep8 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines2[i][0].slice(trimIndent) + "\n";
@@ -4509,24 +4509,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep7 + indent.slice(trimIndent) + content;
-          sep7 = "\n";
+          value += sep8 + indent.slice(trimIndent) + content;
+          sep8 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep7 === " ")
-            sep7 = "\n";
-          else if (!prevMoreIndented && sep7 === "\n")
-            sep7 = "\n\n";
-          value += sep7 + indent.slice(trimIndent) + content;
-          sep7 = "\n";
+          if (sep8 === " ")
+            sep8 = "\n";
+          else if (!prevMoreIndented && sep8 === "\n")
+            sep8 = "\n\n";
+          value += sep8 + indent.slice(trimIndent) + content;
+          sep8 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep7 === "\n")
+          if (sep8 === "\n")
             value += "\n";
           else
-            sep7 = "\n";
+            sep8 = "\n";
         } else {
-          value += sep7 + content;
-          sep7 = " ";
+          value += sep8 + content;
+          sep8 = " ";
           prevMoreIndented = false;
         }
       }
@@ -4708,25 +4708,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep7 = " ";
+      let sep8 = " ";
       let pos = first.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
-          if (sep7 === "\n")
-            res += sep7;
+          if (sep8 === "\n")
+            res += sep8;
           else
-            sep7 = "\n";
+            sep8 = "\n";
         } else {
-          res += sep7 + match[1];
-          sep7 = " ";
+          res += sep8 + match[1];
+          sep8 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep7 + (match?.[1] ?? "");
+      return res + sep8 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -5536,14 +5536,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep7, value }) {
+    function stringifyItem({ start, key, sep: sep8, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep7)
-        for (const st of sep7)
+      if (sep8)
+        for (const st of sep8)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -6710,18 +6710,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep7;
+          let sep8;
           if (scalar2.end) {
-            sep7 = scalar2.end;
-            sep7.push(this.sourceToken);
+            sep8 = scalar2.end;
+            sep8.push(this.sourceToken);
             delete scalar2.end;
           } else
-            sep7 = [this.sourceToken];
+            sep8 = [this.sourceToken];
           const map = {
             type: "block-map",
             offset: scalar2.offset,
             indent: scalar2.indent,
-            items: [{ start, key: scalar2, sep: sep7 }]
+            items: [{ start, key: scalar2, sep: sep8 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map;
@@ -6874,15 +6874,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep7 = it.sep;
-                  sep7.push(this.sourceToken);
+                  const sep8 = it.sep;
+                  sep8.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep7 }]
+                    items: [{ start: start2, key, sep: sep8 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -7076,13 +7076,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep7 = fc.end.splice(1, fc.end.length);
-            sep7.push(this.sourceToken);
+            const sep8 = fc.end.splice(1, fc.end.length);
+            sep8.push(this.sourceToken);
             const map = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep7 }]
+              items: [{ start, key: fc, sep: sep8 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map;
@@ -7361,15 +7361,15 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync3, readFileSync as readFileSync4, realpathSync as realpathSync2, statSync as statSync2, writeFileSync as writeFileSync3 } from "fs";
-import { join as join3, relative as relative6, resolve as resolve6, sep as sep6 } from "path";
+import { existsSync as existsSync4, readFileSync as readFileSync5, realpathSync as realpathSync2, statSync as statSync2, writeFileSync as writeFileSync3 } from "fs";
+import { join as join3, relative as relative7, resolve as resolve7, sep as sep7 } from "path";
 import { fileURLToPath as fileURLToPath2, pathToFileURL } from "url";
 
 // src/closeout/bundle.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 import { execFile } from "child_process";
 import { access, lstat, readFile, readdir, realpath } from "fs/promises";
-import { basename as basename3, dirname as dirname2, isAbsolute as isAbsolute2, relative as relative3, resolve as resolve3, sep as sep3 } from "path";
+import { basename as basename3, dirname as dirname3, isAbsolute as isAbsolute2, relative as relative3, resolve as resolve3, sep as sep3 } from "path";
 import { promisify } from "util";
 
 // src/closeout/records.ts
@@ -7394,8 +7394,9 @@ var DIMENSION_STATES = /* @__PURE__ */ new Set(["satisfied", "open", "blocked", 
 var CLAIM_STATES = /* @__PURE__ */ new Set(["established", "not_established", "not_assessed", "not_applicable"]);
 var DEBT_STATES = /* @__PURE__ */ new Set(["satisfied", "accepted_exception", "open", "blocked", "deferred", "not_assessed"]);
 var RECOMMENDATIONS = /* @__PURE__ */ new Set(["proceed", "proceed_with_conditions", "do_not_proceed", "not_assessed"]);
-var MODES = /* @__PURE__ */ new Set(["AUDIT", "CLEAN", "CLOSE", "CONFORM"]);
+var MODES = /* @__PURE__ */ new Set(["AUDIT", "CLEAN", "CLOSE", "CONFORM", "GUARD"]);
 var EXECUTION_STATES = /* @__PURE__ */ new Set(["authorized", "executed"]);
+var MANIFEST_SCHEMA_VERSIONS = /* @__PURE__ */ new Set(["1.0", "1.1", "1.2"]);
 var RISKS = /* @__PURE__ */ new Set(["reversible_local", "consequential_external", "unrecoverable"]);
 var AUTH_STATES = /* @__PURE__ */ new Set(["granted"]);
 var STANDING_AUTH_SOURCES = /* @__PURE__ */ new Set(["skill_invocation", "explicit_user", "explicit_operator"]);
@@ -7432,6 +7433,7 @@ var ALLOWED_ACTION_KINDS = /* @__PURE__ */ new Set([
   "git_push",
   "stash_preserve",
   "stash_drop",
+  "git_integrate",
   "branch_delete_local",
   "branch_delete_remote",
   "worktree_remove",
@@ -7465,6 +7467,29 @@ var DIMENSION_EVIDENCE_KINDS = {
   handoff_readiness: /* @__PURE__ */ new Set(["successor_readiness"])
 };
 var PLACEHOLDER = /<[^<>]+>/;
+var LANE_ROLES = /* @__PURE__ */ new Set(["read_only", "writer", "integrator"]);
+var LANE_STATES = /* @__PURE__ */ new Set(["queued", "active", "ready", "integrated", "retired", "blocked"]);
+var EXECUTION_CLASSES = /* @__PURE__ */ new Set(["hosted", "local_inference"]);
+var EVALUATION_MODES = /* @__PURE__ */ new Set(["none", "naturalistic", "controlled"]);
+var CAS_RESULTS = /* @__PURE__ */ new Set(["applied", "rejected_target_moved", "rejected_regression", "not_run"]);
+var COORDINATION_ACCESS = /* @__PURE__ */ new Set(["read", "write"]);
+var COORDINATION_CAS_RESULTS = /* @__PURE__ */ new Set(["validated", "applied", "rejected_stale", "not_run"]);
+var PUSH_INTENTS = /* @__PURE__ */ new Set(["coherent_wave", "minimal_ci_repair"]);
+var GUARD_STATES = /* @__PURE__ */ new Set(["initialized", "collecting", "passed", "crossed", "invalidated"]);
+var GUARD_ROLES = /* @__PURE__ */ new Set(["dev", "qa", "mister_clean", "holdout"]);
+var GUARD_CONCLUSIONS = /* @__PURE__ */ new Set(["pass", "fail", "conditional", "not_run"]);
+var GUARD_BARRIER_STATES = /* @__PURE__ */ new Set(["closed", "open", "crossed", "invalidated"]);
+var LOCAL_MUTATION_KINDS = /* @__PURE__ */ new Set([
+  "local_edit",
+  "local_move",
+  "recoverable_delete",
+  "format",
+  "generate",
+  "doc_update",
+  "planning_record_update",
+  "historical_conform",
+  "handoff_update"
+]);
 var REGRESSION_POLICY = "zero_open_run_introduced_debt";
 var REGRESSION_COUNT_FIELDS = [
   "baseline_findings",
@@ -7871,15 +7896,1012 @@ function validateReport(data, allowPlaceholders = false, bundleContext = false) 
   if (!allowPlaceholders) for (const path of findPlaceholders(data)) errors.push(`${path}: unresolved template placeholder`);
   return errors;
 }
+function commitObject(value, allowPlaceholders) {
+  return typeof value === "string" && (allowPlaceholders && PLACEHOLDER.test(value) || /^[0-9a-f]{7,40}$/.test(value));
+}
+function exactGitObject(value, allowPlaceholders) {
+  return typeof value === "string" && (allowPlaceholders && PLACEHOLDER.test(value) || /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value));
+}
+function canonicalWriteRoot(value) {
+  if (!nonempty(value)) return "";
+  const normalized = pathPosix.normalize(value.replaceAll("\\", "/"));
+  const wildcard = normalized.search(/[?*[\]{}]/);
+  const root = wildcard < 0 ? normalized : normalized.slice(0, wildcard);
+  return root.replace(/\/+$/, "");
+}
+function writeRootsOverlap(left, right) {
+  if (!left || !right) return true;
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+function targetWithinWritePaths(target, writePaths) {
+  const normalized = pathPosix.normalize(target.replaceAll("\\", "/"));
+  return writePaths.some((pattern) => {
+    const root = canonicalWriteRoot(pattern);
+    return root === "" || normalized === root || normalized.startsWith(`${root}/`);
+  });
+}
+function digestRefOrPlaceholder(value, allowPlaceholders) {
+  return digestRef(value) || allowPlaceholders && findPlaceholders(value).length > 0;
+}
+function normalizedStringSet(value) {
+  const values = array(value);
+  if (!values || values.some((item) => !nonempty(item))) return void 0;
+  return [...new Set(values.map((item) => pathPosix.normalize(String(item).replaceAll("\\", "/"))))].sort();
+}
+function validatePlanningProjectionTransaction(action, lane, path, errors, allowPlaceholders) {
+  requireKeys(action.projection_transaction, [
+    "cause_key",
+    "source_of_truth",
+    "required_projections",
+    "updated_projections",
+    "atomic",
+    "post_audit"
+  ], `${path}.projection_transaction`, errors);
+  const transaction = object(action.projection_transaction);
+  if (!transaction) return;
+  if (!nonempty(transaction.cause_key)) errors.push(`${path}.projection_transaction.cause_key: required stable debt/root-cause key`);
+  if (!nonempty(transaction.source_of_truth)) errors.push(`${path}.projection_transaction.source_of_truth: required`);
+  const required = normalizedStringSet(transaction.required_projections);
+  const updated = normalizedStringSet(transaction.updated_projections);
+  if (!required?.length) errors.push(`${path}.projection_transaction.required_projections: required nonempty exact projection set`);
+  if (!updated?.length) errors.push(`${path}.projection_transaction.updated_projections: required nonempty exact projection set`);
+  if (required && updated && JSON.stringify(required) !== JSON.stringify(updated)) {
+    errors.push(`${path}.projection_transaction: required_projections must equal updated_projections atomically`);
+  }
+  if (transaction.atomic !== true) errors.push(`${path}.projection_transaction.atomic: expected true`);
+  requireKeys(transaction.post_audit, ["status", "object", "evidence_ref"], `${path}.projection_transaction.post_audit`, errors);
+  const audit = object(transaction.post_audit);
+  if (audit) {
+    if (audit.status !== "passed") errors.push(`${path}.projection_transaction.post_audit.status: expected passed`);
+    if (audit.object !== action.after_object) errors.push(`${path}.projection_transaction.post_audit.object: must equal the operation after_object`);
+    if (!digestRefOrPlaceholder(audit.evidence_ref, allowPlaceholders)) {
+      errors.push(`${path}.projection_transaction.post_audit.evidence_ref: required digest-bound projection-coherence evidence`);
+    }
+  }
+  const collisionKeys = new Set((array(lane?.collision_keys) ?? []).map(canonicalIdentity));
+  const coordinationClaims = (array(lane?.coordination_claims) ?? []).map(object).filter((item) => !!item);
+  const ownsPlanningDomain = coordinationClaims.some((claim) => canonicalIdentity(claim.key) === canonicalIdentity("planning-projections") && claim.access === "write");
+  if (!collisionKeys.has(canonicalIdentity("planning-projections")) && !ownsPlanningDomain) {
+    errors.push(`${path}.lane_id: planning_record_update requires a write claim on planning-projections`);
+  }
+}
+function validatePushGate(action, lane, coordination, repo, parents, path, errors, allowPlaceholders) {
+  if (lane?.role !== "integrator") errors.push(`${path}.lane_id: git_push requires the integrator lane`);
+  requireKeys(action.push_gate, [
+    "intent",
+    "remote_ref",
+    "candidate_commit",
+    "expected_remote_commit",
+    "observed_remote_commit",
+    "observed_at",
+    "writers_frozen",
+    "worktree_clean",
+    "review",
+    "validation",
+    "prior_remote_ci"
+  ], `${path}.push_gate`, errors);
+  const gate = object(action.push_gate);
+  if (!gate) return;
+  const intent = String(gate.intent);
+  if (!PUSH_INTENTS.has(intent)) errors.push(`${path}.push_gate.intent: expected coherent_wave or minimal_ci_repair`);
+  const coordinationTarget = object(coordination?.target);
+  if (!nonempty(gate.remote_ref)) errors.push(`${path}.push_gate.remote_ref: required`);
+  else if (coordinationTarget && gate.remote_ref !== coordinationTarget.ref) {
+    errors.push(`${path}.push_gate.remote_ref: must equal coordination.target.ref`);
+  }
+  for (const field of ["candidate_commit", "expected_remote_commit", "observed_remote_commit"]) {
+    if (!commitObject(gate[field], allowPlaceholders)) errors.push(`${path}.push_gate.${field}: required 7-40 char hex object id`);
+  }
+  if (gate.expected_remote_commit !== gate.observed_remote_commit) {
+    errors.push(`${path}.push_gate: compare-and-swap precondition failed; observed remote differs from expected remote`);
+  }
+  if (gate.candidate_commit !== action.before_object || gate.candidate_commit !== action.after_object) {
+    errors.push(`${path}.push_gate.candidate_commit: push must preserve the same local before/after candidate object`);
+  }
+  if (nonempty(repo.commit) && gate.candidate_commit !== repo.commit) {
+    errors.push(`${path}.push_gate.candidate_commit: must equal repo.commit`);
+  }
+  if (!(allowPlaceholders && findPlaceholders(gate.observed_at).length > 0) && !isoTimestamp(gate.observed_at)) {
+    errors.push(`${path}.push_gate.observed_at: required ISO timestamp`);
+  }
+  if (gate.writers_frozen !== true) errors.push(`${path}.push_gate.writers_frozen: expected true`);
+  if (gate.worktree_clean !== true) errors.push(`${path}.push_gate.worktree_clean: expected true`);
+  requireKeys(gate.review, ["state", "evidence_ref"], `${path}.push_gate.review`, errors);
+  const review = object(gate.review);
+  if (review) {
+    if (review.state !== "accepted") errors.push(`${path}.push_gate.review.state: expected accepted`);
+    if (!digestRefOrPlaceholder(review.evidence_ref, allowPlaceholders)) errors.push(`${path}.push_gate.review.evidence_ref: required digest-bound review`);
+  }
+  requireKeys(gate.validation, [
+    "candidate_commit",
+    "focused_state",
+    "full_applicable_state",
+    "known_failing_gates",
+    "evidence_ref",
+    "no_harm_evidence_ref"
+  ], `${path}.push_gate.validation`, errors);
+  const validation = object(gate.validation);
+  if (validation) {
+    if (validation.candidate_commit !== gate.candidate_commit) errors.push(`${path}.push_gate.validation.candidate_commit: must equal candidate_commit`);
+    if (validation.focused_state !== "passed") errors.push(`${path}.push_gate.validation.focused_state: expected passed`);
+    if (validation.full_applicable_state !== "passed") errors.push(`${path}.push_gate.validation.full_applicable_state: expected passed`);
+    if (!Array.isArray(validation.known_failing_gates)) errors.push(`${path}.push_gate.validation.known_failing_gates: expected array`);
+    else if (validation.known_failing_gates.length > 0) {
+      errors.push(`${path}.push_gate.validation.known_failing_gates: push forbidden while any established gate is red, regardless of product/test-infrastructure classification`);
+    }
+    for (const field of ["evidence_ref", "no_harm_evidence_ref"]) {
+      if (!digestRefOrPlaceholder(validation[field], allowPlaceholders)) errors.push(`${path}.push_gate.validation.${field}: required digest-bound evidence`);
+    }
+  }
+  requireKeys(gate.prior_remote_ci, ["status", "commit", "evidence_ref"], `${path}.push_gate.prior_remote_ci`, errors);
+  const priorCi = object(gate.prior_remote_ci);
+  if (priorCi) {
+    if (!(/* @__PURE__ */ new Set(["success", "failure", "not_configured"])).has(String(priorCi.status))) {
+      errors.push(`${path}.push_gate.prior_remote_ci.status: expected success, failure, or not_configured`);
+    }
+    if (priorCi.commit !== gate.observed_remote_commit) errors.push(`${path}.push_gate.prior_remote_ci.commit: must equal observed_remote_commit`);
+    if (!digestRefOrPlaceholder(priorCi.evidence_ref, allowPlaceholders)) errors.push(`${path}.push_gate.prior_remote_ci.evidence_ref: required digest-bound CI observation`);
+    if (intent === "coherent_wave" && !["success", "not_configured"].includes(String(priorCi.status))) {
+      errors.push(`${path}.push_gate.prior_remote_ci.status: coherent_wave requires the prior remote to be green or explicitly have no CI`);
+    }
+    if (intent === "minimal_ci_repair" && priorCi.status !== "failure") {
+      errors.push(`${path}.push_gate.prior_remote_ci.status: minimal_ci_repair is reserved for a red remote baseline`);
+    }
+  }
+  const parentMatches = intent === "coherent_wave" ? parents.some((parent) => parent.kind === "git_integrate" && parent.status === "executed" && object(parent.cas)?.result === "applied" && parent.after_object === gate.candidate_commit) : parents.some((parent) => parent.kind === "git_commit" && parent.status === "executed" && parent.after_object === gate.candidate_commit);
+  if (!parentMatches) {
+    errors.push(`${path}.parent_operation_ids: ${intent || "push"} requires the candidate-producing applied integration or minimal-repair commit as a direct parent`);
+  }
+  if ((action.status === "executed" || action.outcome !== void 0) && (array(object(action.outcome)?.evidence) ?? []).map(object).filter(Boolean).every((evidence) => evidence?.kind !== "remote_ref_resolution")) {
+    errors.push(`${path}.outcome.evidence: git_push requires a remote_ref_resolution receipt`);
+  }
+}
+function sha256(value, allowPlaceholders) {
+  return typeof value === "string" && (allowPlaceholders && PLACEHOLDER.test(value) || /^[0-9a-f]{64}$/.test(value));
+}
+function validateCoordinationDomains(coordination, path, errors, allowPlaceholders) {
+  const result = /* @__PURE__ */ new Map();
+  const domains = array(coordination?.domains);
+  if (!domains) {
+    errors.push(`${path}.domains: schema 1.2 requires an array of versioned coordination domains`);
+    return result;
+  }
+  for (const [index, raw] of domains.entries()) {
+    const domainPath = `${path}.domains[${index}]`;
+    requireKeys(raw, ["key", "version", "state_digest", "observed_at", "evidence_ref"], domainPath, errors);
+    const domain = object(raw);
+    if (!domain) continue;
+    const key = canonicalIdentity(domain.key);
+    if (!key) errors.push(`${domainPath}.key: required canonical coordination key`);
+    else if (result.has(key)) errors.push(`${domainPath}.key: duplicate coordination domain ${JSON.stringify(key)}`);
+    if (!Number.isInteger(domain.version) || Number(domain.version) < 0) {
+      errors.push(`${domainPath}.version: required nonnegative monotonic integer`);
+    }
+    if (!sha256(domain.state_digest, allowPlaceholders)) {
+      errors.push(`${domainPath}.state_digest: required SHA-256 of the invariant-bearing state`);
+    }
+    if (!(allowPlaceholders && findPlaceholders(domain.observed_at).length > 0) && !isoTimestamp(domain.observed_at)) {
+      errors.push(`${domainPath}.observed_at: required ISO timestamp`);
+    }
+    if (!digestRefOrPlaceholder(domain.evidence_ref, allowPlaceholders)) {
+      errors.push(`${domainPath}.evidence_ref: required digest-bound domain observation`);
+    }
+    if (key && Number.isInteger(domain.version) && sha256(domain.state_digest, allowPlaceholders)) {
+      result.set(key, { version: Number(domain.version), stateDigest: String(domain.state_digest) });
+    }
+  }
+  return result;
+}
+function coordinationClaimsCommute(left, right) {
+  const leftClass = canonicalIdentity(left.operation_class);
+  const rightClass = canonicalIdentity(right.operation_class);
+  const leftAllows = new Set((array(left.commutes_with) ?? []).map(canonicalIdentity));
+  const rightAllows = new Set((array(right.commutes_with) ?? []).map(canonicalIdentity));
+  const leftRef = object(left.commutativity_ref);
+  const rightRef = object(right.commutativity_ref);
+  return !!leftClass && !!rightClass && leftAllows.has(rightClass) && rightAllows.has(leftClass) && digestRef(leftRef) && digestRef(rightRef) && leftRef?.sha256 === rightRef?.sha256;
+}
+function validateLaneCoordinationClaims(lane, lanePath, domains, errors, allowPlaceholders) {
+  const rawClaims = array(lane.coordination_claims);
+  if (!rawClaims) {
+    errors.push(`${lanePath}.coordination_claims: schema 1.2 requires an array`);
+    return [];
+  }
+  const claims = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const [index, raw] of rawClaims.entries()) {
+    const claimPath = `${lanePath}.coordination_claims[${index}]`;
+    requireKeys(raw, [
+      "key",
+      "access",
+      "expected_version",
+      "expected_state_digest",
+      "operation_class",
+      "commutes_with",
+      "commutativity_ref"
+    ], claimPath, errors);
+    const claim = object(raw);
+    if (!claim) continue;
+    const key = canonicalIdentity(claim.key);
+    if (!key) errors.push(`${claimPath}.key: required canonical coordination key`);
+    else if (seen.has(key)) errors.push(`${claimPath}.key: duplicate lane claim ${JSON.stringify(key)}`);
+    else seen.add(key);
+    if (!COORDINATION_ACCESS.has(String(claim.access))) {
+      errors.push(`${claimPath}.access: expected read or write`);
+    }
+    if (!Number.isInteger(claim.expected_version) || Number(claim.expected_version) < 0) {
+      errors.push(`${claimPath}.expected_version: required nonnegative integer`);
+    }
+    if (!sha256(claim.expected_state_digest, allowPlaceholders)) {
+      errors.push(`${claimPath}.expected_state_digest: required SHA-256`);
+    }
+    if (!nonempty(claim.operation_class)) errors.push(`${claimPath}.operation_class: required`);
+    if (!Array.isArray(claim.commutes_with)) errors.push(`${claimPath}.commutes_with: expected array`);
+    else if (claim.commutes_with.some((item) => !nonempty(item))) errors.push(`${claimPath}.commutes_with: entries must be nonempty operation classes`);
+    const commutes = array(claim.commutes_with) ?? [];
+    if (commutes.length > 0 && !digestRefOrPlaceholder(claim.commutativity_ref, allowPlaceholders)) {
+      errors.push(`${claimPath}.commutativity_ref: explicit commutativity requires digest-bound policy evidence`);
+    }
+    if (commutes.length === 0 && claim.commutativity_ref !== null) {
+      errors.push(`${claimPath}.commutativity_ref: must be null when no commutativity is claimed`);
+    }
+    const domain = domains.get(key);
+    if (!domain) errors.push(`${claimPath}.key: does not resolve to coordination.domains`);
+    else {
+      if (claim.expected_version !== domain.version) {
+        errors.push(`${claimPath}.expected_version: stale plan; expected ${JSON.stringify(claim.expected_version)} but live domain is ${domain.version}`);
+      }
+      if (claim.expected_state_digest !== domain.stateDigest) {
+        errors.push(`${claimPath}.expected_state_digest: stale plan; invariant state digest has changed`);
+      }
+    }
+    if (key) claims.push(claim);
+  }
+  return claims;
+}
+function validateCoordination(value, path, errors, allowPlaceholders, schemaVersion, domains) {
+  const requiredCoordinationKeys = [
+    "dispatcher",
+    "integrator",
+    "write_policy",
+    "integration_policy",
+    "integration_mutex",
+    "local_inference_max_concurrency",
+    "target",
+    "lanes"
+  ];
+  if (schemaVersion === "1.2") requiredCoordinationKeys.push("domains");
+  requireKeys(value, requiredCoordinationKeys, path, errors);
+  const coordination = object(value);
+  const laneMap = /* @__PURE__ */ new Map();
+  if (!coordination) return laneMap;
+  for (const field of ["dispatcher", "integrator"]) {
+    if (!nonempty(coordination[field])) errors.push(`${path}.${field}: required`);
+  }
+  if (coordination.write_policy !== "isolated_worktrees") {
+    errors.push(`${path}.write_policy: expected isolated_worktrees`);
+  }
+  if (coordination.integration_policy !== "mutex_and_compare_and_swap") {
+    errors.push(`${path}.integration_policy: expected mutex_and_compare_and_swap`);
+  }
+  requireKeys(coordination.integration_mutex, [
+    "required",
+    "kind",
+    "scope",
+    "max_lease_seconds"
+  ], `${path}.integration_mutex`, errors);
+  const integrationMutex = object(coordination.integration_mutex);
+  if (integrationMutex) {
+    if (integrationMutex.required !== true) errors.push(`${path}.integration_mutex.required: expected true`);
+    if (integrationMutex.kind !== "lease_with_fencing") {
+      errors.push(`${path}.integration_mutex.kind: expected lease_with_fencing`);
+    }
+    if (integrationMutex.scope !== "target_ref") {
+      errors.push(`${path}.integration_mutex.scope: expected target_ref`);
+    }
+    if (!Number.isInteger(integrationMutex.max_lease_seconds) || Number(integrationMutex.max_lease_seconds) < 1 || Number(integrationMutex.max_lease_seconds) > 900) {
+      errors.push(`${path}.integration_mutex.max_lease_seconds: expected integer from 1 through 900`);
+    }
+  }
+  if (coordination.local_inference_max_concurrency !== 1) {
+    errors.push(`${path}.local_inference_max_concurrency: expected 1`);
+  }
+  requireKeys(coordination.target, ["ref", "expected_commit", "observed_at"], `${path}.target`, errors);
+  const target = object(coordination.target);
+  if (target) {
+    if (!nonempty(target.ref)) errors.push(`${path}.target.ref: required`);
+    if (!commitObject(target.expected_commit, allowPlaceholders)) {
+      errors.push(`${path}.target.expected_commit: required 7-40 char hex object id`);
+    }
+    if (!(allowPlaceholders && findPlaceholders(target.observed_at).length > 0) && !isoTimestamp(target.observed_at)) {
+      errors.push(`${path}.target.observed_at: required ISO timestamp`);
+    }
+  }
+  const lanes = array(coordination.lanes);
+  if (!lanes) {
+    errors.push(`${path}.lanes: expected array`);
+    return laneMap;
+  }
+  const activeCollisionOwners = /* @__PURE__ */ new Map();
+  const activeCoordinationClaims = /* @__PURE__ */ new Map();
+  const activeWorktrees = /* @__PURE__ */ new Map();
+  const activeBranches = /* @__PURE__ */ new Map();
+  const activeWriteRoots = [];
+  let activeIntegrators = 0;
+  let activeLocalInference = 0;
+  for (const [index, raw] of lanes.entries()) {
+    const lanePath = `${path}.lanes[${index}]`;
+    const requiredLaneKeys = [
+      "id",
+      "task_id",
+      "owner",
+      "role",
+      "state",
+      "execution_class",
+      "model",
+      "reasoning",
+      "harness",
+      "safe_context_limit_tokens",
+      "estimated_context_tokens",
+      "evaluation_mode",
+      "routing_reason",
+      "worktree",
+      "branch",
+      "baseline_commit",
+      "read_paths",
+      "write_paths",
+      "dependencies",
+      "invariants",
+      "acceptance",
+      "bootstrap",
+      schemaVersion === "1.2" ? "coordination_claims" : "collision_keys"
+    ];
+    requireKeys(raw, requiredLaneKeys, lanePath, errors);
+    const lane = object(raw);
+    if (!lane) continue;
+    const id = String(lane.id ?? "");
+    if (!nonempty(lane.id)) errors.push(`${lanePath}.id: required`);
+    else if (laneMap.has(id)) errors.push(`${lanePath}.id: duplicate ${JSON.stringify(id)}`);
+    else laneMap.set(id, lane);
+    for (const field of ["task_id", "owner", "routing_reason"]) {
+      if (!nonempty(lane[field])) errors.push(`${lanePath}.${field}: required`);
+    }
+    if (!LANE_ROLES.has(String(lane.role))) errors.push(`${lanePath}.role: unsupported ${JSON.stringify(lane.role)}`);
+    if (!LANE_STATES.has(String(lane.state))) errors.push(`${lanePath}.state: unsupported ${JSON.stringify(lane.state)}`);
+    if (!EXECUTION_CLASSES.has(String(lane.execution_class))) errors.push(`${lanePath}.execution_class: unsupported ${JSON.stringify(lane.execution_class)}`);
+    if (!EVALUATION_MODES.has(String(lane.evaluation_mode))) errors.push(`${lanePath}.evaluation_mode: unsupported ${JSON.stringify(lane.evaluation_mode)}`);
+    for (const field of ["read_paths", "write_paths", "dependencies", "invariants", "acceptance"]) {
+      if (!Array.isArray(lane[field])) errors.push(`${lanePath}.${field}: expected array`);
+    }
+    if (schemaVersion !== "1.2" && !Array.isArray(lane.collision_keys)) {
+      errors.push(`${lanePath}.collision_keys: expected array`);
+    }
+    const laneClaims = schemaVersion === "1.2" ? validateLaneCoordinationClaims(lane, lanePath, domains, errors, allowPlaceholders) : [];
+    if (["active", "ready", "integrated"].includes(String(lane.state))) {
+      for (const field of ["model", "reasoning", "harness"]) {
+        if (!nonempty(lane[field])) errors.push(`${lanePath}.${field}: required once a lane starts`);
+      }
+      if (!array(lane.read_paths)?.length) errors.push(`${lanePath}.read_paths: active lane requires a bounded read set`);
+      if (!array(lane.invariants)?.length) errors.push(`${lanePath}.invariants: active lane requires protected invariants`);
+      if (!array(lane.acceptance)?.length) errors.push(`${lanePath}.acceptance: active lane requires an acceptance boundary`);
+    }
+    const safe = lane.safe_context_limit_tokens;
+    const estimated = lane.estimated_context_tokens;
+    if (safe !== null && (!Number.isInteger(safe) || Number(safe) <= 0)) {
+      errors.push(`${lanePath}.safe_context_limit_tokens: expected null or positive integer`);
+    }
+    if (!Number.isInteger(estimated) || Number(estimated) < 0) {
+      errors.push(`${lanePath}.estimated_context_tokens: required nonnegative integer`);
+    } else if (Number.isInteger(safe) && Number(estimated) > Number(safe)) {
+      errors.push(`${lanePath}.estimated_context_tokens: exceeds verified safe context limit`);
+    }
+    const active = lane.state === "active";
+    if (lane.execution_class === "local_inference" && active) {
+      activeLocalInference += 1;
+      if (!Number.isInteger(safe) || Number(safe) <= 0) {
+        errors.push(`${lanePath}.safe_context_limit_tokens: active local inference requires a verified limit`);
+      }
+    }
+    const modifying = lane.role === "writer" || lane.role === "integrator";
+    if (modifying) {
+      if (typeof lane.worktree !== "string" || !pathPosix.isAbsolute(lane.worktree)) {
+        errors.push(`${lanePath}.worktree: modifying lane requires an absolute dedicated worktree`);
+      }
+      if (!nonempty(lane.branch)) errors.push(`${lanePath}.branch: modifying lane requires a branch`);
+      if (!commitObject(lane.baseline_commit, allowPlaceholders)) {
+        errors.push(`${lanePath}.baseline_commit: modifying lane requires a 7-40 char hex object id`);
+      }
+      if (!array(lane.write_paths)?.length) errors.push(`${lanePath}.write_paths: modifying lane requires a bounded write set`);
+      if (schemaVersion === "1.2") {
+        if (!laneClaims.some((claim) => claim.access === "write")) {
+          errors.push(`${lanePath}.coordination_claims: modifying lane requires at least one versioned write claim`);
+        }
+      } else if (!array(lane.collision_keys)?.length) {
+        errors.push(`${lanePath}.collision_keys: modifying lane requires semantic collision keys`);
+      }
+      for (const [writeIndex, rawPath] of (array(lane.write_paths) ?? []).entries()) {
+        if (!nonempty(rawPath)) {
+          errors.push(`${lanePath}.write_paths[${writeIndex}]: required nonempty repository-relative path or glob`);
+          continue;
+        }
+        const normalized = pathPosix.normalize(rawPath.replaceAll("\\", "/"));
+        if (pathPosix.isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../") || normalized === ".git" || normalized.startsWith(".git/")) {
+          errors.push(`${lanePath}.write_paths[${writeIndex}]: must be repository-relative, non-traversing, and outside .git`);
+        }
+        if (lane.role === "writer" && canonicalWriteRoot(rawPath) === "") {
+          errors.push(`${lanePath}.write_paths[${writeIndex}]: writer lanes require a bounded root; repository-wide globs are integrator-only`);
+        }
+      }
+      if (["active", "ready", "integrated"].includes(String(lane.state))) {
+        requireKeys(lane.bootstrap, [
+          "worktree",
+          "branch",
+          "head",
+          "observed_at",
+          "evidence_ref"
+        ], `${lanePath}.bootstrap`, errors);
+        const bootstrap = object(lane.bootstrap);
+        if (bootstrap) {
+          if (bootstrap.worktree !== lane.worktree) errors.push(`${lanePath}.bootstrap.worktree: must equal the assigned worktree`);
+          if (bootstrap.branch !== lane.branch) errors.push(`${lanePath}.bootstrap.branch: must equal the assigned branch`);
+          if (bootstrap.head !== lane.baseline_commit) errors.push(`${lanePath}.bootstrap.head: must equal the assigned baseline_commit`);
+          if (!(allowPlaceholders && findPlaceholders(bootstrap.observed_at).length > 0) && !isoTimestamp(bootstrap.observed_at)) {
+            errors.push(`${lanePath}.bootstrap.observed_at: required ISO timestamp`);
+          }
+          if (!(allowPlaceholders && findPlaceholders(bootstrap.evidence_ref).length > 0) && !digestRef(bootstrap.evidence_ref)) {
+            errors.push(`${lanePath}.bootstrap.evidence_ref: required digest-bound cwd/HEAD/branch evidence`);
+          }
+        }
+      }
+    }
+    if (active && schemaVersion === "1.2") {
+      if (laneClaims.length === 0) errors.push(`${lanePath}.coordination_claims: active lane requires a bounded coordination domain`);
+      for (const claim of laneClaims) {
+        const key = canonicalIdentity(claim.key);
+        const priorClaims = activeCoordinationClaims.get(key) ?? [];
+        for (const prior of priorClaims) {
+          const readRead = claim.access === "read" && prior.claim.access === "read";
+          if (!readRead && !coordinationClaimsCommute(claim, prior.claim)) {
+            errors.push(`${lanePath}.coordination_claims: active lanes ${prior.laneId} and ${id} overlap on ${JSON.stringify(key)} without symmetric, evidence-bound commutativity`);
+          }
+        }
+        priorClaims.push({ laneId: id, claim });
+        activeCoordinationClaims.set(key, priorClaims);
+      }
+    }
+    if (active && modifying) {
+      if (lane.role === "integrator") activeIntegrators += 1;
+      if (typeof lane.worktree === "string") {
+        const prior = activeWorktrees.get(lane.worktree);
+        if (prior) errors.push(`${lanePath}.worktree: active modifying lanes ${prior} and ${id} share a worktree`);
+        else activeWorktrees.set(lane.worktree, id);
+      }
+      if (nonempty(lane.branch)) {
+        const prior = activeBranches.get(lane.branch);
+        if (prior) errors.push(`${lanePath}.branch: active modifying lanes ${prior} and ${id} share a branch`);
+        else activeBranches.set(lane.branch, id);
+      }
+      if (schemaVersion !== "1.2") {
+        for (const rawKey of array(lane.collision_keys) ?? []) {
+          const key = canonicalIdentity(rawKey);
+          if (!key) {
+            errors.push(`${lanePath}.collision_keys: entries must be nonempty`);
+            continue;
+          }
+          const prior = activeCollisionOwners.get(key);
+          if (prior) errors.push(`${lanePath}.collision_keys: active modifying lanes ${prior} and ${id} overlap on ${JSON.stringify(key)}`);
+          else activeCollisionOwners.set(key, id);
+        }
+      }
+      for (const rawPath of array(lane.write_paths) ?? []) {
+        const root = canonicalWriteRoot(rawPath);
+        for (const prior of activeWriteRoots) {
+          if (writeRootsOverlap(root, prior.root)) {
+            errors.push(`${lanePath}.write_paths: active modifying lanes ${prior.laneId} and ${id} overlap on write roots ${JSON.stringify(prior.root || "**/*")} and ${JSON.stringify(root || "**/*")}`);
+          }
+        }
+        activeWriteRoots.push({ root, laneId: id });
+      }
+    }
+  }
+  if (activeIntegrators > 1) errors.push(`${path}.lanes: at most one integrator may be active`);
+  if (activeLocalInference > 1) errors.push(`${path}.lanes: local inference is serialized; at most one model may be active`);
+  return laneMap;
+}
+function validateCoordinationCas(action, lanes, domains, path, errors, allowPlaceholders) {
+  requireKeys(action, ["source_lane_ids", "coordination_cas"], path, errors);
+  const sourceLaneIds = array(action.source_lane_ids);
+  if (!sourceLaneIds?.length) {
+    errors.push(`${path}.source_lane_ids: schema 1.2 integration requires at least one source lane`);
+    return;
+  }
+  const sourceLanes = /* @__PURE__ */ new Map();
+  for (const [index, rawId] of sourceLaneIds.entries()) {
+    const sourcePath = `${path}.source_lane_ids[${index}]`;
+    if (!nonempty(rawId)) {
+      errors.push(`${sourcePath}: required lane id`);
+      continue;
+    }
+    const id = String(rawId);
+    if (sourceLanes.has(id)) {
+      errors.push(`${sourcePath}: duplicate source lane ${JSON.stringify(id)}`);
+      continue;
+    }
+    const source = lanes.get(id);
+    if (!source) errors.push(`${sourcePath}: does not resolve to coordination.lanes`);
+    else if (source.role !== "writer") errors.push(`${sourcePath}: integration source must be a writer lane`);
+    else sourceLanes.set(id, source);
+  }
+  const expectedClaims = /* @__PURE__ */ new Map();
+  const writeOwners = /* @__PURE__ */ new Map();
+  for (const [laneId, source] of sourceLanes) {
+    for (const claim of (array(source.coordination_claims) ?? []).map(object).filter((item) => !!item)) {
+      const key = canonicalIdentity(claim.key);
+      const pair = `${laneId}\0${key}`;
+      expectedClaims.set(pair, { laneId, claim });
+      if (claim.access === "write") {
+        const prior = writeOwners.get(key);
+        if (prior) {
+          errors.push(`${path}.source_lane_ids: source lanes ${prior} and ${laneId} both write ${JSON.stringify(key)}; combine them into one task or integrate as separate versioned transactions`);
+        } else writeOwners.set(key, laneId);
+      }
+    }
+  }
+  const entries = array(action.coordination_cas);
+  if (!entries) {
+    errors.push(`${path}.coordination_cas: expected array`);
+    return;
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const integrationApplied = object(action.cas)?.result === "applied";
+  const pendingUpdates = /* @__PURE__ */ new Map();
+  const startErrorCount = errors.length;
+  for (const [index, raw] of entries.entries()) {
+    const entryPath = `${path}.coordination_cas[${index}]`;
+    requireKeys(raw, [
+      "source_lane_id",
+      "key",
+      "access",
+      "operation_class",
+      "expected_version",
+      "observed_version",
+      "expected_state_digest",
+      "observed_state_digest",
+      "result",
+      "result_version",
+      "result_state_digest",
+      "observed_at",
+      "evidence_ref"
+    ], entryPath, errors);
+    const entry = object(raw);
+    if (!entry) continue;
+    const laneId = String(entry.source_lane_id ?? "");
+    const key = canonicalIdentity(entry.key);
+    const pair = `${laneId}\0${key}`;
+    if (seen.has(pair)) errors.push(`${entryPath}: duplicate source-lane/domain check`);
+    else seen.add(pair);
+    const expected = expectedClaims.get(pair);
+    if (!expected) errors.push(`${entryPath}: does not correspond to a source lane coordination claim`);
+    else {
+      for (const field of ["access", "operation_class", "expected_version", "expected_state_digest"]) {
+        const claimField = field;
+        if (entry[field] !== expected.claim[claimField]) errors.push(`${entryPath}.${field}: must equal the source lane claim`);
+      }
+    }
+    if (!COORDINATION_ACCESS.has(String(entry.access))) errors.push(`${entryPath}.access: expected read or write`);
+    if (!COORDINATION_CAS_RESULTS.has(String(entry.result))) errors.push(`${entryPath}.result: unsupported coordination CAS result`);
+    for (const field of ["expected_version", "observed_version", "result_version"]) {
+      if (!Number.isInteger(entry[field]) || Number(entry[field]) < 0) errors.push(`${entryPath}.${field}: required nonnegative integer`);
+    }
+    for (const field of ["expected_state_digest", "observed_state_digest", "result_state_digest"]) {
+      if (!sha256(entry[field], allowPlaceholders)) errors.push(`${entryPath}.${field}: required SHA-256`);
+    }
+    if (!(allowPlaceholders && findPlaceholders(entry.observed_at).length > 0) && !isoTimestamp(entry.observed_at)) {
+      errors.push(`${entryPath}.observed_at: required ISO timestamp`);
+    }
+    if (!digestRefOrPlaceholder(entry.evidence_ref, allowPlaceholders)) {
+      errors.push(`${entryPath}.evidence_ref: required digest-bound live domain observation`);
+    }
+    const live = domains.get(key);
+    if (!live) errors.push(`${entryPath}.key: does not resolve to a live coordination domain`);
+    else {
+      if (entry.observed_version !== live.version) errors.push(`${entryPath}.observed_version: must equal the freshly observed live domain version`);
+      if (entry.observed_state_digest !== live.stateDigest) errors.push(`${entryPath}.observed_state_digest: must equal the freshly observed live domain digest`);
+      const stale = entry.expected_version !== entry.observed_version || entry.expected_state_digest !== entry.observed_state_digest;
+      if (integrationApplied && stale) {
+        errors.push(`${entryPath}: stale plan cannot integrate; re-plan and re-attest against the live coordination domain`);
+      }
+      if (integrationApplied && entry.access === "read") {
+        if (entry.result !== "validated") errors.push(`${entryPath}.result: applied integration requires validated for a read claim`);
+        if (entry.result_version !== entry.observed_version || entry.result_state_digest !== entry.observed_state_digest) {
+          errors.push(`${entryPath}: a read claim must preserve the observed domain version and digest`);
+        }
+      }
+      if (integrationApplied && entry.access === "write") {
+        if (entry.result !== "applied") errors.push(`${entryPath}.result: applied integration requires applied for a write claim`);
+        if (entry.result_version !== Number(entry.observed_version) + 1) {
+          errors.push(`${entryPath}.result_version: a write must advance the domain by exactly one`);
+        }
+        if (entry.result_state_digest === entry.observed_state_digest) {
+          errors.push(`${entryPath}.result_state_digest: a version-advancing write requires changed invariant state`);
+        }
+        if (!stale && Number.isInteger(entry.result_version) && sha256(entry.result_state_digest, allowPlaceholders)) {
+          pendingUpdates.set(key, { version: Number(entry.result_version), stateDigest: String(entry.result_state_digest) });
+        }
+      }
+      if (!integrationApplied && entry.result === "rejected_stale" && !stale) {
+        errors.push(`${entryPath}.result: rejected_stale requires a version or state-digest mismatch`);
+      }
+    }
+  }
+  for (const pair of expectedClaims.keys()) {
+    if (!seen.has(pair)) errors.push(`${path}.coordination_cas: missing source-lane/domain check for ${JSON.stringify(pair.replace("\0", "@"))}`);
+  }
+  for (const pair of seen) {
+    if (!expectedClaims.has(pair)) errors.push(`${path}.coordination_cas: contains an undeclared source-lane/domain check`);
+  }
+  if (integrationApplied && errors.length === startErrorCount) {
+    for (const [key, state] of pendingUpdates) domains.set(key, state);
+  }
+}
+function validateGuard(manifest, actions, lanes, errors, allowPlaceholders) {
+  const guard = object(manifest.guard);
+  requireKeys(manifest.guard, [
+    "status",
+    "baseline_commit",
+    "candidate_tree",
+    "minted_at",
+    "staged_paths",
+    "writers_frozen",
+    "receipts",
+    "deterministic_gates",
+    "no_harm",
+    "commit_barrier"
+  ], "$.guard", errors);
+  if (!guard) return;
+  const status = String(guard.status);
+  if (!GUARD_STATES.has(status)) errors.push(`$.guard.status: unsupported ${JSON.stringify(guard.status)}`);
+  const repo = object(manifest.repo) ?? {};
+  if (!commitObject(guard.baseline_commit, allowPlaceholders)) {
+    errors.push("$.guard.baseline_commit: required 7-40 char baseline commit");
+  } else if (nonempty(repo.commit) && guard.baseline_commit !== repo.commit) {
+    errors.push("$.guard.baseline_commit: must equal repo.commit at GUARD initialization");
+  }
+  const candidateBound = status !== "initialized";
+  if (candidateBound) {
+    if (!exactGitObject(guard.candidate_tree, allowPlaceholders)) {
+      errors.push("$.guard.candidate_tree: required exact 40- or 64-character staged-tree object");
+    }
+    if (!(allowPlaceholders && findPlaceholders(guard.minted_at).length > 0) && !isoTimestamp(guard.minted_at)) {
+      errors.push("$.guard.minted_at: required timezone-aware candidate-mint timestamp");
+    }
+    if (guard.writers_frozen !== true) errors.push("$.guard.writers_frozen: candidate review requires frozen writers");
+  } else {
+    if (guard.candidate_tree !== null) errors.push("$.guard.candidate_tree: initialized GUARD must not claim a candidate tree");
+    if (guard.minted_at !== null) errors.push("$.guard.minted_at: initialized GUARD must be null");
+    if (guard.writers_frozen !== false) errors.push("$.guard.writers_frozen: initialized GUARD expects false until a tree is minted");
+  }
+  const stagedPaths = array(guard.staged_paths);
+  if (!stagedPaths) errors.push("$.guard.staged_paths: expected array");
+  else {
+    const seenPaths = /* @__PURE__ */ new Set();
+    for (const [index, rawPath] of stagedPaths.entries()) {
+      const path = `$.guard.staged_paths[${index}]`;
+      if (!nonempty(rawPath)) {
+        errors.push(`${path}: required nonempty repository-relative path`);
+        continue;
+      }
+      const normalized = pathPosix.normalize(rawPath.replaceAll("\\", "/"));
+      if (pathPosix.isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../") || normalized === ".git" || normalized.startsWith(".git/")) {
+        errors.push(`${path}: must be repository-relative, non-traversing, and outside .git`);
+      }
+      if (seenPaths.has(normalized)) errors.push(`${path}: duplicate staged path ${JSON.stringify(normalized)}`);
+      else seenPaths.add(normalized);
+    }
+  }
+  const receipts = array(guard.receipts);
+  const receiptById = /* @__PURE__ */ new Map();
+  if (!receipts) errors.push("$.guard.receipts: expected array");
+  else for (const [index, raw] of receipts.entries()) {
+    const path = `$.guard.receipts[${index}]`;
+    requireKeys(raw, [
+      "id",
+      "run_id",
+      "round_id",
+      "pod_id",
+      "task_id",
+      "role",
+      "actor",
+      "actual_model",
+      "reasoning_level",
+      "harness",
+      "session_id",
+      "baseline_commit",
+      "candidate_tree",
+      "prompt_sha256",
+      "policy_sha256",
+      "criteria_sha256",
+      "checks_sha256",
+      "started_at",
+      "finished_at",
+      "conclusion",
+      "findings_total",
+      "findings_paid",
+      "unresolved",
+      "repository_mutated",
+      "mutation_owner_transfer",
+      "evidence_ref"
+    ], path, errors);
+    const receipt = object(raw);
+    if (!receipt) continue;
+    const id = String(receipt.id ?? "");
+    if (!nonempty(receipt.id)) errors.push(`${path}.id: required`);
+    else if (receiptById.has(id)) errors.push(`${path}.id: duplicate ${JSON.stringify(id)}`);
+    else receiptById.set(id, receipt);
+    if (!GUARD_ROLES.has(String(receipt.role))) errors.push(`${path}.role: expected dev, qa, mister_clean, or holdout`);
+    for (const field of [
+      "run_id",
+      "round_id",
+      "pod_id",
+      "task_id",
+      "actor",
+      "actual_model",
+      "reasoning_level",
+      "harness",
+      "session_id"
+    ]) {
+      if (!nonempty(receipt[field])) errors.push(`${path}.${field}: required`);
+    }
+    if (receipt.baseline_commit !== guard.baseline_commit) errors.push(`${path}.baseline_commit: must equal guard baseline_commit`);
+    if (receipt.candidate_tree !== guard.candidate_tree) errors.push(`${path}.candidate_tree: receipt is stale or bound to a different tree`);
+    for (const field of ["prompt_sha256", "policy_sha256", "criteria_sha256", "checks_sha256"]) {
+      if (!sha256(receipt[field], allowPlaceholders)) errors.push(`${path}.${field}: required SHA-256`);
+    }
+    for (const field of ["started_at", "finished_at"]) {
+      if (!(allowPlaceholders && findPlaceholders(receipt[field]).length > 0) && !isoTimestamp(receipt[field])) {
+        errors.push(`${path}.${field}: required timezone-aware ISO timestamp`);
+      }
+    }
+    if (isoTimestamp(receipt.started_at) && isoTimestamp(receipt.finished_at) && Date.parse(String(receipt.started_at)) > Date.parse(String(receipt.finished_at))) {
+      errors.push(`${path}: started_at cannot follow finished_at`);
+    }
+    if (!GUARD_CONCLUSIONS.has(String(receipt.conclusion))) {
+      errors.push(`${path}.conclusion: expected pass, fail, conditional, or not_run`);
+    }
+    for (const field of ["findings_total", "findings_paid", "unresolved"]) {
+      if (!Number.isInteger(receipt[field]) || Number(receipt[field]) < 0) {
+        errors.push(`${path}.${field}: required nonnegative integer`);
+      }
+    }
+    if (["findings_total", "findings_paid", "unresolved"].every((field) => Number.isInteger(receipt[field]))) {
+      if (Number(receipt.findings_total) !== Number(receipt.findings_paid) + Number(receipt.unresolved)) {
+        errors.push(`${path}: findings_total must equal findings_paid plus unresolved`);
+      }
+    }
+    if (typeof receipt.repository_mutated !== "boolean") errors.push(`${path}.repository_mutated: expected boolean`);
+    if (["qa", "holdout"].includes(String(receipt.role)) && receipt.repository_mutated !== false) {
+      errors.push(`${path}.repository_mutated: QA and holdout are read-only exact-tree roles`);
+    }
+    if (receipt.repository_mutated === true) {
+      if (!digestRefOrPlaceholder(receipt.mutation_owner_transfer, allowPlaceholders)) {
+        errors.push(`${path}.mutation_owner_transfer: mutation requires a digest-bound custody transfer`);
+      }
+    } else if (receipt.mutation_owner_transfer !== null) {
+      errors.push(`${path}.mutation_owner_transfer: must be null when the receipt did not mutate the repository`);
+    }
+    if (!digestRefOrPlaceholder(receipt.evidence_ref, allowPlaceholders)) {
+      errors.push(`${path}.evidence_ref: required digest-bound exact-tree receipt`);
+    }
+  }
+  const gates = object(guard.deterministic_gates);
+  if (guard.deterministic_gates !== null) {
+    requireKeys(guard.deterministic_gates, [
+      "candidate_tree",
+      "state",
+      "required_count",
+      "passed_count",
+      "known_failures",
+      "evidence_ref"
+    ], "$.guard.deterministic_gates", errors);
+    if (gates) {
+      if (gates.candidate_tree !== guard.candidate_tree) errors.push("$.guard.deterministic_gates.candidate_tree: must equal guard candidate_tree");
+      if (!(/* @__PURE__ */ new Set(["passed", "failed", "not_run"])).has(String(gates.state))) {
+        errors.push("$.guard.deterministic_gates.state: expected passed, failed, or not_run");
+      }
+      for (const field of ["required_count", "passed_count"]) {
+        if (!Number.isInteger(gates[field]) || Number(gates[field]) < 0) errors.push(`$.guard.deterministic_gates.${field}: required nonnegative integer`);
+      }
+      if (!Array.isArray(gates.known_failures)) errors.push("$.guard.deterministic_gates.known_failures: expected array");
+      if (gates.state === "passed") {
+        if (gates.required_count !== gates.passed_count) errors.push("$.guard.deterministic_gates: passed requires every required gate to pass");
+        if ((array(gates.known_failures) ?? []).length > 0) errors.push("$.guard.deterministic_gates.known_failures: passed forbids known failures");
+      }
+      if (!digestRefOrPlaceholder(gates.evidence_ref, allowPlaceholders)) errors.push("$.guard.deterministic_gates.evidence_ref: required digest-bound gate receipt");
+    }
+  }
+  const noHarm = object(guard.no_harm);
+  if (guard.no_harm !== null) {
+    requireKeys(guard.no_harm, ["candidate_tree", "state", "introduced_by_run_open", "evidence_ref"], "$.guard.no_harm", errors);
+    if (noHarm) {
+      if (noHarm.candidate_tree !== guard.candidate_tree) errors.push("$.guard.no_harm.candidate_tree: must equal guard candidate_tree");
+      if (!(/* @__PURE__ */ new Set(["passed", "failed", "not_run"])).has(String(noHarm.state))) errors.push("$.guard.no_harm.state: expected passed, failed, or not_run");
+      if (!Number.isInteger(noHarm.introduced_by_run_open) || Number(noHarm.introduced_by_run_open) < 0) {
+        errors.push("$.guard.no_harm.introduced_by_run_open: required nonnegative integer");
+      }
+      if (noHarm.state === "passed" && noHarm.introduced_by_run_open !== 0) {
+        errors.push("$.guard.no_harm.introduced_by_run_open: passed requires zero cleanup-introduced open debt");
+      }
+      if (!digestRefOrPlaceholder(noHarm.evidence_ref, allowPlaceholders)) errors.push("$.guard.no_harm.evidence_ref: required digest-bound comparator receipt");
+    }
+  }
+  requireKeys(guard.commit_barrier, [
+    "state",
+    "approved_tree",
+    "receipt_ids",
+    "opened_at",
+    "crossed_action_id"
+  ], "$.guard.commit_barrier", errors);
+  const barrier = object(guard.commit_barrier);
+  if (!barrier) return;
+  const barrierState = String(barrier.state);
+  if (!GUARD_BARRIER_STATES.has(barrierState)) errors.push(`$.guard.commit_barrier.state: unsupported ${JSON.stringify(barrier.state)}`);
+  if (status === "initialized" || status === "collecting") {
+    if (barrierState !== "closed") errors.push("$.guard.commit_barrier.state: initialized or collecting GUARD must remain closed");
+  } else if (status === "passed" && barrierState !== "open") {
+    errors.push("$.guard.commit_barrier.state: passed GUARD requires an open barrier");
+  } else if (status === "crossed" && barrierState !== "crossed") {
+    errors.push("$.guard.commit_barrier.state: crossed GUARD requires a crossed barrier");
+  } else if (status === "invalidated" && barrierState !== "invalidated") {
+    errors.push("$.guard.commit_barrier.state: invalidated GUARD requires an invalidated barrier");
+  }
+  const selectedIds = array(barrier.receipt_ids);
+  const selectedReceipts = [];
+  if (!selectedIds) errors.push("$.guard.commit_barrier.receipt_ids: expected array");
+  else {
+    const seenIds = /* @__PURE__ */ new Set();
+    for (const [index, rawId] of selectedIds.entries()) {
+      const path = `$.guard.commit_barrier.receipt_ids[${index}]`;
+      if (!nonempty(rawId)) {
+        errors.push(`${path}: required receipt id`);
+        continue;
+      }
+      const id = String(rawId);
+      if (seenIds.has(id)) errors.push(`${path}: duplicate receipt id ${JSON.stringify(id)}`);
+      else seenIds.add(id);
+      const receipt = receiptById.get(id);
+      if (!receipt) errors.push(`${path}: does not resolve to guard.receipts`);
+      else selectedReceipts.push(receipt);
+    }
+  }
+  const barrierReady = barrierState === "open" || barrierState === "crossed";
+  if (barrierReady) {
+    if (barrier.approved_tree !== guard.candidate_tree) errors.push("$.guard.commit_barrier.approved_tree: must equal guard candidate_tree");
+    if (!(allowPlaceholders && findPlaceholders(barrier.opened_at).length > 0) && !isoTimestamp(barrier.opened_at)) {
+      errors.push("$.guard.commit_barrier.opened_at: required timezone-aware timestamp");
+    }
+    if (selectedReceipts.length !== 4) errors.push("$.guard.commit_barrier.receipt_ids: exact-tree barrier requires exactly four final receipts");
+    const byRole = /* @__PURE__ */ new Map();
+    const actors = /* @__PURE__ */ new Set();
+    const sessions = /* @__PURE__ */ new Set();
+    const taskBindings = /* @__PURE__ */ new Set();
+    for (const receipt of selectedReceipts) {
+      const role = String(receipt.role);
+      if (byRole.has(role)) errors.push(`$.guard.commit_barrier.receipt_ids: multiple selected receipts for ${role}`);
+      else byRole.set(role, receipt);
+      const actor = canonicalIdentity(receipt.actor);
+      const session = canonicalIdentity(`${receipt.harness}:${receipt.session_id}`);
+      taskBindings.add(JSON.stringify([
+        receipt.run_id,
+        receipt.round_id,
+        receipt.pod_id,
+        receipt.task_id
+      ]));
+      if (actors.has(actor)) errors.push("$.guard.commit_barrier.receipt_ids: DEV, QA, Mister Clean, and holdout must be distinct actors");
+      else actors.add(actor);
+      if (sessions.has(session)) errors.push("$.guard.commit_barrier.receipt_ids: final receipts must come from distinct harness/session identities");
+      else sessions.add(session);
+      if (receipt.candidate_tree !== guard.candidate_tree) errors.push("$.guard.commit_barrier.receipt_ids: selected receipt is bound to a different candidate tree");
+      if (receipt.conclusion !== "pass") errors.push("$.guard.commit_barrier.receipt_ids: every selected role receipt must conclude pass");
+      if (receipt.unresolved !== 0 || receipt.findings_total !== receipt.findings_paid) {
+        errors.push("$.guard.commit_barrier.receipt_ids: every selected receipt requires zero unresolved findings and all findings paid");
+      }
+      if (receipt.repository_mutated !== false) {
+        errors.push("$.guard.commit_barrier.receipt_ids: a receipt that mutated the repository is stale; mint a new tree and obtain a non-mutating final receipt");
+      }
+    }
+    if (taskBindings.size !== 1) {
+      errors.push("$.guard.commit_barrier.receipt_ids: all final receipts must bind the same run, round, pod, and task");
+    }
+    for (const role of GUARD_ROLES) if (!byRole.has(role)) errors.push(`$.guard.commit_barrier.receipt_ids: missing final ${role} receipt`);
+    const dev = byRole.get("dev");
+    const qa = byRole.get("qa");
+    const clean = byRole.get("mister_clean");
+    const holdout = byRole.get("holdout");
+    if (dev && qa && isoTimestamp(dev.finished_at) && isoTimestamp(qa.started_at) && Date.parse(String(dev.finished_at)) > Date.parse(String(qa.started_at))) {
+      errors.push("$.guard.commit_barrier.receipt_ids: QA must start after DEV finishes the exact candidate");
+    }
+    if (dev && clean && isoTimestamp(dev.finished_at) && isoTimestamp(clean.started_at) && Date.parse(String(dev.finished_at)) > Date.parse(String(clean.started_at))) {
+      errors.push("$.guard.commit_barrier.receipt_ids: Mister Clean must start after DEV finishes the exact candidate");
+    }
+    for (const prior of [dev, qa, clean]) {
+      if (prior && holdout && isoTimestamp(prior.finished_at) && isoTimestamp(holdout.started_at) && Date.parse(String(prior.finished_at)) > Date.parse(String(holdout.started_at))) {
+        errors.push("$.guard.commit_barrier.receipt_ids: holdout must remain the final independent pass");
+      }
+    }
+    if (gates?.state !== "passed") errors.push("$.guard.deterministic_gates.state: commit barrier requires passed exact-tree gates");
+    if (noHarm?.state !== "passed" || noHarm?.introduced_by_run_open !== 0) {
+      errors.push("$.guard.no_harm: commit barrier requires a passed exact-tree comparator with zero introduced debt");
+    }
+  } else {
+    if (barrier.approved_tree !== null) errors.push("$.guard.commit_barrier.approved_tree: closed or invalidated barrier must not approve a tree");
+    if ((selectedIds ?? []).length > 0) errors.push("$.guard.commit_barrier.receipt_ids: closed or invalidated barrier must not select final receipts");
+    if (barrier.opened_at !== null) errors.push("$.guard.commit_barrier.opened_at: closed or invalidated barrier must be null");
+  }
+  const actionById = /* @__PURE__ */ new Map();
+  const executedCommits = [];
+  for (const [actionIndex, raw] of actions.entries()) {
+    const action = object(raw);
+    if (!action) continue;
+    if (nonempty(action.id)) actionById.set(action.id, action);
+    if (action.status === "executed" && LOCAL_MUTATION_KINDS.has(String(action.kind)) && isoTimestamp(action.recorded_at) && isoTimestamp(guard.minted_at) && Date.parse(String(action.recorded_at)) > Date.parse(String(guard.minted_at)) && status !== "invalidated") {
+      errors.push(`$.guard: executed mutation ${String(action.id)} occurred after candidate mint; invalidate receipts and mint a new tree`);
+    }
+    if (action.kind === "git_commit") {
+      requireKeys(action.guard_commit, [
+        "candidate_tree",
+        "commit",
+        "commit_tree",
+        "receipt_ids",
+        "evidence_ref"
+      ], `$.actions[${actionIndex}].guard_commit`, errors);
+      const commitProof = object(action.guard_commit);
+      const lane = lanes.get(String(action.lane_id));
+      if (lane?.role !== "integrator") errors.push(`$.actions[${actionIndex}].lane_id: GUARD git_commit requires the integrator lane`);
+      if (commitProof) {
+        if (commitProof.candidate_tree !== guard.candidate_tree || commitProof.commit_tree !== guard.candidate_tree) {
+          errors.push(`$.actions[${actionIndex}].guard_commit: candidate_tree and commit_tree must equal the approved guard tree`);
+        }
+        if (action.status === "executed" && commitProof.commit !== action.after_object) {
+          errors.push(`$.actions[${actionIndex}].guard_commit.commit: must equal the executed action after_object`);
+        }
+        const expectedReceipts = [...new Set((selectedIds ?? []).map(String))].sort();
+        const actualReceipts = [...new Set((array(commitProof.receipt_ids) ?? []).map(String))].sort();
+        if (JSON.stringify(expectedReceipts) !== JSON.stringify(actualReceipts)) {
+          errors.push(`$.actions[${actionIndex}].guard_commit.receipt_ids: must equal the commit-barrier receipts`);
+        }
+        if (!digestRefOrPlaceholder(commitProof.evidence_ref, allowPlaceholders)) {
+          errors.push(`$.actions[${actionIndex}].guard_commit.evidence_ref: required digest-bound commit-tree proof`);
+        }
+      }
+      if (action.status === "executed") executedCommits.push(action);
+    }
+    if (["git_integrate", "git_push"].includes(String(action.kind)) && action.status === "executed" && barrierState !== "crossed") {
+      errors.push(`$.actions[${actionIndex}]: GUARD integration or push requires a crossed exact-tree commit barrier`);
+    }
+  }
+  if (barrierState === "crossed") {
+    if (!nonempty(barrier.crossed_action_id)) errors.push("$.guard.commit_barrier.crossed_action_id: crossed barrier requires the executed git_commit action id");
+    const crossed = actionById.get(String(barrier.crossed_action_id));
+    if (!crossed || crossed.kind !== "git_commit" || crossed.status !== "executed") {
+      errors.push("$.guard.commit_barrier.crossed_action_id: must resolve to one executed git_commit action");
+    }
+    if (executedCommits.length !== 1 || executedCommits[0]?.id !== barrier.crossed_action_id) {
+      errors.push("$.guard.commit_barrier.crossed_action_id: exactly one executed GUARD commit may cross the barrier");
+    }
+  } else {
+    if (barrier.crossed_action_id !== null) errors.push("$.guard.commit_barrier.crossed_action_id: non-crossed barrier must be null");
+    if (executedCommits.length > 0) errors.push("$.guard.commit_barrier.state: executed git_commit forbidden before the exact-tree barrier crosses");
+  }
+}
 function validateManifest(data, allowPlaceholders = false) {
   const errors = [];
   const manifest = object(data);
   requireKeys(data, ["record_type", "schema_version", "execution_state", "repo", "mode", "request_ref", "authorization_basis", "policy_sources", "actions", "excluded_actions"], "$", errors);
   if (!manifest || errors.length > 0) return errors;
   if (manifest.record_type !== "mister-clean.action-manifest") errors.push("$.record_type: expected mister-clean.action-manifest");
-  if (manifest.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
+  if (!MANIFEST_SCHEMA_VERSIONS.has(String(manifest.schema_version))) errors.push("$.schema_version: expected 1.0, 1.1, or 1.2");
   if (!EXECUTION_STATES.has(String(manifest.execution_state))) errors.push(`$.execution_state: unsupported value ${JSON.stringify(manifest.execution_state)}`);
-  if (!["CLEAN", "CLOSE", "CONFORM"].includes(String(manifest.mode))) errors.push("$.mode: action manifest requires CLEAN, CLOSE, or CONFORM");
+  if (!["CLEAN", "CLOSE", "CONFORM", "GUARD"].includes(String(manifest.mode))) errors.push("$.mode: action manifest requires CLEAN, CLOSE, CONFORM, or GUARD");
   const repo = object(manifest.repo) ?? {};
   if (!allowPlaceholders) {
     if (!nonempty(repo.id)) errors.push("$.repo.id: required portable repository identity");
@@ -7888,6 +8910,9 @@ function validateManifest(data, allowPlaceholders = false) {
   if (!nonempty(manifest.request_ref)) errors.push("$.request_ref: required");
   validateAuthorizationBasis(manifest.authorization_basis, "$.authorization_basis", errors);
   if (!Array.isArray(manifest.excluded_actions)) errors.push("$.excluded_actions: expected array");
+  if (manifest.schema_version === "1.0" && manifest.legacy_schema_acknowledged !== true) {
+    errors.push("$.legacy_schema_acknowledged: schema 1.0 omits coordination/CAS protections and requires explicit true acknowledgment");
+  }
   const actions = array(manifest.actions);
   if (!actions) {
     errors.push("$.actions: expected array");
@@ -7932,6 +8957,189 @@ function validateManifest(data, allowPlaceholders = false) {
         const typed = (array(outcome.evidence) ?? []).map(object).filter((entry) => !!entry);
         if (!typed.some((entry) => ACTION_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every((key) => nonempty(entry[key])) && isoTimestamp(entry.observed_at) && digestRef(entry.evidence_ref))) errors.push(`${path}.outcome.evidence: executed action requires allowlisted, time-bound, digest-referenced execution evidence`);
       }
+    }
+  }
+  const schemaVersion = String(manifest.schema_version);
+  if (manifest.mode === "GUARD" && schemaVersion !== "1.2") {
+    errors.push("$.schema_version: GUARD requires schema 1.2 exact-tree enforcement");
+  }
+  if (manifest.mode !== "GUARD" && manifest.guard !== void 0 && manifest.guard !== null) {
+    errors.push("$.guard: exact-tree guard record is valid only in GUARD mode");
+  }
+  const coordination = object(manifest.coordination);
+  const coordinationDomains = schemaVersion === "1.2" ? validateCoordinationDomains(coordination, "$.coordination", errors, allowPlaceholders) : /* @__PURE__ */ new Map();
+  if (schemaVersion === "1.1" || schemaVersion === "1.2") {
+    const lanes = validateCoordination(coordination, "$.coordination", errors, allowPlaceholders, schemaVersion, coordinationDomains);
+    const mutexPolicy = object(coordination?.integration_mutex);
+    const maxLeaseSeconds = Number(mutexPolicy?.max_lease_seconds);
+    const priorLeaseByResource = /* @__PURE__ */ new Map();
+    const recordedOperations = /* @__PURE__ */ new Map();
+    let expectedTargetCommit = object(coordination?.target)?.expected_commit;
+    for (const [index, raw] of actions.entries()) {
+      const path = `$.actions[${index}]`;
+      const action = object(raw);
+      if (!action) continue;
+      requireKeys(action, [
+        "lane_id",
+        "task_id",
+        "parent_operation_ids",
+        "before_object",
+        "after_object",
+        "recorded_at"
+      ], path, errors);
+      const lane = lanes.get(String(action.lane_id));
+      if (!lane) errors.push(`${path}.lane_id: must resolve to a coordination lane`);
+      else if (action.task_id !== lane.task_id) errors.push(`${path}.task_id: must equal the lane task_id`);
+      if (!nonempty(action.task_id)) errors.push(`${path}.task_id: required`);
+      if (!nonempty(action.before_object)) errors.push(`${path}.before_object: required`);
+      if ((manifest.execution_state === "executed" || action.status === "executed") && !nonempty(action.after_object)) {
+        errors.push(`${path}.after_object: executed operation requires the resulting object`);
+      }
+      if (!(allowPlaceholders && findPlaceholders(action.recorded_at).length > 0) && !isoTimestamp(action.recorded_at)) {
+        errors.push(`${path}.recorded_at: required ISO timestamp`);
+      }
+      const parents = array(action.parent_operation_ids);
+      const parentOperations = [];
+      if (!parents) errors.push(`${path}.parent_operation_ids: expected array`);
+      else for (const [parentIndex, parent] of parents.entries()) {
+        if (!nonempty(parent)) errors.push(`${path}.parent_operation_ids[${parentIndex}]: required nonempty operation id`);
+        else {
+          const parentOperation = recordedOperations.get(parent);
+          if (!parentOperation) errors.push(`${path}.parent_operation_ids[${parentIndex}]: parent must precede child in the append-only log`);
+          else parentOperations.push(parentOperation);
+        }
+      }
+      if (nonempty(action.id)) recordedOperations.set(action.id, action);
+      if (LOCAL_MUTATION_KINDS.has(String(action.kind))) {
+        if (lane?.role !== "writer" && lane?.role !== "integrator") {
+          errors.push(`${path}.lane_id: ${action.kind} requires a modifying lane`);
+        }
+        if (nonempty(action.target) && lane && !targetWithinWritePaths(action.target, array(lane.write_paths) ?? [])) {
+          errors.push(`${path}.target: must be contained by the lane write_paths`);
+        }
+      }
+      if (action.kind === "planning_record_update") {
+        validatePlanningProjectionTransaction(action, lane, path, errors, allowPlaceholders);
+      }
+      if (action.kind === "agent_dispatch" && lane) {
+        if (!array(lane.invariants)?.length || !array(lane.acceptance)?.length) {
+          errors.push(`${path}: dispatched lane requires explicit invariants and acceptance boundary`);
+        }
+      }
+      if (action.kind === "git_integrate") {
+        if (lane?.role !== "integrator") errors.push(`${path}.lane_id: git_integrate requires the integrator lane`);
+        requireKeys(action.cas, [
+          "compare_and_swap",
+          "target_ref",
+          "expected_target_commit",
+          "observed_target_commit",
+          "candidate_commit",
+          "result",
+          "result_commit",
+          "mutex"
+        ], `${path}.cas`, errors);
+        const cas = object(action.cas);
+        if (cas) {
+          if (cas.compare_and_swap !== true) errors.push(`${path}.cas.compare_and_swap: expected true`);
+          if (!nonempty(cas.target_ref)) errors.push(`${path}.cas.target_ref: required`);
+          const coordinationTarget = object(coordination?.target);
+          if (coordinationTarget && cas.target_ref !== coordinationTarget.ref) {
+            errors.push(`${path}.cas.target_ref: must equal coordination.target.ref`);
+          }
+          if (commitObject(expectedTargetCommit, allowPlaceholders) && cas.expected_target_commit !== expectedTargetCommit) {
+            errors.push(`${path}.cas.expected_target_commit: must equal the current operation-log target object`);
+          }
+          if (cas.expected_target_commit !== action.before_object) {
+            errors.push(`${path}.before_object: git_integrate must equal cas.expected_target_commit`);
+          }
+          for (const field of ["expected_target_commit", "observed_target_commit", "candidate_commit"]) {
+            if (!commitObject(cas[field], allowPlaceholders)) errors.push(`${path}.cas.${field}: required 7-40 char hex object id`);
+          }
+          if (!CAS_RESULTS.has(String(cas.result))) errors.push(`${path}.cas.result: unsupported ${JSON.stringify(cas.result)}`);
+          if (cas.result === "applied") {
+            if (action.status !== "executed") errors.push(`${path}.status: applied integration requires executed`);
+            if (cas.expected_target_commit !== cas.observed_target_commit) {
+              errors.push(`${path}.cas: applied integration requires observed target to equal expected target`);
+            }
+            if (!commitObject(cas.result_commit, allowPlaceholders)) {
+              errors.push(`${path}.cas.result_commit: applied integration requires resulting commit`);
+            }
+            if (cas.result_commit !== action.after_object) {
+              errors.push(`${path}.after_object: applied integration must equal cas.result_commit`);
+            }
+            expectedTargetCommit = cas.result_commit;
+          }
+          if (cas.result === "rejected_target_moved" && cas.expected_target_commit === cas.observed_target_commit) {
+            errors.push(`${path}.cas: rejected_target_moved requires a changed target object`);
+          }
+          requireKeys(cas.mutex, [
+            "resource",
+            "holder_lane_id",
+            "lease_id",
+            "fencing_token",
+            "acquired_at",
+            "mutation_observed_at",
+            "expires_at",
+            "released_at"
+          ], `${path}.cas.mutex`, errors);
+          const mutex = object(cas.mutex);
+          if (mutex) {
+            if (!nonempty(mutex.resource) || mutex.resource !== cas.target_ref) {
+              errors.push(`${path}.cas.mutex.resource: must equal the CAS target_ref`);
+            }
+            if (!nonempty(mutex.holder_lane_id) || mutex.holder_lane_id !== action.lane_id) {
+              errors.push(`${path}.cas.mutex.holder_lane_id: must equal the integrator lane_id`);
+            }
+            if (!nonempty(mutex.lease_id)) errors.push(`${path}.cas.mutex.lease_id: required`);
+            if (!Number.isInteger(mutex.fencing_token) || Number(mutex.fencing_token) < 1) {
+              errors.push(`${path}.cas.mutex.fencing_token: required positive integer`);
+            }
+            const timestampFields = ["acquired_at", "mutation_observed_at", "expires_at", "released_at"];
+            for (const field of timestampFields) {
+              if (!(allowPlaceholders && findPlaceholders(mutex[field]).length > 0) && !isoTimestamp(mutex[field])) {
+                errors.push(`${path}.cas.mutex.${field}: required ISO timestamp`);
+              }
+            }
+            if (timestampFields.every((field) => isoTimestamp(mutex[field]))) {
+              const acquired = Date.parse(String(mutex.acquired_at));
+              const mutation = Date.parse(String(mutex.mutation_observed_at));
+              const expires = Date.parse(String(mutex.expires_at));
+              const released = Date.parse(String(mutex.released_at));
+              if (!(acquired <= mutation && mutation <= expires)) {
+                errors.push(`${path}.cas.mutex: CAS observation must occur inside the live lease`);
+              }
+              if (released < mutation) {
+                errors.push(`${path}.cas.mutex.released_at: release cannot precede the CAS observation`);
+              }
+              if (Number.isInteger(maxLeaseSeconds) && (expires - acquired) / 1e3 > maxLeaseSeconds) {
+                errors.push(`${path}.cas.mutex: lease exceeds coordination max_lease_seconds`);
+              }
+              const resource = String(mutex.resource);
+              const fencingToken = Number(mutex.fencing_token);
+              const effectiveEnd = Math.min(expires, released);
+              const prior = priorLeaseByResource.get(resource);
+              if (prior && acquired < prior.effectiveEnd) {
+                errors.push(`${path}.cas.mutex: integration lease overlaps a prior lease for ${JSON.stringify(resource)}`);
+              }
+              if (prior && fencingToken <= prior.fencingToken) {
+                errors.push(`${path}.cas.mutex.fencing_token: must increase monotonically for ${JSON.stringify(resource)}`);
+              }
+              if (nonempty(mutex.resource) && Number.isInteger(mutex.fencing_token)) {
+                priorLeaseByResource.set(resource, { effectiveEnd, fencingToken });
+              }
+            }
+          }
+        }
+        if (schemaVersion === "1.2") {
+          validateCoordinationCas(action, lanes, coordinationDomains, path, errors, allowPlaceholders);
+        }
+      }
+      if (action.kind === "git_push") {
+        validatePushGate(action, lane, coordination, repo, parentOperations, path, errors, allowPlaceholders);
+      }
+    }
+    if (manifest.mode === "GUARD" && schemaVersion === "1.2") {
+      validateGuard(manifest, actions, lanes, errors, allowPlaceholders);
     }
   }
   if (!allowPlaceholders) for (const path of findPlaceholders(data)) errors.push(`${path}: unresolved template placeholder`);
@@ -8056,8 +9264,14 @@ function planningLaneLifecycle(name) {
   return PLANNING_LANE_LIFECYCLES.get(name.toLocaleLowerCase("und"));
 }
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
+  "__fixtures__",
   ".git",
+  "examples",
+  "fixtures",
   "node_modules",
+  "samples",
+  "test-data",
+  "testdata",
   "vendor",
   ".venv",
   "venv",
@@ -8219,8 +9433,9 @@ function assertDirectory(path) {
 
 // src/closeout/planning.ts
 var import_yaml = __toESM(require_dist(), 1);
+import { createHash as createHash2 } from "crypto";
 import { lstatSync as lstatSync2, readFileSync as readFileSync2 } from "fs";
-import { basename as basename2, extname as extname2, relative as relative2, resolve as resolve2, sep as sep2 } from "path";
+import { basename as basename2, dirname as dirname2, extname as extname2, relative as relative2, resolve as resolve2, sep as sep2 } from "path";
 var TEXT_EXTENSIONS = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
 var DONE = /* @__PURE__ */ new Set([
   "accept",
@@ -8269,6 +9484,14 @@ var PREEXECUTION = /* @__PURE__ */ new Set([
 ]);
 var ARCHIVED = /* @__PURE__ */ new Set(["archive", "archived", "historical", "history", "superseded"]);
 var FAILED = /* @__PURE__ */ new Set(["deny", "denied", "fail", "failed", "reject", "rejected", "revise"]);
+var PARTIAL = /* @__PURE__ */ new Set([
+  "conditional",
+  "conditional pass",
+  "conditionally passed",
+  "partial",
+  "partially complete",
+  "partially satisfied"
+]);
 var PASSED = /* @__PURE__ */ new Set([...DONE, "approve"]);
 var UNRUN = /* @__PURE__ */ new Set([
   "backlog",
@@ -8295,7 +9518,10 @@ var PLANNING_ARTIFACT_TYPES = /* @__PURE__ */ new Set([
   ...HIERARCHY_ARTIFACT_TYPES,
   ...ROLLUP_ARTIFACT_TYPES,
   "acceptance",
+  "dispatch",
+  "finding",
   "holdout",
+  "maintenance",
   "qa",
   "review"
 ]);
@@ -8493,19 +9719,26 @@ var FINDING_CODES = [
   "acceptance_gate_identity_conflict",
   "acceptance_gate_undiscovered",
   "acceptance_gate_unknown",
+  "acceptance_partial_malformed",
+  "acceptance_partial_unpaid",
   "archive_classification_conflict",
   "body_projection_conflict",
   "completed_parent_unexecuted_acceptance",
   "duplicate_artifact_id",
+  "finding_state_unknown",
+  "unfinished_completion_marker",
   "lane_status_conflict",
   "lifecycle_state_unknown",
+  "maintenance_lifecycle_stale",
   "orphan_parent_reference",
   "parent_child_projection_conflict",
   "parent_completion_stale",
   "planning_input_unparsed",
   "planning_relationship_conflict",
   "planning_relationship_unresolved",
-  "preexecution_parent_has_started_children"
+  "preexecution_parent_has_started_children",
+  "remediation_finding_open",
+  "remediation_finding_partial"
 ];
 function object2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -8560,10 +9793,100 @@ function acceptance(value) {
   if (!value) return "unknown";
   const token = normalize(value);
   if (FAILED.has(token)) return "failed";
+  if (PARTIAL.has(token)) return "partial";
   if (UNRUN.has(token)) return "unrun";
   if (NOT_APPLICABLE.has(token)) return "not_applicable";
   if (PASSED.has(token)) return "passed";
   return "unknown";
+}
+function acceptanceForArtifact(value, artifactType2, kind = artifactType2) {
+  const exact = acceptance(value);
+  if (exact !== "unknown") return exact;
+  if (artifactType2 !== "review" && kind !== "review") return "unknown";
+  const token = normalize(value ?? "");
+  if (/^conditional accept\b/.test(token)) return "passed";
+  if (/^(?:accept|accepted|approve|approved|pass|passed)\b/.test(token)) return "passed";
+  if (/^(?:reject|rejected|fail|failed)\b/.test(token)) return "failed";
+  return "unknown";
+}
+function findingState(value) {
+  const token = normalize(value ?? "");
+  if (/^partial(?:ly)?(?: resolved| complete)?\b/.test(token)) return "partial";
+  if (/^open\b/.test(token)) return "open";
+  if (/^fixed\b/.test(token)) return "fixed";
+  if (/^resolved\b/.test(token)) return "resolved";
+  return "unknown";
+}
+function findingStateProjection(metadata) {
+  const aliases = scalarAliasValues(metadata, ["finding_status", "status"], "finding state");
+  const states = aliases.values.map(findingState);
+  const recognized = [...new Set(states.filter((state2) => state2 !== "unknown"))];
+  const errors = [
+    aliases.error,
+    ...aliases.values.length === 0 ? ["finding state is missing"] : [],
+    ...states.includes("unknown") ? [`finding state must begin with OPEN, FIXED, RESOLVED, or PARTIAL; received ${aliases.values.map((value) => JSON.stringify(value)).join(", ")}`] : [],
+    ...recognized.length > 1 ? [`finding state projections conflict: ${aliases.values.map((value) => JSON.stringify(value)).join(", ")}`] : []
+  ].filter((error) => Boolean(error));
+  const state = errors.length === 0 ? recognized[0] ?? "unknown" : "unknown";
+  const lifecycleState = (/* @__PURE__ */ new Set(["fixed", "resolved"])).has(state) ? "done" : (/* @__PURE__ */ new Set(["open", "partial"])).has(state) ? "active" : "unknown";
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    lifecycle: lifecycleState,
+    projection: {
+      state: lifecycleState,
+      states: lifecycleState === "unknown" ? ["unknown"] : [lifecycleState],
+      values: aliases.values
+    },
+    state
+  };
+}
+function operateTimeLegs(metadata) {
+  const entries = topEntries(metadata, ["operate_time_legs"]);
+  if (entries.length === 0) return { count: 0, errors: [] };
+  const errors = [];
+  const legs = entries.flatMap(([key, raw]) => {
+    if (!Array.isArray(raw)) {
+      errors.push(`${key} must be a nonempty array of typed pending legs`);
+      return [];
+    }
+    return raw.map((value, index) => ({ ref: `${key}[${index}]`, value }));
+  });
+  if (legs.length === 0) errors.push("operate_time_legs must contain at least one pending leg");
+  for (const leg of legs) {
+    const item = object2(leg.value);
+    if (!item) {
+      errors.push(`${leg.ref} must be an object`);
+      continue;
+    }
+    const state = scalarAliasValues(item, ["status", "state"], `${leg.ref} state`);
+    const action = scalarAliasValues(item, ["required_next_action", "next_action", "action"], `${leg.ref} next action`);
+    const owner = scalarAliasValues(item, ["owner", "owner_role"], `${leg.ref} owner`);
+    const evidence = scalarAliasValues(item, ["evidence_required", "evidence"], `${leg.ref} evidence`);
+    for (const scan of [state, action, owner, evidence]) if (scan.error) errors.push(scan.error);
+    if (state.values.length !== 1 || acceptance(state.values[0]) !== "unrun") {
+      errors.push(`${leg.ref} must declare exactly one pending or unrun state`);
+    }
+    if (action.values.length !== 1) errors.push(`${leg.ref} must declare exactly one required next action`);
+    if (owner.values.length !== 1) errors.push(`${leg.ref} must declare exactly one owner`);
+    if (evidence.values.length !== 1) errors.push(`${leg.ref} must declare exactly one evidence requirement`);
+  }
+  return { count: legs.length, errors };
+}
+function maintenanceEvidence(metadata, content) {
+  const declared = scalarAliasValues(
+    metadata,
+    ["completion_commit", "implementation_commit", "resolved_commit"],
+    "maintenance completion commit"
+  ).values[0];
+  const bodyMatch = /\bRESOLUTION\s*:\s*(?:landed|implemented|completed|fixed)(?:\s+at)?\s+([0-9a-f]{7,40})\b/i.exec(content);
+  const candidate = declared ?? bodyMatch?.[1];
+  const commit = candidate && /^[0-9a-f]{7,40}$/i.test(candidate) ? candidate : void 0;
+  const terminalMetadata = scalarAliasValues(
+    metadata,
+    ["deliverable_status", "implementation_status", "verification_status"],
+    "maintenance terminal evidence"
+  ).values.some((value) => lifecycle(value) === "done" || acceptance(value) === "passed");
+  return { ...commit ? { commit } : {}, terminal: Boolean(commit && (bodyMatch || terminalMetadata)) };
 }
 function stateProjection(values) {
   const orderedValues = unique(values).sort((left, right) => normalize(left).localeCompare(normalize(right)) || left.localeCompare(right));
@@ -8692,10 +10015,13 @@ function topLevelProjection(metadata) {
     value: normalized.length === 1 && (/* @__PURE__ */ new Set(["1", "true", "yes"])).has(normalized[0] ?? "")
   };
 }
-function unsupportedStateAliasError(metadata, label) {
+function unsupportedStateAliasError(metadata, label, type) {
   const supported = /* @__PURE__ */ new Set([
     ...STRUCTURED_STATE_KEYS.map(keyToken),
-    ...EXPLICIT_ACCEPTANCE_FIELDS.map(keyToken)
+    ...EXPLICIT_ACCEPTANCE_FIELDS.map(keyToken),
+    "primary_state_column",
+    ...type === "finding" ? ["finding_status"] : [],
+    ...type === "story" ? ["story_review_status"] : []
   ]);
   const unsupported = Object.keys(metadata).filter((key) => {
     const token = keyToken(key);
@@ -8729,6 +10055,7 @@ function hasRawPlanningSignal(metadata, type) {
     "non_relationship_table_target_columns",
     "parent",
     "parent_id",
+    "primary_state_column",
     "parent_ids",
     "parents",
     "parents_ids",
@@ -8901,7 +10228,7 @@ function inferredArtifactType(path, metadata, declaredType) {
 }
 function artifactType(path, metadata) {
   const projection = scalarAliasValues(metadata, ["artifact_type", "kind", "type"], "artifact type");
-  const types = unique(projection.values.map(keyToken));
+  const types = unique(projection.values.map(keyToken).map((value) => value === "story_review" ? "review" : value));
   const inferred = inferredArtifactType(path, metadata, types.length === 1 ? types[0] : void 0);
   if (types.length === 0) {
     const errors2 = [projection.error, inferred.error].filter((error) => Boolean(error));
@@ -8913,7 +10240,7 @@ function artifactType(path, metadata) {
     inferred.error,
     ...types.length > 1 ? [`artifact type projections conflict: ${projection.values.map((value) => JSON.stringify(value)).join(", ")}`] : [],
     ...acceptanceKinds.some((kind) => kind !== types[0]) ? [`artifact type ${JSON.stringify(types[0])} conflicts with acceptance identity aliases for ${acceptanceKinds.map((value) => JSON.stringify(value)).join(", ")}`] : [],
-    ...inferred.strongAcceptanceType && inferred.strongAcceptanceType !== types[0] ? [`artifact type ${JSON.stringify(types[0])} conflicts with acceptance-shaped metadata for ${JSON.stringify(inferred.strongAcceptanceType)}`] : []
+    ...inferred.strongAcceptanceType && inferred.strongAcceptanceType !== types[0] && !(inferred.strongAcceptanceType === "acceptance" && ACCEPTANCE_WORDS.has(types[0] ?? "")) ? [`artifact type ${JSON.stringify(types[0])} conflicts with acceptance-shaped metadata for ${JSON.stringify(inferred.strongAcceptanceType)}`] : []
   ].filter((error) => Boolean(error));
   return {
     ...errors.length > 0 ? { error: errors.join("; ") } : {},
@@ -8921,7 +10248,11 @@ function artifactType(path, metadata) {
   };
 }
 function artifactIdentity(path, type, metadata) {
-  const projection = scalarAliasValues(metadata, [`${type}_id`, "id"], "artifact identity");
+  const projection = scalarAliasValues(
+    metadata,
+    type === "maintenance" ? ["maintenance_id", "maint_id", "id"] : [`${type}_id`, "id"],
+    "artifact identity"
+  );
   const ids = unique(projection.values);
   const errors = [
     projection.error,
@@ -8958,8 +10289,7 @@ function parentReferenceKeys(type, isAcceptance) {
       ["review_of", "reviewed_id", "subject_id", "target_id"],
       ["story", "story_id"],
       ["feature", "feature_id", "slice", "slice_id", "task", "task_id", "work_item", "work_item_id"],
-      ["epic", "epic_id"],
-      ["reviews"]
+      ["epic", "epic_id"]
     ].flat());
   } else {
     keys.push(...CANONICAL_PARENT_FIELDS[type] ?? []);
@@ -9005,7 +10335,7 @@ function parentReferences(metadata, type, isAcceptance, path) {
       return;
     }
     const item = object2(value);
-    const unsupportedState = item ? unsupportedStateAliasError(item, "parent reference") : void 0;
+    const unsupportedState = item ? unsupportedStateAliasError(item, "parent reference", "relationship") : void 0;
     if (unsupportedState) {
       errors.push({
         code: "planning_relationship_conflict",
@@ -9155,6 +10485,18 @@ function nonRelationshipTableHeaders(metadata, role) {
     headers: new Set(values)
   };
 }
+function primaryStateColumn(metadata) {
+  const projection = scalarAliasValues(metadata, ["primary_state_column"], "primary state column");
+  const errors = [projection.error].filter((error) => Boolean(error));
+  if (projection.values.length > 1) {
+    errors.push(`primary_state_column must resolve to exactly one header; received ${projection.values.map((value) => JSON.stringify(value)).join(", ")}`);
+  }
+  const header = projection.values.length === 1 ? normalize(projection.values[0] ?? "") : void 0;
+  return {
+    ...errors.length > 0 ? { error: errors.join("; ") } : {},
+    ...header ? { header } : {}
+  };
+}
 function splitTableRow(line) {
   const trimmed = line.trim();
   const cells = [];
@@ -9270,7 +10612,7 @@ function scanBody(content) {
   }
   return scanned;
 }
-function tableChildren(lines2, path, role, targetHeaders, nonRelationshipHeaders) {
+function tableChildren(lines2, path, role, targetHeaders, nonRelationshipHeaders, primaryStateHeader) {
   const children = [];
   const errors = [];
   for (let index = 0; index + 1 < lines2.length; index += 1) {
@@ -9286,15 +10628,12 @@ function tableChildren(lines2, path, role, targetHeaders, nonRelationshipHeaders
     const unsupportedStateIndexes = headers.flatMap((header2, headerIndex) => stateLikeHeader(header2) && !STATE_HEADERS.has(header2) ? [headerIndex] : []);
     const nonRelationshipIndexes = headers.flatMap((header2, headerIndex) => nonRelationshipHeaders.has(header2) ? [headerIndex] : []);
     const childIndex = childIndexes[0] ?? -1;
-    const stateIndex = stateIndexes[0] ?? -1;
+    const declaredStateIndexes = primaryStateHeader ? headers.flatMap((header2, headerIndex) => header2 === primaryStateHeader ? [headerIndex] : []) : [];
+    const statusIndexes = headers.flatMap((header2, headerIndex) => header2 === "status" ? [headerIndex] : []);
+    const authoritativeStateIndexes = primaryStateHeader ? declaredStateIndexes : statusIndexes.length === 1 ? statusIndexes : stateIndexes;
+    const stateIndex = authoritativeStateIndexes[0] ?? -1;
     const hasSeparator = separatorRow(splitTableRow(separatorLine));
-    if (childIndexes.length > 1 || stateIndexes.length > 1) {
-      errors.push({
-        code: "planning_relationship_conflict",
-        detail: `relationship table must have exactly one target column and at most one state column; found ${childIndexes.length} targets and ${stateIndexes.length} state columns`,
-        related: [`${path}#table-header-${header.lineNumber}`]
-      });
-    }
+    const ambiguousState = primaryStateHeader ? declaredStateIndexes.length !== 1 : statusIndexes.length > 1 || statusIndexes.length === 0 && stateIndexes.length > 1;
     if (childIndexes.length === 0 && nonRelationshipIndexes.length === 1) continue;
     if (childIndexes.length === 0 && nonRelationshipIndexes.length > 1) {
       errors.push({
@@ -9304,15 +10643,8 @@ function tableChildren(lines2, path, role, targetHeaders, nonRelationshipHeaders
       });
       continue;
     }
-    if (unsupportedStateIndexes.length > 0) {
-      errors.push({
-        code: "planning_relationship_conflict",
-        detail: `state-like table headers must use a recognized lifecycle column name; unsupported: ${unsupportedStateIndexes.map((headerIndex) => JSON.stringify(headers[headerIndex])).join(", ")}`,
-        related: [`${path}#table-header-${header.lineNumber}`]
-      });
-    }
     if (childIndex < 0) {
-      if (stateIndex >= 0 || unsupportedStateIndexes.length > 0) {
+      if (role === "rollup_projection" && (stateIndex >= 0 || unsupportedStateIndexes.length > 0)) {
         errors.push({
           code: "planning_relationship_conflict",
           detail: `${role} table has a state column but no recognized or declared target column (${headers.map((header2) => JSON.stringify(header2)).join(", ")})`,
@@ -9320,6 +10652,20 @@ function tableChildren(lines2, path, role, targetHeaders, nonRelationshipHeaders
         });
       }
       continue;
+    }
+    if (childIndexes.length > 1 || ambiguousState) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: primaryStateHeader ? `relationship table must contain exactly one declared primary state column ${JSON.stringify(primaryStateHeader)}; found ${declaredStateIndexes.length}` : `relationship table must have exactly one target column and one unambiguous authoritative lifecycle column; found ${childIndexes.length} targets and ${stateIndexes.length} lifecycle-like columns`,
+        related: [`${path}#table-header-${header.lineNumber}`]
+      });
+    }
+    if (unsupportedStateIndexes.length > 0 && stateIndex < 0) {
+      errors.push({
+        code: "planning_relationship_conflict",
+        detail: `state-like table headers must use a recognized lifecycle column name; unsupported: ${unsupportedStateIndexes.map((headerIndex) => JSON.stringify(headers[headerIndex])).join(", ")}`,
+        related: [`${path}#table-header-${header.lineNumber}`]
+      });
     }
     let row = index + (hasSeparator ? 2 : 1);
     while (row < lines2.length && !lines2[row]?.historical && (lines2[row]?.text ?? "").includes("|")) {
@@ -9383,7 +10729,7 @@ function structuredChildren(metadata, path, parentKeys) {
     }
     const identityScan = scalarAliasValues(item, STRUCTURED_ID_KEYS, "structured relationship identity");
     const ids = identityScan.values;
-    const unsupportedState = unsupportedStateAliasError(item, "structured relationship entry");
+    const unsupportedState = unsupportedStateAliasError(item, "structured relationship entry", "relationship");
     if (unsupportedState) {
       errors.push({
         code: "planning_relationship_conflict",
@@ -9455,7 +10801,7 @@ function bodyProjection(lines2) {
   for (const line of lines2) {
     if (line.historical) continue;
     const match = /^\s*(?:>\s*)*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\*\*)?(?:(?:current|implementation)[_ -]+)?(?:lifecycle|phase|stage|state|status)(?:\*\*)?\s*:\s*(.+?)\s*$/i.exec(line.text);
-    if (match?.[1]) values.push(match[1]);
+    if (match?.[1] && lifecycle(match[1]) !== "unknown") values.push(match[1]);
   }
   return stateProjection(values);
 }
@@ -9468,26 +10814,15 @@ function bodyAcceptanceObservations(lines2, path) {
   for (const line of lines2) {
     if (line.historical) continue;
     const visible = line.text.replace(/^\s*(?:>\s*)*/, "").replace(/^\s*#{1,6}\s*/, "").replace(/^\s*[-*+]\s*/, "");
-    const unchecked = /^\[\s\]\s*(.+)$/i.exec(visible);
-    if (unchecked?.[1]) {
-      const kind = acceptanceKind(unchecked[1]);
-      if (kind) {
-        observations.push({
-          kind,
-          rationale: false,
-          ref: `${path}#line-${line.lineNumber}`,
-          state: "unrun"
-        });
-        continue;
-      }
-    }
     const plain = visible.replace(/\*\*|__|`/g, "").trim();
     const labelled = label.exec(plain);
     if (labelled?.[1] && labelled[2]) {
       observations.push({
+        identity: `body:${path}:${normalize(labelled[1])}`,
         kind: normalize(labelled[1]),
         rationale: false,
         ref: `${path}#line-${line.lineNumber}`,
+        strength: "explicit",
         state: acceptance(labelled[2])
       });
       continue;
@@ -9496,15 +10831,26 @@ function bodyAcceptanceObservations(lines2, path) {
       const kind = acceptanceKind(plain);
       if (kind) {
         observations.push({
+          identity: `body:${path}:${kind}`,
           kind,
           rationale: false,
           ref: `${path}#line-${line.lineNumber}`,
+          strength: "weak",
           state: "unrun"
         });
       }
     }
   }
   return observations;
+}
+function unfinishedCompletionMarkers(lines2, path) {
+  const refs = [];
+  for (const line of lines2) {
+    if (line.historical) continue;
+    const visible = line.text.replace(/^\s*(?:>\s*)*/, "").replace(/^\s*[-*+]\s*/, "");
+    if (/^\[\s\]\s+\S/.test(visible)) refs.push(`${path}#line-${line.lineNumber}`);
+  }
+  return refs;
 }
 function validAcceptanceScope(value) {
   const direct = scalar(value);
@@ -9556,7 +10902,7 @@ function acceptanceDeclarationErrors(metadata, path, artifactTypeValue, isAccept
     }
     const trailWords = trail.flatMap((part) => normalize(part).split(" "));
     if (trailWords.some((word) => ACCEPTANCE_WORDS.has(word) || ACCEPTANCE_WORDS.has(word.replace(/s$/, "")))) {
-      const unsupportedState = unsupportedStateAliasError(item, "acceptance scope");
+      const unsupportedState = unsupportedStateAliasError(item, "acceptance scope", "acceptance");
       const unsupportedOutcome = unsupportedAcceptanceAliasError(item);
       if (unsupportedState) {
         errors.push({
@@ -9576,6 +10922,7 @@ function acceptanceDeclarationErrors(metadata, path, artifactTypeValue, isAccept
     for (const [scopeKey, scopeValue] of Object.entries(item)) {
       const scope = keyToken(scopeKey);
       if (!kinds.some((kind) => scope === kind || scope === `${kind}s`)) continue;
+      if (trail.length === 0 && scope === "reviews") continue;
       if (!validAcceptanceScope(scopeValue)) {
         errors.push({
           code: "planning_relationship_unresolved",
@@ -9606,7 +10953,7 @@ function acceptanceDeclarationErrors(metadata, path, artifactTypeValue, isAccept
           related: [`${path}#${[...trail, kind].join(".")}`]
         });
       }
-      const unknownOutcomes = projection.values.filter((value2) => acceptance(value2) === "unknown");
+      const unknownOutcomes = projection.values.filter((value2) => acceptanceForArtifact(value2, artifactTypeValue, kind) === "unknown");
       if (unknownOutcomes.length > 0) {
         errors.push({
           code: "planning_relationship_conflict",
@@ -9627,58 +10974,153 @@ function acceptanceDeclarationErrors(metadata, path, artifactTypeValue, isAccept
   visit(metadata, []);
   return errors;
 }
+var PLANNING_ROOT_DIRECTORY_NAMES = /* @__PURE__ */ new Set([
+  "epics",
+  "issues",
+  "planning",
+  "plans",
+  "project management",
+  "roadmap",
+  "slices",
+  "stories",
+  "tasks",
+  "work items"
+]);
+function implicitPlanningPolicy(source, metadata) {
+  const extension = extname2(source.path).toLocaleLowerCase("und");
+  if (!(/* @__PURE__ */ new Set([".yaml", ".yml"])).has(extension) || !basename2(source.path).startsWith("_")) return false;
+  const parent = normalize(source.path.split("/").at(-2) ?? "");
+  if (!PLANNING_ROOT_DIRECTORY_NAMES.has(parent)) return false;
+  const declarationKeys = [
+    "artifact_id",
+    "artifact_type",
+    "child_relationship_role",
+    "epic_id",
+    "feature_id",
+    "id",
+    "kind",
+    "maint_id",
+    "maintenance_id",
+    "parent",
+    "parent_id",
+    "parent_ids",
+    "relationship_role",
+    "slice_id",
+    "story_id",
+    "task_id",
+    "top_level",
+    "type",
+    "work_item_id"
+  ];
+  return topEntries(metadata, declarationKeys).length === 0;
+}
+function implicitPlanningEvidence(source, metadata) {
+  const declarationKeys = [
+    "artifact_id",
+    "artifact_type",
+    "epic_id",
+    "feature_id",
+    "holdout_id",
+    "id",
+    "kind",
+    "maint_id",
+    "maintenance_id",
+    "parent",
+    "parent_id",
+    "parent_ids",
+    "qa_id",
+    "relationship_role",
+    "review_id",
+    "slice_id",
+    "story_id",
+    "task_id",
+    "top_level",
+    "type",
+    "work_item_id"
+  ];
+  if (topEntries(metadata, declarationKeys).length > 0) return false;
+  const parts = source.path.split("/").slice(0, -1).map(normalize);
+  if (parts.some((part) => (/* @__PURE__ */ new Set(["evidence", "holdout evidence", "receipts", "verdict evidence"])).has(part))) return true;
+  const stem = normalize(basename2(source.path, extname2(source.path)));
+  return /(?:^| )(?:audit|readiness|verification report)$/.test(stem);
+}
+function emptyStateProjection() {
+  return { state: "unknown", states: [], values: [] };
+}
 function parseArtifact(source) {
   const parsed = parseSource(source);
   const typeProjection = artifactType(source.path, parsed.metadata);
   const type = typeProjection.type;
   const isAcceptance = acceptanceArtifact(source.path, type);
   const lane = pathLane(source.path);
-  const declaredScan = lifecycleAliasProjection(parsed.metadata, "artifact lifecycle", isAcceptance);
-  const unsupportedStateError = unsupportedStateAliasError(parsed.metadata, "artifact");
+  const remediationState = type === "finding" ? findingStateProjection(parsed.metadata) : void 0;
+  const declaredScan = remediationState ? {
+    ...remediationState.error ? { error: remediationState.error } : {},
+    projection: remediationState.projection
+  } : lifecycleAliasProjection(parsed.metadata, "artifact lifecycle", isAcceptance);
+  const unsupportedStateError = unsupportedStateAliasError(parsed.metadata, "artifact", type);
   const declaredProjection = declaredScan.projection;
   const declared = declaredProjection.state;
   const identity2 = artifactIdentity(source.path, type, parsed.metadata);
-  const nonArtifactRequested = isNonArtifactPlanningClass(source.declaredClass ?? "") || isNonArtifactPlanningClass(type);
+  const contextualPolicy = implicitPlanningPolicy(source, parsed.metadata);
+  const contextualEvidence = implicitPlanningEvidence(source, parsed.metadata);
+  const contextualCompound = Boolean(source.compoundEnvelope);
+  const nonArtifactRequested = contextualPolicy || contextualEvidence || contextualCompound || isNonArtifactPlanningClass(source.declaredClass ?? "") || isNonArtifactPlanningClass(type);
   const classificationRationale = scalarAliasValues(
     parsed.metadata,
     ["classification_rationale", "justification", "non_artifact_rationale", "rationale", "reason"],
     "classification rationale"
   );
-  const nonArtifactRationale = Boolean(source.classificationRationale?.trim()) || classificationRationale.values.length > 0;
+  const nonArtifactRationale = contextualPolicy || contextualEvidence || contextualCompound || Boolean(source.classificationRationale?.trim()) || classificationRationale.values.length > 0;
   const topLevelScan = topLevelProjection(parsed.metadata);
   const topLevel = topLevelScan.value;
   const extension = extname2(source.path).toLocaleLowerCase("und");
   const scannedBody = (/* @__PURE__ */ new Set([".md", ".mdx", ".txt"])).has(extension) ? scanBody(source.content) : [];
-  const currentBody = bodyProjection(scannedBody);
-  const bodyGateObservations = bodyAcceptanceObservations(scannedBody, source.path);
+  const explicitRelationshipRole = topEntries(
+    parsed.metadata,
+    ["child_relationship_role", "relationship_role"]
+  ).length > 0;
+  const graphEligible = HIERARCHY_ARTIFACT_TYPES.has(type) || ROLLUP_ARTIFACT_TYPES.has(type) || lane !== "unknown" || explicitRelationshipRole;
+  const currentBody = graphEligible ? bodyProjection(scannedBody) : emptyStateProjection();
+  const bodyGateObservations = graphEligible || isAcceptance ? bodyAcceptanceObservations(scannedBody, source.path) : [];
+  const unfinishedMarkers = graphEligible && !isAcceptance ? unfinishedCompletionMarkers(scannedBody, source.path) : [];
   const parentScan = parentReferences(parsed.metadata, type, isAcceptance, source.path);
   const parentIds = parentScan.ids;
   const relationshipRole = childRelationshipRole(parsed.metadata, type);
   const targetHeaders = relationshipTargetHeaders(parsed.metadata, relationshipRole.role);
   const nonRelationshipHeaders = nonRelationshipTableHeaders(parsed.metadata, relationshipRole.role);
-  const scannedTables = tableChildren(
+  const primaryState = primaryStateColumn(parsed.metadata);
+  const scannedTables = graphEligible ? tableChildren(
     scannedBody,
     source.path,
     relationshipRole.role,
     targetHeaders.headers,
-    nonRelationshipHeaders.headers
-  );
+    nonRelationshipHeaders.headers,
+    primaryState.header
+  ) : { children: [], errors: [] };
   const structuredRelationships = structuredChildren(
     parsed.metadata,
     source.path,
     new Set(parentReferenceKeys(type, isAcceptance).map(keyToken))
   );
   const acceptanceErrors = acceptanceDeclarationErrors(parsed.metadata, source.path, type, isAcceptance);
+  const operateTime = operateTimeLegs(parsed.metadata);
+  const acceptanceValues = topEntries(parsed.metadata, EXPLICIT_ACCEPTANCE_FIELDS);
+  const selectedAcceptanceValues = acceptanceValues.length > 0 ? acceptanceValues : isAcceptance ? topEntries(parsed.metadata, ["status"]) : [];
+  const acceptanceStates = [...new Set(selectedAcceptanceValues.map(([, value]) => acceptanceForArtifact(scalar(value), type, gateKind([type, source.path], type))))];
+  const acceptanceState = acceptanceStates.length === 1 ? acceptanceStates[0] ?? "unknown" : "unknown";
+  const maintenance = maintenanceEvidence(parsed.metadata, source.content);
   const relationshipErrors = [
     ...typeProjection.error ? [{ code: "planning_relationship_conflict", detail: typeProjection.error, related: [] }] : [],
     ...identity2.error ? [{ code: "planning_relationship_conflict", detail: identity2.error, related: [] }] : [],
-    ...declaredScan.error ? [{ code: "planning_relationship_conflict", detail: declaredScan.error, related: [] }] : [],
+    ...declaredScan.error && type !== "finding" ? [{ code: "planning_relationship_conflict", detail: declaredScan.error, related: [] }] : [],
     ...unsupportedStateError ? [{ code: "planning_relationship_conflict", detail: unsupportedStateError, related: [] }] : [],
     ...classificationRationale.error ? [{ code: "planning_relationship_conflict", detail: classificationRationale.error, related: [] }] : [],
     ...topLevelScan.error ? [{ code: "planning_relationship_conflict", detail: topLevelScan.error, related: [] }] : [],
     ...relationshipRole.error ? [{ code: "planning_relationship_conflict", detail: relationshipRole.error, related: [] }] : [],
     ...targetHeaders.error ? [{ code: "planning_relationship_conflict", detail: targetHeaders.error, related: [] }] : [],
     ...nonRelationshipHeaders.error ? [{ code: "planning_relationship_conflict", detail: nonRelationshipHeaders.error, related: [] }] : [],
+    ...primaryState.error ? [{ code: "planning_relationship_conflict", detail: primaryState.error, related: [] }] : [],
     ...parentScan.errors,
     ...scannedTables.errors,
     ...structuredRelationships.errors,
@@ -9698,12 +11140,14 @@ function parseArtifact(source) {
     "relationship_target_column",
     "rollup_target_column"
   ]).length > 0;
-  const nonArtifact = nonArtifactRequested && nonArtifactRationale && !hasPlanningSignals;
+  const contextualNonArtifact = (contextualPolicy || contextualEvidence || contextualCompound) && parsed.parseError === void 0;
+  const nonArtifact = contextualNonArtifact || nonArtifactRequested && nonArtifactRationale && !hasPlanningSignals;
   const structuredSurface = parsed.structured || table.length > 0 || currentBody.values.length > 0;
   const structured = parsed.parseError === void 0 && (nonArtifact || structuredSurface && hasPlanningSignals);
   const state = lane !== "unknown" ? lane : declaredProjection.values.length > 0 ? declared : currentBody.state;
   return {
     acceptance: isAcceptance,
+    acceptanceState,
     bodyGateObservations,
     bodyProjection: currentBody,
     childRelationshipRole: relationshipRole.role,
@@ -9712,7 +11156,10 @@ function parseArtifact(source) {
     declaredClass: lifecycle(source.declaredClass),
     declaredProjection,
     id: identity2.id,
+    identityExplicit: identity2.explicit,
     lane,
+    ...maintenance.commit ? { maintenanceCommit: maintenance.commit } : {},
+    maintenanceTerminalEvidence: maintenance.terminal,
     metadata: parsed.metadata,
     nonArtifact,
     nonArtifactRationale,
@@ -9721,16 +11168,149 @@ function parseArtifact(source) {
     parentReferences: parentScan.references,
     ...parsed.parseError === void 0 ? {} : { parseError: parsed.parseError },
     path: source.path,
+    findingState: remediationState?.state ?? "unknown",
+    operateTimeLegCount: operateTime.count,
+    operateTimeLegErrors: operateTime.errors,
     relationshipErrors,
     state,
     structured,
     tableChildren: table,
     topLevel,
-    type
+    type,
+    unfinishedMarkers
   };
 }
 function finding(code, artifact, detail, related = []) {
   return { code, detail, path: artifact.path, related: [...new Set(related)].sort(), subject: artifact.id };
+}
+function affectedProjectionField(code) {
+  if ((/* @__PURE__ */ new Set([
+    "body_projection_conflict",
+    "lane_status_conflict",
+    "parent_child_projection_conflict",
+    "preexecution_parent_has_started_children"
+  ])).has(code)) return "lifecycle_projection";
+  if ((/* @__PURE__ */ new Set([
+    "parent_completion_stale",
+    "completed_parent_unexecuted_acceptance",
+    "unfinished_completion_marker"
+  ])).has(code)) return "completion_rollup";
+  if ((/* @__PURE__ */ new Set([
+    "acceptance_cascade_unexecuted",
+    "acceptance_failure_unpaid",
+    "acceptance_partial_malformed",
+    "acceptance_partial_unpaid",
+    "acceptance_gate_undiscovered",
+    "acceptance_gate_unknown"
+  ])).has(code)) return "acceptance_execution";
+  if (code === "acceptance_gate_identity_conflict") return "acceptance_identity";
+  if ((/* @__PURE__ */ new Set([
+    "orphan_parent_reference",
+    "planning_relationship_conflict",
+    "planning_relationship_unresolved"
+  ])).has(code)) return "relationship_graph";
+  if (code === "duplicate_artifact_id") return "artifact_identity";
+  if (code === "archive_classification_conflict") return "archive_classification";
+  if (code === "lifecycle_state_unknown") return "lifecycle_state";
+  if ((/* @__PURE__ */ new Set([
+    "finding_state_unknown",
+    "remediation_finding_open",
+    "remediation_finding_partial"
+  ])).has(code)) return "remediation_state";
+  if (code === "maintenance_lifecycle_stale") return "maintenance_lifecycle";
+  return "planning_input";
+}
+function stablePlanningId(prefix, parts) {
+  const digest = createHash2("sha256").update(parts.map((part) => part.trim()).join("\0")).digest("hex").slice(0, 20).toUpperCase();
+  return `${prefix}-${digest}`;
+}
+function causalPlanningAccounting(findings, snapshot) {
+  const rawFindings = findings.map((item) => ({
+    ...item,
+    detector: "planning_graph",
+    evidence_refs: [.../* @__PURE__ */ new Set([item.path, ...item.related])].sort(),
+    id: stablePlanningId("RAW-PLANNING", [
+      "planning_graph",
+      item.code,
+      item.subject,
+      item.path,
+      item.detail.replaceAll(/\s+/g, " "),
+      ...[...new Set(item.related)].sort()
+    ]),
+    snapshot
+  }));
+  const parents = rawFindings.map((_, index) => index);
+  const findRoot = (index) => {
+    let current = index;
+    while ((parents[current] ?? current) !== current) current = parents[current] ?? current;
+    let cursor = index;
+    while ((parents[cursor] ?? cursor) !== current) {
+      const next = parents[cursor] ?? cursor;
+      parents[cursor] = current;
+      cursor = next;
+    }
+    return current;
+  };
+  const unite = (left, right) => {
+    const leftRoot = findRoot(left);
+    const rightRoot = findRoot(right);
+    if (leftRoot !== rightRoot) parents[rightRoot] = leftRoot;
+  };
+  const firstByInvariantRef = /* @__PURE__ */ new Map();
+  const boundSnapshot = snapshot !== "unbound";
+  for (const [index, item] of rawFindings.entries()) {
+    const invariant = affectedProjectionField(item.code);
+    const refs = boundSnapshot ? item.evidence_refs.map((ref) => ref.split("#", 1)[0] ?? ref).filter((ref) => ref.includes("/") || /\.[A-Za-z0-9]+$/.test(ref)) : [item.path];
+    for (const ref of [...new Set(refs)]) {
+      const key = `${invariant}\0${ref}`;
+      const prior = firstByInvariantRef.get(key);
+      if (prior === void 0) firstByInvariantRef.set(key, index);
+      else unite(prior, index);
+    }
+  }
+  const groups = /* @__PURE__ */ new Map();
+  for (const [index, item] of rawFindings.entries()) {
+    const root = findRoot(index);
+    const group = groups.get(root) ?? [];
+    group.push(item);
+    groups.set(root, group);
+  }
+  const orderedGroups = [...groups.values()].sort((left, right) => {
+    const leftItem = left[0];
+    const rightItem = right[0];
+    return affectedProjectionField(leftItem?.code ?? "planning_input_unparsed").localeCompare(affectedProjectionField(rightItem?.code ?? "planning_input_unparsed")) || (leftItem?.path ?? "").localeCompare(rightItem?.path ?? "");
+  });
+  const rootDebts = orderedGroups.map((group) => {
+    const projection = affectedProjectionField(group[0]?.code ?? "planning_input_unparsed");
+    const classes = [...new Set(group.map((item) => item.code))].sort();
+    const paths = [...new Set(group.flatMap((item) => [item.path, ...item.related].map((ref) => ref.split("#", 1)[0] ?? ref).filter((ref) => ref.includes("/") || /\.[A-Za-z0-9]+$/.test(ref))))].sort();
+    const componentRefs = [...new Set(group.flatMap((item) => item.evidence_refs))].sort();
+    const boundary = paths.length === 1 ? paths[0] ?? group[0]?.path ?? "unknown" : `${paths.length}-artifact connected component rooted at ${paths[0] ?? "unknown"}`;
+    const causeKey = `planning:${projection}:${stablePlanningId("CAUSE", [
+      projection,
+      ...classes,
+      ...componentRefs,
+      ...group.map((item) => item.id).sort()
+    ])}`;
+    return {
+      affected_paths: paths,
+      affected_projection_field: projection,
+      causal_evidence: {
+        component_refs: componentRefs,
+        kind: paths.length > 1 ? "connected_artifact_component" : "single_artifact",
+        violated_invariant: projection
+      },
+      cause_key: causeKey,
+      class: classes.join("+"),
+      detector_family: "planning_graph",
+      id: stablePlanningId("ROOT-PLANNING", [causeKey, ...group.map((item) => item.id).sort()]),
+      observation_count: group.length,
+      raw_finding_ids: group.map((item) => item.id).sort(),
+      repair_boundary: boundary,
+      snapshot
+    };
+  });
+  return { rawFindings, rootDebts };
 }
 function gateKind(path, fallback = "acceptance") {
   const words = path.flatMap((part) => normalize(part).split(" "));
@@ -9763,19 +11343,38 @@ function embeddedGateObservations(parent) {
     "status"
   ]);
   const outcomeFields = /* @__PURE__ */ new Set(["outcome", "result", "verdict"]);
+  const identityFor = (kind) => {
+    const ids = scalarAliasValues(parent.metadata, [`${kind}_id`], `${kind} identity`).values;
+    return ids.length === 1 ? `id:${normalizedId(ids[0] ?? "")}` : `embedded:${parent.path}:${kind}`;
+  };
   for (const entry of deepEntries(parent.metadata)) {
     const last = entry.path.at(-1) ?? "";
     const joined = entry.path.join("_");
     const hasAcceptance = [...ACCEPTANCE_WORDS].some((word) => joined.includes(word));
     const scopeKind = [...entry.path].reverse().flatMap((part) => [...ACCEPTANCE_WORDS].filter((word) => part === word || part === `${word}s`)).at(0);
+    if (parent.type === "story" && entry.path.length === 1 && last === "story_review_status") {
+      candidates.push({
+        explicit: true,
+        identity: identityFor("review"),
+        kind: "review",
+        rationale: gateHasRationale(parent.metadata, "review", entry.path),
+        ref: `${parent.path}#story_review_status`,
+        scope: `review\0`,
+        strength: "structured",
+        state: acceptanceForArtifact(scalar(entry.value), parent.type, "review")
+      });
+      continue;
+    }
     if (scopeKind && (last === scopeKind || last === `${scopeKind}s` || /^\d+$/.test(last))) {
       candidates.push({
         explicit: true,
+        identity: identityFor(scopeKind),
         kind: scopeKind,
         rationale: gateHasRationale(parent.metadata, scopeKind, entry.path),
         ref: `${parent.path}#${entry.path.join(".")}`,
         scope: `${scopeKind}\0${entry.path.slice(0, -1).join(".")}`,
-        state: acceptance(scalar(entry.value))
+        strength: "structured",
+        state: acceptanceForArtifact(scalar(entry.value), parent.type, scopeKind)
       });
       continue;
     }
@@ -9786,53 +11385,93 @@ function embeddedGateObservations(parent) {
     const kind = gateKind(entry.path);
     candidates.push({
       explicit: explicitField,
+      identity: identityFor(kind),
       kind,
       rationale: gateHasRationale(parent.metadata, kind, entry.path),
       ref: `${parent.path}#${entry.path.join(".")}`,
       scope: `${kind}\0${entry.path.slice(0, -1).join(".")}`,
-      state: acceptance(scalar(entry.value))
+      strength: "structured",
+      state: acceptanceForArtifact(scalar(entry.value), parent.type, kind)
     });
   }
   const explicitScopes = new Set(candidates.filter((candidate) => candidate.explicit).map((candidate) => candidate.scope));
-  return candidates.filter((candidate) => candidate.explicit || !explicitScopes.has(candidate.scope)).map(({ kind, rationale, ref, state }) => ({ kind, rationale, ref, state }));
+  return candidates.filter((candidate) => candidate.explicit || !explicitScopes.has(candidate.scope)).map(({ identity: identity2, kind, rationale, ref, state, strength }) => ({ identity: identity2, kind, rationale, ref, state, strength }));
 }
 function artifactGateObservations(artifact) {
   const explicit = topEntries(artifact.metadata, EXPLICIT_ACCEPTANCE_FIELDS);
   const selected = explicit.length > 0 ? explicit : topEntries(artifact.metadata, ["status"]);
   const kind = gateKind([artifact.type, artifact.path], artifact.type);
+  const identity2 = artifact.identityExplicit ? `id:${normalizedId(artifact.id)}` : `path:${artifact.path}`;
   const rationale = topValues(artifact.metadata, ["justification", "rationale", "reason"]).length > 0;
-  const direct = selected.length === 0 ? [{ kind, rationale, ref: artifact.path, state: "unknown" }] : selected.map(([, value]) => ({
+  const direct = selected.length === 0 ? [{ identity: identity2, kind, rationale, ref: artifact.path, state: "unknown", strength: "structured" }] : selected.map(([, value]) => ({
+    identity: identity2,
     kind,
     rationale,
     ref: artifact.path,
-    state: acceptance(scalar(value))
+    strength: "structured",
+    state: acceptanceForArtifact(scalar(value), artifact.type, kind)
   }));
-  return [...direct, ...embeddedGateObservations(artifact), ...artifact.bodyGateObservations];
+  const supporting = explicit.length > 0 ? embeddedGateObservations(artifact) : [...embeddedGateObservations(artifact), ...artifact.bodyGateObservations];
+  return [...direct, ...supporting].map((observation) => ({ ...observation, identity: identity2 }));
 }
 function acceptanceGates(parent, artifacts) {
-  const observations = [...embeddedGateObservations(parent), ...parent.bodyGateObservations];
+  const embeddedParentObservations = embeddedGateObservations(parent);
+  const embeddedIdentitiesByKind = /* @__PURE__ */ new Map();
+  for (const observation of embeddedParentObservations) {
+    const identities = embeddedIdentitiesByKind.get(observation.kind) ?? /* @__PURE__ */ new Set();
+    identities.add(observation.identity);
+    embeddedIdentitiesByKind.set(observation.kind, identities);
+  }
+  const parentObservations = [
+    ...embeddedParentObservations,
+    ...parent.bodyGateObservations.map((observation) => {
+      const identities = [...embeddedIdentitiesByKind.get(observation.kind) ?? []];
+      return identities.length === 1 ? { ...observation, identity: identities[0] ?? observation.identity } : observation;
+    })
+  ];
+  const childObservations = [];
   for (const artifact of artifacts) {
     if (!artifact.acceptance || artifact.state === "archived") continue;
     if (!artifact.parentIds.some((id) => normalizedId(id) === normalizedId(parent.id))) continue;
-    observations.push(...artifactGateObservations(artifact));
+    childObservations.push(...artifactGateObservations(artifact));
   }
+  const childIdentitiesByKind = /* @__PURE__ */ new Map();
+  for (const observation of childObservations) {
+    const identities = childIdentitiesByKind.get(observation.kind) ?? /* @__PURE__ */ new Set();
+    identities.add(observation.identity);
+    childIdentitiesByKind.set(observation.kind, identities);
+  }
+  const observations = [
+    ...parentObservations.map((observation) => {
+      if (!observation.identity.startsWith("embedded:") && !observation.identity.startsWith("body:")) return observation;
+      const identities = [...childIdentitiesByKind.get(observation.kind) ?? []];
+      return identities.length === 1 ? { ...observation, identity: identities[0] ?? observation.identity } : observation;
+    }),
+    ...childObservations
+  ];
+  const kindsWithStrongEvidence = new Set(observations.filter((observation) => observation.strength !== "weak").map((observation) => observation.kind));
+  const eligibleObservations = observations.filter((observation) => observation.strength !== "weak" || !kindsWithStrongEvidence.has(observation.kind));
   const grouped = /* @__PURE__ */ new Map();
-  for (const observation of observations) {
-    const current = grouped.get(observation.kind) ?? [];
+  for (const observation of eligibleObservations) {
+    const key = `${observation.kind}\0${observation.identity}`;
+    const current = grouped.get(key) ?? [];
     current.push(observation);
-    grouped.set(observation.kind, current);
+    grouped.set(key, current);
   }
-  return [...grouped.entries()].map(([kind, values]) => {
+  return [...grouped.entries()].map(([key, rawValues]) => {
+    const [kind = "acceptance", identity2 = "unknown"] = key.split("\0", 2);
+    const values = rawValues.some((value) => value.strength !== "weak") ? rawValues.filter((value) => value.strength !== "weak") : rawValues;
     const states = [...new Set(values.map((value) => value.state))].sort();
     const unreasonedExemption = values.some((value) => value.state === "not_applicable" && !value.rationale);
-    const state = states.includes("failed") ? "failed" : states.includes("unrun") ? "unrun" : states.includes("unknown") || unreasonedExemption ? "unknown" : states.includes("not_applicable") ? "not_applicable" : "passed";
+    const state = states.includes("failed") ? "failed" : states.includes("partial") ? "partial" : states.includes("unrun") ? "unrun" : states.includes("unknown") || unreasonedExemption ? "unknown" : states.includes("not_applicable") ? "not_applicable" : "passed";
     return {
+      identity: identity2,
       kind,
       refs: unique(values.map((value) => value.ref)).sort(),
       state,
       states
     };
-  }).sort((left, right) => left.kind.localeCompare(right.kind));
+  }).sort((left, right) => left.kind.localeCompare(right.kind) || left.identity.localeCompare(right.identity));
 }
 function sameProjection(left, right) {
   return left === "unknown" || right === "unknown" || left === right;
@@ -9892,8 +11531,33 @@ function relationshipCycles(childrenByParent) {
 function isPlanningTextPath(path) {
   return TEXT_EXTENSIONS.has(extname2(path).toLocaleLowerCase("und"));
 }
-function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 ? 1 : 0) {
-  const artifacts = sources.map(parseArtifact);
+function contextualizeDispatchPacketSources(sources) {
+  const envelopeDirectories = new Set(sources.flatMap((source) => {
+    if (basename2(source.path).toLocaleLowerCase("und") !== "dispatch.md") return [];
+    const parsed = parseSource(source);
+    if (parsed.parseError) return [];
+    const declaredTypes = scalarAliasValues(parsed.metadata, ["artifact_type", "kind", "type"], "dispatch type").values.map(keyToken);
+    return declaredTypes.length === 1 && declaredTypes[0] === "dispatch" ? [dirname2(source.path)] : [];
+  }));
+  const internalName = (path) => {
+    const name = basename2(path).toLocaleLowerCase("und");
+    return /^(?:execution-dag|ledger|manifest)(?:\.[^.]+)?\.(?:json|md|yaml|yml)$/.test(name) || /^(?:execution-dag|ledger|manifest)\.(?:json|md|yaml|yml)$/.test(name);
+  };
+  return sources.map((source) => {
+    const envelope = dirname2(source.path);
+    if (!envelopeDirectories.has(envelope) || !internalName(source.path)) return source;
+    const parsed = parseSource(source);
+    if (parsed.parseError) return source;
+    return {
+      ...source,
+      classificationRationale: "Compound dispatch packet internal governed by its typed dispatch.md envelope.",
+      compoundEnvelope: `${envelope}/dispatch.md`,
+      declaredClass: "reference"
+    };
+  });
+}
+function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 ? 1 : 0, options = {}) {
+  const artifacts = contextualizeDispatchPacketSources(sources).map(parseArtifact);
   const findings = [];
   for (const artifact of artifacts) {
     if (artifact.nonArtifactRequested && !artifact.nonArtifact) {
@@ -9916,6 +11580,55 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
           artifact,
           error.detail,
           error.related
+        ));
+      }
+    }
+    if (artifact.structured && !artifact.nonArtifact && artifact.type === "finding") {
+      if (artifact.findingState === "unknown") {
+        findings.push(finding(
+          "finding_state_unknown",
+          artifact,
+          "remediation finding must begin its state with OPEN, FIXED, RESOLVED, or PARTIAL"
+        ));
+      } else if (artifact.findingState === "open") {
+        findings.push(finding(
+          "remediation_finding_open",
+          artifact,
+          "remediation finding remains OPEN"
+        ));
+      } else if (artifact.findingState === "partial") {
+        findings.push(finding(
+          "remediation_finding_partial",
+          artifact,
+          "remediation finding is only PARTIALLY resolved"
+        ));
+      }
+      continue;
+    }
+    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance) {
+      const malformedPartial = artifact.acceptanceState === "partial" && (artifact.operateTimeLegCount === 0 || artifact.operateTimeLegErrors.length > 0);
+      const terminalWithPendingLeg = artifact.acceptanceState === "passed" && artifact.operateTimeLegCount > 0;
+      if (malformedPartial || terminalWithPendingLeg || artifact.operateTimeLegErrors.length > 0) {
+        findings.push(finding(
+          "acceptance_partial_malformed",
+          artifact,
+          malformedPartial ? `PARTIAL requires at least one typed pending operate-time leg; ${artifact.operateTimeLegErrors.join("; ") || "none declared"}` : terminalWithPendingLeg ? "PASS cannot coexist with pending operate-time legs" : artifact.operateTimeLegErrors.join("; ")
+        ));
+      }
+    }
+    if (artifact.structured && !artifact.nonArtifact && artifact.type === "maintenance" && artifact.declared === "active" && artifact.maintenanceCommit && artifact.maintenanceTerminalEvidence && options.repository) {
+      let landed = false;
+      try {
+        landed = isGitAncestor(options.repository, artifact.maintenanceCommit, "HEAD");
+      } catch {
+        landed = false;
+      }
+      if (landed) {
+        findings.push(finding(
+          "maintenance_lifecycle_stale",
+          artifact,
+          `maintenance remains active after its verified implementation commit ${artifact.maintenanceCommit} landed in the bound target`,
+          [artifact.maintenanceCommit]
         ));
       }
     }
@@ -9962,6 +11675,14 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
         "body_projection_conflict",
         artifact,
         `effective lifecycle is ${artifact.state} but current body projects ${bodyProjection2.state}`
+      ));
+    }
+    if (!artifact.acceptance && artifact.state === "done" && artifact.unfinishedMarkers.length > 0) {
+      findings.push(finding(
+        "unfinished_completion_marker",
+        artifact,
+        `completed artifact retains ${artifact.unfinishedMarkers.length} unchecked current marker${artifact.unfinishedMarkers.length === 1 ? "" : "s"}`,
+        artifact.unfinishedMarkers
       ));
     }
   }
@@ -10068,9 +11789,23 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
       ));
     }
   }
+  const reaches = (ancestor, descendant) => {
+    const pending = [ancestor];
+    const seen = /* @__PURE__ */ new Set();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || seen.has(current)) continue;
+      if (current === descendant) return true;
+      seen.add(current);
+      pending.push(...childrenByParent.get(current) ?? []);
+    }
+    return false;
+  };
+  const formsScopeChain = (parents) => parents.every((left, index) => parents.slice(index + 1).every((right) => reaches(left, right) || reaches(right, left)));
   for (const gate of artifacts) {
     if (!gate.structured || !gate.acceptance || gate.nonArtifact) continue;
     if (gate.parentIds.length === 0) {
+      if (gate.type === "review" && topEntries(gate.metadata, ["reviews"]).length > 0) continue;
       findings.push(finding(
         "planning_relationship_unresolved",
         gate,
@@ -10080,8 +11815,16 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
     }
     const matchedParents = /* @__PURE__ */ new Map();
     for (const observation of gate.parentReferences) {
-      for (const parent of byId.get(normalizedId(observation.id)) ?? []) {
-        if (parent.acceptance || parent.nonArtifact) continue;
+      const matches = (byId.get(normalizedId(observation.id)) ?? []).filter((parent) => !parent.acceptance && !parent.nonArtifact);
+      if (matches.length > 1) {
+        findings.push(finding(
+          "planning_relationship_conflict",
+          gate,
+          `acceptance parent ${JSON.stringify(observation.id)} resolves ambiguously to ${matches.length} artifacts`,
+          matches.map((parent) => parent.path)
+        ));
+      }
+      for (const parent of matches) {
         matchedParents.set(parent.path, parent);
         if (observation.state !== "unknown" && parent.state !== "unknown" && !sameProjection(observation.state, parent.state)) {
           findings.push(finding(
@@ -10107,11 +11850,11 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
         "live acceptance artifact resolves only to archived parents",
         [...matchedParents.keys()].sort()
       ));
-    } else if (eligibleParents.length > 1) {
+    } else if (eligibleParents.length > 1 && !formsScopeChain(eligibleParents)) {
       findings.push(finding(
         "planning_relationship_conflict",
         gate,
-        `acceptance artifact resolves to ${eligibleParents.length} parents`,
+        `acceptance artifact resolves to ${eligibleParents.length} unrelated parent scopes`,
         eligibleParents.map((parent) => parent.path)
       ));
     }
@@ -10251,6 +11994,7 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
     }
     const unrun = gates.filter((gate) => gate.state === "unrun");
     const failed = gates.filter((gate) => gate.state === "failed");
+    const partial = gates.filter((gate) => gate.state === "partial");
     if (allChildrenDone && unrun.length > 0) {
       findings.push(finding(
         "acceptance_cascade_unexecuted",
@@ -10265,6 +12009,14 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
         parent,
         `${failed.length}/${gates.length} acceptance gates record failure`,
         failed.flatMap((gate) => gate.refs)
+      ));
+    }
+    if (partial.length > 0) {
+      findings.push(finding(
+        "acceptance_partial_unpaid",
+        parent,
+        `${partial.length}/${gates.length} acceptance gates are PARTIAL with named operate-time work remaining`,
+        partial.flatMap((gate) => gate.refs)
       ));
     }
     if (!allChildrenDone && parent.state === "done" && unrun.length > 0) {
@@ -10288,15 +12040,22 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
   const counts = Object.fromEntries(
     FINDING_CODES.map((code) => [code, ordered.filter((item) => item.code === code).length])
   );
+  const accounting = causalPlanningAccounting(ordered, options.snapshot ?? "unbound");
   const status = planningRootCount === 0 ? "not_applicable" : ordered.length > 0 ? "fail" : "pass";
   return {
     artifactCount: artifacts.length,
+    candidate_probe_count: 0,
     counts,
     exitCode: ordered.length > 0 ? 1 : 0,
     findings: ordered,
     planningRootCount,
+    raw_finding_count: accounting.rawFindings.length,
+    raw_findings: accounting.rawFindings,
+    root_debt_count: accounting.rootDebts.length,
+    root_debts: accounting.rootDebts,
     status,
-    structuredArtifactCount: artifacts.filter((artifact) => artifact.structured).length
+    structuredArtifactCount: artifacts.filter((artifact) => artifact.structured).length,
+    suppressed_by_typed_nonartifact_count: artifacts.filter((artifact) => artifact.nonArtifact).length
   };
 }
 function auditPlanningRepository(repository) {
@@ -10306,6 +12065,7 @@ function auditPlanningRepository(repository) {
   const sources = [];
   const appendEntry = (entry) => {
     const relativePath = relative2(root, entry.path).split(sep2).join("/");
+    if (entry.kind === "file" && basename2(entry.path) === ".gitkeep" && lstatSync2(entry.path).size === 0) return;
     if (entry.kind !== "file" || !isPlanningTextPath(entry.path)) {
       sources.push({ content: "", path: relativePath });
       return;
@@ -10328,7 +12088,13 @@ function auditPlanningRepository(repository) {
     }
     for (const entry of listEntriesRecursively(rootPath)) appendEntry(entry);
   }
-  return auditPlanningArtifacts(sources, planningRoots.length);
+  let snapshot = "unbound";
+  try {
+    snapshot = git(root, "rev-parse", "HEAD");
+  } catch {
+    snapshot = "unbound";
+  }
+  return auditPlanningArtifacts(sources, planningRoots.length, { repository: root, snapshot });
 }
 
 // src/closeout/bundle.ts
@@ -10415,8 +12181,8 @@ function compareCodePoints2(left, right) {
   }
   return leftPoints.length - rightPoints.length;
 }
-function sha256(bytes) {
-  return createHash2("sha256").update(bytes).digest("hex");
+function sha2562(bytes) {
+  return createHash3("sha256").update(bytes).digest("hex");
 }
 function stableEqual(left, right) {
   if (Object.is(left, right)) return true;
@@ -10511,9 +12277,9 @@ async function contained(files, root, candidate) {
     const rootReal = await files.realpath(root);
     let existing = lexical;
     const tail = [];
-    while (!await files.exists(existing) && dirname2(existing) !== existing) {
+    while (!await files.exists(existing) && dirname3(existing) !== existing) {
       tail.unshift(basename3(existing));
-      existing = dirname2(existing);
+      existing = dirname3(existing);
     }
     const targetReal = resolve3(await files.realpath(existing), ...tail);
     const realRel = relative3(rootReal, targetReal);
@@ -10523,7 +12289,7 @@ async function contained(files, root, candidate) {
     return lexical;
   }
 }
-async function loadRef(files, base, value, path, errors, allowPlaceholders) {
+async function loadBytesRef(files, base, value, path, errors, allowPlaceholders) {
   const ref = requireObject(value, ["path", "sha256"], path, errors);
   if (!ref) return {};
   if (allowPlaceholders && [ref.path, ref.sha256].some((entry) => typeof entry === "string" && entry.includes("<"))) return {};
@@ -10537,18 +12303,25 @@ async function loadRef(files, base, value, path, errors, allowPlaceholders) {
     return { file: target };
   }
   const bytes = await files.readBytes(target);
+  const digest = sha2562(bytes);
   if (!allowPlaceholders) {
     if (typeof ref.sha256 !== "string" || !HEX64.test(ref.sha256)) errors.push(`${path}.sha256: required lowercase SHA-256`);
-    else if (sha256(bytes) !== ref.sha256) errors.push(`${path}.sha256: digest mismatch`);
+    else if (digest !== ref.sha256) errors.push(`${path}.sha256: digest mismatch`);
   }
+  return { bytes, digest, file: target };
+}
+async function loadRef(files, base, value, path, errors, allowPlaceholders) {
+  const loaded = await loadBytesRef(files, base, value, path, errors, allowPlaceholders);
+  const fileResult = loaded.file === void 0 ? {} : { file: loaded.file };
+  if (!loaded.bytes) return fileResult;
   try {
-    const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(loaded.bytes));
     if (!object3(parsed)) errors.push(`${path}.path: expected JSON object`);
     const data = object3(parsed);
-    return data ? { data, file: target } : { file: target };
+    return data ? { ...fileResult, data } : fileResult;
   } catch (error) {
     errors.push(`${path}.path: ${error instanceof Error ? error.message : String(error)}`);
-    return { file: target };
+    return fileResult;
   }
 }
 async function evidenceRef(files, base, ref, path, errors, allowPlaceholders, recordType) {
@@ -10572,7 +12345,7 @@ async function discoverPlanningRoots2(repo, files) {
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = /* @__PURE__ */ new Map();
   for (const row of directories) {
-    const parent = dirname2(row.relative);
+    const parent = dirname3(row.relative);
     const children = childrenByDirectory.get(parent) ?? /* @__PURE__ */ new Set();
     children.add(basename3(row.relative).toLocaleLowerCase("und"));
     childrenByDirectory.set(parent, children);
@@ -10609,7 +12382,7 @@ async function validateCriteria(bundle, report, base, files, clean, allowPlaceho
       const request = await contained(files, base, ref.path);
       if (!request || !await files.isFile(request)) errors.push(`${path}.request_source.path: file not found, not a regular file, or outside bundle directory`);
       else {
-        const digest = sha256(await files.readBytes(request));
+        const digest = sha2562(await files.readBytes(request));
         if (digest !== ref.sha256) errors.push(`${path}.request_source.sha256: digest mismatch`);
         if (digest !== proof.request_sha256) errors.push(`${path}.request_source: exact request bytes do not match request_sha256`);
       }
@@ -10703,7 +12476,7 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
       if (repo && system.kind === "repo_files" && text(artifact.path)) {
         const target = await contained(files, repo, artifact.path);
         if (!target || !await files.isFile(target)) errors.push(`${apath}.path: missing, not a regular file, or outside repository`);
-        else if (typeof artifact.sha256 === "string" && HEX64.test(artifact.sha256) && sha256(await files.readBytes(target)) !== artifact.sha256) errors.push(`${apath}.sha256: live digest mismatch`);
+        else if (typeof artifact.sha256 === "string" && HEX64.test(artifact.sha256) && sha2562(await files.readBytes(target)) !== artifact.sha256) errors.push(`${apath}.sha256: live digest mismatch`);
       }
     }
     if (corpus.total !== seen.size) errors.push(`${spath}.corpus.total (${String(corpus.total)}) != unique artifacts (${seen.size})`);
@@ -10858,7 +12631,7 @@ async function validateRegressionDelta(bundle, report, manifest, base, files, cl
     ...REGRESSION_COUNT_FIELDS.filter((field) => field !== "action_checks"),
     "action_checks"
   ], recordPath, errors);
-  if (record.schema_version !== "1.0") errors.push(`${recordPath}.schema_version: expected 1.0`);
+  if (record.schema_version !== "1.2") errors.push(`${recordPath}.schema_version: expected 1.2`);
   if (record.policy !== REGRESSION_POLICY) {
     errors.push(`${recordPath}.policy: expected ${REGRESSION_POLICY}`);
   }
@@ -10923,12 +12696,14 @@ async function validateRegressionDelta(bundle, report, manifest, base, files, cl
     if (Number.isInteger(check.introduced) && Number.isInteger(check.paid_before_boundary) && Number.isInteger(check.open_at_boundary)) {
       const accounted = Number(check.paid_before_boundary) + Number(check.open_at_boundary);
       if (check.introduced !== accounted) errors.push(`${checkPath}.introduced: must equal paid_before_boundary + open_at_boundary (${accounted})`);
-      introducedPaid += Number(check.paid_before_boundary);
-      introducedOpen += Number(check.open_at_boundary);
     }
     if (!Array.isArray(check.comparators) || array2(check.comparators).length === 0) {
       errors.push(`${checkPath}.comparators: required nonempty array`);
     }
+    const derivedIntroduced = /* @__PURE__ */ new Set();
+    const derivedPaid = /* @__PURE__ */ new Set();
+    const derivedOpen = /* @__PURE__ */ new Set();
+    const comparatorIds = /* @__PURE__ */ new Set();
     for (const [comparatorIndex, rawComparator] of array2(check.comparators).entries()) {
       const comparatorPath = `${checkPath}.comparators[${comparatorIndex}]`;
       const comparator = requireObject(rawComparator, [
@@ -10936,13 +12711,104 @@ async function validateRegressionDelta(bundle, report, manifest, base, files, cl
         "command",
         "scope",
         "detector",
-        "before_result",
-        "after_result"
+        "observations"
       ], comparatorPath, errors);
-      if (comparator) for (const field of ["id", "command", "scope", "detector", "before_result", "after_result"]) {
+      if (!comparator) continue;
+      for (const field of ["id", "command", "scope", "detector"]) {
         if (!text(comparator[field])) errors.push(`${comparatorPath}.${field}: required`);
       }
+      const comparatorId = String(comparator.id ?? "");
+      if (comparatorIds.has(comparatorId)) errors.push(`${comparatorPath}.id: duplicate within action check`);
+      else comparatorIds.add(comparatorId);
+      const observations = array2(comparator.observations);
+      if (observations.length < 2) errors.push(`${comparatorPath}.observations: requires before and after observations`);
+      const commandSha256 = sha2562(new TextEncoder().encode(String(comparator.command ?? "")));
+      const detectorSha256 = sha2562(new TextEncoder().encode(String(comparator.detector ?? "")));
+      const fingerprintsByObservation = [];
+      let priorObservedAt = -Infinity;
+      for (const [observationIndex, rawObservation] of observations.entries()) {
+        const observationPath = `${comparatorPath}.observations[${observationIndex}]`;
+        const observation = requireObject(rawObservation, [
+          "phase",
+          "object",
+          "command_sha256",
+          "detector_sha256",
+          "result_sha256",
+          "result_ref",
+          "finding_fingerprints",
+          "exit_code",
+          "observed_at"
+        ], observationPath, errors);
+        if (!observation) continue;
+        const phase = observation.phase;
+        const expectedPhase = observationIndex === 0 ? "before" : observationIndex === observations.length - 1 ? "after" : "intermediate";
+        if (phase !== expectedPhase) errors.push(`${observationPath}.phase: expected ${expectedPhase}`);
+        if (!text(observation.object)) errors.push(`${observationPath}.object: required`);
+        if (observationIndex === 0 && observation.object !== check.before_object) errors.push(`${observationPath}.object: must equal action-check before_object`);
+        if (observationIndex === observations.length - 1 && observation.object !== check.after_object) errors.push(`${observationPath}.object: must equal action-check after_object`);
+        for (const [field, expected] of [["command_sha256", commandSha256], ["detector_sha256", detectorSha256]]) {
+          if (!(allowPlaceholders && text(observation[field]) && String(observation[field]).includes("<")) && observation[field] !== expected) {
+            errors.push(`${observationPath}.${field}: must equal the SHA-256 of comparator ${field === "command_sha256" ? "command" : "detector"}`);
+          }
+        }
+        if (!(allowPlaceholders && text(observation.result_sha256) && observation.result_sha256.includes("<")) && (typeof observation.result_sha256 !== "string" || !HEX64.test(observation.result_sha256))) {
+          errors.push(`${observationPath}.result_sha256: required lowercase SHA-256 of exact comparator output`);
+        }
+        const comparatorResult = await loadBytesRef(
+          files,
+          base,
+          observation.result_ref,
+          `${observationPath}.result_ref`,
+          errors,
+          allowPlaceholders
+        );
+        if (comparatorResult.digest && !(allowPlaceholders && text(observation.result_sha256) && observation.result_sha256.includes("<")) && observation.result_sha256 !== comparatorResult.digest) {
+          errors.push(`${observationPath}.result_sha256: must equal the digest-bound result_ref bytes`);
+        }
+        if (!Number.isInteger(observation.exit_code)) errors.push(`${observationPath}.exit_code: required integer`);
+        if (!iso(observation.observed_at)) errors.push(`${observationPath}.observed_at: required ISO-8601 timestamp`);
+        else {
+          const observedAt = Date.parse(String(observation.observed_at));
+          if (observedAt < priorObservedAt) errors.push(`${observationPath}.observed_at: observations must be chronological`);
+          priorObservedAt = observedAt;
+        }
+        if (!Array.isArray(observation.finding_fingerprints)) {
+          errors.push(`${observationPath}.finding_fingerprints: required array`);
+          fingerprintsByObservation.push(/* @__PURE__ */ new Set());
+          continue;
+        }
+        const rawFingerprints = array2(observation.finding_fingerprints);
+        const fingerprints = rawFingerprints.filter((item) => typeof item === "string");
+        if (fingerprints.length !== rawFingerprints.length || fingerprints.some((item) => !(allowPlaceholders && item.includes("<")) && !HEX64.test(item))) {
+          errors.push(`${observationPath}.finding_fingerprints: entries must be lowercase SHA-256 values`);
+        }
+        if (new Set(fingerprints).size !== fingerprints.length) errors.push(`${observationPath}.finding_fingerprints: duplicates are forbidden`);
+        if (!stableEqual(fingerprints, [...fingerprints].sort())) errors.push(`${observationPath}.finding_fingerprints: must be sorted`);
+        fingerprintsByObservation.push(new Set(fingerprints));
+      }
+      if (fingerprintsByObservation.length === observations.length && observations.length >= 2) {
+        const before = fingerprintsByObservation[0] ?? /* @__PURE__ */ new Set();
+        const after = fingerprintsByObservation.at(-1) ?? /* @__PURE__ */ new Set();
+        const introduced = new Set(fingerprintsByObservation.flatMap((set) => [...set]).filter((item) => !before.has(item)));
+        for (const fingerprint of introduced) {
+          const namespaced = `${comparatorId}\0${fingerprint}`;
+          derivedIntroduced.add(namespaced);
+          if (after.has(fingerprint)) derivedOpen.add(namespaced);
+          else derivedPaid.add(namespaced);
+        }
+      }
     }
+    if (Number.isInteger(check.introduced) && check.introduced !== derivedIntroduced.size) {
+      errors.push(`${checkPath}.introduced: must equal fingerprint-derived total (${derivedIntroduced.size})`);
+    }
+    if (Number.isInteger(check.paid_before_boundary) && check.paid_before_boundary !== derivedPaid.size) {
+      errors.push(`${checkPath}.paid_before_boundary: must equal fingerprint-derived total (${derivedPaid.size})`);
+    }
+    if (Number.isInteger(check.open_at_boundary) && check.open_at_boundary !== derivedOpen.size) {
+      errors.push(`${checkPath}.open_at_boundary: must equal fingerprint-derived total (${derivedOpen.size})`);
+    }
+    introducedPaid += derivedPaid.size;
+    introducedOpen += derivedOpen.size;
     if (check.boundary_status === "closed") {
       if (check.open_at_boundary !== 0) errors.push(`${checkPath}: closed boundary requires open_at_boundary=0`);
     } else if (check.boundary_status === "interrupted") {
@@ -11383,7 +13249,7 @@ async function validateLive(bundle, report, manifest, bundlePath, repo, ports, e
       const currentPath = await contained(files, repo, relCurrent);
       if (relCurrent === ".git" || relCurrent.startsWith(".git/")) errors.push("$.successor_readiness.current_state.path: Git metadata cannot be a successor entrypoint");
       else if (!currentPath || !await files.isFile(currentPath)) errors.push("$.successor_readiness.current_state.path: missing, not a file, or outside repository");
-      else if (sha256(await files.readBytes(currentPath)) !== current.sha256) errors.push("$.successor_readiness.current_state.sha256: live digest differs");
+      else if (sha2562(await files.readBytes(currentPath)) !== current.sha256) errors.push("$.successor_readiness.current_state.sha256: live digest differs");
       else if ((await git2.run(repo, ["cat-file", "-e", `${String(subject)}:${relCurrent}`], [0, 128])).code !== 0) errors.push("$.successor_readiness.current_state.path: must exist in the subject commit");
     }
     if (current.commit !== subject) errors.push("$.successor_readiness.current_state.commit: must equal subject commit");
@@ -11419,7 +13285,7 @@ async function validateBundle(data, bundlePath, options = {}) {
   if (bundle.record_type !== "mister-clean.closure-bundle") errors.push("$.record_type: expected mister-clean.closure-bundle");
   if (bundle.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
   for (const field of ["run_id", "request_ref"]) if (!text(bundle[field])) errors.push(`$.${field}: required`);
-  const base = dirname2(resolve3(bundlePath));
+  const base = dirname3(resolve3(bundlePath));
   const reportLoad = await loadRef(ports.files, base, bundle.report, "$.report", errors, allowPlaceholders);
   const manifestLoad = await loadRef(ports.files, base, bundle.manifest, "$.manifest", errors, allowPlaceholders);
   const report = reportLoad.data;
@@ -11485,7 +13351,7 @@ async function validateBundleFile(bundlePath, options = {}) {
 }
 
 // src/closeout/inspection.ts
-import { createHash as createHash3 } from "crypto";
+import { createHash as createHash4 } from "crypto";
 import {
   readFile as readFile2,
   readdir as readdir2,
@@ -11656,7 +13522,7 @@ async function generateManifest(root) {
     const bytes = await readFile2(file.absolute);
     entries.push({
       path: `./${file.relative}`,
-      sha256: createHash3("sha256").update(bytes).digest("hex")
+      sha256: createHash4("sha256").update(bytes).digest("hex")
     });
   }
   entries.sort((left, right) => compareCodePoints3(left.path, right.path));
@@ -11699,7 +13565,7 @@ async function generatePackageManifest(root) {
     const bytes = await readFile2(file.absolute);
     entries.push({
       path: `./${file.relative}`,
-      sha256: createHash3("sha256").update(bytes).digest("hex")
+      sha256: createHash4("sha256").update(bytes).digest("hex")
     });
   }
   entries.sort((left, right) => compareCodePoints3(left.path, right.path));
@@ -11711,17 +13577,562 @@ async function generatePackageManifest(root) {
 }
 
 // src/closeout/prepare.ts
-import { createHash as createHash4 } from "crypto";
-import { existsSync as existsSync2, lstatSync as lstatSync3, mkdirSync, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "fs";
-import { join as join2, relative as relative5, resolve as resolve5, sep as sep5 } from "path";
+import { createHash as createHash6 } from "crypto";
+import { existsSync as existsSync3, lstatSync as lstatSync4, mkdirSync, readFileSync as readFileSync4, writeFileSync as writeFileSync2 } from "fs";
+import { join as join2, relative as relative6, resolve as resolve6, sep as sep6 } from "path";
+
+// src/closeout/semantic.ts
+import { createHash as createHash5 } from "crypto";
+import { spawnSync as spawnSync2 } from "child_process";
+import { existsSync as existsSync2, lstatSync as lstatSync3, readFileSync as readFileSync3, readlinkSync } from "fs";
+import { basename as basename5, extname as extname3, isAbsolute as isAbsolute3, relative as relative5, resolve as resolve5, sep as sep5 } from "path";
+var TEXT_EXTENSIONS2 = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
+var CONSTRUCTION_ASSERTION = /\b(choke point|construction[- ]enforced|redact(?:ion|or)?|safe by construction|saniti[sz](?:e|er|ation)|validator)\b/i;
+var CRITICAL_BOUNDARY = /\b(auth(?:entication|orization)?|credential|privacy|policy|redact|secret|security|telemetry|token)\b/i;
+var COMPOSITION_ROOT = /\b(app factory|bootstrap|composition root|production root|server factory)\b/i;
+var ROOT_BEHAVIOR = /\b(consumer|guard|inject|mount|policy|register|sink|state|wire|wired|wiring)\b/i;
+function object4(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function strings(value) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim())) return void 0;
+  return [...new Set(value.map((item) => String(item).trim()))].sort();
+}
+function argv(value) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim())) return void 0;
+  return value.map((item) => String(item).trim());
+}
+function evidenceRefs(value) {
+  if (!Array.isArray(value) || value.length === 0) return void 0;
+  const refs = [];
+  for (const raw of value) {
+    const ref = object4(raw);
+    if (!ref || typeof ref.path !== "string" || !ref.path.trim() || isAbsolute3(ref.path) || ref.path === ".." || ref.path.startsWith("../") || typeof ref.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(ref.sha256)) return void 0;
+    refs.push({ path: ref.path.trim().replaceAll("\\", "/"), sha256: ref.sha256 });
+  }
+  return refs.sort((left, right) => left.path.localeCompare(right.path) || left.sha256.localeCompare(right.sha256));
+}
+function isoTimestamp2(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value) && !Number.isNaN(Date.parse(value));
+}
+function sha2563(value) {
+  return createHash5("sha256").update(value).digest("hex");
+}
+function normalizeClaim(value) {
+  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("und");
+}
+function candidateId(kind, path, claim) {
+  const prefix = kind === "construction_boundary" ? "CONSTRUCTION" : "COMPOSITION";
+  return `SEM-${prefix}-${sha2563(`${kind}\0${path}\0${normalizeClaim(claim)}`).slice(0, 12).toUpperCase()}`;
+}
+function semanticCandidateSetSha256(candidates) {
+  return sha2563(JSON.stringify(candidates.map((candidate) => ({
+    evidence: candidate.evidence.map(normalizeClaim).sort(),
+    id: candidate.id,
+    kind: candidate.kind,
+    path: candidate.path
+  }))));
+}
+function semanticWorkingTreeSha256(repository, excludedPath) {
+  const root = resolve5(repository);
+  const excluded = excludedPath ? resolve5(excludedPath) : void 0;
+  const listed = spawnSync2("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  if (listed.error) throw listed.error;
+  if (listed.status !== 0) throw new Error(String(listed.stderr || "git ls-files failed"));
+  const hash = createHash5("sha256");
+  const paths = String(listed.stdout).split("\0").filter(Boolean).sort();
+  for (const portablePath of paths) {
+    const absolute = resolve5(root, portablePath);
+    if (excluded && absolute === excluded) continue;
+    hash.update(`${portablePath.length}:`);
+    hash.update(portablePath);
+    if (!existsSync2(absolute)) {
+      hash.update("\0missing\0");
+      continue;
+    }
+    const stat2 = lstatSync3(absolute);
+    if (stat2.isSymbolicLink()) {
+      hash.update("\0symlink\0");
+      hash.update(readlinkSync(absolute));
+    } else if (stat2.isFile()) {
+      hash.update("\0file\0");
+      hash.update(readFileSync3(absolute));
+    } else {
+      hash.update("\0other\0");
+    }
+  }
+  return hash.digest("hex");
+}
+function visibleLines(content) {
+  const result = [];
+  let fence;
+  let inComment = false;
+  for (const [index, raw] of content.split(/\r?\n/).entries()) {
+    let text2 = raw;
+    if (inComment) {
+      const end = text2.indexOf("-->");
+      if (end < 0) continue;
+      inComment = false;
+      text2 = text2.slice(end + 3);
+    }
+    while (text2.includes("<!--")) {
+      const start = text2.indexOf("<!--");
+      const end = text2.indexOf("-->", start + 4);
+      if (end < 0) {
+        text2 = text2.slice(0, start);
+        inComment = true;
+        break;
+      }
+      text2 = `${text2.slice(0, start)}${text2.slice(end + 3)}`;
+    }
+    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(text2)?.[1];
+    if (marker) {
+      const character = marker[0] ?? "";
+      if (!fence) fence = { character, length: marker.length };
+      else if (character === fence.character && marker.length >= fence.length) fence = void 0;
+      continue;
+    }
+    if (!fence && text2.trim()) result.push({ line: index + 1, text: text2.trim() });
+  }
+  return result;
+}
+function discoverSemanticProbeCandidates(repository) {
+  const root = resolve5(repository);
+  assertDirectory(root);
+  const groups = /* @__PURE__ */ new Map();
+  const add = (kind, path, line, text2) => {
+    const claim = normalizeClaim(text2);
+    const key = `${kind}\0${path}\0${claim}`;
+    const group = groups.get(key) ?? { claim, evidence: [], kind, path, refs: [] };
+    group.refs.push(`${path}#line-${line}`);
+    group.evidence.push(text2.slice(0, 240));
+    groups.set(key, group);
+  };
+  for (const rootText of discoverPlanningRoots(root)) {
+    const planningRoot = resolve5(root, rootText);
+    const stat2 = lstatSync3(planningRoot);
+    const entries = stat2.isFile() ? [{ kind: "file", path: planningRoot }] : listEntriesRecursively(planningRoot);
+    for (const entry of entries) {
+      if (entry.kind !== "file" || !TEXT_EXTENSIONS2.has(extname3(entry.path).toLocaleLowerCase("und"))) continue;
+      let content;
+      try {
+        content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync3(entry.path));
+      } catch {
+        continue;
+      }
+      if (content.includes("\0")) continue;
+      const path = relative5(root, entry.path).split(sep5).join("/");
+      for (const item of visibleLines(content)) {
+        if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
+          add("construction_boundary", path, item.line, item.text);
+        }
+        if (COMPOSITION_ROOT.test(item.text) && (ROOT_BEHAVIOR.test(item.text) || CRITICAL_BOUNDARY.test(item.text))) {
+          add("composition_root_reachability", path, item.line, item.text);
+        }
+      }
+    }
+  }
+  return [...groups.values()].map((group) => ({
+    evidence: [...new Set(group.evidence)].sort(),
+    id: candidateId(group.kind, group.path, group.claim),
+    kind: group.kind,
+    path: group.path,
+    refs: [...new Set(group.refs)].sort()
+  })).sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
+}
+function invalidFinding(detail, refs = []) {
+  return {
+    candidate_id: "manifest",
+    classification: "verification_debt",
+    code: "semantic_probe_manifest_invalid",
+    detail,
+    kind: "construction_boundary",
+    refs
+  };
+}
+function parseManifest(manifestPath, manifestRef, repository, expectedCommit, expectedTreeSha256, expectedCandidateSetSha256) {
+  let content = "";
+  let raw;
+  try {
+    content = readFileSync3(manifestPath, "utf8");
+    raw = JSON.parse(content);
+  } catch (error) {
+    return {
+      definitions: [],
+      errors: [invalidFinding(`cannot read semantic probe manifest: ${error instanceof Error ? error.message : String(error)}`, [manifestRef])],
+      sha256: sha2563(content)
+    };
+  }
+  const manifest = object4(raw);
+  if (!manifest) return { definitions: [], errors: [invalidFinding("semantic probe manifest root must be an object", [manifestRef])], sha256: sha2563(content) };
+  const errors = [];
+  if (manifest.record_type !== "mister-clean.semantic-probes") errors.push(invalidFinding("record_type must be mister-clean.semantic-probes", [manifestRef]));
+  if (manifest.schema_version !== "1.1") errors.push(invalidFinding("schema_version must be 1.1", [manifestRef]));
+  if (manifest.subject_commit !== expectedCommit) errors.push(invalidFinding(`subject_commit must equal current HEAD ${expectedCommit}`, [manifestRef]));
+  if (manifest.subject_tree_sha256 !== expectedTreeSha256) errors.push(invalidFinding("subject_tree_sha256 must equal the current non-ignored working-tree snapshot", [manifestRef]));
+  if (manifest.candidate_set_sha256 !== expectedCandidateSetSha256) errors.push(invalidFinding("candidate_set_sha256 must equal the complete discovered semantic candidate set", [manifestRef]));
+  if (!isoTimestamp2(manifest.observed_at)) errors.push(invalidFinding("observed_at must be a timezone-aware ISO timestamp", [manifestRef]));
+  if (!Array.isArray(manifest.probes)) {
+    errors.push(invalidFinding("probes must be an array", [manifestRef]));
+    return { definitions: [], errors, ...isoTimestamp2(manifest.observed_at) ? { observedAt: String(manifest.observed_at) } : {}, sha256: sha2563(content) };
+  }
+  const definitions = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const [index, rawProbe] of manifest.probes.entries()) {
+    const path = `${manifestRef}#probes[${index}]`;
+    const probe = object4(rawProbe);
+    if (!probe) {
+      errors.push(invalidFinding("probe must be an object", [path]));
+      continue;
+    }
+    const candidate = typeof probe.candidate_id === "string" ? probe.candidate_id.trim() : "";
+    const kind = probe.kind === "construction_boundary" || probe.kind === "composition_root_reachability" ? probe.kind : void 0;
+    const contractRefs = strings(probe.contract_refs);
+    const requiredCases = strings(probe.required_cases);
+    const exercisedCases = strings(probe.exercised_cases);
+    const disposition = probe.disposition === "operate_time_pending" || probe.disposition === "execute" || probe.disposition === "not_applicable" ? probe.disposition : void 0;
+    const command = argv(probe.command);
+    const timeout = probe.timeout_ms;
+    const expectedStatus = probe.expected_status;
+    const boundary = typeof probe.boundary === "string" ? probe.boundary.trim() : "";
+    const endpoint = typeof probe.observed_endpoint === "string" ? probe.observed_endpoint.trim() : "";
+    const localErrors = [];
+    if (!candidate) localErrors.push("candidate_id is required");
+    else if (seen.has(candidate)) localErrors.push(`duplicate candidate_id ${candidate}`);
+    if (!kind) localErrors.push("kind must be construction_boundary or composition_root_reachability");
+    if (!contractRefs?.length) localErrors.push("contract_refs must be a nonempty string array");
+    if (disposition !== "not_applicable" && !requiredCases?.length) localErrors.push("required_cases must be a nonempty string array");
+    if (disposition !== "not_applicable" && !exercisedCases) localErrors.push("exercised_cases must be a string array");
+    if (!disposition) localErrors.push("disposition must explicitly be execute, operate_time_pending, or not_applicable");
+    if (!boundary) localErrors.push("boundary is required");
+    if (!endpoint) localErrors.push("observed_endpoint is required");
+    if (disposition === "execute") {
+      if (!command?.length) localErrors.push("command must be a nonempty argv array");
+      if (!Number.isInteger(timeout) || Number(timeout) < 100 || Number(timeout) > 3e4) localErrors.push("timeout_ms must be an integer from 100 through 30000");
+      if (expectedStatus !== 0) localErrors.push("expected_status must be 0; the probe harness must translate correct behavior to success");
+    }
+    const owner = typeof probe.owner === "string" ? probe.owner.trim() : "";
+    const nextAction = typeof probe.required_next_action === "string" ? probe.required_next_action.trim() : "";
+    const evidenceRequired = typeof probe.evidence_required === "string" ? probe.evidence_required.trim() : "";
+    const notApplicableReason = typeof probe.not_applicable_reason === "string" ? probe.not_applicable_reason.trim() : "";
+    const notApplicableEvidence = evidenceRefs(probe.not_applicable_evidence);
+    if (disposition === "operate_time_pending" && (!owner || !nextAction || !evidenceRequired)) {
+      localErrors.push("operate_time_pending requires owner, required_next_action, and evidence_required");
+    }
+    if (disposition === "not_applicable" && (!notApplicableReason || !notApplicableEvidence?.length)) {
+      localErrors.push("not_applicable requires not_applicable_reason and nonempty portable digest-bound not_applicable_evidence");
+    } else if (disposition === "not_applicable" && notApplicableEvidence) {
+      for (const ref of notApplicableEvidence) {
+        const evidencePath = resolve5(repository, ref.path);
+        const relation = relative5(repository, evidencePath);
+        if (relation === ".." || relation.startsWith(`..${sep5}`) || !existsSync2(evidencePath) || !lstatSync3(evidencePath).isFile()) {
+          localErrors.push(`not_applicable_evidence path is missing or outside the repository: ${ref.path}`);
+          continue;
+        }
+        if (createHash5("sha256").update(readFileSync3(evidencePath)).digest("hex") !== ref.sha256) {
+          localErrors.push(`not_applicable_evidence digest mismatch: ${ref.path}`);
+        }
+      }
+    }
+    if (localErrors.length > 0 || !kind || !contractRefs || !disposition) {
+      errors.push(invalidFinding(localErrors.join("; "), [path]));
+      continue;
+    }
+    seen.add(candidate);
+    definitions.push({
+      boundary,
+      candidateId: candidate,
+      command: disposition === "execute" ? command ?? [] : [],
+      contractRefs,
+      disposition,
+      ...evidenceRequired ? { evidenceRequired } : {},
+      exercisedCases: exercisedCases ?? [],
+      expectedStatus: disposition === "execute" ? Number(expectedStatus) : 0,
+      kind,
+      ...notApplicableEvidence?.length ? { notApplicableEvidence } : {},
+      ...notApplicableReason ? { notApplicableReason } : {},
+      ...nextAction ? { nextAction } : {},
+      observedEndpoint: endpoint,
+      ...owner ? { owner } : {},
+      requiredCases: requiredCases ?? [],
+      timeoutMs: disposition === "execute" ? Number(timeout) : 0
+    });
+  }
+  return {
+    definitions,
+    errors,
+    ...isoTimestamp2(manifest.observed_at) ? { observedAt: String(manifest.observed_at) } : {},
+    sha256: sha2563(content)
+  };
+}
+function sameStringSet(left, right) {
+  return JSON.stringify([...new Set(left)].sort()) === JSON.stringify([...new Set(right)].sort());
+}
+function parseProbeReceipt(stdout, definition, candidate, subjectCommit, subjectTreeSha256, candidateSetSha256) {
+  const lines2 = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const receiptRows = [];
+  for (const line of lines2) {
+    try {
+      const value = object4(JSON.parse(line));
+      if (value?.record_type === "mister-clean.semantic-probe-receipt") receiptRows.push({ raw: line, value });
+    } catch {
+    }
+  }
+  if (receiptRows.length !== 1) {
+    return { error: `probe stdout must contain exactly one single-line mister-clean.semantic-probe-receipt; found ${receiptRows.length}`, receiptSha256: sha2563(stdout) };
+  }
+  const row = receiptRows[0];
+  const receipt = row.value;
+  const exercisedCases = strings(receipt.exercised_cases);
+  const passedCases = strings(receipt.passed_cases) ?? [];
+  const failedCases = strings(receipt.failed_cases) ?? [];
+  const result = receipt.result === "pass" || receipt.result === "fail" ? receipt.result : void 0;
+  const errors = [];
+  if (receipt.schema_version !== "1.0") errors.push("schema_version must be 1.0");
+  if (receipt.candidate_id !== candidate.id) errors.push("candidate_id does not match the executing candidate");
+  if (receipt.subject_commit !== subjectCommit) errors.push("subject_commit does not match current HEAD");
+  if (receipt.subject_tree_sha256 !== subjectTreeSha256) errors.push("subject_tree_sha256 does not match the bound working tree");
+  if (receipt.candidate_set_sha256 !== candidateSetSha256) errors.push("candidate_set_sha256 does not match the complete discovered set");
+  if (!exercisedCases || !sameStringSet(exercisedCases, definition.requiredCases)) errors.push("exercised_cases must exactly equal required_cases");
+  if (!sameStringSet([...passedCases, ...failedCases], definition.requiredCases) || passedCases.some((item) => failedCases.includes(item))) {
+    errors.push("passed_cases and failed_cases must be a disjoint exact partition of required_cases");
+  }
+  if (!result) errors.push("result must be pass or fail");
+  if (result === "pass" && (failedCases.length > 0 || !sameStringSet(passedCases, definition.requiredCases))) {
+    errors.push("pass requires every required case in passed_cases and zero failed_cases");
+  }
+  if (result === "fail" && failedCases.length === 0) errors.push("fail requires at least one failed case");
+  if (errors.length > 0 || !result || !exercisedCases) {
+    return { error: errors.join("; "), receiptSha256: sha2563(row.raw) };
+  }
+  return {
+    receipt: {
+      candidateId: candidate.id,
+      candidateSetSha256,
+      exercisedCases,
+      failedCases,
+      passedCases,
+      result,
+      subjectCommit,
+      subjectTreeSha256
+    },
+    receiptSha256: sha2563(row.raw)
+  };
+}
+function auditSemanticRepository(repository, options = {}) {
+  const root = resolve5(repository);
+  assertDirectory(root);
+  const snapshot = git(root, "rev-parse", "HEAD");
+  const manifestPath = options.manifestPath ? resolve5(root, options.manifestPath) : void 0;
+  const manifestRelation = manifestPath ? relative5(root, manifestPath) : "";
+  const manifestRef = manifestPath ? manifestRelation !== ".." && !manifestRelation.startsWith(`..${sep5}`) && !isAbsolute3(manifestRelation) ? manifestRelation.split(sep5).join("/") : `external-semantic-manifest/${basename5(manifestPath)}` : void 0;
+  const workingTreeSha256 = semanticWorkingTreeSha256(root, manifestPath);
+  const candidates = discoverSemanticProbeCandidates(root);
+  const candidateSetSha256 = semanticCandidateSetSha256(candidates);
+  const findings = [];
+  const executions = [];
+  const resolutions = [];
+  let manifestSha256;
+  let manifestObservedAt;
+  if (!manifestPath || !manifestRef) {
+    for (const candidate of candidates) {
+      findings.push({
+        candidate_id: candidate.id,
+        classification: "verification_debt",
+        code: "semantic_probe_unassigned",
+        detail: "critical contract candidate has no bound construction or composition-root probe",
+        kind: candidate.kind,
+        refs: candidate.refs
+      });
+    }
+  } else {
+    const parsed = parseManifest(
+      manifestPath,
+      manifestRef,
+      root,
+      snapshot,
+      workingTreeSha256,
+      candidateSetSha256
+    );
+    manifestSha256 = parsed.sha256;
+    manifestObservedAt = parsed.observedAt;
+    const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+    const bindingErrors = [];
+    if (parsed.errors.length > 0) {
+      bindingErrors.push(...parsed.errors.map((error) => error.detail));
+    } else {
+      const definitions = new Map(parsed.definitions.map((definition) => [definition.candidateId, definition]));
+      for (const definition of parsed.definitions) {
+        if (!candidateIds.has(definition.candidateId)) bindingErrors.push(`probe ${definition.candidateId} does not match the bound candidate set`);
+      }
+      for (const candidate of candidates) {
+        const definition = definitions.get(candidate.id);
+        if (!definition) bindingErrors.push(`candidate ${candidate.id} is absent from the manifest`);
+        else if (definition.kind !== candidate.kind || !candidate.refs.every((ref) => definition.contractRefs.includes(ref))) {
+          bindingErrors.push(`candidate ${candidate.id} has incomplete kind or contract_refs coverage`);
+        }
+      }
+    }
+    if (bindingErrors.length > 0) {
+      findings.push(invalidFinding(
+        `semantic probe manifest requires one repair: ${[...new Set(bindingErrors)].sort().join(" | ")}`,
+        [manifestRef]
+      ));
+    } else {
+      const byCandidate = new Map(parsed.definitions.map((definition) => [definition.candidateId, definition]));
+      for (const candidate of candidates) {
+        const definition = byCandidate.get(candidate.id);
+        if (definition.disposition === "not_applicable") {
+          resolutions.push({
+            candidate_id: candidate.id,
+            disposition: "not_applicable",
+            evidence_refs: definition.notApplicableEvidence ?? [],
+            rationale: definition.notApplicableReason ?? ""
+          });
+          continue;
+        }
+        const missingCases = definition.requiredCases.filter((item) => !definition.exercisedCases.includes(item));
+        if (missingCases.length > 0) {
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "verification_debt",
+            code: "semantic_probe_incomplete",
+            detail: `probe omits required cases: ${missingCases.join(", ")}`,
+            kind: candidate.kind,
+            refs: candidate.refs
+          });
+          continue;
+        }
+        if (definition.disposition === "operate_time_pending") {
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "operate_time_pending",
+            code: "semantic_probe_operate_time_pending",
+            detail: `${definition.nextAction}; owner=${definition.owner}; evidence=${definition.evidenceRequired}`,
+            kind: candidate.kind,
+            refs: candidate.refs
+          });
+          continue;
+        }
+        if (!options.execute) {
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "verification_debt",
+            code: "semantic_probe_unexecuted",
+            detail: "probe is defined but was not executed; rerun with --execute under CLOSE authority",
+            kind: candidate.kind,
+            refs: candidate.refs
+          });
+          continue;
+        }
+        const [command, ...args] = definition.command;
+        if (!command) continue;
+        const result = spawnSync2(command, args, {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            MISTER_CLEAN_CANDIDATE_ID: candidate.id,
+            MISTER_CLEAN_CANDIDATE_SET_SHA256: candidateSetSha256,
+            MISTER_CLEAN_REQUIRED_CASES_JSON: JSON.stringify(definition.requiredCases),
+            MISTER_CLEAN_SUBJECT_COMMIT: snapshot,
+            MISTER_CLEAN_SUBJECT_TREE_SHA256: workingTreeSha256
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: definition.timeoutMs
+        });
+        const stdout = String(result.stdout ?? "");
+        const evidence = `${stdout}
+${result.stderr ?? ""}`;
+        if (result.error || result.status === null) {
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "verification_debt",
+            code: "semantic_probe_execution_error",
+            detail: result.error?.message ?? `probe ended without an exit status${result.signal ? ` (${result.signal})` : ""}`,
+            kind: candidate.kind,
+            refs: candidate.refs
+          });
+          continue;
+        }
+        const receiptResult = parseProbeReceipt(
+          stdout,
+          definition,
+          candidate,
+          snapshot,
+          workingTreeSha256,
+          candidateSetSha256
+        );
+        const changedTree = semanticWorkingTreeSha256(root, manifestPath) !== workingTreeSha256;
+        const statusMismatch = receiptResult.receipt ? receiptResult.receipt.result === "pass" ? result.status !== 0 : result.status === 0 : false;
+        const executionResult = receiptResult.error || changedTree || statusMismatch ? "error" : receiptResult.receipt.result;
+        executions.push({
+          candidate_id: candidate.id,
+          command_sha256: sha2563(JSON.stringify(definition.command)),
+          evidence_sha256: sha2563(evidence),
+          executable: basename5(command),
+          observed_status: result.status,
+          receipt_sha256: receiptResult.receiptSha256,
+          result: executionResult
+        });
+        if (executionResult === "error") {
+          const detail = receiptResult.error ?? (changedTree ? "probe mutated the bound working tree" : "probe receipt result and process exit status disagree");
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "verification_debt",
+            code: "semantic_probe_execution_error",
+            detail,
+            kind: candidate.kind,
+            refs: candidate.refs
+          });
+          continue;
+        }
+        if (executionResult === "fail") {
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "confirmed_product_defect",
+            code: candidate.kind === "construction_boundary" ? "construction_boundary_failure" : "mechanism_unwired_at_composition_root",
+            detail: `${definition.boundary} -> ${definition.observedEndpoint} failed cases: ${receiptResult.receipt.failedCases.join(", ")}`,
+            kind: candidate.kind,
+            refs: candidate.refs
+          });
+        }
+      }
+    }
+  }
+  const status = candidates.length === 0 && findings.length === 0 ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
+  return {
+    candidate_probe_count: candidates.length,
+    candidate_set_sha256: candidateSetSha256,
+    candidates,
+    confirmed_failure_count: findings.filter((finding2) => finding2.classification === "confirmed_product_defect").length,
+    executed_probe_count: executions.length,
+    executions,
+    exitCode: status === "fail" ? 1 : 0,
+    findings,
+    ...manifestObservedAt ? { manifest_observed_at: manifestObservedAt } : {},
+    ...manifestSha256 ? { manifest_sha256: manifestSha256 } : {},
+    pending_probe_count: findings.filter((finding2) => finding2.classification === "operate_time_pending").length,
+    resolved_probe_count: resolutions.length,
+    resolutions,
+    snapshot,
+    status,
+    working_tree_sha256: workingTreeSha256
+  };
+}
+
+// src/closeout/prepare.ts
 function asObject(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
   return value;
 }
-function sha2562(value) {
-  return createHash4("sha256").update(value).digest("hex");
+function sha2564(value) {
+  return createHash6("sha256").update(value).digest("hex");
 }
-function isoTimestamp2(date) {
+function isoTimestamp3(date) {
   return date.toISOString();
 }
 function planningClass(path) {
@@ -11747,15 +14158,20 @@ function prepareCloseout(options) {
   }
   if (!options.runId.trim()) throw new Error("runId is required");
   if (!options.requestRef.trim()) throw new Error("requestRef is required");
-  const requestedRepository = resolve5(options.repo);
-  const repository = resolve5(git(requestedRepository, "rev-parse", "--show-toplevel"));
-  const bundleDirectory = join2(resolve5(options.evidenceHome), "mister-clean", options.runId);
-  if (existsSync2(bundleDirectory)) {
+  if (options.executeSemanticProbes && options.semanticManifestPath === void 0) {
+    throw new Error("executeSemanticProbes requires semanticManifestPath");
+  }
+  const mode = options.mode ?? "CLOSE";
+  if (!(/* @__PURE__ */ new Set(["CLOSE", "GUARD"])).has(mode)) throw new Error(`unsupported prepare mode: ${mode}`);
+  const requestedRepository = resolve6(options.repo);
+  const repository = resolve6(git(requestedRepository, "rev-parse", "--show-toplevel"));
+  const bundleDirectory = join2(resolve6(options.evidenceHome), "mister-clean", options.runId);
+  if (existsSync3(bundleDirectory)) {
     throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
   }
   mkdirSync(bundleDirectory, { recursive: true });
   const templates = options.templateRoot ?? packageRoot();
-  const now = isoTimestamp2((options.now ?? (() => /* @__PURE__ */ new Date()))());
+  const now = isoTimestamp3((options.now ?? (() => /* @__PURE__ */ new Date()))());
   const head = git(repository, "rev-parse", "HEAD");
   const branch = git(repository, "branch", "--show-current") || "detached";
   const repoId = repositoryIdentity(repository);
@@ -11777,10 +14193,10 @@ function prepareCloseout(options) {
   const left = Number(divergence[0] ?? 0);
   const right = Number(divergence[1] ?? 0);
   let requestBytes;
-  if (options.requestSource !== void 0) requestBytes = readFileSync3(options.requestSource);
+  if (options.requestSource !== void 0) requestBytes = readFileSync4(options.requestSource);
   else if (options.requestText !== void 0) requestBytes = Buffer.from(options.requestText, "utf8");
   else requestBytes = Buffer.from(options.requestRef, "utf8");
-  const requestSha256 = sha2562(requestBytes);
+  const requestSha256 = sha2564(requestBytes);
   let requestSource = null;
   let sourceKind = "reference_only";
   if (options.requestSource !== void 0 || options.requestText !== void 0) {
@@ -11806,14 +14222,23 @@ function prepareCloseout(options) {
     path: "planning-audit.json",
     sha256: sha256File(join2(bundleDirectory, "planning-audit.json"))
   };
+  const semanticAudit = auditSemanticRepository(repository, {
+    execute: options.executeSemanticProbes ?? false,
+    ...options.semanticManifestPath === void 0 ? {} : { manifestPath: options.semanticManifestPath }
+  });
+  writeJson(join2(bundleDirectory, "semantic-audit.json"), semanticAudit);
+  const semanticAuditRef = {
+    path: "semantic-audit.json",
+    sha256: sha256File(join2(bundleDirectory, "semantic-audit.json"))
+  };
   let planningSystems;
   if (planningRoots.length) {
     planningSystems = planningRoots.map((rootText, index) => {
       const root = join2(repository, ...rootText.split("/"));
-      const rootStat = lstatSync3(root);
+      const rootStat = lstatSync4(root);
       const rootFiles = rootStat.isFile() ? [root] : rootStat.isDirectory() ? listFilesRecursively(root) : [];
-      const artifacts = rootFiles.filter((path) => !relative5(repository, path).split(sep5).includes(".git")).map((path) => {
-        const repoPath = relative5(repository, path).split(sep5).join("/");
+      const artifacts = rootFiles.filter((path) => !relative6(repository, path).split(sep6).includes(".git")).map((path) => {
+        const repoPath = relative6(repository, path).split(sep6).join("/");
         return {
           path: repoPath,
           class: unclassifiedPlanningPaths.has(repoPath) ? "unclassified" : planningClass(repoPath),
@@ -11857,7 +14282,7 @@ function prepareCloseout(options) {
     ];
   }
   const worktrees = parseWorktrees(repository).map((row) => {
-    const path = resolve5(row.worktree);
+    const path = resolve6(row.worktree);
     const dirtyCount = splitLines(git(path, "status", "--porcelain=v1", "--untracked-files=all")).length;
     return {
       path,
@@ -11894,7 +14319,7 @@ function prepareCloseout(options) {
   }));
   const stashes = splitLines(git(repository, "stash", "list", "--format=%gd%09%H%09%gs"));
   const currentCandidates = ["CURRENT-STATE.md", "docs/CURRENT-STATE.md", "_STATUS.md", "README.md"];
-  const currentPath = currentCandidates.find((candidate) => existsSync2(join2(repository, candidate)));
+  const currentPath = currentCandidates.find((candidate) => existsSync3(join2(repository, candidate)));
   let policyRef = null;
   let targetObservation;
   if (upstream) {
@@ -11931,27 +14356,53 @@ function prepareCloseout(options) {
     "acceptance_gate_unknown",
     "completed_parent_unexecuted_acceptance"
   ]);
-  const planningDebts = planningAudit.findings.map((finding2, index) => ({
-    id: `DEBT-PLANNING-${String(index + 1).padStart(4, "0")}`,
-    class: finding2.code,
-    procedure: `Reconcile ${finding2.code} at ${evidenceLabel(finding2.path)} for ${evidenceLabel(finding2.subject)}`,
+  const planningDebts = planningAudit.root_debts.map((debt) => ({
+    id: debt.id.replace("ROOT-", "DEBT-"),
+    class: debt.class,
+    cause_key: debt.cause_key,
+    observation_count: debt.observation_count,
+    raw_finding_ids: debt.raw_finding_ids,
+    affected_paths: debt.affected_paths,
+    repair_boundary: debt.repair_boundary,
+    causal_evidence: debt.causal_evidence,
+    procedure: `Reconcile ${debt.affected_projection_field} across ${evidenceLabel(debt.repair_boundary)}`,
     state: "open",
-    disposition: validationDebtClasses.has(finding2.code) ? "autonomously_validate" : "autonomously_repair",
+    disposition: debt.class.split("+").some((code) => validationDebtClasses.has(code)) ? "autonomously_validate" : "autonomously_repair",
     evidence: [{
       kind: "planning_census",
-      object: finding2.subject,
+      object: debt.cause_key,
       command: "mister-clean audit planning . --json",
-      result: finding2.code,
+      result: `${debt.observation_count} raw observations: ${debt.class}`,
       observed_at: now,
       evidence_ref: planningAuditRef
     }]
   }));
+  const semanticCommand = options.semanticManifestPath === void 0 ? "mister-clean audit semantic . --json" : `mister-clean audit semantic . --manifest semantic-probe-manifest${options.executeSemanticProbes ? " --execute" : ""} --json`;
+  const semanticDebts = semanticAudit.findings.map((finding2) => ({
+    id: `DEBT-SEMANTIC-${sha2564(Buffer.from(`${finding2.candidate_id}\0${finding2.code}\0${finding2.refs.join("\0")}\0${finding2.detail.replaceAll(/\s+/g, " ")}`, "utf8")).slice(0, 16).toUpperCase()}`,
+    class: finding2.code,
+    cause_key: finding2.candidate_id,
+    observation_count: 1,
+    affected_paths: unique2(finding2.refs.map((ref) => ref.split("#line-", 1)[0] ?? ref)),
+    procedure: finding2.classification === "confirmed_product_defect" ? `Repair ${finding2.kind.replaceAll("_", " ")} and rerun its bound semantic probe` : finding2.classification === "operate_time_pending" ? `Execute and record the owned operate-time proof for ${finding2.candidate_id}` : `Bind and execute complete adversarial coverage for ${finding2.candidate_id}`,
+    state: "open",
+    disposition: finding2.classification === "confirmed_product_defect" ? "autonomously_repair" : finding2.classification === "operate_time_pending" ? "decision_or_coordination_required" : "autonomously_validate",
+    evidence: [{
+      kind: "gate_result",
+      object: head,
+      command: semanticCommand,
+      result: `${finding2.code}: ${finding2.detail}`,
+      observed_at: now,
+      evidence_ref: semanticAuditRef
+    }]
+  }));
+  const completionDebts = [...planningDebts, ...semanticDebts];
   Object.assign(report, {
     generated_at: now,
     repo: { id: repoId, commit: head, branch },
-    mode: "CLOSE",
+    mode,
     actions: [],
-    completion_debts: planningDebts,
+    completion_debts: completionDebts,
     residuals: [],
     acceptance_criteria: criteriaIds.map((id) => ({
       id,
@@ -11960,18 +14411,43 @@ function prepareCloseout(options) {
       evidence: ["not yet assessed"]
     })),
     verdict: "NOT_CLEAN",
-    debt_census: { discovered: planningDebts.length, paid: 0, accepted_exception: 0 }
+    debt_census: { discovered: completionDebts.length, paid: 0, accepted_exception: 0 },
+    planning_accounting: {
+      raw_finding_count: planningAudit.raw_finding_count,
+      root_debt_count: planningAudit.root_debt_count,
+      suppressed_by_typed_nonartifact_count: planningAudit.suppressed_by_typed_nonartifact_count,
+      candidate_probe_count: planningAudit.candidate_probe_count,
+      evidence_ref: planningAuditRef
+    },
+    semantic_accounting: {
+      candidate_probe_count: semanticAudit.candidate_probe_count,
+      executed_probe_count: semanticAudit.executed_probe_count,
+      resolved_probe_count: semanticAudit.resolved_probe_count,
+      confirmed_failure_count: semanticAudit.confirmed_failure_count,
+      pending_probe_count: semanticAudit.pending_probe_count,
+      finding_count: semanticAudit.findings.length,
+      evidence_ref: semanticAuditRef
+    }
   });
-  if (planningDebts.length > 0) {
+  if (completionDebts.length > 0) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
       state: "open",
-      evidence: [{ kind: "debt_census", object: head, command: "mister-clean audit planning . --json", result: `${planningDebts.length} open planning debts`, observed_at: now }],
-      notes: ["Executable planning audit found payable successor-readiness debt."]
+      evidence: [{ kind: "debt_census", object: head, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${semanticDebts.length} semantic)`, observed_at: now }],
+      notes: ["Executable planning and semantic audits found payable successor-readiness debt."]
     });
+  }
+  if (planningDebts.length > 0) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").planning_integrity, "closeout-report.dimensions.planning_integrity"), {
       state: "open",
-      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning . --json", result: `${planningDebts.length} findings`, observed_at: now }],
+      evidence: [{ kind: "planning_census", object: head, command: "mister-clean audit planning . --json", result: `${planningAudit.raw_finding_count} raw findings / ${planningDebts.length} root debts`, observed_at: now }],
       notes: ["Physical lanes, structured metadata, exact parent projections, and acceptance-gate identity do not yet agree."]
+    });
+  }
+  if (semanticDebts.length > 0) {
+    Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").verification, "closeout-report.dimensions.verification"), {
+      state: "open",
+      evidence: [{ kind: "validation_summary", object: head, command: semanticCommand, result: `${semanticDebts.length} unproved, pending, or failed semantic probes`, observed_at: now }],
+      notes: ["Critical construction and composition-root claims require bound, executed evidence; prose and isolated unit tests are insufficient."]
     });
   }
   asObject(report.authorization_basis, "closeout-report.authorization_basis").ref = options.requestRef;
@@ -11991,10 +14467,10 @@ function prepareCloseout(options) {
     policy: REGRESSION_POLICY,
     baseline_object: head,
     closing_object: head,
-    baseline_findings: planningDebts.length,
-    closing_findings: planningDebts.length,
+    baseline_findings: completionDebts.length,
+    closing_findings: completionDebts.length,
     baseline_paid: 0,
-    baseline_open: planningDebts.length,
+    baseline_open: completionDebts.length,
     newly_discovered_preexisting_paid: 0,
     newly_discovered_preexisting_open: 0,
     concurrent_external_paid: 0,
@@ -12004,7 +14480,7 @@ function prepareCloseout(options) {
   };
   writeJson(join2(bundleDirectory, "regression-delta.json"), {
     record_type: "mister-clean.regression-delta",
-    schema_version: "1.0",
+    schema_version: "1.2",
     ...regressionCounts,
     action_checks: []
   });
@@ -12020,6 +14496,31 @@ function prepareCloseout(options) {
   manifest.repo = { id: repoId, commit: head };
   manifest.request_ref = options.requestRef;
   asObject(manifest.authorization_basis, "action-manifest.authorization_basis").ref = options.requestRef;
+  manifest.mode = mode;
+  if (mode === "GUARD") {
+    manifest.guard = {
+      status: "initialized",
+      baseline_commit: head,
+      candidate_tree: null,
+      minted_at: null,
+      staged_paths: [],
+      writers_frozen: false,
+      receipts: [],
+      deterministic_gates: null,
+      no_harm: null,
+      commit_barrier: {
+        state: "closed",
+        approved_tree: null,
+        receipt_ids: [],
+        opened_at: null,
+        crossed_action_id: null
+      }
+    };
+  }
+  const coordination = asObject(manifest.coordination, "action-manifest.coordination");
+  coordination.dispatcher = `mister-clean:${options.runId}`;
+  coordination.integrator = `mister-clean:${options.runId}`;
+  coordination.target = { ref: targetRef, expected_commit: targetCommit, observed_at: now };
   writeJson(join2(bundleDirectory, "debris-census.json"), {
     record_type: "mister-clean.debris-census",
     removed: 0,
@@ -12163,6 +14664,9 @@ var nodeCloseoutEngine = {
   async auditPlanning(root) {
     return auditPlanningRepository(root);
   },
+  async auditSemantic(root, options) {
+    return auditSemanticRepository(root, options);
+  },
   async scanPublicSafety(root, denylistPath) {
     return scanPublicSafety(root, await loadDenylist(denylistPath));
   },
@@ -12207,16 +14711,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside(root, candidate) {
-  const rootPath = resolve6(root);
-  const candidatePath = resolve6(candidate);
-  const relation = relative6(
-    existsSync3(rootPath) ? realpathSync2(rootPath) : rootPath,
-    existsSync3(candidatePath) ? realpathSync2(candidatePath) : candidatePath
+  const rootPath = resolve7(root);
+  const candidatePath = resolve7(candidate);
+  const relation = relative7(
+    existsSync4(rootPath) ? realpathSync2(rootPath) : rootPath,
+    existsSync4(candidatePath) ? realpathSync2(candidatePath) : candidatePath
   );
-  return relation === "" || !relation.startsWith(`..${sep6}`) && relation !== ".." && !relation.startsWith("/");
+  return relation === "" || !relation.startsWith(`..${sep7}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson2(path) {
-  return JSON.parse(readFileSync4(path, "utf8"));
+  return JSON.parse(readFileSync5(path, "utf8"));
 }
 async function runPrepare(args, io) {
   const repo = removeOption(args, "--repo", true);
@@ -12225,18 +14729,30 @@ async function runPrepare(args, io) {
   const requestRef = removeOption(args, "--request-ref", true);
   const requestSource = removeOption(args, "--request-source");
   const requestText = removeOption(args, "--request-text");
+  const rawMode = removeOption(args, "--mode")?.toLocaleUpperCase("und");
+  if (rawMode !== void 0 && rawMode !== "CLOSE" && rawMode !== "GUARD") {
+    throw new UsageError("--mode requires CLOSE or GUARD");
+  }
+  const semanticManifestPath = removeOption(args, "--semantic-manifest");
+  const executeSemanticProbes = removeFlag(args, "--execute-semantic-probes");
   const criteria = removeRepeatedOption(args, "--criterion");
   assertNoArgs(args);
   if (requestSource !== void 0 && requestText !== void 0) {
     throw new UsageError("--request-source and --request-text are mutually exclusive");
+  }
+  if (executeSemanticProbes && semanticManifestPath === void 0) {
+    throw new UsageError("--execute-semantic-probes requires --semantic-manifest");
   }
   const prepared = nodeCloseoutEngine.prepare({
     repo,
     evidenceHome,
     runId,
     requestRef,
+    mode: rawMode ?? "CLOSE",
     ...requestSource === void 0 ? {} : { requestSource },
     ...requestText === void 0 ? {} : { requestText },
+    ...semanticManifestPath === void 0 ? {} : { semanticManifestPath },
+    executeSemanticProbes,
     criteria
   });
   io.stdout(prepared.bundleDirectory);
@@ -12297,8 +14813,8 @@ async function runDetect(args, io) {
   if (!root) throw new UsageError("detect stack requires a repository path");
   const listOnly = removeFlag(args, "--list");
   assertNoArgs(args);
-  if (!existsSync3(root) || !statSync2(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve6(root)}`);
+  if (!existsSync4(root) || !statSync2(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve7(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
@@ -12309,8 +14825,8 @@ async function runDetect(args, io) {
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
   const reference = join3(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync3(reference)) return 0;
-  const text2 = readFileSync4(reference, "utf8");
+  if (!existsSync4(reference)) return 0;
+  const text2 = readFileSync5(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text2.indexOf(header);
@@ -12323,8 +14839,8 @@ ${text2.slice(start, next < 0 ? void 0 : next).trimEnd()}`);
 }
 async function runAudit(args, io) {
   const kind = args.shift();
-  if (!(/* @__PURE__ */ new Set(["planning", "public-safety"])).has(String(kind))) {
-    throw new UsageError("audit requires planning or public-safety");
+  if (!(/* @__PURE__ */ new Set(["planning", "public-safety", "semantic"])).has(String(kind))) {
+    throw new UsageError("audit requires planning, public-safety, or semantic");
   }
   const root = args[0]?.startsWith("--") === false ? args.shift() : process.cwd();
   if (kind === "planning") {
@@ -12337,6 +14853,25 @@ async function runAudit(args, io) {
         io.stdout(`${finding2.code}	${finding2.path}	${finding2.subject}	${finding2.detail}`);
       }
       io.stdout(`planning: ${result2.status.toLocaleUpperCase("und")} artifacts=${result2.artifactCount} structured=${result2.structuredArtifactCount} findings=${result2.findings.length}`);
+    }
+    return result2.exitCode;
+  }
+  if (kind === "semantic") {
+    const json = removeFlag(args, "--json");
+    const execute = removeFlag(args, "--execute");
+    const manifestPath = removeOption(args, "--manifest");
+    assertNoArgs(args);
+    if (execute && manifestPath === void 0) throw new UsageError("audit semantic --execute requires --manifest");
+    const result2 = await nodeCloseoutEngine.auditSemantic(root, {
+      execute,
+      ...manifestPath === void 0 ? {} : { manifestPath }
+    });
+    if (json) io.stdout(JSON.stringify(result2, null, 2));
+    else {
+      for (const finding2 of result2.findings) {
+        io.stdout(`${finding2.code}	${finding2.candidate_id}	${finding2.detail}`);
+      }
+      io.stdout(`semantic: ${result2.status.toLocaleUpperCase("und")} candidates=${result2.candidate_probe_count} executed=${result2.executed_probe_count} findings=${result2.findings.length}`);
     }
     return result2.exitCode;
   }
@@ -12354,9 +14889,9 @@ async function runManifest(args, io) {
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join3(resolve6(root), "MANIFEST.sha256");
+  const path = join3(resolve7(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync3(path) || readFileSync4(path, "utf8") !== result.content) {
+    if (!existsSync4(path) || readFileSync5(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -12368,10 +14903,10 @@ async function runManifest(args, io) {
   return 0;
 }
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ... (audit: planning|public-safety)");
+  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ... (audit: planning|public-safety|semantic)");
 }
-async function runCli(argv, io = defaultIO()) {
-  const args = [...argv];
+async function runCli(argv2, io = defaultIO()) {
+  const args = [...argv2];
   const command = args.shift();
   try {
     if (command === "prepare") return await runPrepare(args, io);
@@ -12392,7 +14927,7 @@ function isDirectInvocation(argvPath, moduleUrl) {
   try {
     return realpathSync2(argvPath) === realpathSync2(fileURLToPath2(moduleUrl));
   } catch {
-    const invokedPath = resolve6(argvPath);
+    const invokedPath = resolve7(argvPath);
     return invokedPath === fileURLToPath2(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }

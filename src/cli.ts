@@ -70,18 +70,30 @@ async function runPrepare(args: string[], io: CliIO): Promise<number> {
   const requestRef = removeOption(args, "--request-ref", true) as string;
   const requestSource = removeOption(args, "--request-source");
   const requestText = removeOption(args, "--request-text");
+  const rawMode = removeOption(args, "--mode")?.toLocaleUpperCase("und");
+  if (rawMode !== undefined && rawMode !== "CLOSE" && rawMode !== "GUARD") {
+    throw new UsageError("--mode requires CLOSE or GUARD");
+  }
+  const semanticManifestPath = removeOption(args, "--semantic-manifest");
+  const executeSemanticProbes = removeFlag(args, "--execute-semantic-probes");
   const criteria = removeRepeatedOption(args, "--criterion");
   assertNoArgs(args);
   if (requestSource !== undefined && requestText !== undefined) {
     throw new UsageError("--request-source and --request-text are mutually exclusive");
+  }
+  if (executeSemanticProbes && semanticManifestPath === undefined) {
+    throw new UsageError("--execute-semantic-probes requires --semantic-manifest");
   }
   const prepared = nodeCloseoutEngine.prepare({
     repo,
     evidenceHome,
     runId,
     requestRef,
+    mode: (rawMode ?? "CLOSE") as "CLOSE" | "GUARD",
     ...(requestSource === undefined ? {} : { requestSource }),
     ...(requestText === undefined ? {} : { requestText }),
+    ...(semanticManifestPath === undefined ? {} : { semanticManifestPath }),
+    executeSemanticProbes,
     criteria,
   });
   io.stdout(prepared.bundleDirectory);
@@ -172,8 +184,8 @@ async function runDetect(args: string[], io: CliIO): Promise<number> {
 
 async function runAudit(args: string[], io: CliIO): Promise<number> {
   const kind = args.shift();
-  if (!new Set(["planning", "public-safety"]).has(String(kind))) {
-    throw new UsageError("audit requires planning or public-safety");
+  if (!new Set(["planning", "public-safety", "semantic"]).has(String(kind))) {
+    throw new UsageError("audit requires planning, public-safety, or semantic");
   }
   const root = args[0]?.startsWith("--") === false ? (args.shift() as string) : process.cwd();
   if (kind === "planning") {
@@ -186,6 +198,25 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
         io.stdout(`${finding.code}\t${finding.path}\t${finding.subject}\t${finding.detail}`);
       }
       io.stdout(`planning: ${result.status.toLocaleUpperCase("und")} artifacts=${result.artifactCount} structured=${result.structuredArtifactCount} findings=${result.findings.length}`);
+    }
+    return result.exitCode;
+  }
+  if (kind === "semantic") {
+    const json = removeFlag(args, "--json");
+    const execute = removeFlag(args, "--execute");
+    const manifestPath = removeOption(args, "--manifest");
+    assertNoArgs(args);
+    if (execute && manifestPath === undefined) throw new UsageError("audit semantic --execute requires --manifest");
+    const result = await nodeCloseoutEngine.auditSemantic(root, {
+      execute,
+      ...(manifestPath === undefined ? {} : { manifestPath }),
+    });
+    if (json) io.stdout(JSON.stringify(result, null, 2));
+    else {
+      for (const finding of result.findings) {
+        io.stdout(`${finding.code}\t${finding.candidate_id}\t${finding.detail}`);
+      }
+      io.stdout(`semantic: ${result.status.toLocaleUpperCase("und")} candidates=${result.candidate_probe_count} executed=${result.executed_probe_count} findings=${result.findings.length}`);
     }
     return result.exitCode;
   }
@@ -221,7 +252,7 @@ async function runManifest(args: string[], io: CliIO): Promise<number> {
 }
 
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ... (audit: planning|public-safety)");
+  io.stderr("usage: mister-clean <prepare|validate|detect|audit|manifest> ... (audit: planning|public-safety|semantic)");
 }
 
 export async function runCli(argv: readonly string[], io: CliIO = defaultIO()): Promise<number> {

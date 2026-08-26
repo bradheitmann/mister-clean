@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -86,6 +87,30 @@ describe("unified Mister Clean CLI", () => {
     expect(code).toBe(0);
     const audit = JSON.parse(output.stdout.join("\n")) as { artifactCount: number; planningRootCount: number; status: string };
     expect(audit).toEqual(expect.objectContaining({ artifactCount: 3, planningRootCount: 1, status: "pass" }));
+  });
+
+  it("makes unproved critical-boundary claims exit-relevant", async () => {
+    const root = fixture("semantic-audit");
+    mkdirSync(join(root, "planning"));
+    writeFileSync(join(root, "planning", "SECURITY.md"), "The credential validator is a security choke point and must be safe by construction.\n");
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
+    execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
+    const output = capture();
+    const code = await runCli(["audit", "semantic", root, "--json"], output.io);
+    expect(code).toBe(1);
+    const audit = JSON.parse(output.stdout.join("\n")) as { candidate_probe_count: number; findings: Array<{ code: string }> };
+    expect(audit.candidate_probe_count).toBe(1);
+    expect(audit.findings).toContainEqual(expect.objectContaining({ code: "semantic_probe_unassigned" }));
+  });
+
+  it("requires a bound manifest before semantic execution", async () => {
+    const output = capture();
+    const code = await runCli(["audit", "semantic", fixture("semantic-execute"), "--execute"], output.io);
+    expect(code).toBe(2);
+    expect(output.stderr).toContain("ERROR: audit semantic --execute requires --manifest");
   });
 
   it("writes and then verifies a deterministic manifest", async () => {

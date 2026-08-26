@@ -22,6 +22,11 @@ import {
   auditPlanningRepository,
   type PlanningAuditResult,
 } from "./planning.js";
+import {
+  auditSemanticRepository,
+  type SemanticAuditOptions,
+  type SemanticAuditResult,
+} from "./semantic.js";
 import { validateManifest, validateReport } from "./records.js";
 
 export type CloseoutRecordKind = "manifest" | "report";
@@ -32,6 +37,7 @@ export interface CloseoutEngine {
   validateBundle(path: string, options?: BundleValidationOptions): Promise<BundleValidationResult>;
   detectStack(root: string): Promise<StackDetectionResult>;
   auditPlanning(root: string): Promise<PlanningAuditResult>;
+  auditSemantic(root: string, options?: SemanticAuditOptions): Promise<SemanticAuditResult>;
   scanPublicSafety(root: string, denylistPath?: string): Promise<PublicSafetyScanResult>;
   generateManifest(root: string): Promise<ManifestResult>;
   generatePackageManifest(root: string): Promise<ManifestResult>;
@@ -52,6 +58,9 @@ export const nodeCloseoutEngine: CloseoutEngine = {
   detectStack,
   async auditPlanning(root) {
     return auditPlanningRepository(root);
+  },
+  async auditSemantic(root, options) {
+    return auditSemanticRepository(root, options);
   },
   async scanPublicSafety(root, denylistPath) {
     return scanPublicSafety(root, await loadDenylist(denylistPath));

@@ -6,6 +6,12 @@ working tree, their uncommitted changes mix, and a branch switch drags one
 lane's work into the other's commit. **`branch off main` without a dedicated
 worktree is not isolation** — it is a shared mutable buffer with no lock.
 
+This file defines the Git containment mechanics. The complete multi-agent
+transaction—including versioned coordination-domain claims, operation parents,
+short-lived integration leases, compare-and-swap integration, local-inference
+serialization, and honest model evaluation—lives in
+[concurrent-remediation.md](concurrent-remediation.md).
+
 ## Pre-dispatch contract (before ANY modifying delegate)
 
 1. **Preallocate a unique worktree + branch from a recorded baseline.**
@@ -14,9 +20,11 @@ worktree is not isolation** — it is a shared mutable buffer with no lock.
 2. **Record the lane in the custody ledger:** owner, purpose, the path globs
    it is authorized to modify, the worktree absolute path, the branch, the
    baseline/candidate SHA.
-3. **Reject the dispatch if any LIVE writer already owns an overlapping path.**
-   Two lanes authorized to modify the same files is the collision, pre-empted.
-   Serialize them or split the path ownership before dispatch.
+3. **Reject the dispatch if any LIVE writer owns an overlapping path or
+   non-commuting coordination domain (semantic conflict key).** Two lanes can collide through one shared
+   invariant—planning rollups, a lockfile, generated index, acceptance seal,
+   or composition root—even when their path globs do not overlap. Serialize
+   them or split ownership before dispatch.
 4. **Prompt with the ABSOLUTE worktree path** and forbid: branch switching
    inside it, `git checkout <other-branch>`, and any write outside the
    worktree. The delegate works in exactly one tree.

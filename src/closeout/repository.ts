@@ -97,8 +97,14 @@ export function planningLaneLifecycle(name: string): PlanningLaneLifecycle | und
 }
 
 const PLANNING_IGNORED_NAMES = new Set([
+  "__fixtures__",
   ".git",
+  "examples",
+  "fixtures",
   "node_modules",
+  "samples",
+  "test-data",
+  "testdata",
   "vendor",
   ".venv",
   "venv",

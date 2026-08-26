@@ -93,6 +93,17 @@ describe("Mister Clean MCP server", () => {
     expect(content?.type === "text" ? content.text : "").toContain("hard safety");
   });
 
+  it("exposes GUARD as an executable prompt mode", async () => {
+    const prompt = await client.getPrompt({
+      name: "mister_clean_closeout",
+      arguments: { repository: "example-repository", mode: "GUARD" },
+    });
+    const content = prompt.messages[0]?.content;
+    const text = content?.type === "text" ? content.text : "";
+    expect(text).toContain("in GUARD mode");
+    expect(text).toContain("standing authorization");
+  });
+
   it("instantiates the optional persistent goal without making it evidence", async () => {
     const prompt = await client.getPrompt({
       name: "mister_clean_orchestration_goal",

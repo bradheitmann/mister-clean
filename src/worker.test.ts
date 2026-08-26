@@ -22,7 +22,7 @@ describe("Mister Clean Worker routes", () => {
     await expect(result.json()).resolves.toEqual({
       service: "mister-clean-mcp-server",
       status: "ok",
-      version: "6.2.1",
+      version: "6.3.0",
     });
   });
 
@@ -48,7 +48,7 @@ describe("Mister Clean Worker routes", () => {
     );
     expect(styles.status).toBe(200);
     expect(styles.headers.get("content-type")).toContain("text/css");
-    expect(await styles.text()).toContain("--mc-");
+    expect(await styles.text()).toContain("--okoa-");
   });
 
   it("keeps unrelated paths closed", async () => {

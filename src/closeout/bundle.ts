@@ -237,6 +237,29 @@ async function contained(files: FilePort, root: string, candidate: unknown): Pro
   }
 }
 
+async function loadBytesRef(
+  files: FilePort,
+  base: string,
+  value: unknown,
+  path: string,
+  errors: string[],
+  allowPlaceholders: boolean,
+): Promise<{ bytes?: Uint8Array; digest?: string; file?: string }> {
+  const ref = requireObject(value, ["path", "sha256"], path, errors);
+  if (!ref) return {};
+  if (allowPlaceholders && [ref.path, ref.sha256].some((entry) => typeof entry === "string" && entry.includes("<"))) return {};
+  const target = await contained(files, base, ref.path);
+  if (!target) { errors.push(`${path}.path: must resolve inside the bundle directory`); return {}; }
+  if (!(await files.isFile(target))) { errors.push(`${path}.path: file not found or not a regular file: ${target}`); return { file: target }; }
+  const bytes = await files.readBytes(target);
+  const digest = sha256(bytes);
+  if (!allowPlaceholders) {
+    if (typeof ref.sha256 !== "string" || !HEX64.test(ref.sha256)) errors.push(`${path}.sha256: required lowercase SHA-256`);
+    else if (digest !== ref.sha256) errors.push(`${path}.sha256: digest mismatch`);
+  }
+  return { bytes, digest, file: target };
+}
+
 async function loadRef(
   files: FilePort,
   base: string,
@@ -245,25 +268,17 @@ async function loadRef(
   errors: string[],
   allowPlaceholders: boolean,
 ): Promise<{ data?: JsonObject; file?: string }> {
-  const ref = requireObject(value, ["path", "sha256"], path, errors);
-  if (!ref) return {};
-  if (allowPlaceholders && [ref.path, ref.sha256].some((entry) => typeof entry === "string" && entry.includes("<"))) return {};
-  const target = await contained(files, base, ref.path);
-  if (!target) { errors.push(`${path}.path: must resolve inside the bundle directory`); return {}; }
-  if (!(await files.isFile(target))) { errors.push(`${path}.path: file not found or not a regular file: ${target}`); return { file: target }; }
-  const bytes = await files.readBytes(target);
-  if (!allowPlaceholders) {
-    if (typeof ref.sha256 !== "string" || !HEX64.test(ref.sha256)) errors.push(`${path}.sha256: required lowercase SHA-256`);
-    else if (sha256(bytes) !== ref.sha256) errors.push(`${path}.sha256: digest mismatch`);
-  }
+  const loaded = await loadBytesRef(files, base, value, path, errors, allowPlaceholders);
+  const fileResult = loaded.file === undefined ? {} : { file: loaded.file };
+  if (!loaded.bytes) return fileResult;
   try {
-    const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(loaded.bytes));
     if (!object(parsed)) errors.push(`${path}.path: expected JSON object`);
     const data = object(parsed);
-    return data ? { data, file: target } : { file: target };
+    return data ? { ...fileResult, data } : fileResult;
   } catch (error) {
     errors.push(`${path}.path: ${error instanceof Error ? error.message : String(error)}`);
-    return { file: target };
+    return fileResult;
   }
 }
 
@@ -580,7 +595,7 @@ async function validateRegressionDelta(
     "record_type", "schema_version", "policy", "baseline_object", "closing_object",
     ...REGRESSION_COUNT_FIELDS.filter((field) => field !== "action_checks"), "action_checks",
   ], recordPath, errors);
-  if (record.schema_version !== "1.0") errors.push(`${recordPath}.schema_version: expected 1.0`);
+  if (record.schema_version !== "1.2") errors.push(`${recordPath}.schema_version: expected 1.2`);
   if (record.policy !== REGRESSION_POLICY) {
     errors.push(`${recordPath}.policy: expected ${REGRESSION_POLICY}`);
   }
@@ -648,21 +663,112 @@ async function validateRegressionDelta(
     if (Number.isInteger(check.introduced) && Number.isInteger(check.paid_before_boundary) && Number.isInteger(check.open_at_boundary)) {
       const accounted = Number(check.paid_before_boundary) + Number(check.open_at_boundary);
       if (check.introduced !== accounted) errors.push(`${checkPath}.introduced: must equal paid_before_boundary + open_at_boundary (${accounted})`);
-      introducedPaid += Number(check.paid_before_boundary);
-      introducedOpen += Number(check.open_at_boundary);
     }
     if (!Array.isArray(check.comparators) || array(check.comparators).length === 0) {
       errors.push(`${checkPath}.comparators: required nonempty array`);
     }
+    const derivedIntroduced = new Set<string>();
+    const derivedPaid = new Set<string>();
+    const derivedOpen = new Set<string>();
+    const comparatorIds = new Set<string>();
     for (const [comparatorIndex, rawComparator] of array(check.comparators).entries()) {
       const comparatorPath = `${checkPath}.comparators[${comparatorIndex}]`;
       const comparator = requireObject(rawComparator, [
-        "id", "command", "scope", "detector", "before_result", "after_result",
+        "id", "command", "scope", "detector", "observations",
       ], comparatorPath, errors);
-      if (comparator) for (const field of ["id", "command", "scope", "detector", "before_result", "after_result"] as const) {
+      if (!comparator) continue;
+      for (const field of ["id", "command", "scope", "detector"] as const) {
         if (!text(comparator[field])) errors.push(`${comparatorPath}.${field}: required`);
       }
+      const comparatorId = String(comparator.id ?? "");
+      if (comparatorIds.has(comparatorId)) errors.push(`${comparatorPath}.id: duplicate within action check`);
+      else comparatorIds.add(comparatorId);
+      const observations = array(comparator.observations);
+      if (observations.length < 2) errors.push(`${comparatorPath}.observations: requires before and after observations`);
+      const commandSha256 = sha256(new TextEncoder().encode(String(comparator.command ?? "")));
+      const detectorSha256 = sha256(new TextEncoder().encode(String(comparator.detector ?? "")));
+      const fingerprintsByObservation: Set<string>[] = [];
+      let priorObservedAt = -Infinity;
+      for (const [observationIndex, rawObservation] of observations.entries()) {
+        const observationPath = `${comparatorPath}.observations[${observationIndex}]`;
+        const observation = requireObject(rawObservation, [
+          "phase", "object", "command_sha256", "detector_sha256", "result_sha256", "result_ref",
+          "finding_fingerprints", "exit_code", "observed_at",
+        ], observationPath, errors);
+        if (!observation) continue;
+        const phase = observation.phase;
+        const expectedPhase = observationIndex === 0 ? "before" : observationIndex === observations.length - 1 ? "after" : "intermediate";
+        if (phase !== expectedPhase) errors.push(`${observationPath}.phase: expected ${expectedPhase}`);
+        if (!text(observation.object)) errors.push(`${observationPath}.object: required`);
+        if (observationIndex === 0 && observation.object !== check.before_object) errors.push(`${observationPath}.object: must equal action-check before_object`);
+        if (observationIndex === observations.length - 1 && observation.object !== check.after_object) errors.push(`${observationPath}.object: must equal action-check after_object`);
+        for (const [field, expected] of [["command_sha256", commandSha256], ["detector_sha256", detectorSha256]] as const) {
+          if (!(allowPlaceholders && text(observation[field]) && String(observation[field]).includes("<")) && observation[field] !== expected) {
+            errors.push(`${observationPath}.${field}: must equal the SHA-256 of comparator ${field === "command_sha256" ? "command" : "detector"}`);
+          }
+        }
+        if (!(allowPlaceholders && text(observation.result_sha256) && observation.result_sha256.includes("<"))
+          && (typeof observation.result_sha256 !== "string" || !HEX64.test(observation.result_sha256))) {
+          errors.push(`${observationPath}.result_sha256: required lowercase SHA-256 of exact comparator output`);
+        }
+        const comparatorResult = await loadBytesRef(
+          files,
+          base,
+          observation.result_ref,
+          `${observationPath}.result_ref`,
+          errors,
+          allowPlaceholders,
+        );
+        if (comparatorResult.digest
+          && !(allowPlaceholders && text(observation.result_sha256) && observation.result_sha256.includes("<"))
+          && observation.result_sha256 !== comparatorResult.digest) {
+          errors.push(`${observationPath}.result_sha256: must equal the digest-bound result_ref bytes`);
+        }
+        if (!Number.isInteger(observation.exit_code)) errors.push(`${observationPath}.exit_code: required integer`);
+        if (!iso(observation.observed_at)) errors.push(`${observationPath}.observed_at: required ISO-8601 timestamp`);
+        else {
+          const observedAt = Date.parse(String(observation.observed_at));
+          if (observedAt < priorObservedAt) errors.push(`${observationPath}.observed_at: observations must be chronological`);
+          priorObservedAt = observedAt;
+        }
+        if (!Array.isArray(observation.finding_fingerprints)) {
+          errors.push(`${observationPath}.finding_fingerprints: required array`);
+          fingerprintsByObservation.push(new Set());
+          continue;
+        }
+        const rawFingerprints = array(observation.finding_fingerprints);
+        const fingerprints = rawFingerprints.filter((item): item is string => typeof item === "string");
+        if (fingerprints.length !== rawFingerprints.length
+          || fingerprints.some((item) => !(allowPlaceholders && item.includes("<")) && !HEX64.test(item))) {
+          errors.push(`${observationPath}.finding_fingerprints: entries must be lowercase SHA-256 values`);
+        }
+        if (new Set(fingerprints).size !== fingerprints.length) errors.push(`${observationPath}.finding_fingerprints: duplicates are forbidden`);
+        if (!stableEqual(fingerprints, [...fingerprints].sort())) errors.push(`${observationPath}.finding_fingerprints: must be sorted`);
+        fingerprintsByObservation.push(new Set(fingerprints));
+      }
+      if (fingerprintsByObservation.length === observations.length && observations.length >= 2) {
+        const before = fingerprintsByObservation[0] ?? new Set<string>();
+        const after = fingerprintsByObservation.at(-1) ?? new Set<string>();
+        const introduced = new Set(fingerprintsByObservation.flatMap((set) => [...set]).filter((item) => !before.has(item)));
+        for (const fingerprint of introduced) {
+          const namespaced = `${comparatorId}\0${fingerprint}`;
+          derivedIntroduced.add(namespaced);
+          if (after.has(fingerprint)) derivedOpen.add(namespaced);
+          else derivedPaid.add(namespaced);
+        }
+      }
     }
+    if (Number.isInteger(check.introduced) && check.introduced !== derivedIntroduced.size) {
+      errors.push(`${checkPath}.introduced: must equal fingerprint-derived total (${derivedIntroduced.size})`);
+    }
+    if (Number.isInteger(check.paid_before_boundary) && check.paid_before_boundary !== derivedPaid.size) {
+      errors.push(`${checkPath}.paid_before_boundary: must equal fingerprint-derived total (${derivedPaid.size})`);
+    }
+    if (Number.isInteger(check.open_at_boundary) && check.open_at_boundary !== derivedOpen.size) {
+      errors.push(`${checkPath}.open_at_boundary: must equal fingerprint-derived total (${derivedOpen.size})`);
+    }
+    introducedPaid += derivedPaid.size;
+    introducedOpen += derivedOpen.size;
     if (check.boundary_status === "closed") {
       if (check.open_at_boundary !== 0) errors.push(`${checkPath}: closed boundary requires open_at_boundary=0`);
     } else if (check.boundary_status === "interrupted") {

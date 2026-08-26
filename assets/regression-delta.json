@@ -1,6 +1,6 @@
 {
   "record_type": "mister-clean.regression-delta",
-  "schema_version": "1.0",
+  "schema_version": "1.2",
   "policy": "zero_open_run_introduced_debt",
   "baseline_object": "<full starting commit>",
   "closing_object": "<full closing subject commit>",
@@ -25,8 +25,36 @@
           "command": "<exact command>",
           "scope": "<affected scope>",
           "detector": "<tool and version or digest>",
-          "before_result": "<baseline result or digest>",
-          "after_result": "<closing result or digest>"
+          "observations": [
+            {
+              "phase": "before",
+              "object": "<pre-action snapshot or digest>",
+              "command_sha256": "<sha256 of exact command string>",
+              "detector_sha256": "<sha256 of exact detector string>",
+              "result_sha256": "<sha256 of exact comparator output>",
+              "result_ref": {
+                "path": "comparator-results/<action-id>-before.txt",
+                "sha256": "<sha256 of exact comparator output>"
+              },
+              "finding_fingerprints": [],
+              "exit_code": 0,
+              "observed_at": "<ISO-8601 timestamp>"
+            },
+            {
+              "phase": "after",
+              "object": "<post-action snapshot or digest>",
+              "command_sha256": "<sha256 of exact command string>",
+              "detector_sha256": "<sha256 of exact detector string>",
+              "result_sha256": "<sha256 of exact comparator output>",
+              "result_ref": {
+                "path": "comparator-results/<action-id>-after.txt",
+                "sha256": "<sha256 of exact comparator output>"
+              },
+              "finding_fingerprints": [],
+              "exit_code": 0,
+              "observed_at": "<ISO-8601 timestamp>"
+            }
+          ]
         }
       ],
       "introduced": 0,

@@ -18,6 +18,11 @@ const categoryRoots = [
 ];
 
 const allowedExtensions = new Set([".css", ".html", ".json", ".md", ".yaml", ".yml"]);
+const localEvidenceAssets = new Set([
+  "assets/codebase-state-dashboard/case-study-okgo.html",
+  "assets/codebase-state-dashboard/okgo-case-study-state.json",
+  "assets/codebase-state-dashboard/okgo-main-history.json",
+]);
 
 function collect(path) {
   const absolute = join(rootPath, path);
@@ -44,7 +49,7 @@ function mimeFor(path) {
 
 const materials = categoryRoots.flatMap(([category, path]) =>
   collect(path)
-    .filter((candidate) => allowedExtensions.has(extname(candidate)))
+    .filter((candidate) => allowedExtensions.has(extname(candidate)) && !localEvidenceAssets.has(candidate))
     .map((candidate) => {
       const content = readFileSync(join(rootPath, candidate), "utf8");
       return {

@@ -1,6 +1,6 @@
 {
   "record_type": "mister-clean.action-manifest",
-  "schema_version": "1.0",
+  "schema_version": "1.2",
   "execution_state": "authorized",
   "repo": {
     "id": "<portable repository identity, e.g. owner/name>",
@@ -15,6 +15,26 @@
     "standing": true
   },
   "policy_sources": [],
+  "coordination": {
+    "dispatcher": "<single accountable dispatcher or single-agent identity>",
+    "integrator": "<single accountable integrator or same single-agent identity>",
+    "write_policy": "isolated_worktrees",
+    "integration_policy": "mutex_and_compare_and_swap",
+    "integration_mutex": {
+      "required": true,
+      "kind": "lease_with_fencing",
+      "scope": "target_ref",
+      "max_lease_seconds": 300
+    },
+    "local_inference_max_concurrency": 1,
+    "target": {
+      "ref": "<resolved target ref>",
+      "expected_commit": "<target commit observed at initialization>",
+      "observed_at": "<ISO-8601 timestamp>"
+    },
+    "domains": [],
+    "lanes": []
+  },
   "actions": [],
   "excluded_actions": [
     "unrecoverable destruction",

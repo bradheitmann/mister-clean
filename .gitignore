@@ -17,3 +17,9 @@ dist/
 node_modules/
 src/generated-materials.ts
 *.skill
+
+# Live case-study projections are local evidence, never package input. The
+# generic dashboard and token pack remain versioned beside these ignored files.
+assets/codebase-state-dashboard/case-study-okgo.html
+assets/codebase-state-dashboard/okgo-case-study-state.json
+assets/codebase-state-dashboard/okgo-main-history.json

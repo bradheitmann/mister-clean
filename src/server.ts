@@ -233,7 +233,7 @@ export function createMisterCleanServer(): McpServer {
             .min(1)
             .max(500)
             .describe("Local repository path or unambiguous repository name."),
-          mode: z.enum(["CLOSE", "CLEAN", "CONFORM", "AUDIT"]).default("CLOSE"),
+          mode: z.enum(["CLOSE", "CLEAN", "CONFORM", "GUARD", "AUDIT"]).default("CLOSE"),
         })
         .strict(),
     },
@@ -263,7 +263,7 @@ export function createMisterCleanServer(): McpServer {
       argsSchema: z
         .object({
           repository: z.string().min(1).max(500).describe("Local repository path or unambiguous repository name."),
-          mode: z.enum(["CLOSE", "CLEAN", "CONFORM", "AUDIT"]).default("CLOSE"),
+          mode: z.enum(["CLOSE", "CLEAN", "CONFORM", "GUARD", "AUDIT"]).default("CLOSE"),
         })
         .strict(),
     },

@@ -1,10 +1,15 @@
 # Mister Clean
 
-Mister Clean is an agent skill for closing repository work all the way: paying
-completion debt, reconciling planning and Git state, validating the result,
-and leaving a successor-ready codebase. Its premise is simple: the repository
-is the next team's prompt, so a clean inheritance creates intelligent momentum
-while an unfinished one compounds debt across every later session.
+Mister Clean is an agent skill for making repository hygiene durable. `CLOSE`
+pays inherited completion debt, reconciles code, planning, and Git into one
+trustworthy reality, and leaves the next team ready to build. `GUARD` applies
+the same standard at the commit boundary so unclean work never enters accepted
+history.
+
+Its premise is simple: the repository is the agent team's shared memory. A
+clean inheritance lets every session start with leverage; an ambiguous one
+makes every successor pay to reconstruct the same reality. Mister Clean pays
+that debt once, at the source, then protects the gain.
 
 Invocation is standing authorization for the procedures documented in the
 skill. Ordinary in-scope cleanup is performed, not queued; hard safety and
