@@ -635,7 +635,7 @@ status: active
     expect(result.status).toBe("fail");
   });
 
-  it("rejects an archived child projected by a live parent", () => {
+  it("accepts an EXPLICITLY archived child retired under a live parent (single-artifact retirement)", () => {
     const result = auditPlanningArtifacts([
       source("planning/active/LIVE-PARENT.md", `---
 artifact_type: story
@@ -650,6 +650,27 @@ artifact_type: task
 task_id: ARCHIVED-CHILD
 parent_id: LIVE-PARENT
 status: archived
+---
+`),
+    ]);
+
+    expect(result.counts.planning_relationship_conflict ?? 0).toBe(0);
+  });
+
+  it("rejects a lane-archived child under a live parent when its archival is not declared (accidental split)", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/active/LIVE-PARENT.md", `---
+artifact_type: story
+story_id: LIVE-PARENT
+status: active
+---
+| Child | Status |
+| ARCHIVED-CHILD | Archived |
+`),
+      source("planning/archive/ARCHIVED-CHILD.md", `---
+artifact_type: task
+task_id: ARCHIVED-CHILD
+parent_id: LIVE-PARENT
 ---
 `),
     ]);
@@ -1133,8 +1154,8 @@ ${bodyLineAt(lineNumber, "Status: Backlog")}`)));
 
   it("fails closed on contradictory lifecycle fields independent of key order", () => {
     const results = [
-      "status: done\nphase: active",
-      "phase: active\nstatus: done",
+      "status: done\nstate: active",
+      "state: active\nstatus: done",
     ].map((fields) => auditPlanningArtifacts([
       source("planning/items/STATE-PERMUTATION.md", `---
 artifact_type: task
@@ -1148,6 +1169,40 @@ ${fields}
     expect(results[0]).toEqual(results[1]);
     expect(results[0]?.counts.lifecycle_state_unknown).toBe(1);
     expect(results[0]?.status).toBe("fail");
+  });
+
+  it("treats a decisive status as authoritative over the progress axis (status + phase is one mid-flight artifact)", () => {
+    for (const fields of [
+      "status: Ready for QA\nphase: IMPLEMENTED",
+      "phase: IMPLEMENTED\nstatus: Ready for QA",
+      "status: active\nphase: done",
+    ]) {
+      const result = auditPlanningArtifacts([
+        source("planning/items/STATUS-DECISIVE.md", `---
+artifact_type: task
+task_id: STATUS-DECISIVE
+top_level: true
+${fields}
+---
+`),
+      ]);
+      expect(result.counts.lifecycle_state_unknown ?? 0).toBe(0);
+    }
+  });
+
+  it("still fails closed when no primary lifecycle key resolves and progress keys conflict", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/items/PROGRESS-ONLY-CONFLICT.md", `---
+artifact_type: task
+task_id: PROGRESS-ONLY-CONFLICT
+top_level: true
+phase: done
+stage: active
+---
+`),
+    ]);
+    expect(result.counts.lifecycle_state_unknown).toBe(1);
+    expect(result.status).toBe("fail");
   });
 
   it("uses explicit acceptance outcomes ahead of generic status independent of key order", () => {
@@ -3290,5 +3345,91 @@ RESOLUTION: landed at ${implementationCommit}. Independently verified.
         expect(result.status, `${field}/${artifactType}`).toBe("fail");
       }
     }
+  });
+
+  it("exempts a superseded/archived acceptance record from live PARTIAL-shape requirements", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/reviews/REVIEW-DISCHARGED.md", `---
+artifact_type: review
+review_id: REVIEW-DISCHARGED
+status: superseded
+verdict: partial
+---
+`),
+    ]);
+    expect(result.counts.acceptance_partial_malformed ?? 0).toBe(0);
+  });
+
+  it("still requires typed pending legs on a LIVE partial acceptance record", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/reviews/REVIEW-LIVE-PARTIAL.md", `---
+artifact_type: review
+review_id: REVIEW-LIVE-PARTIAL
+status: active
+verdict: partial
+---
+`),
+    ]);
+    expect(result.counts.acceptance_partial_malformed).toBe(1);
+  });
+
+  it("resolves a struck-through (~~ID~~) table row as a retired archived reference", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/active/EPIC-WITH-TOMBSTONE.md", `---
+artifact_type: epic
+epic_id: EPIC-WITH-TOMBSTONE
+status: active
+---
+| Story | Status |
+|-------|--------|
+| LIVE-STORY | Active |
+| ~~RETIRED-STORY~~ | -- |
+`),
+      source("planning/active/LIVE-STORY.md", `---
+artifact_type: story
+story_id: LIVE-STORY
+parent_id: EPIC-WITH-TOMBSTONE
+status: active
+---
+`),
+      source("planning/archive/RETIRED-STORY.md", `---
+artifact_type: story
+story_id: RETIRED-STORY
+parent_id: EPIC-WITH-TOMBSTONE
+status: archived
+---
+`),
+    ]);
+    expect(result.counts.planning_relationship_unresolved ?? 0).toBe(0);
+    expect(result.counts.planning_relationship_conflict ?? 0).toBe(0);
+  });
+
+  it("treats archived_<canonical> artifact types as the canonical type with declared archival", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/active/PARENT-EPIC.md", `---
+artifact_type: epic
+epic_id: PARENT-EPIC
+status: active
+---
+`),
+      source("planning/stories/RETIRED-VIA-TYPE.md", `---
+artifact_type: archived_story
+story_id: RETIRED-VIA-TYPE
+parent_id: PARENT-EPIC
+status: archived
+---
+`),
+    ]);
+    expect(result.counts.planning_relationship_conflict ?? 0).toBe(0);
+    expect(result.counts.planning_input_unparsed ?? 0).toBe(0);
+  });
+
+  it("classifies code files under a planning governance directory as non-artifact validators", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/governance/check-something.py", "#!/usr/bin/env python3\nprint('gate')\n"),
+      source("planning/governance/check-something.ts", "export const gate = 1;\n"),
+    ]);
+    expect(result.counts.planning_input_unparsed ?? 0).toBe(0);
+    expect(result.counts.lifecycle_state_unknown ?? 0).toBe(0);
   });
 });

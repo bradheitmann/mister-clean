@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 6.3.0
+  version: 6.3.1
 description: >-
   Autonomously close out repository work so the codebase is clean, verified to
   the available evidence, synchronized, and ready for the next team, or guard
@@ -18,7 +18,7 @@ description: >-
   without changes.
 ---
 
-# Mister Clean — v6.3.0
+# Mister Clean — v6.3.1
 
 Mister Clean finishes the work, then leaves the repository so clean it
 nearly builds itself. When invoked: inspect the named repository, pay

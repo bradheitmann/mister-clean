@@ -288,6 +288,12 @@ const STRUCTURED_STATE_KEYS = [
   "current_lifecycle", "current_phase", "current_stage", "current_state", "current_status",
   "implementation_status", "lifecycle", "phase", "stage", "state", "status",
 ] as const;
+// Lifecycle-decisive subset: when one of these yields a recognized state it
+// wins over the progress axis (phase/stage/implementation_status). See
+// lifecycleAliasProjection (FP-A repair).
+const PRIMARY_STATE_KEYS = [
+  "current_lifecycle", "current_state", "current_status", "lifecycle", "state", "status",
+] as const;
 const STATE_HEADERS = new Set(STRUCTURED_STATE_KEYS.map(normalize));
 const STATE_HEADER_WORDS = new Set(["lifecycle", "phase", "stage", "state", "status"]);
 const ACCEPTANCE_ID_FIELDS = ["acceptance_id", "holdout_id", "qa_id", "review_id"] as const;
@@ -645,10 +651,19 @@ function lifecycleAliasProjection(
   allowAcceptance = false,
 ): { error?: string; projection: StateProjection } {
   const aliases = scalarAliasValues(metadata, STRUCTURED_STATE_KEYS, label);
-  const projection = stateProjection(aliases.values);
-  const unsupported = aliases.values.filter((value) =>
+  // Primary lifecycle keys (status/state/lifecycle) are DECISIVE over progress
+  // keys (phase/stage/implementation_status): a workflow schema that records
+  // `status: Ready for QA` + `phase: IMPLEMENTED` describes one mid-flight
+  // artifact, not a lifecycle contradiction. Progress keys only project when
+  // no primary key yields a recognized state (FP-A repair).
+  const primary = scalarAliasValues(metadata, PRIMARY_STATE_KEYS, label);
+  const primaryStates = [...new Set(primary.values.map(lifecycle).filter((state) => state !== "unknown"))];
+  const decisive = primaryStates.length === 1 && !primary.error;
+  const effectiveValues = decisive ? primary.values : aliases.values;
+  const projection = stateProjection(effectiveValues);
+  const unsupported = effectiveValues.filter((value) =>
     lifecycle(value) === "unknown" && !(allowAcceptance && acceptance(value) !== "unknown"));
-  const lifecycleStates = [...new Set(aliases.values
+  const lifecycleStates = decisive ? primaryStates : [...new Set(aliases.values
     .map(lifecycle)
     .filter((state) => state !== "unknown"))];
   const errors = [
@@ -887,7 +902,16 @@ function inferredArtifactType(
 
 function artifactType(path: string, metadata: JsonObject): { error?: string; type: string } {
   const projection = scalarAliasValues(metadata, ["artifact_type", "kind", "type"], "artifact type");
-  const types = unique(projection.values.map(keyToken).map((value) => value === "story_review" ? "review" : value));
+  // `archived_<canonical>` is the first-class retirement form of the canonical
+  // type (generalizing the established archived_slice convention): it resolves
+  // to the canonical type; the artifact's own lifecycle metadata carries the
+  // archival (FP-E repair).
+  const types = unique(projection.values.map(keyToken)
+    .map((value) => value === "story_review" ? "review" : value)
+    .map((value) => {
+      const retired = value.match(/^archived_(.+)$/);
+      return retired && PLANNING_ARTIFACT_TYPES.has(retired[1] ?? "") ? retired[1] ?? value : value;
+    }));
   const inferred = inferredArtifactType(path, metadata, types.length === 1 ? types[0] : undefined);
   if (types.length === 0) {
     const errors = [projection.error, inferred.error].filter((error): error is string => Boolean(error));
@@ -1383,9 +1407,14 @@ function tableChildren(
     while (row < lines.length && !lines[row]?.historical && (lines[row]?.text ?? "").includes("|")) {
       const bodyLine = lines[row];
       const cells = splitTableRow(bodyLine?.text ?? "");
-      const id = cells[childIndex]?.replace(/[`*]/g, "").trim();
+      const rawIdCell = cells[childIndex] ?? "";
+      // FP-E repair: a struck-through target cell (~~ID~~) is a RETIRED row —
+      // the reference resolves after stripping the strikethrough and the row
+      // projects the archived state regardless of its status cell.
+      const struckRow = /~~[^~]+~~/.test(rawIdCell);
+      const id = rawIdCell.replace(/~~/g, "").replace(/[`*]/g, "").trim().replace(/\s+(ARCHIVED|RETIRED|SUPERSEDED)\b.*$/i, "").trim();
       const ref = `${path}#table-row-${bodyLine?.lineNumber ?? row + 1}`;
-      const stateValue = stateIndex < 0 ? undefined : cells[stateIndex]?.trim();
+      const stateValue = struckRow ? "archived" : stateIndex < 0 ? undefined : cells[stateIndex]?.trim();
       if (!id) {
         if (cells.some((cell) => cell.trim() !== "")) {
           errors.push({
@@ -2343,12 +2372,38 @@ function contextualizeDispatchPacketSources(sources: readonly PlanningSource[]):
   });
 }
 
+const GOVERNANCE_CODE_EXTENSIONS = new Set([".cjs", ".js", ".mjs", ".py", ".rb", ".sh", ".ts"]);
+
+function contextualizeGovernanceValidatorSources(
+  sources: readonly PlanningSource[],
+): readonly PlanningSource[] {
+  // Code files living inside a planning governance directory are validators and
+  // gate tooling, not lifecycle-bearing planning artifacts. They cannot carry
+  // frontmatter, so classify them contextually (same pattern as dispatch-packet
+  // internals) instead of reporting them unparsed (standalone-audit FP repair).
+  return sources.map((source) => {
+    if (source.declaredClass !== undefined || source.compoundEnvelope !== undefined) return source;
+    const extension = source.path.slice(source.path.lastIndexOf(".")).toLocaleLowerCase("und");
+    if (!GOVERNANCE_CODE_EXTENSIONS.has(extension)) return source;
+    const parts = source.path.split("/").slice(0, -1).map(normalize);
+    if (!parts.includes("governance")) return source;
+    return {
+      ...source,
+      classificationRationale:
+        "Executable validator/gate tooling inside the planning governance directory; carries no artifact lifecycle by construction.",
+      declaredClass: "reference",
+    };
+  });
+}
+
 export function auditPlanningArtifacts(
   sources: readonly PlanningSource[],
   planningRootCount = sources.length > 0 ? 1 : 0,
   options: { readonly repository?: string; readonly snapshot?: string } = {},
 ): PlanningAuditResult {
-  const artifacts = contextualizeDispatchPacketSources(sources).map(parseArtifact);
+  const artifacts = contextualizeGovernanceValidatorSources(
+    contextualizeDispatchPacketSources(sources),
+  ).map(parseArtifact);
   const findings: PlanningFinding[] = [];
 
   for (const artifact of artifacts) {
@@ -2399,7 +2454,12 @@ export function auditPlanningArtifacts(
       }
       continue;
     }
-    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance) {
+    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance
+      // FP-D repair: a superseded/archived acceptance record is a historical
+      // fact, not a live acceptance claim. A discharged CONDITIONAL/PARTIAL
+      // cannot truthfully declare a "pending" leg, so the live-shape
+      // requirements do not apply once its effective lifecycle is archived.
+      && artifact.state !== "archived" && artifact.declared !== "archived") {
       const malformedPartial = artifact.acceptanceState === "partial"
         && (artifact.operateTimeLegCount === 0 || artifact.operateTimeLegErrors.length > 0);
       const terminalWithPendingLeg = artifact.acceptanceState === "passed" && artifact.operateTimeLegCount > 0;
@@ -2534,6 +2594,13 @@ export function auditPlanningArtifacts(
     const parentArchived = parent.state === "archived";
     const childArchived = child.state === "archived";
     if (parentArchived === childArchived) return true;
+    // FP-E repair: single-artifact retirement is a legitimate topology. A child
+    // whose archival is EXPLICIT (declared in its own lifecycle metadata, not
+    // merely inferred from lane placement) may sit under a living parent.
+    // Accidental splits (lane moved without declared archival) still conflict,
+    // and a live acceptance artifact under an archived parent still conflicts —
+    // its canonical resolution is the first-class archived_<type> form.
+    if (childArchived && child.declared === "archived") return true;
     const key = `${parent.path}\u0000${child.path}`;
     if (!archiveBoundaryEdges.has(key)) {
       archiveBoundaryEdges.add(key);

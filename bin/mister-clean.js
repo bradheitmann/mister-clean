@@ -9710,6 +9710,14 @@ var STRUCTURED_STATE_KEYS = [
   "state",
   "status"
 ];
+var PRIMARY_STATE_KEYS = [
+  "current_lifecycle",
+  "current_state",
+  "current_status",
+  "lifecycle",
+  "state",
+  "status"
+];
 var STATE_HEADERS = new Set(STRUCTURED_STATE_KEYS.map(normalize));
 var STATE_HEADER_WORDS = /* @__PURE__ */ new Set(["lifecycle", "phase", "stage", "state", "status"]);
 var ACCEPTANCE_ID_FIELDS = ["acceptance_id", "holdout_id", "qa_id", "review_id"];
@@ -9988,9 +9996,13 @@ function scalarListAliasValues(metadata, keys, label) {
 }
 function lifecycleAliasProjection(metadata, label, allowAcceptance = false) {
   const aliases = scalarAliasValues(metadata, STRUCTURED_STATE_KEYS, label);
-  const projection = stateProjection(aliases.values);
-  const unsupported = aliases.values.filter((value) => lifecycle(value) === "unknown" && !(allowAcceptance && acceptance(value) !== "unknown"));
-  const lifecycleStates = [...new Set(aliases.values.map(lifecycle).filter((state) => state !== "unknown"))];
+  const primary = scalarAliasValues(metadata, PRIMARY_STATE_KEYS, label);
+  const primaryStates = [...new Set(primary.values.map(lifecycle).filter((state) => state !== "unknown"))];
+  const decisive = primaryStates.length === 1 && !primary.error;
+  const effectiveValues = decisive ? primary.values : aliases.values;
+  const projection = stateProjection(effectiveValues);
+  const unsupported = effectiveValues.filter((value) => lifecycle(value) === "unknown" && !(allowAcceptance && acceptance(value) !== "unknown"));
+  const lifecycleStates = decisive ? primaryStates : [...new Set(aliases.values.map(lifecycle).filter((state) => state !== "unknown"))];
   const errors = [
     aliases.error,
     ...unsupported.length > 0 ? [`${label} contains unsupported lifecycle values: ${unsupported.map((value) => JSON.stringify(value)).join(", ")}`] : [],
@@ -10228,7 +10240,10 @@ function inferredArtifactType(path, metadata, declaredType) {
 }
 function artifactType(path, metadata) {
   const projection = scalarAliasValues(metadata, ["artifact_type", "kind", "type"], "artifact type");
-  const types = unique(projection.values.map(keyToken).map((value) => value === "story_review" ? "review" : value));
+  const types = unique(projection.values.map(keyToken).map((value) => value === "story_review" ? "review" : value).map((value) => {
+    const retired = value.match(/^archived_(.+)$/);
+    return retired && PLANNING_ARTIFACT_TYPES.has(retired[1] ?? "") ? retired[1] ?? value : value;
+  }));
   const inferred = inferredArtifactType(path, metadata, types.length === 1 ? types[0] : void 0);
   if (types.length === 0) {
     const errors2 = [projection.error, inferred.error].filter((error) => Boolean(error));
@@ -10671,9 +10686,11 @@ function tableChildren(lines2, path, role, targetHeaders, nonRelationshipHeaders
     while (row < lines2.length && !lines2[row]?.historical && (lines2[row]?.text ?? "").includes("|")) {
       const bodyLine = lines2[row];
       const cells = splitTableRow(bodyLine?.text ?? "");
-      const id = cells[childIndex]?.replace(/[`*]/g, "").trim();
+      const rawIdCell = cells[childIndex] ?? "";
+      const struckRow = /~~[^~]+~~/.test(rawIdCell);
+      const id = rawIdCell.replace(/~~/g, "").replace(/[`*]/g, "").trim().replace(/\s+(ARCHIVED|RETIRED|SUPERSEDED)\b.*$/i, "").trim();
       const ref = `${path}#table-row-${bodyLine?.lineNumber ?? row + 1}`;
-      const stateValue = stateIndex < 0 ? void 0 : cells[stateIndex]?.trim();
+      const stateValue = struckRow ? "archived" : stateIndex < 0 ? void 0 : cells[stateIndex]?.trim();
       if (!id) {
         if (cells.some((cell) => cell.trim() !== "")) {
           errors.push({
@@ -11556,8 +11573,25 @@ function contextualizeDispatchPacketSources(sources) {
     };
   });
 }
+var GOVERNANCE_CODE_EXTENSIONS = /* @__PURE__ */ new Set([".cjs", ".js", ".mjs", ".py", ".rb", ".sh", ".ts"]);
+function contextualizeGovernanceValidatorSources(sources) {
+  return sources.map((source) => {
+    if (source.declaredClass !== void 0 || source.compoundEnvelope !== void 0) return source;
+    const extension = source.path.slice(source.path.lastIndexOf(".")).toLocaleLowerCase("und");
+    if (!GOVERNANCE_CODE_EXTENSIONS.has(extension)) return source;
+    const parts = source.path.split("/").slice(0, -1).map(normalize);
+    if (!parts.includes("governance")) return source;
+    return {
+      ...source,
+      classificationRationale: "Executable validator/gate tooling inside the planning governance directory; carries no artifact lifecycle by construction.",
+      declaredClass: "reference"
+    };
+  });
+}
 function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 ? 1 : 0, options = {}) {
-  const artifacts = contextualizeDispatchPacketSources(sources).map(parseArtifact);
+  const artifacts = contextualizeGovernanceValidatorSources(
+    contextualizeDispatchPacketSources(sources)
+  ).map(parseArtifact);
   const findings = [];
   for (const artifact of artifacts) {
     if (artifact.nonArtifactRequested && !artifact.nonArtifact) {
@@ -11605,7 +11639,7 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
       }
       continue;
     }
-    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance) {
+    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance && artifact.state !== "archived" && artifact.declared !== "archived") {
       const malformedPartial = artifact.acceptanceState === "partial" && (artifact.operateTimeLegCount === 0 || artifact.operateTimeLegErrors.length > 0);
       const terminalWithPendingLeg = artifact.acceptanceState === "passed" && artifact.operateTimeLegCount > 0;
       if (malformedPartial || terminalWithPendingLeg || artifact.operateTimeLegErrors.length > 0) {
@@ -11722,6 +11756,7 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
     const parentArchived = parent.state === "archived";
     const childArchived = child.state === "archived";
     if (parentArchived === childArchived) return true;
+    if (childArchived && child.declared === "archived") return true;
     const key = `${parent.path}\0${child.path}`;
     if (!archiveBoundaryEdges.has(key)) {
       archiveBoundaryEdges.add(key);

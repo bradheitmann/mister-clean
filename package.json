@@ -1,6 +1,6 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "6.3.0",
+  "version": "6.3.1",
   "description": "Agent skill for paying repository debt and preventing unclean commits.",
   "type": "module",
   "license": "MIT",
