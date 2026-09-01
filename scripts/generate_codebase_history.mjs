@@ -33,8 +33,9 @@ for (let index = 2; index < process.argv.length; index += 1) {
 
 const repositoryPath = resolve(options.repo);
 const runGit = (args, encoding = "utf8") =>
-  execFileSync("git", ["-C", repositoryPath, ...args], {
+  execFileSync("git", ["--no-optional-locks", "-C", repositoryPath, ...args], {
     encoding,
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     maxBuffer: 256 * 1024 * 1024,
   });
 

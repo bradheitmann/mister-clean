@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title description">
+  <title id="title">Repository paths converging through a clean passage</title>
+  <desc id="description">Three paths resolve into one open corridor.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="6">
+    <path d="M8 14h13c9 0 9 12 18 12h8"/>
+    <path d="M8 50h13c9 0 9-12 18-12h8"/>
+    <path d="M49 12h7v14"/>
+    <path d="M49 52h7V38"/>
+  </g>
+  <path d="M8 32h48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="6" opacity=".72"/>
+</svg>

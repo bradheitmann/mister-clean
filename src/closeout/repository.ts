@@ -128,8 +128,9 @@ export function runGit(
   args: readonly string[],
   allowedStatuses: readonly number[] = [0],
 ): GitResult {
-  const result = spawnSync("git", ["-C", repository, ...args], {
+  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
     encoding: "utf8",
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const status = result.status ?? 1;
@@ -140,6 +141,27 @@ export function runGit(
     throw new Error(stderr || `git ${args.join(" ")} exited ${status}`);
   }
   return { status, stdout, stderr };
+}
+
+function gitNullPaths(repository: string, args: readonly string[]): string[] {
+  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error) throw result.error;
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(result.stderr.trim() || `git ${args.join(" ")} exited ${result.status ?? 1}`);
+  }
+  return result.stdout.split("\0").filter((path) => path.length > 0);
+}
+
+/** Exact extant Git-tracked worktree surface; candidate deletions are not shippable bytes. */
+export function trackedShippablePaths(repository: string): string[] {
+  const deleted = new Set(gitNullPaths(repository, ["ls-files", "--deleted", "-z"]));
+  return [...new Set(gitNullPaths(repository, ["ls-files", "--cached", "-z"]))]
+    .filter((path) => !deleted.has(path))
+    .sort(compareCodePoints);
 }
 
 export function git(repository: string, ...args: string[]): string {
@@ -181,17 +203,45 @@ export function packageRoot(fromUrl: string = import.meta.url): string {
 
 export function repositoryIdentity(repository: string): string {
   const remote = runGit(repository, ["config", "--get", "remote.origin.url"], [0, 1]).stdout;
-  if (remote && !remote.startsWith("/") && !remote.startsWith("file://")) {
-    let value: string;
+  return canonicalRemoteRepositoryIdentity(remote)
+    ?? localRepositoryIdentity(realpathSync(repository));
+}
+
+/**
+ * Portable repository identity v2. Remote identities retain the authority
+ * host; local-only identities disclose no path bytes and are scoped to the
+ * exact canonical checkout path. Both forms are exact opaque inputs to the
+ * regression root-debt identity scheme.
+ */
+export function canonicalRemoteRepositoryIdentity(remote: string): string | undefined {
+  if (!remote || remote.startsWith("/") || remote.startsWith("file://")) return undefined;
+  let host = "";
+  let pathname = "";
+  try {
     if (remote.includes("://")) {
-      value = new URL(remote).pathname.replace(/^\/+|\/+$/g, "");
+      const parsed = new URL(remote);
+      if (parsed.protocol === "file:" || !parsed.hostname) return undefined;
+      host = parsed.host.toLocaleLowerCase("und");
+      pathname = parsed.pathname;
     } else {
-      value = remote.split(":", 2).at(-1) ?? remote;
+      const match = /^(?:[^@/:]+@)?([^/:]+):(.+)$/u.exec(remote);
+      if (!match) return undefined;
+      host = (match[1] ?? "").toLocaleLowerCase("und");
+      pathname = match[2] ?? "";
     }
-    value = value.replace(/\.git$/, "").replace(/\/+$/, "");
-    if (value.includes("/")) return value;
+  } catch {
+    return undefined;
   }
-  return repository.split(sep).filter(Boolean).at(-1) ?? repository;
+  const normalizedPath = pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/u, "");
+  if (!host || !normalizedPath.includes("/") || /[\u0000-\u001f\u007f]/u.test(normalizedPath)) return undefined;
+  return `remote:${host}/${normalizedPath}`;
+}
+
+export function localRepositoryIdentity(canonicalPath: string): string {
+  if (!isAbsolute(canonicalPath) || /[\u0000-\u001f\u007f]/u.test(canonicalPath)) {
+    throw new Error("local repository identity requires an absolute canonical path without controls");
+  }
+  return `local-path-sha256:${createHash("sha256").update(canonicalPath, "utf8").digest("hex")}`;
 }
 
 function childEntries(directory: string) {
@@ -249,16 +299,18 @@ export function parseWorktrees(repository: string): WorktreeRecord[] {
   const output = git(repository, "worktree", "list", "--porcelain", "-z");
   if (!output) return [];
   const records: WorktreeRecord[] = [];
-  let current: Record<string, string> = {};
+  const forbiddenKeys = new Set(["__proto__", "constructor", "prototype"]);
+  let current: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const item of output.split("\0")) {
     if (!item) continue;
     if (item.startsWith("worktree ") && current.worktree) {
       records.push(current as unknown as WorktreeRecord);
-      current = {};
+      current = Object.create(null) as Record<string, string>;
     }
     const separator = item.indexOf(" ");
     const rawKey = separator === -1 ? item : item.slice(0, separator);
     const key = rawKey === "HEAD" ? "head" : rawKey.toLocaleLowerCase();
+    if (forbiddenKeys.has(key)) throw new Error(`forbidden git worktree porcelain key: ${key}`);
     if (separator === -1) current[key] = "true";
     else current[key] = item.slice(separator + 1);
   }

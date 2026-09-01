@@ -10,6 +10,12 @@ are encountered — the detector picks up any `## <ecosystem>` header.
 - `package.json` scripts referencing deleted files; phantom `bin` entries.
 - Workspace globs vs actual directories drift (packages exist that no
   manifest reaches — the unreachable-suite defect).
+- Production `.js`/`.mjs`/`.cjs` packages that no reachable syntax, static,
+  type, build, or test route actually reads. A root recursive command covers
+  only member scripts it reaches; zero-build deployment is not zero-check
+  permission. Use the native linter, `node --check`, TypeScript `checkJs`, or a
+  stronger repository-specific route and retain a file-removal/parse-error
+  negative control.
 - Engines/volta/nvmrc pinning disagreement across docs and manifests.
 
 ## node-bun
@@ -37,6 +43,10 @@ are encountered — the detector picks up any `## <ecosystem>` header.
 ## typescript
 - Emitted `*.js`/`*.d.ts` beside sources, tracked but stale vs `tsc` output.
 - `tsconfig` `paths` aliases pointing at moved/deleted directories.
+- A green root `tsc` whose include/exclude graph omits production packages,
+  JSDoc JavaScript, Svelte/Vue sources, generated runtime entry points, or
+  workspace members. Enumerate source-to-gate coverage; do not infer it from
+  the script name.
 - `@ts-expect-error`/`@ts-ignore` without owner + exit condition (same rule
   as skipped tests).
 
@@ -69,3 +79,29 @@ are encountered — the detector picks up any `## <ecosystem>` header.
 - `--no-bail`-class masking: a matrix/step whose failure hides successors.
 - Comments asserting expected-red/known state that has since changed
   (stale-baseline class); untrusted-input interpolation into `run:`.
+- A privileged `workflow_dispatch` deploy that checks out the selected ref
+  without an explicit allowed-ref guard. Manual dispatch is not main-bound by
+  implication: fail closed on every branch/tag outside the authorized ref and
+  prove that behavior with negative fixtures.
+- A step named “verify” that only prints, warns, or tees health output while a
+  later public promotion remains reachable. Every prerequisite health leg must
+  exit nonzero on non-passing/empty/malformed evidence; test each failure path.
+- Mutable third-party action refs in credential-bearing or release-writing
+  jobs; missing least-privilege `permissions`; checkout credentials retained
+  before they are needed. Pin privileged dependencies to immutable commits.
+- Treat every workflow named by an effectful `workflow_run.workflows` trigger
+  as part of the same trust boundary. Its success authorizes the downstream
+  effect, so mutable actions or implicit permissions upstream can forge the
+  very green signal CD trusts. Pin and least-privilege the whole transitive
+  authorization chain, not only the deploy job.
+- A `workflow_run` source bound only to `head_sha` and a branch named `main`.
+  Before any candidate-controlled code receives credentials, bootstrap policy
+  from trusted main, bind `head_repository.full_name` to the current repository,
+  require a trusted upstream event, and prove the SHA belongs to freshly fetched
+  trusted main. A same-named fork branch is the mandatory negative control.
+- Health evidence that proves every observed row is green but never proves the
+  required named check exists. Bind each plane to an explicit check manifest;
+  reject missing, duplicate, substituted, empty, malformed, or nonpassing rows.
+- Workflow syntax/semantics absent from the established CI gate. Run a pinned
+  workflow-aware validator, but retain behavioral negative tests: syntax green
+  does not prove authorization or fail-closed promotion.

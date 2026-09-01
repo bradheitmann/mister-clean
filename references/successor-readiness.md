@@ -48,6 +48,16 @@ Everything below is MUST unless marked SHOULD.
    (epic) tables/counts. Where history matters, it lives in a **clearly
    labeled history section** excluded from current-state reading — historical
    prose beside current-state fields, unlabeled, is a defect.
+5a. **Operational truth is one directed graph:** authoritative decision →
+    current successor projection → executable behavior → bounded runtime state.
+    The close must enumerate and verify these edges, not merely validate each
+    file in isolation. A North Star, README, agent instruction, launch ledger,
+    or status surface that disagrees with the authority it cites is payable
+    projection debt even when both files are individually well formed.
+5b. **Identifiers are authority-qualified.** If two domains reuse the same
+    short token, the machine identity includes its namespace and every current
+    reference resolves unambiguously. A derived live-rule index or glossary may
+    project this graph; do not create another hand-maintained source of law.
 6. **Validate every lane — including done, backlog, and archived.** "Done"
    implies finalized current metadata and a closure record. "Archived" stays
    connected to the canonical graph (machine-readable id linkage, not only a
@@ -55,6 +65,11 @@ Everything below is MUST unless marked SHOULD.
 7. **Projections are DERIVED, not hand-maintained.** Child tables and counts
    in parent artifacts are generated from the children (or verified equal to
    such a generation). A hand-edited rollup is stale the day it is written.
+7a. **Declared distinctions must distinguish behavior.** A mode, tier, task
+    class, route, fallback, fitness score, or feature switch is not implemented
+    merely because its label and configuration exist. Require a differential
+    probe showing at least two declared values produce the intended different
+    decision, or narrow the claim and plan the missing behavior honestly.
 8. **Close the cascade — and PAY it.** When all of a parent's children reach
    done, the parent's acceptance step (story review, holdout execution) is
    OPEN, PAYABLE completion debt like any other: pay it by dispatching the
@@ -146,11 +161,30 @@ Everything below is MUST unless marked SHOULD.
     lifecycle/evidence/exception classes must form a complete partition: the
     class counts reconcile to the census, and an unclassified remainder is a
     failure even if the underlying command returns zero.
+22a. **Every production executable surface is inside a reachable gate.** Build
+    the source-to-gate coverage map for every package and language, including
+    JavaScript/JSDoc and zero-build entry points. A workspace aggregate, root
+    typecheck, test count, or CI label does not confer coverage on files it
+    excludes. Each surface needs a named syntax/static/type/build/test route or
+    a narrow evidence-backed exception.
+22b. **Every long-lived state holder has a lifecycle bound.** Caches, maps,
+    sets, idempotency journals, queues, ledgers, histories, timers, and retry
+    stores name and test their size/age bound, eviction, retention, rotation,
+    pruning, or compaction behavior. “Durable” without a growth bound is
+    operate-time debt, not resilience.
 23. **Unbound assertions fail.** A sealing/immutability claim with no seal
     record is fail-open — make it fail, or encode the exemption (void /
     superseded / exempt) explicitly. Lifecycle vocabularies must distinguish
     unstarted, scheduled, void, superseded, archived, and executed — one
     catch-all "not run" hides five different meanings.
+    A file-corpus seal also requires a valid canonical content census with the
+    same algorithm and scope at comparison time; counts or aggregate bytes
+    alone cannot establish immutability or mutation. Bind the manifest to the
+    exact RepositoryObject after writer quiescence and ownership release,
+    retain immutable/read-only custody or a copied frozen object, and recheck
+    the original seal after review before acceptance/integration. Any later
+    byte, path, executable-metadata, or binding change invalidates PASS and
+    forces re-freeze; never regenerate the original seal in place.
 24. **Negative controls before trusting any new gate:** deliberately
     introduce one lane mismatch, one stale baseline, one missing review
     directory, one unbound seal claim, and one unmapped dirty worktree —

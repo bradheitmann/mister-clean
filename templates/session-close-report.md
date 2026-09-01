@@ -8,11 +8,13 @@ an unpaid row without a recorded ruling}
 
 ## Do-no-harm check
 
-`regression-delta.json`: baseline {commit} → close {commit} · baseline debt
-paid/open {n}/{n} · newly exposed pre-existing paid/open {n}/{n} · concurrent
-external paid/open {n}/{n} · introduced by this run paid/open {n}/**0 required
-for CLEAN** · action boundaries closed {n}/{n}. Any nonzero introduced-open
-count is paid or safely rolled back before another action begins.
+Schema-1.5 `regression-delta.json`: baseline {commit} → close {commit} ·
+observation ledger {baseline IDs/digest} → {closing IDs/digest} · root-debt
+ledger {baseline-present keys/digest} → {closing-present keys/digest} · action
+boundaries closed {n}/{n} with empty `open_at_boundary_observation_ids`. Raw
+observation and normalized root-debt cardinalities are never added. Every
+run-introduced observation is paid or safely rolled back before another action
+begins.
 
 ## Paired-work check — no half-executed procedures left behind
 
@@ -47,8 +49,8 @@ commits and revalidation of the integrated tree.
 
 | | Target | Actual |
 |---|---|---|
-| Branches (local / remote) | main+≤1 / main | |
-| Worktrees | 1 | |
+| Branches (local / remote) | {policy-derived allowed sets} | |
+| Worktrees | {policy-derived owned/dispositioned set} | |
 | Stashes / dirty / untracked | 0 / 0 / 0 | |
 | Ahead / behind | 0 / 0 | |
 | In-progress ops | none | |

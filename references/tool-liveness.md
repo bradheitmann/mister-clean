@@ -277,3 +277,23 @@ lane.
   successor receives. CLEAN is a property of the shipped artifact plus a
   standing exclusion rule — never of a source-dir snapshot that the OS will
   dirty again.
+
+### Bind the installed runtime, not only its version string
+
+The same package version can exist with different bytes in the source tree,
+registry cache, global shim, copied skill registry, or MCP runtime. A matching
+`version` field is therefore not runtime identity. A release binds the package
+name/version, clean tagged source commit, exact `MANIFEST.sha256` bytes, and
+the required executable entrypoints in `RELEASE_ATTESTATION.json`; production
+entrypoints fail closed when that record or any bound byte is missing or stale.
+Explicit execution from `src/` is a separately reported development mode, not
+a production pass.
+
+Avoid the attestation self-reference trap. `RELEASE_ATTESTATION.json` is
+excluded from the manifest it attests, generated only after the clean source
+commit is tagged, ignored in the source worktree, and explicitly included in
+the packed surface. It must not contain the enclosing archive hash, registry
+integrity, publication URL, or publication time: those facts do not exist until
+after packing/publishing and belong in a separate external post-publish
+receipt. Rebuild and smoke-test the extracted archive and an ordinary pnpm
+installation before distributing or synchronizing global skill copies.

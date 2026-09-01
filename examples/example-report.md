@@ -13,11 +13,14 @@ and next safe action. No payable completion debt or unresolved decision remains.
 
 ## 1b. No-harm delta
 
-The digest-bound regression delta compares the same detector set at baseline
-and close on `9f3a2d1`. Baseline debt: 2 paid / 0 open. Newly discovered
-pre-existing: 0 / 0. Concurrent external: 0 / 0. Introduced by this run: 1
-paid inside its atomic action / **0 open**. All 4 executed action boundaries
-closed with the same affected comparators and zero introduced debt remaining.
+The digest-bound schema-1.5 regression delta compares the same detector set at
+baseline and close on `9f3a2d1`. Its observation ledger closed from 7 raw
+observation IDs to an empty set; its separate root-debt ledger closed from 2
+normalized cause keys to an empty set. One transient run-introduced observation
+appeared and resolved inside its atomic action. All 4 executed action boundaries
+closed with the same affected comparators and empty
+`open_at_boundary_observation_ids`. The 7 observations and 2 debts are never
+added or subtracted as though they were the same unit.
 
 ## 2. Explicit acceptance criteria
 

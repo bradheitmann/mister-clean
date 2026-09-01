@@ -635,7 +635,7 @@ status: active
     expect(result.status).toBe("fail");
   });
 
-  it("rejects an archived child projected by a live parent", () => {
+  it("accepts an explicitly archived child retired under a live parent", () => {
     const result = auditPlanningArtifacts([
       source("planning/active/LIVE-PARENT.md", `---
 artifact_type: story
@@ -654,8 +654,7 @@ status: archived
 `),
     ]);
 
-    expect(result.counts.planning_relationship_conflict).toBe(1);
-    expect(result.status).toBe("fail");
+    expect(result.counts.planning_relationship_conflict ?? 0).toBe(0);
   });
 
   it("allows an archived parent and archived child to remain a coherent historical graph", () => {
@@ -1133,8 +1132,8 @@ ${bodyLineAt(lineNumber, "Status: Backlog")}`)));
 
   it("fails closed on contradictory lifecycle fields independent of key order", () => {
     const results = [
-      "status: done\nphase: active",
-      "phase: active\nstatus: done",
+      "status: done\nstate: active",
+      "state: active\nstatus: done",
     ].map((fields) => auditPlanningArtifacts([
       source("planning/items/STATE-PERMUTATION.md", `---
 artifact_type: task
@@ -1148,6 +1147,25 @@ ${fields}
     expect(results[0]).toEqual(results[1]);
     expect(results[0]?.counts.lifecycle_state_unknown).toBe(1);
     expect(results[0]?.status).toBe("fail");
+  });
+
+  it("treats a decisive lifecycle status as authoritative over progress phase", () => {
+    for (const fields of [
+      "status: Ready for QA\nphase: IMPLEMENTED",
+      "phase: IMPLEMENTED\nstatus: Ready for QA",
+      "status: active\nphase: done",
+    ]) {
+      const result = auditPlanningArtifacts([
+        source("planning/items/STATUS-DECISIVE.md", `---
+artifact_type: task
+task_id: STATUS-DECISIVE
+top_level: true
+${fields}
+---
+`),
+      ]);
+      expect(result.counts.lifecycle_state_unknown ?? 0).toBe(0);
+    }
   });
 
   it("uses explicit acceptance outcomes ahead of generic status independent of key order", () => {
@@ -3107,7 +3125,7 @@ verdict: CONDITIONAL ACCEPT — follow-ups routed separately
     expect(result.counts.acceptance_partial_malformed).toBe(0);
   });
 
-  it("keeps distinct acceptance artifacts distinct and treats reviews as provenance-only", () => {
+  it("keeps distinct acceptance artifacts distinct and requires reviews to carry verdict truth", () => {
     const distinct = auditPlanningArtifacts([
       source("project/planning/stories/STORY-GATES.md", `---
 artifact_type: story
@@ -3135,6 +3153,7 @@ result: not_run
 artifact_type: review
 review_id: REVIEW-RECEIPT
 status: completed
+verdict: pass
 reviews: Human-readable subject plus branch and commit provenance.
 ---
 `),
@@ -3290,5 +3309,366 @@ RESOLUTION: landed at ${implementationCommit}. Independently verified.
         expect(result.status, `${field}/${artifactType}`).toBe("fail");
       }
     }
+  });
+
+  it("fails when a live implementation sequence is hidden outside planning discovery", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-hidden-plan-"));
+    try {
+      mkdirSync(join(repository, "references"), { recursive: true });
+      writeFileSync(join(repository, "references", "product-spec.md"), `# Product contract
+
+Status: approved contract; implementation active
+
+## 19. Implementation sequence
+
+1. Build the service.
+2. Verify the candidate.
+`);
+
+      const result = auditPlanningRepository(repository);
+      expect(result.status).toBe("fail");
+      expect(result.candidate_probe_count).toBe(1);
+      expect(result.counts.planning_surface_undiscovered).toBe(1);
+      expect(result.findings[0]?.path).toBe("references/product-spec.md");
+    } finally {
+      rmSync(repository, { force: true, recursive: true });
+    }
+  });
+
+  it("accepts a live implementation sequence projected by the canonical current artifact", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-projected-plan-"));
+    try {
+      mkdirSync(join(repository, "references"), { recursive: true });
+      writeFileSync(join(repository, "references", "product-spec.md"), `# Product contract
+
+Status: approved contract; implementation active
+
+## Implementation sequence
+
+1. Build the service.
+2. Verify the candidate.
+`);
+      writeFileSync(join(repository, "CURRENT.md"), `---
+artifact_type: maintenance
+maint_id: CURRENT-IMPLEMENTATION
+title: Current implementation
+status: active
+timezone: UTC
+contract: references/product-spec.md
+current_projection_source: machine
+current_projection_command: mister-clean inspect repository-object . --json
+---
+`);
+      execFileSync("git", ["init", "-q", "-b", "main", repository]);
+      execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
+      execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      execFileSync("git", ["-C", repository, "add", "CURRENT.md", "references/product-spec.md"]);
+      execFileSync("git", ["-C", repository, "commit", "-q", "-m", "fixture"]);
+
+      const result = auditPlanningRepository(repository);
+      expect(result.status).toBe("pass");
+      expect(result.planningRootCount).toBe(1);
+      expect(result.artifactCount).toBe(1);
+      expect(result.candidate_probe_count).toBe(1);
+      expect(result.counts.planning_surface_undiscovered).toBe(0);
+    } finally {
+      rmSync(repository, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a phantom current projection command even when it contains repository-object prose", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-phantom-projection-"));
+    try {
+      writeFileSync(join(repository, "CURRENT.md"), `---
+artifact_type: maintenance
+maint_id: CURRENT-PHANTOM
+title: Phantom projection
+status: active
+timezone: UTC
+designation: current_state
+current_projection_source: machine
+current_projection_command: mister-clean phantom repository-object . --json
+---
+`);
+      execFileSync("git", ["init", "-q", "-b", "main", repository]);
+      execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
+      execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      execFileSync("git", ["-C", repository, "add", "CURRENT.md"]);
+      execFileSync("git", ["-C", repository, "commit", "-q", "-m", "fixture"]);
+
+      expect(auditPlanningRepository(repository).counts.current_projection_stale).toBe(1);
+    } finally {
+      rmSync(repository, { force: true, recursive: true });
+    }
+  });
+
+  it("enforces canonical maintenance headers and closes standing grants after durable terminal evidence", () => {
+    const stale = auditPlanningArtifacts([
+      source("planning/maintenance/MAINT-STALE.md", `---
+artifact_type: maintenance
+id: MAINT-STALE
+status: active
+completed_at: 2026-08-27T12:00:00Z
+resolution: Accepted work is already complete.
+---
+`),
+    ]);
+    const terminal = auditPlanningArtifacts([
+      source("planning/maintenance/MAINT-DONE.md", `---
+artifact_type: maintenance
+maint_id: MAINT-DONE
+title: Terminal maintenance record
+status: completed
+timezone: America/Denver
+completed_at: 2026-08-27T12:00:00-06:00
+resolution: Accepted work is complete.
+---
+`),
+    ]);
+
+    expect(stale.counts.maintenance_header_noncanonical).toBeGreaterThan(0);
+    expect(stale.counts.maintenance_lifecycle_stale).toBe(1);
+    expect(terminal.counts.maintenance_header_noncanonical).toBe(0);
+    expect(terminal.counts.maintenance_lifecycle_stale).toBe(0);
+  });
+
+  it("rejects stale ownership and active-abandoned state contradictions", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/stories/STORY-OWNER.md", `---
+artifact_type: story
+story_id: STORY-OWNER
+top_level: true
+status: active
+owner: none
+ownership_status: abandoned
+---
+`),
+    ]);
+
+    expect(result.counts.ownership_claim_stale).toBe(2);
+  });
+
+  it("derives review projections from verdicts rather than artifact lifecycle", () => {
+    const review = auditPlanningArtifacts([
+      source("planning/reviews/REVIEW-LIFECYCLE.md", `---
+artifact_type: review
+review_id: REVIEW-LIFECYCLE
+status: accepted
+reviews: Retained subject provenance.
+---
+`),
+    ]);
+    const story = auditPlanningArtifacts([
+      source("planning/stories/STORY-UNBOUND-REVIEW.md", `---
+artifact_type: story
+story_id: STORY-UNBOUND-REVIEW
+top_level: true
+status: completed
+story_review_status: PASS
+---
+`),
+    ]);
+
+    expect(review.counts.review_projection_unbound).toBe(1);
+    expect(story.counts.review_projection_unbound).toBe(1);
+  });
+
+  it("propagates principal-only global blockers into dependent prerequisites", () => {
+    const blocked = auditPlanningArtifacts([
+      source("planning/blockers/BLOCKER-GLOBAL.md", `---
+artifact_type: blocker
+id: BLOCKER-GLOBAL
+status: active
+blocker_scope: global
+decision_authority: principal
+dependent_ids: [STORY-DEPENDENT]
+---
+`),
+      source("planning/stories/STORY-DEPENDENT.md", `---
+artifact_type: story
+story_id: STORY-DEPENDENT
+top_level: true
+status: planned
+---
+`),
+    ]);
+    const propagated = auditPlanningArtifacts([
+      source("planning/blockers/BLOCKER-GLOBAL.md", `---
+artifact_type: blocker
+id: BLOCKER-GLOBAL
+status: active
+blocker_scope: global
+decision_authority: principal
+dependent_ids: [STORY-DEPENDENT]
+---
+`),
+      source("planning/stories/STORY-DEPENDENT.md", `---
+artifact_type: story
+story_id: STORY-DEPENDENT
+top_level: true
+status: planned
+prerequisite_ids: [BLOCKER-GLOBAL]
+---
+`),
+    ]);
+
+    expect(blocked.counts.global_blocker_not_propagated).toBe(1);
+    expect(propagated.counts.global_blocker_not_propagated).toBe(0);
+  });
+
+  it("separates admission approval from product scope and terminal acceptance prose", () => {
+    const ambiguous = auditPlanningArtifacts([
+      source("planning/admission/ALLOWLIST-ONE.md", `---
+artifact_type: admission
+id: ALLOWLIST-ONE
+status: accepted
+---
+
+Acceptance pending QA.
+`),
+    ]);
+    const bounded = auditPlanningArtifacts([
+      source("planning/admission/ALLOWLIST-TWO.md", `---
+artifact_type: admission
+id: ALLOWLIST-TWO
+status: accepted
+approval_scope: admission_only
+---
+
+Admission accepted. Product scope remains independently governed.
+`),
+    ]);
+
+    expect(ambiguous.counts.admission_scope_ambiguous).toBe(1);
+    expect(ambiguous.counts.accepted_artifact_pending_prose).toBe(1);
+    expect(bounded.counts.admission_scope_ambiguous).toBe(0);
+    expect(bounded.counts.accepted_artifact_pending_prose).toBe(0);
+  });
+
+  it("rejects stale designated current-state snapshots and accepts machine-derived projections", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-current-binding-"));
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main", repository]);
+      execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
+      execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      writeFileSync(join(repository, "README.md"), "fixture\n");
+      execFileSync("git", ["-C", repository, "add", "README.md"]);
+      execFileSync("git", ["-C", repository, "commit", "-q", "-m", "fixture"]);
+      writeFileSync(join(repository, "CURRENT.md"), `---
+artifact_type: maintenance
+maint_id: CURRENT-BINDING
+title: Current binding
+status: active
+timezone: UTC
+designation: current_state
+current_commit: ${"a".repeat(40)}
+current_tree: ${"b".repeat(40)}
+---
+`);
+      expect(auditPlanningRepository(repository).counts.current_projection_stale).toBe(1);
+
+      writeFileSync(join(repository, "CURRENT.md"), `---
+artifact_type: maintenance
+maint_id: CURRENT-BINDING
+title: Current binding
+status: active
+timezone: UTC
+designation: current_state
+current_projection_source: machine
+current_projection_command: mister-clean inspect repository-object . --json
+---
+`);
+      expect(auditPlanningRepository(repository).counts.current_projection_stale).toBe(0);
+    } finally {
+      rmSync(repository, { force: true, recursive: true });
+    }
+  });
+
+  it("does not promote an inactive reference sequence into planning debt", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-reference-plan-"));
+    try {
+      mkdirSync(join(repository, "references"), { recursive: true });
+      writeFileSync(join(repository, "references", "historical-spec.md"), `# Historical contract
+
+Status: approved reference
+
+## Implementation sequence
+
+1. Historical example only.
+`);
+
+      const result = auditPlanningRepository(repository);
+      expect(result.status).toBe("not_applicable");
+      expect(result.candidate_probe_count).toBe(0);
+      expect(result.counts.planning_surface_undiscovered).toBe(0);
+    } finally {
+      rmSync(repository, { force: true, recursive: true });
+    }
+  });
+
+  it("exempts a superseded partial acceptance record from live pending-leg shape", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/reviews/REVIEW-DISCHARGED.md", `---
+artifact_type: review
+review_id: REVIEW-DISCHARGED
+status: superseded
+verdict: partial
+---
+`),
+    ]);
+    expect(result.counts.acceptance_partial_malformed ?? 0).toBe(0);
+  });
+
+  it("resolves a struck-through relationship row as retired", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/active/EPIC-WITH-TOMBSTONE.md", `---
+artifact_type: epic
+epic_id: EPIC-WITH-TOMBSTONE
+status: active
+---
+| Story | Status |
+|-------|--------|
+| LIVE-STORY | Active |
+| ~~RETIRED-STORY~~ | -- |
+`),
+      source("planning/active/LIVE-STORY.md", `---
+artifact_type: story
+story_id: LIVE-STORY
+parent_id: EPIC-WITH-TOMBSTONE
+status: active
+---
+`),
+      source("planning/archive/RETIRED-STORY.md", `---
+artifact_type: story
+story_id: RETIRED-STORY
+parent_id: EPIC-WITH-TOMBSTONE
+status: archived
+---
+`),
+    ]);
+    expect(result.counts.planning_relationship_unresolved ?? 0).toBe(0);
+    expect(result.counts.planning_relationship_conflict ?? 0).toBe(0);
+  });
+
+  it("normalizes archived canonical artifact types and governance validator code", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/active/PARENT-EPIC.md", `---
+artifact_type: epic
+epic_id: PARENT-EPIC
+status: active
+---
+`),
+      source("planning/stories/RETIRED-VIA-TYPE.md", `---
+artifact_type: archived_story
+story_id: RETIRED-VIA-TYPE
+parent_id: PARENT-EPIC
+status: archived
+---
+`),
+      source("planning/governance/check-something.py", "#!/usr/bin/env python3\nprint('gate')\n"),
+      source("planning/governance/check-something.ts", "export const gate = 1;\n"),
+    ]);
+    expect(result.counts.planning_relationship_conflict ?? 0).toBe(0);
+    expect(result.counts.planning_input_unparsed ?? 0).toBe(0);
   });
 });

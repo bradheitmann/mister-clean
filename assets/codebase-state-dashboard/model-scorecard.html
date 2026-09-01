@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en" data-style="ridgeline">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Mister Clean · Agent Qualification Scorecard</title>
+  <link rel="icon" href="./product-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./dashboard-tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--okoa-semantic-surface-default); color: var(--okoa-semantic-fg1); font-family: var(--okoa-sans); font-size: var(--t-body); line-height: 1.6; }
+    [hidden] { display: none !important; }
+    a { color: inherit; text-decoration-thickness: var(--okoa-border-hair); text-underline-offset: var(--okoa-space-1); }
+    a:hover { text-decoration-thickness: var(--okoa-border-thick); }
+    :where(a, button, input, select, summary):focus-visible { outline: var(--okoa-focus-ring-width) solid var(--okoa-focus-ring-color); outline-offset: var(--okoa-focus-ring-offset); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2 { font-family: var(--okoa-serif); font-weight: var(--w-medium); }
+    h1 { max-width: 12ch; margin-bottom: var(--okoa-space-5); font-size: var(--t-display-xl); line-height: 1; letter-spacing: var(--tr-tight); }
+    h2 { margin-bottom: var(--okoa-space-5); font-size: var(--t-display-l); line-height: 1.04; }
+    h3 { font-family: var(--okoa-sans); font-size: var(--t-body); font-weight: var(--w-semibold); line-height: 1.3; }
+    .skip-link:not(:focus) { position: absolute; width: var(--okoa-grid-hairline-weight); height: var(--okoa-grid-hairline-weight); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .skip-link:focus { display: inline-flex; min-height: var(--okoa-touch-target-min); align-items: center; margin: var(--okoa-space-2); border: var(--okoa-border-thick) solid var(--okoa-semantic-border-accent); background: var(--okoa-semantic-surface-default); padding-inline: var(--okoa-space-4); }
+    .shell { width: min(calc(100% - (var(--okoa-space-8) * 2)), var(--okoa-container-xl)); margin-inline: auto; }
+    .masthead { border-bottom: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); padding-block: var(--okoa-space-10); }
+    .masthead-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.34fr); gap: var(--okoa-space-8); align-items: end; }
+    .masthead-grid > * { min-width: 0; }
+    .product-identity { display: inline-flex; align-items: center; gap: var(--okoa-space-2); margin-bottom: var(--okoa-space-4); color: var(--okoa-semantic-fg1); font-family: var(--okoa-mono); font-size: var(--t-fine); font-weight: var(--w-medium); letter-spacing: var(--tr-caps); text-transform: uppercase; }
+    .product-mark { display: block; width: var(--okoa-space-6); height: var(--okoa-space-6); flex: none; }
+    .eyebrow, .label, th, .snapshot, .filter-label { font-family: var(--okoa-mono); font-size: var(--t-label); font-weight: var(--w-medium); letter-spacing: var(--tr-caps); text-transform: uppercase; }
+    .eyebrow { margin-bottom: var(--okoa-space-4); color: var(--okoa-semantic-fg-accent); }
+    .lede { max-width: var(--okoa-container-prose); margin-bottom: 0; color: var(--okoa-semantic-fg2); font-size: var(--t-body); line-height: 1.5; }
+    .snapshot { display: grid; min-width: 0; gap: var(--okoa-space-2); border-left: var(--okoa-grid-hairline-weight) solid var(--okoa-grid-hairline-color); padding-left: var(--okoa-space-5); color: var(--okoa-semantic-fg2); overflow-wrap: anywhere; }
+    .snapshot strong { color: var(--okoa-semantic-fg1); font-weight: var(--w-semibold); }
+    .view-nav { position: sticky; top: 0; border-bottom: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); background: var(--okoa-semantic-surface-default); }
+    .view-nav .shell { display: flex; min-height: var(--okoa-touch-target-min); align-items: stretch; gap: var(--okoa-space-5); overflow-x: auto; }
+    .view-nav a { display: inline-flex; min-height: var(--okoa-touch-target-min); align-items: center; white-space: nowrap; font-family: var(--okoa-mono); font-size: var(--t-fine); text-decoration: none; }
+    .view-nav a[aria-current="page"] { border-bottom: var(--okoa-border-thick) solid var(--okoa-semantic-border-accent); }
+    main { padding-block: var(--okoa-space-8) var(--okoa-space-section); }
+    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--okoa-space-3); }
+    .card { border: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); background: var(--okoa-semantic-surface-default); padding: var(--okoa-space-5); transition: border-color var(--okoa-motion-default) var(--okoa-ease-standard), box-shadow var(--okoa-motion-default) var(--okoa-ease-standard), transform var(--okoa-motion-default) var(--okoa-ease-standard); }
+    @media (hover: hover) and (pointer: fine) { .card:hover { border-color: var(--okoa-semantic-border-accent); box-shadow: var(--okoa-elevation-hover); transform: translateY(calc(var(--okoa-space-1) * -1)); } }
+    .metric { min-height: 10rem; display: flex; flex-direction: column; justify-content: space-between; }
+    .metric-value { display: block; margin-block: var(--okoa-space-3); font-family: var(--okoa-mono); font-size: var(--t-title); font-weight: var(--w-medium); font-variant-numeric: tabular-nums; }
+    .metric-note, .method, .caveat { margin-bottom: 0; color: var(--okoa-semantic-fg2); font-size: var(--t-fine); line-height: 1.5; }
+    .section { display: grid; grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr); gap: var(--okoa-space-8); padding-top: var(--okoa-space-section); }
+    .rail { position: sticky; top: calc(var(--okoa-touch-target-min) + var(--okoa-space-5)); align-self: start; }
+    .rail b { display: block; color: var(--okoa-semantic-fg-accent); font-family: var(--okoa-mono); font-size: var(--t-display-l); font-weight: var(--w-medium); }
+    .rail span { font-family: var(--okoa-mono); font-size: var(--t-label); letter-spacing: var(--tr-caps); text-transform: uppercase; }
+    .content { min-width: 0; }
+    .two-up { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--okoa-space-4); }
+    .production-summary { display: grid; grid-template-columns: minmax(0, 0.65fr) minmax(0, 1fr); gap: var(--okoa-space-4); }
+    .production-count { min-height: 15rem; display: flex; flex-direction: column; justify-content: space-between; border-left: var(--okoa-border-thick) solid var(--okoa-semantic-border-accent); background: var(--okoa-semantic-surface-alt); }
+    .production-count strong { display: block; font-family: var(--okoa-mono); font-size: var(--t-display-xl); font-weight: var(--w-medium); font-variant-numeric: tabular-nums; }
+    .gate-list { display: grid; gap: var(--okoa-space-3); margin: 0; padding: 0; list-style: none; }
+    .gate-list li { border-bottom: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); padding-bottom: var(--okoa-space-3); }
+    .gate-list strong { display: block; margin-bottom: var(--okoa-space-1); font-weight: var(--w-semibold); }
+    .candidate-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--okoa-space-4); margin-top: var(--okoa-space-4); }
+    .candidate-card { display: grid; gap: var(--okoa-space-3); }
+    .candidate-card h3, .candidate-card p { margin-bottom: 0; }
+    .trial-progress { width: 100%; height: var(--okoa-space-2); accent-color: var(--okoa-signal-pass); }
+    .trial-progress[aria-invalid="true"] { accent-color: var(--okoa-signal-risk); }
+    .band-stack { display: flex; min-height: var(--okoa-space-5); margin-block: var(--okoa-space-5); overflow: hidden; background: var(--okoa-semantic-surface-alt); }
+    .band-segment { transform-origin: left; animation: mc-band-draw var(--okoa-dataviz-draw-duration) var(--okoa-ease-out) both; }
+    .band-qualified { background: var(--okoa-signal-pass); }
+    .band-promising { background: var(--okoa-signal-caution); }
+    .band-insufficient { background: var(--okoa-semantic-fg3); }
+    .band-failed { background: var(--okoa-signal-risk); }
+    .legend { display: flex; flex-wrap: wrap; gap: var(--okoa-space-4); }
+    .legend-item { display: inline-flex; align-items: center; gap: var(--okoa-space-2); font-family: var(--okoa-mono); font-size: var(--t-fine); }
+    .legend-swatch { width: var(--okoa-space-3); height: var(--okoa-space-3); border: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); }
+    .role-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--okoa-space-4); }
+    .role-card { min-height: 17rem; display: flex; flex-direction: column; }
+    .role-card h3 { margin-block: var(--okoa-space-4) var(--okoa-space-2); }
+    .role-card .role-tuple { font-family: var(--okoa-mono); font-size: var(--t-fine); color: var(--okoa-semantic-fg2); }
+    .role-card .caveat { margin-top: auto; padding-top: var(--okoa-space-5); }
+    .chip { display: inline-flex; width: fit-content; min-height: var(--okoa-space-5); align-items: center; border: var(--okoa-border-hair) solid currentColor; border-radius: var(--okoa-radii-pill); padding-inline: var(--okoa-space-3); font-family: var(--okoa-mono); font-size: var(--t-fine); }
+    .chip-qualified { color: var(--okoa-signal-pass); }
+    .chip-promising { color: var(--okoa-signal-caution); }
+    .chip-insufficient { color: var(--okoa-semantic-fg3); }
+    .chip-failed { color: var(--okoa-signal-risk); }
+    .table-tools { display: grid; gap: var(--okoa-space-4); margin-bottom: var(--okoa-space-3); }
+    .enhancement-panel { border: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); background: var(--okoa-semantic-surface-alt); padding: var(--okoa-space-4); }
+    .filter-group { display: grid; grid-template-columns: minmax(15rem, 1.4fr) repeat(2, minmax(12rem, 0.7fr)) auto; gap: var(--okoa-space-3); align-items: end; }
+    .filter-control { display: grid; gap: var(--okoa-space-1); }
+    .filter-control input, .filter-control select, .reset-button { min-height: var(--okoa-touch-target-min); border: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); border-radius: var(--okoa-control-radius); background: var(--okoa-semantic-surface-default); color: var(--okoa-semantic-fg1); padding-inline: var(--okoa-space-3); font: inherit; }
+    .reset-button { cursor: pointer; font-weight: var(--w-semibold); }
+    .reset-button:hover { border-color: var(--okoa-semantic-border-accent); }
+    .results-status { margin-top: var(--okoa-space-3); }
+    .table-wrap { overflow-x: auto; border: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); }
+    table { width: 100%; min-width: var(--okoa-container-xl); border-collapse: collapse; }
+    caption { padding: var(--okoa-space-3); text-align: left; color: var(--okoa-semantic-fg2); font-size: var(--t-fine); }
+    th, td { border-bottom: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); padding: var(--okoa-space-3); text-align: left; vertical-align: top; }
+    th { background: var(--okoa-component-table-header-bg); color: var(--okoa-component-table-header-text); }
+    td { font-size: var(--t-body-sm); line-height: 1.55; }
+    td:nth-child(3), td:nth-child(4), td:nth-child(5) { font-family: var(--okoa-mono); font-variant-numeric: tabular-nums; }
+    .tuple-name { display: block; font-family: var(--okoa-sans); font-size: var(--t-body); font-weight: var(--w-semibold); }
+    .tuple-meta { display: block; margin-block: var(--okoa-space-1) var(--okoa-space-2); color: var(--okoa-semantic-fg3); font-family: var(--okoa-mono); font-size: var(--t-fine); }
+    .qualification-state, .trial-count { display: block; margin-bottom: var(--okoa-space-2); color: var(--okoa-semantic-fg2); font-family: var(--okoa-mono); font-size: var(--t-fine); }
+    .identity-copy { max-width: 34rem; overflow-wrap: anywhere; }
+    .evidence-list { margin: var(--okoa-space-2) 0 0; padding-left: var(--okoa-space-5); }
+    .evidence-list li { margin-bottom: var(--okoa-space-1); overflow-wrap: anywhere; font-family: var(--okoa-mono); font-size: var(--t-fine); }
+    .comparison-grid, .gap-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--okoa-space-4); }
+    .comparison-grid .card, .gap-grid .card { min-height: 14rem; }
+    .identity-grid, .in-flight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--okoa-space-4); }
+    .static-status { display: grid; gap: var(--okoa-space-2); }
+    .static-status p { margin-bottom: 0; }
+    .method-band { margin-top: var(--okoa-space-section); border-left: var(--okoa-border-thick) solid var(--okoa-semantic-border-accent); background: var(--okoa-semantic-surface-alt); padding: var(--okoa-space-5); }
+    @keyframes mc-band-draw { from { transform: scaleX(0.02); } to { transform: scaleX(1); } }
+    @media (max-width: 1280px) { .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filter-group { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 1024px) { .masthead-grid, .section { grid-template-columns: 1fr; } .rail { position: static; } .production-summary { grid-template-columns: 1fr; } .candidate-grid, .comparison-grid, .gap-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) {
+      .shell { width: min(calc(100% - (var(--okoa-space-5) * 2)), var(--okoa-container-xl)); }
+      .summary-grid, .two-up, .filter-group { grid-template-columns: minmax(0, 1fr); }
+      .table-tools, .enhancement-panel, .enhancement-panel form, .filter-control { min-width: 0; max-width: 100%; }
+      .filter-control input, .filter-control select, .reset-button { min-width: 0; width: 100%; max-width: 100%; }
+      .table-wrap { overflow: visible; border: 0; }
+      table, tbody, tr, td { display: block; min-width: 0; width: 100%; }
+      thead { position: fixed; inset: 0 auto auto 0; width: var(--okoa-grid-hairline-weight); height: var(--okoa-grid-hairline-weight); overflow: hidden; clip-path: inset(50%); transform: translate(-200vw, -200vh); }
+      tr { margin-bottom: var(--okoa-space-4); border: var(--okoa-border-hair) solid var(--okoa-semantic-border-default); padding: var(--okoa-space-3); }
+      td { display: grid; grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr); gap: var(--okoa-space-3); border: 0; padding: var(--okoa-space-2) 0; overflow-wrap: anywhere; }
+      td::before { content: attr(data-label); color: var(--okoa-semantic-fg2); font-family: var(--okoa-mono); font-size: var(--t-label); text-transform: uppercase; }
+    }
+    @media (max-width: 640px) { .role-grid, .identity-grid, .in-flight-grid { grid-template-columns: minmax(0, 1fr); } .in-flight-grid, .in-flight-grid .card, .in-flight-grid h3, .in-flight-grid p { min-width: 0; max-width: 100%; overflow-wrap: anywhere; } .masthead { padding-block: var(--okoa-space-8); } }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: var(--okoa-motion-instant) !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: var(--okoa-motion-instant) !important; }
+      .band-segment { animation: none !important; transform: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to scorecard evidence</a>
+  <header class="masthead">
+    <div class="shell masthead-grid">
+      <div>
+        <div class="product-identity">
+          <img class="product-mark" src="./product-mark.svg" alt="" width="32" height="32">
+          <span>Mister Clean</span>
+        </div>
+        <p class="eyebrow">Mister Clean / agent qualification instrument</p>
+        <p class="label">Public-safe example</p>
+        <h1>Trust is earned in receipts.</h1>
+        <p class="lede">Performance is a vector, not a leaderboard. Model, reasoning level, and harness remain separate treatments; every judgment carries its sample size and evidence boundary.</p>
+      </div>
+      <div class="snapshot" aria-label="Scorecard snapshot identity">
+        <strong>Example campaign</strong>
+        <span>Illustrative state</span>
+        <span>Three public-safe execution tuples</span>
+        <span>No private evidence is embedded</span>
+      </div>
+    </div>
+  </header>
+  <nav class="view-nav" aria-label="Scorecard sections"><div class="shell">
+    <a href="./index.html">Codebase state</a>
+    <a href="#production-cleared" aria-current="page">Production-cleared</a>
+    <a href="#qualification">Current evidence</a>
+    <a href="#roles">Role fit</a>
+    <a href="#evidence">Evidence matrix</a>
+  </div></nav>
+  <main id="main-content" class="shell">
+    <p class="method">Complete static example. JavaScript is optional: it adds local sorting and filtering but does not create, replace, or reinterpret evidence.</p>
+    <noscript><p class="method-band method">Interactive controls are unavailable. All execution tuples remain visible below in their original evidence order.</p></noscript>
+
+    <section id="production-cleared" class="section" aria-labelledby="production-title">
+      <div class="rail"><b>00</b><span>Production-cleared</span></div>
+      <div class="content">
+        <h2 id="production-title">Sample size opens the gate. It never closes the case.</h2>
+        <div class="production-summary">
+          <article class="card production-count"><span class="label">Production-cleared</span><strong>0</strong><p class="metric-note">0 of 3 execution tuples. Fifty terminal trials are necessary, not sufficient.</p></article>
+          <article class="card"><span class="label">Four conjunctive gates</span><ul class="gate-list"><li><strong>50 terminal trials</strong><span class="caveat">Measured per exact model × reasoning × harness tuple.</span></li><li><strong>No unresolved hard-gate disqualification</strong><span class="caveat">More samples cannot average away a safety, custody, or completion stop.</span></li><li><strong>Full-runner qualification</strong><span class="caveat">Role evidence and naturalistic success do not establish end-to-end runner fitness.</span></li><li><strong>Complete execution identity and provenance</strong><span class="caveat">An identity label without observation-producing provenance fails closed.</span></li></ul></article>
+        </div>
+        <div class="candidate-grid" aria-label="Highest-sample example tuples">
+          <article class="card candidate-card"><span class="label">Example Model B · high · Harness Two</span><h3>50/50 terminal trials</h3><progress class="trial-progress" value="50" max="50" aria-label="50 of 50 terminal trials" aria-invalid="true">50 of 50</progress><span class="chip chip-failed">Not cleared</span><p class="caveat">The sample floor is met, but an unresolved hard-gate disqualification and absent full-runner qualification still block clearance.</p></article>
+          <article class="card candidate-card"><span class="label">Example Model A · medium · Harness One</span><h3>12/50 terminal trials</h3><progress class="trial-progress" value="12" max="50" aria-label="12 of 50 terminal trials">12 of 50</progress><span class="chip chip-promising">Trial pending</span><p class="caveat">38 more terminal trials and full-runner qualification are required.</p></article>
+          <article class="card candidate-card"><span class="label">Example Model C · router auto · Harness Three</span><h3>0/50 terminal trials</h3><progress class="trial-progress" value="0" max="50" aria-label="0 of 50 terminal trials">0 of 50</progress><span class="chip chip-insufficient">Untested</span><p class="caveat">Low-confidence, unexercised evidence cannot support production routing.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="current-evidence-title" class="section">
+      <div class="rail"><b>01</b><span>Current evidence</span></div>
+      <div class="content"><h2 id="current-evidence-title">The field can nominate trials, not winners.</h2><div class="summary-grid"><article class="card metric"><span class="label">Observed tuples</span><strong class="metric-value">3</strong><p class="metric-note">Exact model × reasoning × harness combinations.</p></article><article class="card metric"><span class="label">Terminal tasks</span><strong class="metric-value">62</strong><p class="metric-note">Terminal evidence rows in this public-safe example.</p></article><article class="card metric"><span class="label">Production-cleared</span><strong class="metric-value">0</strong><p class="metric-note">All four gates must pass together.</p></article><article class="card metric"><span class="label">Hard-gate failures</span><strong class="metric-value">1</strong><p class="metric-note">Visible even after the sample floor is met.</p></article><article class="card metric"><span class="label">Under-sampled</span><strong class="metric-value">2</strong><p class="metric-note">Below 50 terminal trials per tuple.</p></article></div></div>
+    </section>
+
+     <section id="qualification" class="section" aria-labelledby="bands-title"><div class="rail"><b>02</b><span>Qualification</span></div><div class="content"><h2 id="bands-title">Confidence before rank.</h2><div class="two-up"><article class="card"><span class="label">Qualification distribution</span><div class="band-stack" role="img" aria-label="Zero qualified, one promising, one insufficient, one failed"><span class="band-segment band-promising" style="flex-basis:33.333%"></span><span class="band-segment band-insufficient" style="flex-basis:33.333%"></span><span class="band-segment band-failed" style="flex-basis:33.334%"></span></div><div class="legend"><span class="legend-item"><span class="legend-swatch band-qualified"></span>Production-cleared · 0</span><span class="legend-item"><span class="legend-swatch band-promising"></span>Trial pending · 1</span><span class="legend-item"><span class="legend-swatch band-insufficient"></span>Insufficient · 1</span><span class="legend-item"><span class="legend-swatch band-failed"></span>Hard-gate failure · 1</span></div></article><article class="card static-status"><span class="label">Interpretation</span><h3>Evidence remains bounded.</h3><p>One tuple has enough trials but is still not production-cleared. The qualification rule is conjunctive by design.</p><p class="caveat">This template is illustrative. Replace it with a content-addressed receipt manifest and campaign evidence before drawing conclusions.</p></article></div></div></section>
+
+    <section id="roles" class="section" aria-labelledby="roles-title"><div class="rail"><b>03</b><span>Role fit</span></div><div class="content"><h2 id="roles-title">Different work needs different teeth.</h2><div class="role-grid"><article class="card role-card"><span class="label">Implementer</span><h3>Example Model A · medium · Harness One</h3><span class="role-tuple">12 samples · moderate confidence</span><p>Useful bounded implementation evidence.</p><span class="chip chip-promising">Trial pending</span><p class="caveat">A full-runner trial remains absent.</p></article><article class="card role-card"><span class="label">Verifier</span><h3>Example Model B · high · Harness Two</h3><span class="role-tuple">50 samples · high confidence</span><p>High-volume verification evidence.</p><span class="chip chip-failed">Hard-gate failure</span><p class="caveat">Sample volume cannot erase a stop-gate failure.</p></article><article class="card role-card"><span class="label">Mister Clean runner</span><h3>No qualified tuple</h3><span class="role-tuple">0 cleared · low confidence</span><p>No exact tuple has passed every production gate.</p><span class="chip chip-insufficient">Untested</span><p class="caveat">Do not infer runner fitness from scouting.</p></article><article class="card role-card"><span class="label">Holdout</span><h3>Example Model B · high · Harness Two</h3><span class="role-tuple">Role evidence only</span><p>The technical work remains visible despite disqualification.</p><span class="chip chip-failed">Not cleared</span><p class="caveat">Retest is required after the hard-gate defect is paid.</p></article></div></div></section>
+
+    <section id="evidence" class="section" aria-labelledby="evidence-title">
+      <div class="rail"><b>04</b><span>Evidence</span></div>
+      <div class="content"><h2 id="evidence-title">Every tuple. Every counted task.</h2>
+        <div class="table-tools">
+          <p class="metric-note">Missing evidence means unexercised, not zero capability. Identity status, model, reasoning, and harness remain separate fields.</p>
+          <div class="enhancement-panel" hidden data-scorecard-controls>
+            <form data-scorecard-form>
+              <div class="filter-group">
+                <label class="filter-control"><span class="filter-label">Find evidence</span><input type="search" data-scorecard-search placeholder="Model, harness, task, or receipt"></label>
+                <label class="filter-control"><span class="filter-label">Qualification</span><select data-scorecard-qualification><option value="">All qualifications</option><option value="production_cleared">Production-cleared</option><option value="qualified">Full-runner qualified</option><option value="trial_pending">Trial pending</option><option value="role_evidence">Role evidence</option><option value="diagnostic_only">Diagnostic only</option><option value="untested">Untested</option><option value="disqualified">Disqualified</option></select></label>
+                <label class="filter-control"><span class="filter-label">Sort by</span><select data-scorecard-sort><option value="tasks">Task count · high to low</option><option value="model">Model · A to Z</option><option value="reasoning">Reasoning level · low to max</option><option value="harness">Harness · A to Z</option><option value="qualification">Qualification · strongest evidence first</option></select></label>
+                <button class="reset-button" type="reset">Reset</button>
+              </div>
+              <p class="results-status metric-note" role="status" aria-live="polite" aria-atomic="true" data-scorecard-results>3 of 3 execution tuples shown.</p>
+            </form>
+          </div>
+        </div>
+        <div class="table-wrap"><table><caption>Execution-tuple evidence. The complete table is the no-script fallback; controls only reorder or hide existing rows locally.</caption><thead><tr><th>Model × reasoning × harness</th><th>Qualification</th><th>Tasks</th><th>Terminal</th><th>Useful</th><th>Trial floor</th><th>Confidence</th><th>Identity provenance</th><th>Work exercised</th><th>Evidence and caveat</th></tr></thead><tbody data-scorecard-body>
+          <tr data-scorecard-row data-tuple-id="example-a" data-model="Example Model A" data-reasoning="medium" data-harness="Harness One" data-tasks="12" data-qualification="trial_pending" data-production-cleared="false" data-search="example model a medium harness one trial pending implementation receipt a identity bound moderate confidence"><td data-label="Tuple"><span class="tuple-name">Example Model A</span><span class="tuple-meta">medium · Harness One</span><span class="chip chip-promising">Trial pending</span></td><td data-label="Qualification"><span class="qualification-state">Trial pending</span></td><td data-label="Tasks">12</td><td data-label="Terminal">12</td><td data-label="Useful">10</td><td data-label="Trial floor"><span class="trial-count">12/50</span><progress class="trial-progress" value="12" max="50" aria-label="12 of 50 terminal trials">12 of 50</progress><p class="caveat">38 more terminal trials and full-runner qualification required.</p></td><td data-label="Confidence">moderate<p class="caveat">Broader controlled evidence required.</p></td><td data-label="Identity"><span class="qualification-state">identity_bound</span><p class="caveat identity-copy">Example runtime receipt binds model, reasoning, and harness.</p></td><td data-label="Work exercised">implementation, cleanup</td><td data-label="Evidence"><ul class="evidence-list"><li><a href="#sample-evidence-boundary">sample:receipt-a</a></li></ul><p class="caveat">Illustrative data only.</p></td></tr>
+          <tr data-scorecard-row data-tuple-id="example-b" data-model="Example Model B" data-reasoning="high" data-harness="Harness Two" data-tasks="50" data-qualification="disqualified" data-production-cleared="false" data-search="example model b high harness two disqualified qa holdout receipt b identity bound hard gate"><td data-label="Tuple"><span class="tuple-name">Example Model B</span><span class="tuple-meta">high · Harness Two</span><span class="chip chip-failed">Hard-gate failure</span></td><td data-label="Qualification"><span class="qualification-state">Disqualified</span></td><td data-label="Tasks">50</td><td data-label="Terminal">50</td><td data-label="Useful">49</td><td data-label="Trial floor"><span class="trial-count">50/50</span><progress class="trial-progress" value="50" max="50" aria-label="50 of 50 terminal trials" aria-invalid="true">50 of 50</progress><p class="caveat">Floor met; unresolved hard gate and absent full-runner qualification still block clearance.</p></td><td data-label="Confidence">high</td><td data-label="Identity"><span class="qualification-state">identity_bound</span></td><td data-label="Work exercised">QA, holdout</td><td data-label="Evidence"><ul class="evidence-list"><li><a href="#sample-evidence-boundary">sample:receipt-b</a></li></ul><p class="caveat">Sample volume cannot erase a hard-gate failure.</p></td></tr>
+          <tr data-scorecard-row data-tuple-id="example-c" data-model="Example Model C" data-reasoning="router auto" data-harness="Harness Three" data-tasks="0" data-qualification="untested" data-production-cleared="false" data-search="example model c router auto harness three untested identity unbound low confidence"><td data-label="Tuple"><span class="tuple-name">Example Model C</span><span class="tuple-meta">router auto · Harness Three</span><span class="chip chip-insufficient">Untested</span></td><td data-label="Qualification"><span class="qualification-state">Untested</span></td><td data-label="Tasks">0</td><td data-label="Terminal">0</td><td data-label="Useful">0</td><td data-label="Trial floor"><span class="trial-count">0/50</span><progress class="trial-progress" value="0" max="50" aria-label="0 of 50 terminal trials">0 of 50</progress><p class="caveat">50 terminal trials and full-runner qualification required.</p></td><td data-label="Confidence">low<p class="caveat">Directional only.</p></td><td data-label="Identity"><span class="qualification-state">identity_unbound</span><p class="caveat identity-copy">No durable execution-tuple identity receipt.</p></td><td data-label="Work exercised">unexercised</td><td data-label="Evidence"><p class="caveat">No terminal evidence.</p></td></tr>
+        </tbody></table></div>
+      </div>
+    </section>
+    <aside id="sample-evidence-boundary" class="method-band method"><strong>Evidence boundary.</strong> This public-safe template is a derived projection that demonstrates the scorecard contract only. It does not establish runner fitness, replace candidate and verdict receipts, or authorize integration.</aside>
+  </main>
+  <script type="module">
+/* MISTER_CLEAN_SCORECARD_INTERACTIONS_START */
+/* Generated from model-scorecard-interactions.ts · SHA-256 64d3db8619cf9ef6a859a898138837c8dc19cdd42277472df9faca775e15c609. */
+// assets/codebase-state-dashboard/model-scorecard-interactions.ts
+var PRODUCTION_TRIAL_FLOOR = 50;
+var collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+var qualificationOrder = {
+  qualified: 0,
+  trial_pending: 1,
+  role_evidence: 2,
+  diagnostic_only: 3,
+  untested: 4,
+  disqualified: 5
+};
+function qualificationRank(value) {
+  return qualificationOrder[value] ?? 6;
+}
+function reasoningRank(value) {
+  const normalized = value.trim().toLocaleLowerCase("en-US");
+  if (/auto|router/u.test(normalized))
+    return 5;
+  if (/\blow\b/u.test(normalized))
+    return 0;
+  if (/\bmedium\b/u.test(normalized))
+    return 1;
+  if (/\bhigh\b/u.test(normalized) && !/xhigh|extra[ -]?high/u.test(normalized))
+    return 2;
+  if (/xhigh|extra[ -]?high/u.test(normalized))
+    return 3;
+  if (/\bmax\b/u.test(normalized))
+    return 4;
+  return 6;
+}
+function evaluateProductionClearance(input) {
+  const terminalTrials = Number.isFinite(input.terminalTrials) ? Math.max(0, Math.trunc(input.terminalTrials)) : 0;
+  const sampleFloorMet = terminalTrials >= PRODUCTION_TRIAL_FLOOR;
+  const hardGateClear = input.band !== "failed" && input.qualificationState !== "disqualified";
+  const runnerQualified = input.qualificationState === "qualified";
+  const identityComplete = input.identityStatus === "identity_bound" && typeof input.identityProvenance === "string" && input.identityProvenance.trim().length > 0;
+  const blockers = [];
+  if (!sampleFloorMet) {
+    blockers.push(`${PRODUCTION_TRIAL_FLOOR - terminalTrials} more terminal trials required`);
+  }
+  if (!hardGateClear)
+    blockers.push("unresolved hard-gate disqualification");
+  if (!runnerQualified)
+    blockers.push("full-runner qualification absent");
+  if (!identityComplete)
+    blockers.push("complete execution identity and provenance absent");
+  const warnings = [];
+  if (sampleFloorMet && (!hardGateClear || !runnerQualified || !identityComplete)) {
+    warnings.push("The 50-trial floor is met, but sample size alone never clears a tuple.");
+  } else if (!sampleFloorMet) {
+    warnings.push(`${terminalTrials}/${PRODUCTION_TRIAL_FLOOR} terminal trials; the sample floor is not met.`);
+  }
+  const confidence = input.confidence?.trim().toLocaleLowerCase("en-US") ?? "";
+  if (confidence.startsWith("low"))
+    warnings.push("Low-confidence evidence remains directional only.");
+  else if (confidence.startsWith("medium"))
+    warnings.push("Moderate confidence still requires broader controlled evidence.");
+  return {
+    cleared: sampleFloorMet && hardGateClear && runnerQualified && identityComplete,
+    terminalTrials,
+    requiredTrials: PRODUCTION_TRIAL_FLOOR,
+    blockers,
+    warnings
+  };
+}
+function sortScorecardEntries(entries, sortKey) {
+  return [...entries].sort((left, right) => {
+    let comparison = 0;
+    if (sortKey === "model")
+      comparison = collator.compare(left.model, right.model);
+    else if (sortKey === "reasoning") {
+      comparison = reasoningRank(left.reasoning) - reasoningRank(right.reasoning) || collator.compare(left.reasoning, right.reasoning);
+    } else if (sortKey === "harness")
+      comparison = collator.compare(left.harness, right.harness);
+    else if (sortKey === "tasks")
+      comparison = right.tasks - left.tasks;
+    else if (sortKey === "qualification") {
+      comparison = qualificationRank(left.qualification) - qualificationRank(right.qualification);
+    }
+    return comparison || collator.compare(left.model, right.model) || collator.compare(left.harness, right.harness) || (left.originalIndex ?? 0) - (right.originalIndex ?? 0);
+  });
+}
+function matchesScorecardFilters(entry, filters) {
+  const query = filters.query.trim().toLocaleLowerCase("en-US");
+  const searchable = (entry.searchText ?? [
+    entry.model,
+    entry.reasoning,
+    entry.harness,
+    entry.qualification
+  ].join(" ")).toLocaleLowerCase("en-US");
+  const qualificationMatches = !filters.qualification || (filters.qualification === "production_cleared" ? entry.productionCleared === true : entry.qualification === filters.qualification);
+  return qualificationMatches && (!query || searchable.includes(query));
+}
+function numberFromDataset(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function rowEntry(row, originalIndex) {
+  return {
+    id: row.dataset.tupleId ?? String(originalIndex),
+    model: row.dataset.model ?? "",
+    reasoning: row.dataset.reasoning ?? "",
+    harness: row.dataset.harness ?? "",
+    tasks: numberFromDataset(row.dataset.tasks),
+    qualification: row.dataset.qualification ?? "untested",
+    productionCleared: row.dataset.productionCleared === "true",
+    searchText: row.dataset.search ?? "",
+    originalIndex
+  };
+}
+function bootstrapScorecard(documentRoot = document) {
+  const tableBody = documentRoot.querySelector("[data-scorecard-body]");
+  const controls = documentRoot.querySelector("[data-scorecard-controls]");
+  const form = documentRoot.querySelector("[data-scorecard-form]");
+  const search = documentRoot.querySelector("[data-scorecard-search]");
+  const qualification = documentRoot.querySelector("[data-scorecard-qualification]");
+  const sort = documentRoot.querySelector("[data-scorecard-sort]");
+  const resultStatus = documentRoot.querySelector("[data-scorecard-results]");
+  if (!tableBody || !controls || !form || !search || !qualification || !sort || !resultStatus)
+    return;
+  const rows = Array.from(tableBody.querySelectorAll("[data-scorecard-row]"));
+  const records = rows.map((row, originalIndex) => ({ row, entry: rowEntry(row, originalIndex) }));
+  const apply = () => {
+    const sortKey = sort.value;
+    const ordered = sortScorecardEntries(records.map(({ entry }) => entry), sortKey);
+    const byId = new Map(records.map((record) => [record.entry.id, record]));
+    const fragment = documentRoot.createDocumentFragment();
+    let visible = 0;
+    for (const entry of ordered) {
+      const record = byId.get(entry.id);
+      if (!record)
+        continue;
+      const matches = matchesScorecardFilters(entry, {
+        query: search.value,
+        qualification: qualification.value
+      });
+      record.row.hidden = !matches;
+      if (matches)
+        visible += 1;
+      fragment.append(record.row);
+    }
+    tableBody.append(fragment);
+    resultStatus.textContent = `${visible} of ${records.length} execution tuples shown.`;
+  };
+  form.addEventListener("input", apply);
+  form.addEventListener("change", apply);
+  form.addEventListener("reset", () => requestAnimationFrame(apply));
+  controls.hidden = false;
+  documentRoot.documentElement.classList.add("scorecard-enhanced");
+  apply();
+}
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => bootstrapScorecard(), { once: true });
+  } else {
+    bootstrapScorecard();
+  }
+}
+export {
+  PRODUCTION_TRIAL_FLOOR,
+  bootstrapScorecard,
+  evaluateProductionClearance,
+  matchesScorecardFilters,
+  qualificationRank,
+  reasoningRank,
+  sortScorecardEntries
+};
+/* MISTER_CLEAN_SCORECARD_INTERACTIONS_END */
+  </script>
+</body>
+</html>

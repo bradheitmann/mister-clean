@@ -1,0 +1,3 @@
+# Repository-local case-study identifiers forbidden from the public archive.
+# The scanner is generic; other repositories provide their own newline list.
+OKGO

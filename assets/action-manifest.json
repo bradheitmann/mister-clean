@@ -4,7 +4,7 @@
   "execution_state": "authorized",
   "repo": {
     "id": "<portable repository identity, e.g. owner/name>",
-    "commit": "<commit or working-tree snapshot>"
+    "commit": "0000000000000000000000000000000000000000"
   },
   "mode": "CLOSE",
   "request_ref": "<current Mister Clean invocation>",

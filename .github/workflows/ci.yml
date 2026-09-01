@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -13,16 +14,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.2
         with:
           bun-version: 1.4.0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 11.0.3
           run_install: false
-      - run: bun install --frozen-lockfile
-      - run: bun run check
+      - name: Reconstruct and verify the exact candidate in one clean capsule
+        run: pnpm run ci:check
+      - name: Verify exact, read-only tagged release archive
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/prepare_release_archive.mjs --destination "$RUNNER_TEMP/mister-clean-release"
+      - name: Retain tagged release archive and receipt
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mister-clean-${{ github.ref_name }}-verified-release
+          path: ${{ runner.temp }}/mister-clean-release/
+          if-no-files-found: error

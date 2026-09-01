@@ -35,13 +35,20 @@ untested whole.
 - **Independent verifier:** tests a candidate or combined object it did not
   implement. Verification does not authorize it to mutate the worker's lane.
 
+Role authority survives continuation and compaction unchanged. A `continue`
+message resumes the assigned task; it never converts a read-only verifier into
+a writer, expands its read set, or grants repository repair authority. If a
+read-only lane writes anyway, freeze it immediately, preserve the exact diff
+and partial result, mark the receipt authority-contaminated, and require a new
+independent verifier. Do not let a useful finding launder the ownership breach.
+
 Mister Clean may act as dispatcher/integrator in a single-agent close. During a
 larger project, the project orchestrator normally dispatches while Mister Clean
 audits the transaction and refuses false closure.
 
 ## Admission gate before the first write
 
-Before any modifying command, commit, or generated repository artifact:
+Before a lane's first modifying command, commit, or generated repository artifact:
 
 1. Re-read every worktree, branch, owner claim, and observed writer.
 2. Prove the worker has a distinct owned worktree and branch. The shared
@@ -60,10 +67,51 @@ object, or push it merely because the operator asked to keep the remote current.
 The push authorization remains valid after the object is accepted; target
 verification is part of executing that authorization correctly.
 
+Classify Git commands by effects, not by the operator's intent. `git
+write-tree`, index refreshes, worktree administration, and object/ref probes
+may acquire locks or write object-database state even when invoked only to
+"read" a candidate. They belong to the owning write lane and run sequentially.
+A transient `index.lock` collision invalidates that observation; remove no lock
+by assumption, first prove the owning process is gone and the index/tree bytes
+are unchanged, then repeat the probe once under exclusive custody.
+
+## Protected-read custody
+
+Protected holdout, evaluator, secret, and sealed-evidence bodies are a read
+boundary, not a prompt preference. Before admitting any lane that must remain
+blind:
+
+1. Enumerate protected bodies, separately exposed metadata projections, and
+   every planned read/search/gate root.
+2. Expand globs and batch inputs. A recursive root that is an ancestor of a
+   protected body is forbidden even when the search term appears harmless.
+   Exclusion syntax is tool-specific: a Git pathspec is not an `rg` glob, and
+   an accepted command line is not proof of the files it will read. Before the
+   substantive command, use that exact tool's native file-list/dry-run mode to
+   materialize the read set and reject it if any protected path appears.
+3. Externalize protected bodies from the lane or enforce a filesystem/harness
+   deny boundary. Sparse visibility or a path-guard may prevent accidental
+   traversal, but adversarial independence requires a boundary the actor
+   cannot override. A prose-only prohibition is never sufficient custody.
+4. Give native gates only the authenticated metadata projection they actually
+   require. If a gate cannot run without protected scenario, criteria,
+   verdict, or execution content, the dispatch contract is impossible and the
+   lane stays unadmitted.
+5. Bind the enforcement mode and its evidence in the lane receipt. Check it
+   again after continuation, harness restart, worktree replacement, or scope
+   expansion.
+
+If protected bytes are exposed, stop immediately. Preserve the candidate and
+the exact exposure, revoke the actor's positive authority for the affected
+implementation/review, and assign an uncontaminated replacement. The exposed
+actor's technical observations may remain diagnostic evidence, but cannot
+certify the candidate. Repeating the same warning to a new actor without
+installing the missing boundary is a process-defect loop, not remediation.
+
 ## The canonical record
 
-Do not create a second queue or private coordination database. Use
-`action-manifest.json` schema 1.2:
+Do not create a second queue or private coordination database. Generic
+coordination and operation history use `action-manifest.json` schema 1.2:
 
 - `coordination` records dispatcher, integrator, target expectation, policy,
   versioned coordination domains, and the current lane registry.
@@ -72,8 +120,10 @@ Do not create a second queue or private coordination database. Use
   must already appear in the array.
 - `git_integrate` actions carry the compare-and-swap attempt and result.
 - `planning_record_update` actions carry one atomic projection transaction.
-- GUARD manifests carry the exact staged tree, all role receipts, deterministic
-  gates, no-harm receipt, and commit-barrier state.
+- Every newly prepared GUARD closeout is `closeout_guard` schema 1.3 from
+  initialization, reuses these schema-1.2 coordination semantics, and carries
+  the exact staged tree, role receipts, deterministic gates, no-harm receipt,
+  and commit-barrier state.
 - `git_push` actions carry the release barrier and remote compare-and-swap
   observation. A push is never inferred safe from a generic action receipt.
 
@@ -109,7 +159,14 @@ require `jj`.
 Schema 1.0 remains readable only with
 `legacy_schema_acknowledged: true`; schema 1.1 retains string-valued
 `collision_keys` for prior records. Neither silently inherits the stale-plan
-protections that schema 1.2 records. New runs use 1.2.
+protections that schema 1.2 records. New coordination runs use 1.2.
+
+Schema 1.3 does not replace the schema-1.2 operation graph. Its
+initialized/closed state needs no external inputs. Live passed/open or
+crossed/executed validation requires separately retained accepted-evaluator and
+guard-authority files; live schema-1.2 open/crossed authority is closed. Never
+copy either external file inline and treat the copy as authority; the validator
+must load and recheck both against the live repository.
 
 ## Route by boundaries, not filenames alone
 
@@ -137,6 +194,15 @@ domain only when all claims are read-only or symmetric commutativity is
 explicitly proven by the same digest-bound policy. Otherwise combine the work
 into one coherent task or serialize it. A wave is a concurrency ceiling, never
 a new completion prerequisite. Do not create work merely to fill seats.
+
+Execution resources are coordination domains even when all lanes are read-only.
+Declare expensive shared-machine gates such as `full-root-suite`,
+`vendored-tree-hash`, and `browser` before dispatch; admit one owner per domain.
+Record planned concurrency, actual start/end intervals, overlap, and machine
+conditions in the evidence. A timeout during overlap is `resource_contention`
+or `unestablished`, not candidate failure, until the exact gate reruns
+quiescently. Do not raise the timeout as the first remedy, and do not use the
+queue as permission to skip payment.
 
 ## Versioned coordination domains — serialize the plan, not only the write
 
@@ -210,6 +276,8 @@ operation. An operation closes only when:
 
 - its output object is recorded;
 - its stated acceptance and no-harm comparators ran on that output;
+- every changed repository object has its own bound post-state native-gate
+  control, even when the operation was interrupted;
 - cleanup-introduced open debt is zero;
 - its evidence is time- and object-bound; and
 - any shared projection changed by the operation moved atomically.
@@ -305,14 +373,26 @@ elapsed time, mutations, ownership violations, integration regressions, and
 survival after merge. Hard-gate failures override weighted scores. Never rank a
 scout as a full closeout runner without full-runner evidence.
 
-The dispatcher stamps model identity and runtime provenance from observed
-execution state. Do not consume a worker's task budget asking it to reverse
-engineer its own model card, and never let the worker infer an unknown reasoning
-level or provider fallback. A declared experiment deadline reached without the
-required artifact is a completion failure even when the visible reasoning
-looked promising. A recoverable Pi total-time-budget pause is not that
-deadline: resume it in place with `continue` plus Enter and attribute the pause
-to the harness, not the model.
+The dispatcher stamps model identity and runtime provenance from externally
+observed execution state immediately before dispatch and immediately before
+scoring. A pane/tab title is only an intended label; worker self-report is only
+an untrusted comparison. Bind model, harness, reasoning, route, harness session,
+and process instance to an evidence-backed identity lease. Restart, relaunch,
+provider fallback, route/configuration change, or session/process replacement
+invalidates that lease. Preserve dispatcher observations and any worker
+self-report as separate evidence fields. If they disagree, the task is
+`identity_unbound`: keep its technical findings, but do not attribute its
+performance to either model tuple or use it in a model ranking until an
+independent runtime receipt resolves the discrepancy. A mismatch blocks a new
+dispatch; a missing or changed scoring-time readback contributes zero quality
+credit. Do not consume a
+worker's task budget asking it to reverse engineer its own model card, and
+never let the worker infer an unknown reasoning level or provider fallback. A
+declared experiment deadline reached without the required artifact is a
+completion failure even when the visible reasoning looked promising. A
+recoverable Pi total-time-budget pause is not that deadline: resume it in place
+with `continue` plus Enter and attribute the pause to the harness, not the
+model.
 
 Reasoning level is part of execution identity, not a monotonic quality setting.
 Use the progressive model-by-reasoning trial in

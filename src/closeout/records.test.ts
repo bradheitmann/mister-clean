@@ -5,6 +5,7 @@ import {
   validateManifest,
   validateReport,
 } from "./records.js";
+import { canonicalJson, sha256Bytes } from "../control-plane/runtime/authority.js";
 
 type Dict = Record<string, unknown>;
 
@@ -13,6 +14,7 @@ const commit = "a".repeat(40);
 const domainDigest = "b".repeat(64);
 const candidateTree = "e".repeat(40);
 const evidenceRef = { path: "evidence.json", sha256: digest };
+const sealReceipt = (receipt: Dict): Dict => { const { receipt_sha256: _ignored, ...content } = receipt; return { ...receipt, receipt_sha256: sha256Bytes(canonicalJson(content)) }; };
 
 function report(overrides: Dict = {}): Dict {
   const dimensions: Dict = {};
@@ -165,7 +167,7 @@ function coordinationV12(lanes: Dict[], keys = ["planning-projections", "integra
 }
 
 function operation(id: string, laneValue: Dict, overrides: Dict = {}): Dict {
-  return {
+  const value: Dict = {
     id,
     kind: "local_edit",
     target: `src/${laneValue.id}/${id}.ts`,
@@ -183,6 +185,25 @@ function operation(id: string, laneValue: Dict, overrides: Dict = {}): Dict {
     recorded_at: "2026-08-25T10:00:00Z",
     ...overrides,
   };
+  if (value.status === "executed" && value.outcome === undefined) {
+    const evidenceKind = value.kind === "git_push"
+      ? "remote_ref_resolution"
+      : value.kind === "git_commit"
+        ? "git_change"
+        : "validation_result";
+    value.outcome = {
+      state: "verified",
+      evidence: [{
+        kind: evidenceKind,
+        object: `operation-${id}`,
+        command: "bun test",
+        result: "pass",
+        observed_at: "2026-08-25T10:00:01Z",
+        evidence_ref: evidenceRef,
+      }],
+    };
+  }
+  return value;
 }
 
 function guardReceipt(
@@ -192,35 +213,25 @@ function guardReceipt(
   finishedAt: string,
   overrides: Dict = {},
 ): Dict {
-  return {
-    id: `receipt-${role}`,
-    run_id: "run-1",
-    round_id: "round-1",
-    pod_id: "pod-1",
-    task_id: "task-1",
-    role,
-    actor,
-    actual_model: `model-${role}`,
-    reasoning_level: "high",
-    harness: `harness-${role}`,
-    session_id: `session-${role}`,
-    baseline_commit: commit,
-    candidate_tree: candidateTree,
-    prompt_sha256: digest,
-    policy_sha256: digest,
-    criteria_sha256: digest,
-    checks_sha256: digest,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    conclusion: "pass",
-    findings_total: 0,
-    findings_paid: 0,
-    unresolved: 0,
-    repository_mutated: false,
-    mutation_owner_transfer: null,
+  const misterCleanEvaluator = role === "mister_clean" ? {
+    package_name: "@bradheitmann/mister-clean",
+    version: "6.3.0",
+    release_state: "accepted_release",
+    registry_integrity: `sha512-${"A".repeat(86)}==`,
+    skill_sha256: digest,
+    executable_sha256: digest,
+    manifest_sha256: digest,
+    entrypoint: "bin/mister-clean.js",
+    resolved_package_root: "/opt/mister-clean/6.3.0",
+    resolved_at: "2026-08-25T10:02:30Z",
     evidence_ref: evidenceRef,
-    ...overrides,
-  };
+    accepted_release_ref: evidenceRef,
+  } : null;
+  return sealReceipt({
+    id: `receipt-${role}`, run_id: "run-1", round_id: "round-1", pod_id: "pod-1", task_id: "task-1", role, actor,
+    actual_model: `model-${role}`, reasoning_level: "high", harness: `harness-${role}`, session_id: `session-${role}`, baseline_commit: commit, candidate_tree: candidateTree,
+    prompt_sha256: digest, policy_sha256: digest, criteria_sha256: digest, checks_sha256: digest, started_at: startedAt, finished_at: finishedAt, conclusion: "pass", findings_total: 0, findings_paid: 0, unresolved: 0, repository_mutated: false, mutation_owner_transfer: null, mister_clean_evaluator: misterCleanEvaluator, evidence_ref: evidenceRef, ...overrides,
+  });
 }
 
 function guardRecord(overrides: Dict = {}): Dict {
@@ -255,12 +266,76 @@ function guardRecord(overrides: Dict = {}): Dict {
     commit_barrier: {
       state: "open",
       approved_tree: candidateTree,
-      receipt_ids: receipts.map((receipt) => receipt.id),
+      receipt_ids: receipts.map((receipt) => ({ receipt_id: receipt.id, receipt_sha256: receipt.receipt_sha256 })),
       opened_at: "2026-08-25T10:08:00Z",
       crossed_action_id: null,
     },
     ...overrides,
   };
+}
+
+function crossedGuardManifestV13(): Dict {
+  const resultCommit = "f".repeat(40);
+  const integrator = laneV12("integrator", "integration-target", {
+    role: "integrator",
+    task_id: "task-1",
+    write_paths: ["**/*"],
+  });
+  const guard = guardRecord({
+    status: "crossed",
+    authority: {
+      kind: "external_custody",
+      precommit_sha256: "a".repeat(64),
+      crossing_sha256: "b".repeat(64),
+    },
+  });
+  Object.assign(guard.commit_barrier as Dict, { state: "crossed", crossed_action_id: "OP-COMMIT" });
+  const receiptIds = structuredClone((guard.commit_barrier as Dict).receipt_ids);
+  const cas = {
+    compare_and_swap: true,
+    target_ref: "refs/heads/main",
+    expected_target_commit: commit,
+    observed_target_commit: commit,
+    candidate_commit: resultCommit,
+    result: "applied",
+    result_commit: resultCommit,
+    mutex: {
+      resource: "refs/heads/main",
+      holder_lane_id: "integrator",
+      lease_id: "lease-guard",
+      fencing_token: 1,
+      acquired_at: "2026-08-25T10:08:01Z",
+      mutation_observed_at: "2026-08-25T10:08:02Z",
+      expires_at: "2026-08-25T10:09:00Z",
+      released_at: "2026-08-25T10:08:03Z",
+    },
+  };
+  const action = operation("OP-COMMIT", integrator, {
+    kind: "git_commit",
+    target: "repository",
+    status: "executed",
+    before_object: commit,
+    after_object: resultCommit,
+    recorded_at: "2026-08-25T10:08:02Z",
+    guard_commit: {
+      candidate_tree: candidateTree,
+      commit: resultCommit,
+      commit_tree: candidateTree,
+      receipt_ids: receiptIds,
+      evidence_ref: evidenceRef,
+    },
+    cas,
+  });
+  return manifest({
+    schema_version: "1.3",
+    manifest_kind: "closeout_guard",
+    mode: "GUARD",
+    execution_state: "executed",
+    repo: { id: "example/repo", commit: resultCommit },
+    coordination: coordinationV12([integrator]),
+    guard,
+    actions: [action],
+  });
 }
 
 describe("validateReport", () => {
@@ -371,7 +446,7 @@ describe("validateManifest", () => {
 
   it("requires GUARD to use schema 1.2 exact-tree enforcement", () => {
     expect(validateManifest(manifest({ mode: "GUARD" }))).toContain(
-      "$.schema_version: GUARD requires schema 1.2 exact-tree enforcement",
+      "$.schema_version: GUARD requires schema 1.2 or closeout_guard schema 1.3 exact-tree enforcement",
     );
     expect(validateManifest(manifest({
       mode: "GUARD",
@@ -379,6 +454,117 @@ describe("validateManifest", () => {
       coordination: coordinationV12([]),
       guard: guardRecord(),
     }))).toEqual([]);
+  });
+
+  it("keeps the schema 1.3 closeout_guard discriminator two-way", () => {
+    const mislabeled = validateManifest(manifest({
+      schema_version: "1.3",
+      manifest_kind: "closeout_guard",
+      mode: "CLOSE",
+      coordination: coordinationV12([]),
+    }));
+    expect(mislabeled).toContain("$.mode: closeout_guard schema 1.3 requires GUARD mode");
+    expect(mislabeled).toContain("$.guard: closeout_guard schema 1.3 requires a guard object");
+    const missingKind = validateManifest(manifest({
+      schema_version: "1.3",
+      mode: "GUARD",
+      coordination: coordinationV12([]),
+      guard: guardRecord({ authority: { kind: "external_custody", precommit_sha256: null, crossing_sha256: null } }),
+    }));
+    expect(missingKind).toContain("$.manifest_kind: schema 1.3 closeout manifests require manifest_kind=closeout_guard");
+    const valid13 = validateManifest(manifest({
+      schema_version: "1.3",
+      manifest_kind: "closeout_guard",
+      mode: "GUARD",
+      coordination: coordinationV12([]),
+      guard: guardRecord({ authority: { kind: "external_custody", precommit_sha256: "a".repeat(64), crossing_sha256: null } }),
+    }));
+    expect(valid13).toEqual([]);
+  });
+
+  it("uses the canonical receipt id and rejects schema 1.3 receipt aliases", () => {
+    const value = manifest({
+      schema_version: "1.3",
+      manifest_kind: "closeout_guard",
+      mode: "GUARD",
+      coordination: coordinationV12([]),
+      guard: guardRecord({ authority: { kind: "external_custody", precommit_sha256: "a".repeat(64), crossing_sha256: null } }),
+    });
+    const receipt = (((value.guard as Dict).receipts as Dict[])[2]!);
+    receipt.receipt_id = "unselected-alias";
+    Object.assign(receipt, sealReceipt(receipt));
+    expect(validateManifest(value)).toContain(
+      "$.guard.receipts[2].receipt_id: unexpected field in schema 1.3 GUARD receipt",
+    );
+  });
+
+  it("requires every selected schema 1.3 receipt to bind the complete barrier tuple", () => {
+    const fields = ["run_id", "round_id", "pod_id", "task_id"] as const;
+    for (const field of fields) {
+      const value = manifest({
+        schema_version: "1.3",
+        manifest_kind: "closeout_guard",
+        mode: "GUARD",
+        coordination: coordinationV12([]),
+        guard: guardRecord({ authority: { kind: "external_custody", precommit_sha256: "a".repeat(64), crossing_sha256: null } }),
+      });
+      const receipts = (value.guard as Dict).receipts as Dict[];
+      const receipt = receipts[3]!;
+      receipt[field] = `different-${field}`;
+      Object.assign(receipt, sealReceipt(receipt));
+      const seal = (((value.guard as Dict).commit_barrier as Dict).receipt_ids as Dict[])[3]!;
+      seal.receipt_sha256 = receipt.receipt_sha256;
+      expect(validateManifest(value)).toContain(
+        "$.guard.commit_barrier.receipt_ids: all final receipts must bind the same run, round, pod, and task",
+      );
+    }
+  });
+
+  it("orders candidate mint, selected receipt completion, and barrier opening", () => {
+    const mintedLate = manifest({
+      mode: "GUARD",
+      schema_version: "1.2",
+      coordination: coordinationV12([]),
+      guard: guardRecord({ minted_at: "2026-08-25T10:01:01Z" }),
+    });
+    expect(validateManifest(mintedLate)).toContain(
+      "$.guard.commit_barrier.receipt_ids: guard.minted_at must not follow a selected receipt started_at",
+    );
+
+    const finishedLate = manifest({
+      mode: "GUARD",
+      schema_version: "1.2",
+      coordination: coordinationV12([]),
+      guard: guardRecord(),
+    });
+    const guard = finishedLate.guard as Dict;
+    const receipt = (guard.receipts as Dict[])[3]!;
+    receipt.finished_at = "2026-08-25T10:08:01Z";
+    Object.assign(receipt, sealReceipt(receipt));
+    (((guard.commit_barrier as Dict).receipt_ids as Dict[])[3]!).receipt_sha256 = receipt.receipt_sha256;
+    expect(validateManifest(finishedLate)).toContain(
+      "$.guard.commit_barrier.receipt_ids: every selected receipt must finish before the barrier opens",
+    );
+  });
+
+  it("binds crossed schema 1.3 receipt, action, and integrator tasks", () => {
+    const valid = crossedGuardManifestV13();
+    expect(validateManifest(valid)).toEqual([]);
+    const mismatch = structuredClone(valid) as Dict;
+    ((mismatch.actions as Dict[])[0]!).task_id = "other-task";
+    expect(validateManifest(mismatch)).toContain(
+      "$.guard.commit_barrier.receipt_ids: selected task_id must equal the crossed git_commit and integrator lane task_id",
+    );
+  });
+
+  it("rejects crossing action and CAS mutation times before the barrier opens", () => {
+    const value = crossedGuardManifestV13();
+    const action = (value.actions as Dict[])[0]!;
+    action.recorded_at = "2026-08-25T10:07:59Z";
+    (((action.cas as Dict).mutex as Dict).mutation_observed_at) = "2026-08-25T10:07:59Z";
+    const errors = validateManifest(value);
+    expect(errors).toContain("$.actions[0].recorded_at: crossed git_commit cannot precede guard.commit_barrier.opened_at");
+    expect(errors).toContain("$.actions[0].cas.mutex.mutation_observed_at: cannot precede guard.commit_barrier.opened_at");
   });
 
   it("requires an explicit acknowledgment when retaining legacy schema 1.0", () => {
@@ -400,6 +586,32 @@ describe("validateManifest", () => {
     const invalid = structuredClone(action) as Dict;
     (invalid.outcome as Dict).evidence = [{ kind: "git_change" }];
     expect(validateManifest(manifest({ execution_state: "executed", actions: [invalid] })).some(error => error.includes("digest-referenced execution evidence"))).toBe(true);
+  });
+
+  it("permits terminal history while the next authorized action is planned", () => {
+    const terminal = {
+      id: "A1", kind: "local_edit", target: "README.md", purpose: "pay the first debt", risk: "reversible_local",
+      authorization: { state: "granted", source: "skill_invocation", ref: "request-1" },
+      preconditions: ["baseline captured"], verification: ["result verified"], status: "executed",
+      outcome: { state: "verified", evidence: [{ kind: "git_change", object: "A1", command: "edit", result: "paid", observed_at: "2026-08-25T10:00:00Z", evidence_ref: evidenceRef }] },
+    };
+    const planned = {
+      id: "A2", kind: "local_edit", target: "SECURITY.md", purpose: "pay the next debt", risk: "reversible_local",
+      authorization: { state: "granted", source: "skill_invocation", ref: "request-1" },
+      preconditions: ["first action terminal"], verification: ["second result verified"], status: "planned",
+    };
+    expect(validateManifest(manifest({ actions: [terminal, planned] }))).toEqual([]);
+    const failed = structuredClone(terminal);
+    failed.status = "failed";
+    expect(validateManifest(manifest({ actions: [failed, planned] }))).toContain(
+      "$.actions: a failed action is terminal and must be the final manifest action",
+    );
+    expect(validateManifest(manifest({ actions: [terminal] }))).toContain(
+      "$.execution_state: authorized action history requires at least one planned action",
+    );
+    expect(validateManifest(manifest({ execution_state: "executed", actions: [] }))).toContain(
+      "$.execution_state: executed manifest requires at least one terminal action",
+    );
   });
 
   it("rejects prohibited, unknown, and unrecoverable actions", () => {
@@ -507,12 +719,31 @@ describe("validateManifest", () => {
   });
 
   it("blocks a push until the candidate has a direct producer, frozen writers, clean tree, zero red gates, and fresh remote CAS evidence", () => {
-    const integrator = lane("integrator", {
+    const integrator = laneV12("integrator", "integration-target", {
       role: "integrator", collision_keys: ["integration-target"], write_paths: ["**/*"],
     });
-    const candidate = "c".repeat(40);
+    const candidate = candidateTree;
+    const guard = guardRecord();
+    guard.baseline_commit = candidate;
+    for (const receipt of guard.receipts as Dict[]) {
+      receipt.baseline_commit = candidate;
+      Object.assign(receipt, sealReceipt(receipt));
+    }
+    (guard.commit_barrier as Dict).receipt_ids = (guard.receipts as Dict[]).map((receipt) => ({
+      receipt_id: receipt.id,
+      receipt_sha256: receipt.receipt_sha256,
+    }));
+    guard.status = "crossed";
+    Object.assign(guard.commit_barrier as Dict, { state: "crossed", crossed_action_id: "OP-1" });
     const commitAction = operation("OP-1", integrator, {
       kind: "git_commit", target: candidate, status: "executed", after_object: candidate,
+      guard_commit: {
+        candidate_tree: candidateTree,
+        commit: candidate,
+        commit_tree: candidateTree,
+        receipt_ids: (guard.commit_barrier as Dict).receipt_ids,
+        evidence_ref: evidenceRef,
+      },
     });
     const push = operation("OP-2", integrator, {
       kind: "git_push",
@@ -523,6 +754,7 @@ describe("validateManifest", () => {
       after_object: candidate,
       preconditions: ["remote head re-resolved", "writers frozen", "worktree clean"],
       verification: ["remote ref equals candidate", "terminal CI observed"],
+      status: "executed",
       push_gate: {
         intent: "minimal_ci_repair",
         remote_ref: "refs/heads/main",
@@ -545,9 +777,12 @@ describe("validateManifest", () => {
       },
     });
     const valid = manifest({
-      schema_version: "1.1",
+      schema_version: "1.2",
+      execution_state: "executed",
+      mode: "GUARD",
       repo: { id: "example/repo", commit: candidate },
-      coordination: coordination([integrator]),
+      coordination: coordinationV12([integrator]),
+      guard,
       actions: [commitAction, push],
     });
     expect(validateManifest(valid)).toEqual([]);
@@ -579,7 +814,7 @@ describe("validateManifest", () => {
     }));
     expect(missingParent.some(error => error.includes("parent must precede child"))).toBe(true);
 
-    const parent = operation("OP-1", writer);
+    const parent = operation("OP-1", writer, { status: "executed", after_object: commit });
     const staleCas = operation("OP-2", integrator, {
       kind: "git_integrate",
       target: "refs/heads/main",
@@ -617,8 +852,10 @@ describe("validateManifest", () => {
     (rejected.cas as Dict).result = "rejected_target_moved";
     rejected.status = "blocked";
     rejected.after_object = null;
+    delete rejected.outcome;
     expect(validateManifest(manifest({
       schema_version: "1.1",
+      execution_state: "executed",
       coordination: coordination([writer, integrator]),
       actions: [parent, rejected],
     }))).toEqual([]);
@@ -735,6 +972,7 @@ describe("validateManifest", () => {
     });
     const valid = manifest({
       schema_version: "1.2",
+      execution_state: "executed",
       coordination: coordinationV12([source, integrator]),
       actions: [integrate],
     });
@@ -778,7 +1016,7 @@ describe("validateManifest", () => {
       status: "executed", after_object: "d".repeat(40),
     });
     expect(validateManifest(manifest({
-      schema_version: "1.1", coordination: coordination([integrator]), actions: [integrate],
+      schema_version: "1.1", execution_state: "executed", coordination: coordination([integrator]), actions: [integrate],
     }))).toEqual([]);
 
     const expired = structuredClone(integrate) as Dict;
@@ -838,6 +1076,154 @@ describe("validateManifest", () => {
     expect(validateManifest(mutating).some((error) => error.includes("receipt that mutated the repository is stale"))).toBe(true);
   });
 
+  it("requires the selected Mister Clean receipt to bind a pinned accepted release", () => {
+    const base = manifest({
+      mode: "GUARD",
+      schema_version: "1.2",
+      coordination: coordinationV12([]),
+      guard: guardRecord(),
+    });
+
+    const missing = structuredClone(base) as Dict;
+    (((missing.guard as Dict).receipts as Dict[])[2]!).mister_clean_evaluator = null;
+    expect(validateManifest(missing).some((error) => error.includes("mister_clean_evaluator"))).toBe(true);
+
+    const candidate = structuredClone(base) as Dict;
+    const candidateEvaluator = ((((candidate.guard as Dict).receipts as Dict[])[2]!).mister_clean_evaluator as Dict);
+    candidateEvaluator.release_state = "candidate_shadow";
+    expect(validateManifest(candidate).some((error) => error.includes("pinned accepted release"))).toBe(true);
+
+    const forgedIntegrity = structuredClone(base) as Dict;
+    const forgedEvaluator = ((((forgedIntegrity.guard as Dict).receipts as Dict[])[2]!).mister_clean_evaluator as Dict);
+    forgedEvaluator.registry_integrity = "latest";
+    expect(validateManifest(forgedIntegrity).some((error) => error.includes("required npm sha512 integrity"))).toBe(true);
+
+    const lateIdentity = structuredClone(base) as Dict;
+    const lateEvaluator = ((((lateIdentity.guard as Dict).receipts as Dict[])[2]!).mister_clean_evaluator as Dict);
+    lateEvaluator.resolved_at = "2026-08-25T10:04:00Z";
+    expect(validateManifest(lateIdentity).some((error) => error.includes("resolved before the run starts"))).toBe(true);
+
+    const foreignRole = structuredClone(base) as Dict;
+    (((foreignRole.guard as Dict).receipts as Dict[])[0]!).mister_clean_evaluator = structuredClone(
+      ((((foreignRole.guard as Dict).receipts as Dict[])[2]!).mister_clean_evaluator),
+    );
+    expect(validateManifest(foreignRole).some((error) => error.includes("only the Mister Clean role"))).toBe(true);
+
+    const closeModeBypass = manifest({
+      mode: "CLOSE",
+      schema_version: "1.2",
+      coordination: coordinationV12([]),
+      actions: [{
+        id: "OP-UNGUARDED-COMMIT",
+        kind: "git_commit",
+        target: "refs/heads/main",
+        purpose: "attempt to bypass the exact-tree barrier",
+        risk: "reversible_local",
+        authorization: { state: "granted", source: "skill_invocation", ref: "request-1" },
+        preconditions: ["candidate staged"],
+        verification: ["commit tree checked"],
+        status: "planned",
+      }],
+    });
+    expect(validateManifest(closeModeBypass).some((error) => error.includes("every git_commit requires GUARD mode"))).toBe(true);
+  });
+
+  it("seals guard receipts and reconciles action status with execution evidence", () => {
+    const base = manifest({
+      mode: "GUARD",
+      schema_version: "1.2",
+      coordination: coordinationV12([]),
+      guard: guardRecord(),
+    });
+
+    const rewrittenReceipt = structuredClone(base) as Dict;
+    (((rewrittenReceipt.guard as Dict).receipts as Dict[])[0]!).actual_model = "rewritten-after-seal";
+    expect(validateManifest(rewrittenReceipt).some((error) => error.includes("receipt_sha256: must seal canonical receipt content"))).toBe(true);
+
+    const substitutedSeal = structuredClone(base) as Dict;
+    ((((substitutedSeal.guard as Dict).commit_barrier as Dict).receipt_ids as Dict[])[0]!).receipt_sha256 = "b".repeat(64);
+    expect(validateManifest(substitutedSeal).some((error) => error.includes("receipt seal does not match immutable guard receipt"))).toBe(true);
+
+    const writer = lane("writer", { state: "ready" });
+    const planned = operation("OP-PLANNED", writer);
+    const executedTop = manifest({
+      schema_version: "1.1",
+      execution_state: "executed",
+      coordination: coordination([writer]),
+      actions: [planned],
+    });
+    expect(validateManifest(executedTop).some((error) => error.includes("executed manifest requires terminal action status"))).toBe(true);
+
+    const forgedVerified = structuredClone(planned) as Dict;
+    forgedVerified.outcome = {
+      state: "verified",
+      evidence: [{
+        kind: "validation_result", object: "forged", command: "claim", result: "pass",
+        observed_at: "2026-08-25T10:00:01Z", evidence_ref: evidenceRef,
+      }],
+    };
+    expect(validateManifest(manifest({
+      schema_version: "1.1", coordination: coordination([writer]), actions: [forgedVerified],
+    })).some((error) => error.includes("verified outcome requires executed or failed"))).toBe(true);
+
+    const verifiedFailure = structuredClone(forgedVerified) as Dict;
+    verifiedFailure.status = "failed";
+    (((verifiedFailure.outcome as Dict).evidence as Dict[])[0] as Dict).result = "failure observed and preserved";
+    expect(validateManifest(manifest({
+      schema_version: "1.1", execution_state: "executed", coordination: coordination([writer]), actions: [verifiedFailure],
+    }))).toEqual([]);
+
+    const malformedFailure = structuredClone(verifiedFailure) as Dict;
+    ((malformedFailure.outcome as Dict).evidence as Dict[]) = [{ kind: "validation_result" }];
+    expect(validateManifest(manifest({
+      schema_version: "1.1", execution_state: "executed", coordination: coordination([writer]), actions: [malformedFailure],
+    })).some((error) => error.includes("digest-referenced execution evidence"))).toBe(true);
+
+    for (const status of ["blocked", "skipped"]) {
+      const invalidTerminal = structuredClone(verifiedFailure) as Dict;
+      invalidTerminal.status = status;
+      expect(validateManifest(manifest({
+        schema_version: "1.1", execution_state: "executed", coordination: coordination([writer]), actions: [invalidTerminal],
+      })).some((error) => error.includes("verified outcome requires executed or failed"))).toBe(true);
+    }
+
+    const failedCommit = structuredClone(verifiedFailure) as Dict;
+    failedCommit.kind = "git_commit";
+    failedCommit.after_object = "f".repeat(40);
+    expect(validateManifest(manifest({
+      mode: "GUARD", schema_version: "1.2", execution_state: "executed",
+      coordination: coordinationV12([laneV12("writer", "integration-target")]),
+      guard: guardRecord(), actions: [failedCommit],
+    })).some((error) => error.includes("resulting git_commit requires executed"))).toBe(true);
+  });
+
+  it("rejects integration and push before the exact-tree commit barrier crosses", () => {
+    const integrator = laneV12("integrator", "integration-target", {
+      role: "integrator",
+      write_paths: ["**/*"],
+    });
+    for (const kind of ["git_integrate", "git_push"] as const) {
+      const action = operation(`OP-PREMATURE-${kind}`, integrator, {
+        kind,
+        target: kind === "git_push" ? "origin/main" : "refs/heads/main",
+        risk: kind === "git_push" ? "consequential_external" : "reversible_local",
+        status: "executed",
+        after_object: candidateTree,
+      });
+      const errors = validateManifest(manifest({
+        mode: "GUARD",
+        schema_version: "1.2",
+        execution_state: "executed",
+        coordination: coordinationV12([integrator]),
+        guard: guardRecord(),
+        actions: [action],
+      }));
+      expect(errors).toContain(
+        "$.actions[0]: GUARD integration or push requires a crossed exact-tree commit barrier",
+      );
+    }
+  });
+
   it("invalidates the exact-tree barrier when a mutation occurs after candidate mint", () => {
     const writer = laneV12("writer", "planning-projections");
     const mutation = operation("OP-MUTATE", writer, {
@@ -848,6 +1234,7 @@ describe("validateManifest", () => {
     const errors = validateManifest(manifest({
       mode: "GUARD",
       schema_version: "1.2",
+      execution_state: "executed",
       coordination: coordinationV12([writer]),
       guard: guardRecord(),
       actions: [mutation],
@@ -862,7 +1249,7 @@ describe("validateManifest", () => {
     });
     const committed = "f".repeat(40);
     const guard = guardRecord();
-    const receiptIds = ((guard.commit_barrier as Dict).receipt_ids as string[]);
+    const receiptIds = ((guard.commit_barrier as Dict).receipt_ids as Dict[]);
     Object.assign(guard, { status: "crossed" });
     Object.assign(guard.commit_barrier as Dict, {
       state: "crossed",
@@ -884,6 +1271,7 @@ describe("validateManifest", () => {
     const valid = manifest({
       mode: "GUARD",
       schema_version: "1.2",
+      execution_state: "executed",
       coordination: coordinationV12([integrator]),
       guard,
       actions: [commitAction],
@@ -900,5 +1288,9 @@ describe("validateManifest", () => {
     barrier.state = "open";
     barrier.crossed_action_id = null;
     expect(validateManifest(uncrossed).some((error) => error.includes("executed git_commit forbidden before"))).toBe(true);
+
+    const plannedAfterCrossing = structuredClone(valid) as Dict;
+    (plannedAfterCrossing.actions as Dict[]).push(operation("OP-LATE", integrator));
+    expect(validateManifest(plannedAfterCrossing).some((error) => error.includes("crossed barrier cannot coexist"))).toBe(true);
   });
 });

@@ -65,13 +65,20 @@ momentum of your own corpus.
 
 As team complexity grows — more agents, more harnesses, more surfaces running
 simultaneously — the complexity of the *object* they work on must shrink, or
-the product of the two becomes unmanageable. The reductions this skill enforces
-are exactly that budget being paid:
+the product of the two becomes unmanageable. The reductions this skill seeks,
+within repository policy, are exactly that budget being paid:
 
-- one `main`, one working branch — no archaeology before starting
-- one dispatch — no ambiguity about what to do next
+- the smallest owned branch/worktree topology the active workflow requires —
+  no abandoned or unexplained surfaces
+- one designated current directive per scope — no ambiguity about what to do
+  next
 - one artifact shape per type — no decisions about how to write things down
 - zero debris — no noise competing with signal for the model's attention
+
+These are entropy targets, not universal numeric constants. A repository may
+legitimately retain multiple release branches, policy-owned worktrees, or
+independent active directives; Mister Clean proves each one's purpose and
+disposition instead of deleting healthy topology to imitate a template.
 
 The end state of every session is the starting state of the next one. A crew
 that inherits a pristine repo spends its first hour producing, not excavating

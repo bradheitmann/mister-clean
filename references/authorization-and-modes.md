@@ -87,8 +87,13 @@ Invocation retains its ordinary repair authority, but the immutable staged tree
 is the review unit: DEV, QA, Mister Clean, holdout, deterministic gates, and
 the no-harm comparator must bind the same tree. A repair is authorized; it also
 mints a new tree and invalidates every prior receipt. Only the recorded
-integrator may cross the commit barrier, and only after the schema-1.2 guard
-record passes. Read
+integrator may cross the commit barrier. Generic GUARD coordination remains in
+schema-1.2 semantics, but every newly prepared GUARD closeout is a
+`closeout_guard` schema-1.3 record from initialization. Its initialized/closed
+state needs no external authority; live passed/open or crossed/executed
+validation requires separately retained accepted-evaluator and guard-authority
+inputs. Live schema-1.2 open/crossed authority is closed. Inline records and the
+working candidate cannot grant that authority. Read
 [continuous-clean-development.md](continuous-clean-development.md) before the
 first candidate is minted.
 
@@ -139,14 +144,15 @@ Either mechanism satisfies the completion rule. What never satisfies it:
 self-certifying the pair, or silently skipping the dispatch because the
 preferred mechanism is unavailable.
 
-**The one sanctioned question.** This skill removes permission theater — but
-when the requirement to dispatch and the environment's rules about dispatch
-GENUINELY conflict (subagents forbidden and no external orchestration lane is
-reachable; or policy demands a mechanism this session cannot operate), ask
-the user once, stating the conflict and the two resolutions. Only on actual
-conflict — never as a routine confirmation. Until answered, the debt is
-`blocked` with the operator as named owner; it is never silently dropped and
-never self-certified around.
+**A genuine dispatch conflict is a hard boundary, not permission theater.** If
+subagents are forbidden and no external orchestration lane is reachable, or
+policy demands a mechanism this session cannot operate, complete all
+independent authorized work and record the conflict as
+`decision_or_coordination_required`. In an explicitly interactive run the
+agent may then ask once, stating the two concrete resolutions. In an
+autonomous run it must not pause early merely to ask; it returns `NOT CLEAN`
+with the evidence and next decision. The debt is never silently dropped or
+self-certified around.
 
 `external_dispatch` remains prohibited and means something else entirely:
 dispatching to humans or third-party services that incur cost or affect

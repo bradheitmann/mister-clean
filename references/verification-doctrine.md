@@ -154,20 +154,6 @@ in a durable record carrying both verbatim — divergence is signal. And never
 let "the control fired when I tested it" stand in for "the control catches
 what it claims to catch."
 
-## Coda — the family, in one sentence
-
-Every principle above is a case of one defect: **a mechanism claiming more
-than it measures.** A substring scan claiming an object-graph property. An
-`indexOf(' ')` implementing a `\s`-shaped intent. A lane claiming execution
-state it never tracked. A workflow claiming enforcement it never ran. An
-anchor-format enforcer writing a non-conforming anchor. None of these are
-logic bugs, and no quantity of same-kind tests catches them — what catches
-them is a reviewer asking **what does this instrument actually touch?** Ask
-it of every green light, every guard, every claim — and first of all, ask it
-of your own.
-   — distilled at campaign close
-
-
 ## 15. A wrapper's exit code is not the action's outcome
 
 `action || echo "kept"` returns success (echo's exit 0) even when `action`
@@ -230,9 +216,134 @@ label.
   unmet, unless an explicit operator waiver (actor ∈ operator/principal, with a
   ref) is recorded. A reviewer-authored "waiver" of an operator criterion does
   not count.
+- A positive verdict is also INVALID while the review body contains any
+  substantiated, in-scope, payable finding. `LOW`, `non-blocking`, and
+  `recommend fixing before merge` may order payment; they may not authorize
+  integration. The reviewer returns `REJECT` or `ACCEPT_AFTER_FIX`, the owner
+  repairs the exact finding, and the replacement tree is reviewed again.
 - **Reviewer-reported stale comments/docs are payable debt before CLEAN,
   regardless of the severity label attached.** "LOW / non-blocking" is a
   priority hint for ordering, not an exemption; a stale comment a reviewer
   surfaced is drift the successor will read as truth. It may not be
   dispositioned `accepted_exception` (reserved for irreparable historical
   limits) nor parked as a residual — it is fixed, then CLEAN.
+
+## 18. Evidence cannot be observed in the future
+
+A syntactically valid timestamp is not proof that an event occurred. A report
+can predeclare an observation, review, lease release, or gate completion a few
+minutes ahead and still satisfy ordinary ordering checks unless the validator
+compares it with an independent clock boundary.
+**Rule:** bundle validation supplies its own validation time and an explicit,
+bounded maximum clock skew. Every event timestamp in the bundle, report,
+manifest, and digest-loaded sidecar must be at or before that boundary. The
+record under review never chooses the clock that validates itself. A future
+deadline such as `expires_at` may be legitimate, but it proves no event; fields
+such as `observed_at`, `recorded_at`, `generated_at`, and
+`manifest_observed_at` are event claims and fail when future-dated. Check
+referenced sidecars recursively so a plausible top-level clock cannot hide a
+predeclared receipt below it.
+
+## 19. Authority validators require mutation-adequacy controls
+
+A happy-path PASS does not prove that an authorization validator protects its
+boundary. For every privileged path, retain focused negative controls that
+mutate each indispensable input or operation: activation/ref eligibility,
+source-repository and event context, release identity, health-gate reachability,
+and any tag or promotion binding. Every mutation must make the validator fail
+for the intended rule. A removed, renamed, or unreachable check that leaves the
+suite green is verification debt and cannot authorize CLEAN.
+
+## 20. A historical green run is not current promotion authority
+
+A privileged downstream `workflow_run` must bind the upstream run to the
+trusted source repository, event, and exact SHA, then either require that SHA
+to equal the freshly fetched trusted tip or verify retained upstream workflow
+identity and historical workflow bytes against an explicit allowlist. An
+ancestor check alone admits reruns of obsolete CI policy and is fail-open.
+Historical ambiguity is a P0 authority defect, not a harmless provenance gap.
+
+## 21. A framework deadline cannot preempt a synchronous child
+
+A time-bounded test that calls `execFileSync`/`spawnSync` for a long gate but
+sets only the test framework's timeout has no enforceable deadline: the event
+loop cannot run the timer until the child returns. Verification runners must
+own a preemptible process group or pass an enforceable child timeout. On breach,
+terminate only the owned process tree, record `INDETERMINATE` runner debt, and
+rerun quiescently after repair. Never trust the broad-gate result or kill an
+unowned process merely to make the suite finish.
+
+## 22. External producer serialization is a versioned contract
+
+An authority or health validator that consumes another tool's machine output
+must bind the exact producer version (and build/digest when available) and the
+real serialized shape emitted by that version. Establish the contract from the
+pinned producer source or retained authenticated output bytes, then keep one
+representative producer-shaped positive and near-miss negatives for alternate
+top-level containers, invented or renamed identity fields, missing keys, type
+drift, and version drift. Prose, tables, examples, or guessed JSON fields do not
+establish the wire shape and cannot support CLEAN. A producer upgrade invalidates
+the old shape receipt until the bound controls pass again; unavailable producer
+bytes are `INDETERMINATE` evidence debt, never permission to accept the guess.
+
+## 23. Privileged declarative inputs require an exhaustive context census
+
+Required-key checks do not bound an action step: an extra `with` input can
+exfiltrate authority even while every canonical binding remains present.
+Privileged declarative steps therefore require exact action-and-version input
+key allowlists, not subset validation. Census every input value for direct,
+whole-context, and computed context access; in particular, `toJSON(github)` and
+`github[...]` are authority-bearing even when the selected token property is
+hidden behind a function. Match the producer/interpreter's case-insensitive
+expression semantics and scan every declarative step field, not only `with` or
+the canonical lowercase spelling. Retain a canonical exact-shape positive plus negatives
+for an extra key, whole-context serialization, computed property access, and
+case-folded direct token access outside `with`. Actionlint and a required-key PASS cannot support CLEAN
+without this exhaustive input/context control.
+
+## 24. Generated acceptance begins with exact clean materialization
+
+A warm checkout can contain ignored build output, dependency caches, or stale
+generated bytes that never existed in the candidate. Any acceptance consuming
+ignored, generated, cached, or untracked artifacts is `NOT VERIFIED` until one
+command reconstructs the tracked-plus-nonignored RepositoryObject in a pristine
+capsule, installs only declared dependencies, runs the declared raw build, and
+executes the complete test/package/public/generated matrix inside that same
+capsule. Recapture the source and capsule object around materialization; neither
+dependency installation nor build output may change candidate identity. Retain
+one cold-clone positive and one negative in which source-only ignored output
+cannot rescue a missing build product. An undeclared warm-up is not evidence.
+
+## 25. Search custody is a root-qualified topology contract
+
+Protected searches prefer positive enumeration of allowed repository roots.
+When exclusions are necessary, each exclusion names the complete
+repository-relative protected root. A basename pattern such as an exclusion for
+`holdout/**` does not contain `project/planning/holdout/**`; keep that exact
+nested-path mutation as an executable negative control. Reject recursive
+ancestors of protected material, and never emit a generated dispatch that
+recommends a basename-only exclusion as custody.
+
+## 26. Public and successor surfaces are measured, not inferred
+
+Public safety scans the actual prospective package census produced from the
+current release candidate, including uncommitted files, then applies a
+configurable denylist of project and case-study identifiers to every packaged
+byte. A tracked-tree scan and a detector with one embedded project name both
+measure the wrong boundary. Successor projections likewise receive credit only
+when their exact declared command is structurally parsed and executed through a
+real command implementation; executable-looking substrings and phantom
+subcommands are stale projections.
+
+## Coda — the family, in one sentence
+
+Every principle above is a case of one defect: **a mechanism claiming more
+than it measures.** A substring scan claiming an object-graph property. An
+`indexOf(' ')` implementing a `\s`-shaped intent. A lane claiming execution
+state it never tracked. A workflow claiming enforcement it never ran. An
+anchor-format enforcer writing a non-conforming anchor. None of these are
+logic bugs, and no quantity of same-kind tests catches them — what catches
+them is a reviewer asking **what does this instrument actually touch?** Ask
+it of every green light, every guard, every claim — and first of all, ask it
+of your own.
+   — distilled at campaign close

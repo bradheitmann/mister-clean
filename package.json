@@ -1,6 +1,6 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "6.3.0",
+  "version": "7.0.0",
   "description": "Agent skill for paying repository debt and preventing unclean commits.",
   "type": "module",
   "license": "MIT",
@@ -9,7 +9,14 @@
     "mister-clean-mcp": "dist/stdio.js"
   },
   "exports": {
-    ".": "./dist/server.js"
+    ".": {
+      "types": "./dist/public.d.ts",
+      "import": "./dist/public.js"
+    },
+    "./control-plane": {
+      "types": "./dist/control-plane.d.ts",
+      "import": "./dist/control-plane.js"
+    }
   },
   "files": [
     "agents/*.yaml",
@@ -18,9 +25,17 @@
     "assets/closure-bundle.json",
     "assets/regression-delta.json",
     "assets/codebase-state-dashboard/index.html",
+    "assets/codebase-state-dashboard/model-scorecard.html",
+    "assets/codebase-state-dashboard/model-scorecard-interactions.js",
+    "assets/codebase-state-dashboard/model-scorecard-interactions.ts",
+    "assets/codebase-state-dashboard/product-mark.svg",
+    "assets/codebase-state-dashboard/tsconfig.scorecard.json",
     "assets/codebase-state-dashboard/dashboard-tokens.css",
+    "assets/codebase-state-dashboard/fonts/**",
     "bin/mister-clean.js",
-    "dist/server.*",
+    "dist/public.*",
+    "dist/control-plane.*",
+    "dist/control-plane/**",
     "dist/stdio.*",
     "evals/*.md",
     "evals/*.xml",
@@ -28,7 +43,9 @@
     "references/*.md",
     "templates/*.md",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "MANIFEST.sha256",
+    "RELEASE_ATTESTATION.json",
     "README.md",
     "SECURITY.md",
     "SKILL.md"
@@ -53,20 +70,48 @@
     "node": ">=22"
   },
   "scripts": {
-    "audit:public": "bun src/cli.ts audit public-safety .",
+    "audit:public": "bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt",
+    "audit:repository-boundaries": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts audit repository-boundaries .",
+    "build:scorecard": "bun scripts/build_model_scorecard_interactions.mjs",
+    "build:scorecard:check": "bun scripts/build_model_scorecard_interactions.mjs --check",
     "build:materials": "bun scripts/generate_materials.mjs",
-    "build": "bun run build:materials && tsc --noEmit && tsup && bun run sync:cli && bun run manifest:package",
-    "check": "bun run test && bun run pack:check && bun run pack:smoke && bun run audit:public",
+    "build:materials:check": "bun scripts/generate_materials.mjs --check",
+    "build:raw": "bun run build:scorecard && bun run build:materials && bun run control-plane:typecheck && tsc --noEmit && bun run package:source-surface:check && tsup && bun run control-plane:build && bun run package:surface:check && bun run sync:cli && bun run manifest:package",
+    "build:verified": "bun scripts/run_verified_build.ts --candidate=worktree",
+    "build": "bun run build:verified",
+    "check": "bun run ci:check",
+    "ci:check": "bun scripts/run_clean_ci.ts --candidate=worktree",
+    "control-plane:build": "bunx --bun vite build --config control-plane-app/vite.config.ts",
+    "control-plane:check": "bun run control-plane:typecheck && cd control-plane-app && node ../node_modules/vitest/vitest.mjs --config vite.config.ts run --allowOnly=false src/*.test.ts",
+    "control-plane:render-check": "bun run control-plane:build && bun scripts/verify_control_plane_render.ts",
+    "control-plane:typecheck": "bunx --bun svelte-check --tsconfig control-plane-app/tsconfig.json",
+    "control-plane:dev": "bunx --bun vite --config control-plane-app/vite.config.ts",
     "deploy": "bun run build:materials && wrangler deploy",
     "dev": "bun run build:materials && wrangler dev",
-    "manifest:package": "bun src/cli.ts manifest . --package",
-    "pack:check": "bun pm pack --dry-run",
-    "pack:smoke": "node scripts/verify_packed_cli.mjs",
-    "prepack": "bun run build",
+    "manifest:package": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts manifest . --package",
+    "manifest:package:check": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts manifest . --package --check",
+    "generated:check": "bun scripts/verify_generated_candidate.ts --candidate=worktree",
+    "generated:staged:check": "bun scripts/verify_generated_candidate.ts --candidate=staged",
+    "generated:postbuild:check": "bun run build:scorecard:check && bun run build:materials:check && bun run sync:cli:check && bun run manifest:package:check",
+    "pack:check": "bun run package:import:check && pnpm --config.ignore-scripts=true pack --dry-run",
+    "package:import:check": "node scripts/verify_package_exports.mjs",
+    "package:source-surface:check": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bunx --bun vitest run --allowOnly=false src/control-plane/runtime/public-surface.test.ts",
+    "package:surface:check": "bunx --bun vitest run --allowOnly=false src/control-plane/runtime/package-surface.test.ts",
+    "pack:smoke": "node scripts/prepare_release_archive.mjs",
+    "prepack": "node -e \"console.error('Direct source packing is disabled; use the externally built archive from bun run release:check.'); process.exit(1)\"",
     "report:case-study": "bun scripts/render_case_study_report.mjs",
+    "report:scorecard": "bun run build:scorecard && bun scripts/render_model_scorecard.mjs",
+    "report:case-study-suite": "bun run report:scorecard && bun run report:case-study",
     "report:history": "bun scripts/generate_codebase_history.mjs",
+    "release:attestation:check": "bun scripts/generate_release_attestation.mjs --check",
+    "release:attestation:source-check": "bun scripts/generate_release_attestation.mjs --source-check",
+    "release:attestation:write": "bun scripts/generate_release_attestation.mjs --write",
+    "release:check": "bun run ci:check && node scripts/prepare_release_archive.mjs",
     "sync:cli": "bun scripts/sync_cli.mjs",
-    "test": "bun run build && vitest run",
+    "sync:cli:check": "bun scripts/sync_cli.mjs --check",
+    "test": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun run build:verified && bun run test:node && bun run test:bun && bun run control-plane:check",
+    "test:bun": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bunx --bun vitest run --allowOnly=false src/control-plane",
+    "test:node": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 node ./node_modules/vitest/vitest.mjs run --allowOnly=false --no-file-parallelism --testTimeout=120000 --exclude 'src/control-plane/**/*.test.ts' --exclude 'control-plane-app/**/*.test.ts'",
     "types": "wrangler types env.d.ts --include-runtime false"
   },
   "dependencies": {
@@ -77,17 +122,16 @@
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260825.1",
     "@modelcontextprotocol/client": "2.0.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@types/node": "26.0.1",
+    "svelte": "^5.56.10",
+    "svelte-check": "^4.7.6",
     "tsup": "8.5.0",
     "typescript": "6.0.3",
+    "vite": "^8.2.2",
     "vitest": "4.0.18",
     "wrangler": "4.125.0",
     "yaml": "2.9.0"
   },
-  "trustedDependencies": [
-    "core-js-pure",
-    "esbuild",
-    "workerd"
-  ],
-  "packageManager": "bun@1.4.0"
+  "packageManager": "pnpm@11.0.3"
 }

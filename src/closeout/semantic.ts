@@ -1,25 +1,58 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
-import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+
+import { parse as parseYaml } from "yaml";
 
 import {
   assertDirectory,
   discoverPlanningRoots,
   git,
-  listEntriesRecursively,
+  planningLaneLifecycle,
 } from "./repository.js";
 
-export type SemanticProbeKind = "composition_root_reachability" | "construction_boundary";
+export type SemanticProbeKind =
+  | "acceptance_effect_liveness"
+  | "authoritative_projection"
+  | "behavioral_dimension"
+  | "bounded_state_lifecycle"
+  | "composition_root_reachability"
+  | "construction_boundary"
+  | "environment_semantics"
+  | "executable_surface_coverage"
+  | "execution_identity_coverage"
+  | "failure_domain_independence"
+  | "gate_semantic_bite"
+  | "historical_evidence_portability"
+  | "identifier_namespace"
+  | "instruction_polarity"
+  | "representation_equivalence"
+  | "supersession_lineage";
 export type SemanticFindingCode =
+  | "acceptance_effect_liveness_failure"
+  | "authoritative_projection_failure"
+  | "behavioral_dimension_failure"
+  | "bounded_state_lifecycle_failure"
   | "construction_boundary_failure"
+  | "environment_semantics_failure"
+  | "executable_surface_coverage_failure"
+  | "execution_identity_coverage_failure"
+  | "failure_domain_independence_failure"
+  | "gate_semantic_bite_failure"
+  | "historical_evidence_portability_failure"
+  | "identifier_namespace_failure"
+  | "instruction_polarity_failure"
   | "mechanism_unwired_at_composition_root"
+  | "representation_equivalence_failure"
   | "semantic_probe_execution_error"
+  | "semantic_probe_independent_attestation_required"
   | "semantic_probe_incomplete"
   | "semantic_probe_manifest_invalid"
   | "semantic_probe_operate_time_pending"
   | "semantic_probe_unassigned"
-  | "semantic_probe_unexecuted";
+  | "semantic_probe_unexecuted"
+  | "supersession_lineage_failure";
 
 export interface SemanticEvidenceRef {
   readonly path: string;
@@ -55,7 +88,7 @@ export interface SemanticProbeExecution {
 
 export interface SemanticProbeResolution {
   readonly candidate_id: string;
-  readonly disposition: "not_applicable";
+  readonly disposition: "attested_satisfied" | "deterministically_satisfied" | "not_applicable";
   readonly evidence_refs: readonly SemanticEvidenceRef[];
   readonly rationale: string;
 }
@@ -77,11 +110,14 @@ export interface SemanticAuditResult {
   readonly snapshot: string;
   readonly working_tree_sha256: string;
   readonly status: "fail" | "not_applicable" | "pass";
+  readonly trust_policy_sha256?: string;
 }
 
 export interface SemanticAuditOptions {
+  readonly evidencePackagePath?: string;
   readonly execute?: boolean;
   readonly manifestPath?: string;
+  readonly trustPolicyPath?: string;
 }
 
 interface ProbeDefinition {
@@ -122,10 +158,40 @@ interface ProbeReceipt {
 }
 
 const TEXT_EXTENSIONS = new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
-const CONSTRUCTION_ASSERTION = /\b(choke point|construction[- ]enforced|redact(?:ion|or)?|safe by construction|saniti[sz](?:e|er|ation)|validator)\b/i;
+const SOURCE_EXTENSIONS = new Set([".cjs", ".go", ".js", ".jsx", ".mjs", ".rs", ".ts", ".tsx"]);
+const CONSTRUCTION_ASSERTION = /\b(choke point|construction[- ]enforced|(?:safe|closed|enforced) by construction)\b/i;
 const CRITICAL_BOUNDARY = /\b(auth(?:entication|orization)?|credential|privacy|policy|redact|secret|security|telemetry|token)\b/i;
-const COMPOSITION_ROOT = /\b(app factory|bootstrap|composition root|production root|server factory)\b/i;
-const ROOT_BEHAVIOR = /\b(consumer|guard|inject|mount|policy|register|sink|state|wire|wired|wiring)\b/i;
+const COMPOSITION_ROOT = /\b(app(?:lication)? factory|composition root|production (?:bootstrap|root)|server factory)\b/i;
+const ROOT_BINDING = /\b(bind(?:ing|s)?|connect|inject|mount|register|route|wire|wired|wiring)\b/i;
+const DECLARED_ROUTING_DIMENSION = /(?:\btask[- ](?:class(?:es)?|specific)\b[^\n]{0,160}\b(?:cost|fitness|route|router|routing|score|weight)\b|\b(?:route|router|routing)\b[^\n]{0,160}\b(?:cost|fitness|task[- ]class(?:es)?|weight)\b)/i;
+const GATE_BITE_CLAIM = /(?:\b(?:gate|validator|check)\b[^\n]{0,180}\b(?:covers?|proves?|rejects?|validates?)\b|\b(?:covers?|proves?|rejects?|validates?)\b[^\n]{0,180}\b(?:gate|validator|check)\b)/i;
+const REPRESENTATION_EQUIVALENCE_CLAIM = /\b(?:handwritten[^\n]{0,80}\btwin|keep\s+in\s+sync|mirrors?[^\n]{0,100}\brenderer|typed[- ]react\s+twin)\b/i;
+const FORBIDDEN_INSTRUCTION = /\b(?:do\s+not|forbidden|must\s+not|never)\b/i;
+const DANGEROUS_RECIPE_FENCE = /```(?:ba)?sh[^\n]*\n[\s\S]*?\b(?:curl\b[^\n|]*\|\s*(?:ba)?sh\b|git\s+(?:commit\s+--no-verify|reset\s+--hard)|ln\s+-s\b|rm\s+-rf\b)[\s\S]*?```/i;
+const ENVIRONMENT_SENTINEL = /\bMISTER_CLEAN_SENTINEL\b/u;
+const AUTHORITY_IDENTIFIER = /\b[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-(?:v\d+(?:\.\d+)+|\d+(?:\.\d+)*)\b/g;
+const NAMESPACE_IDENTIFIER = /\b[A-Z][A-Z0-9]{0,7}(?:-\d+(?:\.\d+)?|\d+(?:\.\d+)?)\b/g;
+const AUTHORITY_STATUS = /\b(PROPOSED|APPROVED|RATIFIED)\b/gi;
+const LONG_LIVED_STATE_NAME = /(cache|dedup\w*|done|history|idempot\w*|journal\w*|ledger\w*|processed|queue\w*|record\w*|run\w*|seen)/i;
+const STATE_FIELD_ALLOCATION = /(?:^|[;{}]\s*|\s)(?:(?:public|private|protected|static|readonly|declare)\s+)*(#?)([A-Za-z_$][\w$]*)\s*!?\s*(?::[^=\n;]+)?=\s*new\s+(?:Map|Set)\b/i;
+const MODULE_STATE_ALLOCATION = /(?:^|[;}])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*(?:new\s+(?:Map|Set|Array)\b|\[\s*\])/i;
+const STATE_APPEND = /\b(?:appendFileSync?|createWriteStream)\b/i;
+const APPEND_STATE_BOUND = /\b(?:compact(?:ion)?|evict(?:ion)?|expir(?:e|y)|max(?:imum)?(?:[_ -]?(?:age|entries|size))|prun(?:e|ing)|retention|rotat(?:e|ion)|ttl)\b/i;
+const QUALITY_SCRIPT_NAME = /(?:^|:)(?:build|check|lint|test|typecheck|validate|verify)(?::|$)/i;
+const NON_PRODUCT_PATH = /(?:^|\/)(?:__fixtures__|__tests__|dist|fixtures?|generated|node_modules|test|tests|vendor)(?:\/|$)/i;
+const TOOL_CONFIG_SOURCE = /(?:^|\/)(?:eslint|jest|rollup|tsup|vite|vitest|webpack)\.config\.[^.]+$/i;
+const IDENTITY_REFERENCE_FIELDS = ["agent_identity_ref", "execution_identity_ref", "identity_lease_id"] as const;
+const EXECUTION_IDENTITY_FIELDS = [
+  "control_surface",
+  "inference_provider",
+  "inference_backend",
+  "model_id",
+  "model_version",
+  "reasoning_level",
+  "harness_id",
+  "harness_version",
+  "permission_mode",
+] as const;
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -170,8 +236,246 @@ function normalizeClaim(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("und");
 }
 
+function regexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function frontmatter(content: string): string | undefined {
+  const opening = /^---[ \t]*$/mu.exec(content);
+  if (!opening) return undefined;
+  const prefix = content.slice(0, opening.index).replaceAll(/<!--[\s\S]*?-->/gu, "").trim();
+  if (prefix) return undefined;
+  const bodyStart = opening.index + opening[0].length;
+  const remainder = content.slice(bodyStart).replace(/^\r?\n/u, "");
+  const closing = /^(?:---|\.\.\.)[ \t]*$/mu.exec(remainder);
+  return closing ? remainder.slice(0, closing.index).replace(/\r?\n$/u, "") : undefined;
+}
+
+function planningRecord(path: string, content: string): Record<string, unknown> | undefined {
+  try {
+    const extension = extname(path).toLocaleLowerCase("und");
+    if (extension === ".json") return object(JSON.parse(content));
+    if (extension === ".yaml" || extension === ".yml") return object(parseYaml(content));
+    if (extension === ".md" || extension === ".mdx") {
+      const metadata = frontmatter(content);
+      return metadata ? object(parseYaml(metadata)) : undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function nonemptyIdentityValue(value: unknown): boolean {
+  return typeof value === "string"
+    && value.trim().length > 0
+    && !new Set(["n/a", "none", "null", "unknown", "unrecorded"]).has(value.trim().toLocaleLowerCase("und"));
+}
+
+function validIdentityReference(root: string, value: unknown): boolean {
+  const ref = object(value);
+  if (!ref || typeof ref.path !== "string" || !ref.path.trim() || isAbsolute(ref.path)
+    || ref.path === ".." || ref.path.startsWith("../")
+    || typeof ref.sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(ref.sha256)) return false;
+  const target = resolve(root, ref.path);
+  const relation = relative(root, target);
+  if (relation === ".." || relation.startsWith(`..${sep}`) || isAbsolute(relation)
+    || !existsSync(target) || !lstatSync(target).isFile() || lstatSync(target).isSymbolicLink()) return false;
+  return createHash("sha256").update(readFileSync(target)).digest("hex") === ref.sha256;
+}
+
+function recordRole(record: Record<string, unknown>): "dev" | "qa" | undefined {
+  for (const field of ["artifact_type", "role", "slice_type", "task_type", "work_type"] as const) {
+    const value = record[field];
+    if (typeof value !== "string") continue;
+    const normalized = value.trim().toLocaleLowerCase("und");
+    if (normalized === "dev" || normalized === "qa") return normalized;
+  }
+  return undefined;
+}
+
+function currentPlanningLifecycle(path: string): boolean {
+  return path.split("/").some((segment) => {
+    const lifecycle = planningLaneLifecycle(segment);
+    return lifecycle === "active" || lifecycle === "preexecution";
+  });
+}
+
+function historicalPlanningLifecycle(path: string): boolean {
+  return path.split("/").some((segment) => {
+    const lifecycle = planningLaneLifecycle(segment);
+    return lifecycle === "archived" || lifecycle === "done";
+  });
+}
+
+function missingExecutionIdentityFields(root: string, path: string, content: string): readonly string[] | undefined {
+  if (!currentPlanningLifecycle(path) || historicalPlanningLifecycle(path)) return undefined;
+  const record = planningRecord(path, content);
+  if (!record || !recordRole(record)) return undefined;
+  const validReference = IDENTITY_REFERENCE_FIELDS.some((field) => validIdentityReference(root, record[field]));
+  if (validReference) return [];
+  const errors: string[] = [];
+  const presentReference = IDENTITY_REFERENCE_FIELDS.find((field) => Object.hasOwn(record, field));
+  if (presentReference) errors.push(`invalid ${presentReference}`);
+  for (const field of EXECUTION_IDENTITY_FIELDS) {
+    if (!Object.hasOwn(record, field)) errors.push(`missing ${field}`);
+    else if (!nonemptyIdentityValue(record[field])) errors.push(`blank ${field}`);
+  }
+  return errors;
+}
+
+function unboundedStateFields(path: string, content: string): Array<{ readonly line: number; readonly text: string }> {
+  const results: Array<{ line: number; text: string }> = [];
+  const lines = content.split(/\r?\n/);
+  let braceDepth = 0;
+  for (const [index, line] of lines.entries()) {
+    const lineStartDepth = braceDepth;
+    braceDepth += (line.match(/{/g)?.length ?? 0) - (line.match(/}/g)?.length ?? 0);
+    const moduleAllocation = lineStartDepth === 0 ? MODULE_STATE_ALLOCATION.exec(line) : undefined;
+    const classAllocation = /\b(?:const|let|var)\b/u.test(line) ? undefined : STATE_FIELD_ALLOCATION.exec(line);
+    const field = classAllocation?.[2] ?? moduleAllocation?.[1];
+    if (!field) continue;
+    const sigil = classAllocation?.[1] === "#" ? "#" : "";
+    const escaped = regexLiteral(field);
+    if (!LONG_LIVED_STATE_NAME.test(`${field}\n${path}`)) continue;
+    const access = sigil === "#" ? `(?:this\\.)?#${escaped}` : `(?:this\\.)?${escaped}`;
+    const mutation = new RegExp(`${access}\\.(?:add|push|set|unshift)\\s*\\(`);
+    if (!mutation.test(content)) continue;
+    const insertionArguments = [...content.matchAll(new RegExp(`${access}\\.(?:add|set)\\s*\\(\\s*([^,\\)]+)`, "g"))]
+      .map((match) => String(match[1] ?? "").trim()).filter(Boolean);
+    const removalArguments = [...content.matchAll(new RegExp(`${access}\\.delete\\s*\\(\\s*([^\\)]+)`, "g"))]
+      .map((match) => String(match[1] ?? "").trim()).filter(Boolean);
+    const balancedKeyLifecycle = insertionArguments.length > 0
+      && insertionArguments.every((argument) => removalArguments.includes(argument));
+    const boundedArray = new RegExp(`${access}\\.length\\s*>?=\\s*\\d+[\\s\\S]{0,160}${access}\\.(?:shift|splice)\\s*\\(`).test(content)
+      || new RegExp(`${access}\\.(?:shift|splice)\\s*\\([\\s\\S]{0,160}${access}\\.length\\s*-\\s*\\d+`).test(content);
+    const explicitBound = new RegExp(
+      `(?:max(?:imum)?(?:[_ -]?(?:age|entries|size))|retention|ttl)[\\s\\S]{0,200}${access}|${access}[\\s\\S]{0,200}(?:max(?:imum)?(?:[_ -]?(?:age|entries|size))|retention|ttl)`,
+      "i",
+    ).test(content);
+    if (balancedKeyLifecycle || boundedArray || explicitBound) continue;
+    results.push({ line: index + 1, text: line.trim() });
+  }
+  return results;
+}
+
+function executableSurfaceGaps(root: string, paths: readonly string[]): Array<{
+  readonly evidence: string;
+  readonly refs: readonly string[];
+}> {
+  const packagePaths = paths.filter((path) => basename(path) === "package.json" && !NON_PRODUCT_PATH.test(path));
+  const packageDirectories = packagePaths
+    .map((path) => dirname(path) === "." ? "." : dirname(path).split(sep).join("/"))
+    .sort((left, right) => right.length - left.length || left.localeCompare(right));
+  const parsed = new Map<string, Record<string, unknown>>();
+  for (const packagePath of packagePaths) {
+    try {
+      const value: unknown = JSON.parse(readFileSync(resolve(root, packagePath), "utf8"));
+      if (value && typeof value === "object" && !Array.isArray(value)) parsed.set(packagePath, value as Record<string, unknown>);
+    } catch {
+      // Invalid manifests are handled by native-gate discovery.
+    }
+  }
+  const nearestPackage = (sourcePath: string): string | undefined => packageDirectories.find((directory) => (
+    directory === "." || sourcePath.startsWith(`${directory}/`)
+  ));
+  const qualityScripts: Array<{ command: string; directory: string; name: string }> = [];
+  for (const [packagePath, manifest] of parsed) {
+    const value = manifest.scripts;
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const directory = dirname(packagePath) === "." ? "." : dirname(packagePath).split(sep).join("/");
+    for (const [name, command] of Object.entries(value)) {
+      if (typeof command !== "string" || !QUALITY_SCRIPT_NAME.test(name)) continue;
+      const normalized = command.trim().replace(/\s+/gu, " ").toLocaleLowerCase("und");
+      if (!normalized || /^(?:true|:|exit 0|echo(?:\s+.*)?)$/u.test(normalized)) continue;
+      qualityScripts.push({ command, directory, name });
+    }
+  }
+  const reachable = new Set<string>();
+  for (const script of qualityScripts) {
+    const origin = script.directory === "." ? "" : `${script.directory}/`;
+    for (const path of paths) {
+      const local = origin && path.startsWith(origin) ? path.slice(origin.length) : path;
+      if (script.command.includes(path) || (origin && script.command.includes(local))) reachable.add(path);
+    }
+    for (const match of script.command.matchAll(/(?:^|\s)(?:\.\/)?((?:tests?|src|packages?)\/[^\s'";&|]*)/gu)) {
+      const token = String(match[1] ?? "");
+      const wildcard = token.search(/[*!?{\[]/u);
+      const prefix = (wildcard >= 0 ? token.slice(0, wildcard) : token).replace(/\/+$/u, "");
+      const rooted = `${origin}${prefix}`.replace(/^\.\//u, "");
+      for (const path of paths) if (path === rooted || path.startsWith(`${rooted}/`)) reachable.add(path);
+    }
+  }
+  const sourcePathSet = new Set(paths);
+  const queue = [...reachable];
+  while (queue.length > 0) {
+    const importer = queue.shift()!;
+    if (!SOURCE_EXTENSIONS.has(extname(importer).toLocaleLowerCase("und"))) continue;
+    let content = "";
+    try {
+      content = readFileSync(resolve(root, importer), "utf8");
+    } catch {
+      continue;
+    }
+    for (const match of content.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)["']([^"']+)["']/gu)) {
+      const specifier = String(match[1] ?? "");
+      if (!specifier.startsWith(".")) continue;
+      const base = relative(root, resolve(root, dirname(importer), specifier)).split(sep).join("/");
+      const resolvedCandidates = [
+        base,
+        ...[...SOURCE_EXTENSIONS].map((extension) => `${base}${extension}`),
+        ...[...SOURCE_EXTENSIONS].map((extension) => `${base}/index${extension}`),
+      ];
+      for (const candidate of resolvedCandidates) {
+        if (!sourcePathSet.has(candidate) || reachable.has(candidate)) continue;
+        reachable.add(candidate);
+        queue.push(candidate);
+      }
+    }
+  }
+  const gaps: Array<{ evidence: string; refs: readonly string[] }> = [];
+  for (const packagePath of packagePaths) {
+    const manifest = parsed.get(packagePath);
+    if (!manifest) continue;
+    const directory = dirname(packagePath) === "." ? "." : dirname(packagePath).split(sep).join("/");
+    const sources = paths.filter((sourcePath) => (
+      SOURCE_EXTENSIONS.has(extname(sourcePath).toLocaleLowerCase("und"))
+      && !NON_PRODUCT_PATH.test(sourcePath)
+      && !TOOL_CONFIG_SOURCE.test(sourcePath)
+      && nearestPackage(sourcePath) === directory
+    ));
+    const declaredEntrypoint = [manifest.bin, manifest.exports, manifest.main, manifest.module]
+      .some((value) => value !== undefined && value !== null);
+    if (!declaredEntrypoint && sources.length === 0) continue;
+    const uncovered = sources.filter((source) => !reachable.has(source));
+    if (uncovered.length === 0) continue;
+    gaps.push({
+      evidence: `${directory}: ${uncovered.length}/${sources.length} production executable source files have no proven reachable quality gate`,
+      refs: [packagePath, ...uncovered].sort(),
+    });
+  }
+  return gaps;
+}
+
 function candidateId(kind: SemanticProbeKind, path: string, claim: string): string {
-  const prefix = kind === "construction_boundary" ? "CONSTRUCTION" : "COMPOSITION";
+  const prefix = {
+    acceptance_effect_liveness: "EFFECT",
+    authoritative_projection: "AUTHORITY",
+    behavioral_dimension: "BEHAVIOR",
+    bounded_state_lifecycle: "STATE",
+    composition_root_reachability: "COMPOSITION",
+    construction_boundary: "CONSTRUCTION",
+    environment_semantics: "ENVIRONMENT",
+    executable_surface_coverage: "EXECUTABLE",
+    execution_identity_coverage: "IDENTITY",
+    failure_domain_independence: "FAILURE-DOMAIN",
+    gate_semantic_bite: "GATE-BITE",
+    historical_evidence_portability: "PORTABILITY",
+    identifier_namespace: "NAMESPACE",
+    instruction_polarity: "POLARITY",
+    representation_equivalence: "EQUIVALENCE",
+    supersession_lineage: "SUPERSESSION",
+  }[kind];
   return `SEM-${prefix}-${sha256(`${kind}\0${path}\0${normalizeClaim(claim)}`).slice(0, 12).toUpperCase()}`;
 }
 
@@ -181,20 +485,26 @@ export function semanticCandidateSetSha256(candidates: readonly SemanticProbeCan
     id: candidate.id,
     kind: candidate.kind,
     path: candidate.path,
+    refs: [...candidate.refs].sort(),
   }))));
 }
 
-export function semanticWorkingTreeSha256(repository: string, excludedPath?: string): string {
+function repositoryObjectPaths(repository: string): string[] {
   const root = resolve(repository);
-  const excluded = excludedPath ? resolve(excludedPath) : undefined;
-  const listed = spawnSync("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
+  const listed = spawnSync("git", ["--no-optional-locks", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (listed.error) throw listed.error;
   if (listed.status !== 0) throw new Error(String(listed.stderr || "git ls-files failed"));
+  return String(listed.stdout).split("\0").filter(Boolean).sort();
+}
+
+function semanticWorkingTreeSha256FromPaths(repository: string, paths: readonly string[], excludedPath?: string): string {
+  const root = resolve(repository);
+  const excluded = excludedPath ? resolve(excludedPath) : undefined;
   const hash = createHash("sha256");
-  const paths = String(listed.stdout).split("\0").filter(Boolean).sort();
   for (const portablePath of paths) {
     const absolute = resolve(root, portablePath);
     if (excluded && absolute === excluded) continue;
@@ -216,6 +526,11 @@ export function semanticWorkingTreeSha256(repository: string, excludedPath?: str
     }
   }
   return hash.digest("hex");
+}
+
+export function semanticWorkingTreeSha256(repository: string, excludedPath?: string): string {
+  const root = resolve(repository);
+  return semanticWorkingTreeSha256FromPaths(root, repositoryObjectPaths(root), excludedPath);
 }
 
 function visibleLines(content: string): Array<{ readonly line: number; readonly text: string }> {
@@ -252,10 +567,127 @@ function visibleLines(content: string): Array<{ readonly line: number; readonly 
   return result;
 }
 
-export function discoverSemanticProbeCandidates(repository: string): SemanticProbeCandidate[] {
+function authorityStatuses(text: string): Array<{ readonly identifier: string; readonly status: "proposed" | "ratified" }> {
+  const identifiers = [...text.matchAll(AUTHORITY_IDENTIFIER)]
+    .map((match) => ({ identifier: String(match[0]), index: match.index ?? 0 }));
+  if (identifiers.length === 0) return [];
+  const results: Array<{ identifier: string; status: "proposed" | "ratified" }> = [];
+  for (const match of text.matchAll(AUTHORITY_STATUS)) {
+    const statusIndex = match.index ?? 0;
+    const prefix = text.slice(Math.max(0, statusIndex - 32), statusIndex).toLocaleLowerCase("und");
+    if (/\b(?:is|was|were)?\s*(?:not|never|isn't|wasn't|weren't|without)\s+(?:yet\s+)?$/u.test(prefix)) continue;
+    const distances = identifiers.map((item) => ({ ...item, distance: Math.abs(item.index - statusIndex) }));
+    const nearest = Math.min(...distances.map((item) => item.distance));
+    for (const item of distances.filter((candidate) => candidate.distance <= 80 && candidate.distance <= nearest + 20)) {
+      results.push({
+        identifier: item.identifier,
+        status: String(match[0]).toLocaleUpperCase("und") === "PROPOSED" ? "proposed" : "ratified",
+      });
+    }
+  }
+  return results;
+}
+
+function nestedEntries(value: unknown, prefix = ""): Array<{ readonly key: string; readonly value: unknown }> {
+  if (Array.isArray(value)) return value.flatMap((entry, index) => nestedEntries(entry, `${prefix}[${index}]`));
+  const record = object(value);
+  if (!record) return [];
+  const result: Array<{ key: string; value: unknown }> = [];
+  for (const [key, entry] of Object.entries(record)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    result.push({ key: path, value: entry });
+    result.push(...nestedEntries(entry, path));
+  }
+  return result;
+}
+
+function nestedObjects(value: unknown): Record<string, unknown>[] {
+  const result: Record<string, unknown>[] = [];
+  const visit = (entry: unknown): void => {
+    if (Array.isArray(entry)) {
+      entry.forEach(visit);
+      return;
+    }
+    const record = object(entry);
+    if (!record) return;
+    result.push(record);
+    Object.values(record).forEach(visit);
+  };
+  visit(value);
+  return result;
+}
+
+function terminalStructuredRecord(record: Record<string, unknown>): boolean {
+  return nestedEntries(record).some(({ key, value }) => (
+    /(?:^|\.)(?:result|status|verdict)$/iu.test(key)
+    && typeof value === "string"
+    && /^(?:accepted|complete|completed|done|pass|passed)$/iu.test(value.trim())
+  ));
+}
+
+function structuredRecordId(record: Record<string, unknown>): string | undefined {
+  for (const key of ["review_id", "holdout_id", "slice_id", "story_id", "epic_id", "artifact_id", "id"] as const) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function ignoredByRepository(root: string, portablePath: string): boolean {
+  if (isAbsolute(portablePath) || portablePath === ".." || portablePath.startsWith("../")) return false;
+  const result = spawnSync("git", ["--no-optional-locks", "-C", root, "check-ignore", "-q", "--", portablePath], {
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    stdio: "ignore",
+  });
+  return result.status === 0;
+}
+
+function commonFailureDomain(record: Record<string, unknown>): string | undefined {
+  const fallbacks = record.fallbacks;
+  if (record.resilience_claim !== true || !Array.isArray(fallbacks) || fallbacks.length < 2) return undefined;
+  const domains = fallbacks.map((entry: unknown) => object(entry)).filter((entry): entry is Record<string, unknown> => !!entry)
+    .map((entry) => ["provider", "gateway", "account", "credential", "region", "runtime"]
+      .map((field) => typeof entry[field] === "string" ? `${field}=${String(entry[field]).trim()}` : "")
+      .filter(Boolean).join("|"));
+  if (domains.length < 2) return undefined;
+  const sharedFields = ["provider", "gateway", "account", "credential", "region", "runtime"].filter((field) => {
+    const values = fallbacks.map((entry: unknown) => object(entry)?.[field]).filter((value: unknown) => typeof value === "string" && value.trim());
+    return values.length === fallbacks.length && new Set(values.map((value: unknown) => String(value).trim())).size === 1;
+  });
+  return sharedFields.length > 0 ? sharedFields.join(", ") : undefined;
+}
+
+function environmentSemanticHazards(content: string): string[] {
+  if (!/^#!.*\b(?:ba|z|k)?sh\b/mu.test(content) && !/\bset\s+-e(?:u|o|\s|$)/mu.test(content)) return [];
+  const hazards: string[] = [];
+  if (/^\s*grep(?:\s+--?[\w-]+)*\s+[^\s|;&]+\s*$/mu.test(content)) hazards.push("search command can wait on stdin or omit an explicit search surface");
+  const globRisk = content.split(/\r?\n/).some((line) => (
+    /\b(?:for\s+\w+\s+in\s+|(?:cat|cp|ls|rm|test)\s+)/u.test(line)
+    && /[*?\[]/u.test(line.replaceAll("$?", ""))
+  ));
+  if (globRisk && !/\b(?:nullglob|failglob)\b/u.test(content)) hazards.push("unmatched glob semantics are not declared");
+  if (hazards.length > 0 && !ENVIRONMENT_SENTINEL.test(content)) hazards.push("final completion sentinel is absent");
+  return hazards;
+}
+
+export function discoverSemanticProbeCandidates(
+  repository: string,
+  boundRepositoryPaths?: readonly string[],
+): SemanticProbeCandidate[] {
   const root = resolve(repository);
   assertDirectory(root);
+  const repositoryPaths = boundRepositoryPaths ? [...boundRepositoryPaths].sort() : repositoryObjectPaths(root);
+  const repositoryPathSet = new Set(repositoryPaths);
   const groups = new Map<string, { claim: string; evidence: string[]; kind: SemanticProbeKind; path: string; refs: string[] }>();
+  const authorityClaims = new Map<string, {
+    proposed: Array<{ readonly path: string; readonly line: number; readonly text: string }>;
+    ratified: Array<{ readonly path: string; readonly line: number; readonly text: string }>;
+  }>();
+  const identifierSpellings = new Map<string, Map<string, string[]>>();
+  const authorityDefinitions = new Map<string, Map<string, string[]>>();
+  const missingExecutionIdentity: Array<{ readonly path: string; readonly fields: readonly string[] }> = [];
+  const structuredIds = new Map<string, string[]>();
+  const supersessionEdges: Array<{ readonly from: string; readonly path: string; readonly to: string }> = [];
   const add = (kind: SemanticProbeKind, path: string, line: number, text: string): void => {
     const claim = normalizeClaim(text);
     const key = `${kind}\0${path}\0${claim}`;
@@ -264,30 +696,253 @@ export function discoverSemanticProbeCandidates(repository: string): SemanticPro
     group.evidence.push(text.slice(0, 240));
     groups.set(key, group);
   };
-  for (const rootText of discoverPlanningRoots(root)) {
-    const planningRoot = resolve(root, rootText);
-    const stat = lstatSync(planningRoot);
-    const entries = stat.isFile()
-      ? [{ kind: "file" as const, path: planningRoot }]
-      : listEntriesRecursively(planningRoot);
-    for (const entry of entries) {
-      if (entry.kind !== "file" || !TEXT_EXTENSIONS.has(extname(entry.path).toLocaleLowerCase("und"))) continue;
+  const planningRoots = discoverPlanningRoots(root);
+  const planningPaths = repositoryPaths.filter((path) => (
+    TEXT_EXTENSIONS.has(extname(path).toLocaleLowerCase("und"))
+    && planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`))
+  ));
+  for (const path of planningPaths) {
+      const absolute = resolve(root, path);
+      if (!repositoryPathSet.has(path)) continue;
+      const stat = lstatSync(absolute);
+      if (!stat.isFile() || stat.isSymbolicLink()) continue;
       let content: string;
       try {
-        content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(entry.path));
+        content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(absolute));
       } catch {
         continue;
       }
       if (content.includes("\0")) continue;
-      const path = relative(root, entry.path).split(sep).join("/");
+      const missing = missingExecutionIdentityFields(root, path, content);
+      if (missing && missing.length > 0) missingExecutionIdentity.push({ fields: missing, path });
+      const structured = planningRecord(path, content);
+      const definition = object(structured?.authority_definition);
+      if (definition && nonemptyIdentityValue(definition.namespace) && nonemptyIdentityValue(definition.id)) {
+        const shortId = String(definition.id).trim();
+        const qualified = `${String(definition.namespace).trim()}::${shortId}`;
+        const definitions = authorityDefinitions.get(shortId) ?? new Map<string, string[]>();
+        const refs = definitions.get(qualified) ?? [];
+        refs.push(`${path}#authority_definition`);
+        definitions.set(qualified, refs);
+        authorityDefinitions.set(shortId, definitions);
+      }
       for (const item of visibleLines(content)) {
         if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
           add("construction_boundary", path, item.line, item.text);
         }
-        if (COMPOSITION_ROOT.test(item.text) && (ROOT_BEHAVIOR.test(item.text) || CRITICAL_BOUNDARY.test(item.text))) {
+        if (COMPOSITION_ROOT.test(item.text) && ROOT_BINDING.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
           add("composition_root_reachability", path, item.line, item.text);
         }
+        if (DECLARED_ROUTING_DIMENSION.test(item.text)) {
+          const key = "behavioral_dimension\0behavioral-dimension/task-routing\0task routing declares class-specific fitness or cost behavior";
+          const group = groups.get(key) ?? {
+            claim: "task routing declares class-specific fitness or cost behavior",
+            evidence: [],
+            kind: "behavioral_dimension" as const,
+            path: "behavioral-dimension/task-routing",
+            refs: [],
+          };
+          group.refs.push(`${path}#line-${item.line}`);
+          group.evidence.push(item.text.slice(0, 240));
+          groups.set(key, group);
+        }
+        if (!historicalPlanningLifecycle(path)) {
+          for (const { identifier, status } of authorityStatuses(item.text)) {
+            const record = authorityClaims.get(identifier) ?? { proposed: [], ratified: [] };
+            record[status].push({ line: item.line, path, text: item.text });
+            authorityClaims.set(identifier, record);
+          }
+          for (const match of item.text.matchAll(NAMESPACE_IDENTIFIER)) {
+            const spelling = String(match[0]);
+            const normalized = spelling.replace(/[^A-Z0-9]/g, "");
+            const spellings = identifierSpellings.get(normalized) ?? new Map<string, string[]>();
+            const refs = spellings.get(spelling) ?? [];
+            refs.push(`${path}#line-${item.line}`);
+            spellings.set(spelling, refs);
+            identifierSpellings.set(normalized, spellings);
+          }
+        }
       }
+  }
+  for (const path of repositoryPaths) {
+    const extension = extname(path).toLocaleLowerCase("und");
+    if (!TEXT_EXTENSIONS.has(extension) && !SOURCE_EXTENSIONS.has(extension) && extension !== ".sh") continue;
+    const absolute = resolve(root, path);
+    let content = "";
+    try {
+      const stat = lstatSync(absolute);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1_048_576) continue;
+      content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(absolute));
+    } catch {
+      continue;
+    }
+    if (content.includes("\0")) continue;
+    const lines = visibleLines(content);
+    for (const item of lines) {
+      if (GATE_BITE_CLAIM.test(item.text)) add("gate_semantic_bite", path, item.line, item.text);
+      if (planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`))) {
+        if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
+          add("construction_boundary", path, item.line, item.text);
+        }
+      }
+    }
+    if (SOURCE_EXTENSIONS.has(extension) && REPRESENTATION_EQUIVALENCE_CLAIM.test(content)
+      && !/\bmirror_contract_ref\b/u.test(content)) {
+      const line = content.split(/\r?\n/).findIndex((item) => REPRESENTATION_EQUIVALENCE_CLAIM.test(item));
+      add("representation_equivalence", path, Math.max(1, line + 1), "declared handwritten mirror/twin has no bound canonical equivalence contract");
+    }
+    if ((extension === ".md" || extension === ".mdx") && FORBIDDEN_INSTRUCTION.test(content)
+      && DANGEROUS_RECIPE_FENCE.test(content)) {
+      const structured = planningRecord(path, content);
+      const polarity = typeof structured?.instruction_polarity === "string"
+        ? structured.instruction_polarity.trim().toLocaleLowerCase("und")
+        : "";
+      if (!new Set(["allowed_recipe", "fixture", "forbidden_counterexample", "historical_nonexecutive"]).has(polarity)) {
+        const line = content.split(/\r?\n/).findIndex((item) => FORBIDDEN_INSTRUCTION.test(item));
+        add("instruction_polarity", path, Math.max(1, line + 1), "executable-looking forbidden recipe lacks machine-readable instruction polarity");
+      }
+    }
+    if (extension === ".sh" || /^#!.*\b(?:ba|z|k)?sh\b/mu.test(content)) {
+      const hazards = environmentSemanticHazards(content);
+      if (hazards.length > 0) add("environment_semantics", path, 1, hazards.join("; "));
+    }
+    const structured = planningRecord(path, content);
+    if (!structured) continue;
+    const identifier = structuredRecordId(structured);
+    if (identifier) {
+      const refs = structuredIds.get(identifier) ?? [];
+      refs.push(path);
+      structuredIds.set(identifier, refs);
+      if (typeof structured.superseded_by === "string" && structured.superseded_by.trim()) {
+        supersessionEdges.push({ from: identifier, path, to: structured.superseded_by.trim() });
+      }
+    }
+    if (terminalStructuredRecord(structured)) {
+      const ignoredEvidence = nestedEntries(structured)
+        .filter(({ key, value }) => /(?:^|\.)(?:evidence|evidence_ref|evidence_path|proof|proof_ref|receipt|receipt_ref)$/iu.test(key)
+          && typeof value === "string" && ignoredByRepository(root, value.trim()))
+        .map(({ value }) => String(value).trim());
+      if (ignoredEvidence.length > 0) {
+        add("historical_evidence_portability", path, 1, `terminal authority depends on ignored evidence: ${[...new Set(ignoredEvidence)].sort().join(", ")}`);
+      }
+      const entries = nestedEntries(structured);
+      const effect = entries.find(({ key, value }) => /(?:^|\.)effect_kind$/iu.test(key) && typeof value === "string")?.value;
+      const proof = entries.find(({ key, value }) => /(?:^|\.)proof_kind$/iu.test(key) && typeof value === "string")?.value;
+      if (typeof effect === "string" && /^(?:external|live|live_external|operate_time)$/iu.test(effect.trim())
+        && typeof proof === "string" && !/^(?:live|operate_time|runtime)$/iu.test(proof.trim())) {
+        add("acceptance_effect_liveness", path, 1, `live effect ${effect.trim()} is terminalized by non-live proof kind ${proof.trim()}`);
+      }
+    }
+    for (const candidate of nestedObjects(structured)) {
+      const shared = commonFailureDomain(candidate);
+      if (shared) add("failure_domain_independence", path, 1, `declared fallbacks share failure-domain fields: ${shared}`);
+    }
+  }
+  for (const edge of supersessionEdges) {
+    if (!structuredIds.has(edge.to)) {
+      add("supersession_lineage", edge.path, 1, `${edge.from} supersedes to missing authority ${edge.to}`);
+      continue;
+    }
+    const visited = new Set<string>([edge.from]);
+    let cursor = edge.to;
+    while (cursor) {
+      if (visited.has(cursor)) {
+        add("supersession_lineage", edge.path, 1, `supersession lineage for ${edge.from} contains a cycle at ${cursor}`);
+        break;
+      }
+      visited.add(cursor);
+      cursor = supersessionEdges.find((item) => item.from === cursor)?.to ?? "";
+    }
+  }
+  if (missingExecutionIdentity.length > 0) {
+    const path = "execution-identity/current-dev-qa";
+    const claim = "every current or future DEV/QA record binds an externally verified execution identity";
+    const key = `execution_identity_coverage\0${path}\0${normalizeClaim(claim)}`;
+    groups.set(key, {
+      claim: normalizeClaim(claim),
+      evidence: missingExecutionIdentity.map((item) => `${item.path}: missing ${item.fields.join(", ")}`).sort(),
+      kind: "execution_identity_coverage",
+      path,
+      refs: missingExecutionIdentity.map((item) => item.path).sort(),
+    });
+  }
+  for (const [identifier, claims] of authorityClaims) {
+    if (claims.proposed.length === 0 || claims.ratified.length === 0) continue;
+    const evidence = [...claims.proposed, ...claims.ratified]
+      .sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
+    const path = `authority-projection/${identifier}`;
+    const claim = `${identifier} appears as both PROPOSED and RATIFIED/APPROVED on current planning surfaces`;
+    const key = `authoritative_projection\0${path}\0${normalizeClaim(claim)}`;
+    groups.set(key, {
+      claim: normalizeClaim(claim),
+      evidence: [...new Set(evidence.map((item) => item.text.slice(0, 240)))].sort(),
+      kind: "authoritative_projection",
+      path,
+      refs: [...new Set(evidence.map((item) => `${item.path}#line-${item.line}`))].sort(),
+    });
+  }
+  const namespaceCollisions = [...identifierSpellings.entries()]
+    .filter(([, spellings]) => spellings.size > 1)
+    .sort(([left], [right]) => left.localeCompare(right));
+  for (const [normalized, spellings] of namespaceCollisions) {
+    const path = `identifier-namespace/${normalized}`;
+    const claim = `${normalized} has punctuation-insensitive namespace variants`;
+    const key = `identifier_namespace\0${path}\0${normalizeClaim(claim)}`;
+    groups.set(key, {
+      claim: normalizeClaim(claim),
+      evidence: [`${normalized}: ${[...spellings.keys()].sort().join(" | ")}`],
+      kind: "identifier_namespace",
+      path,
+      refs: [...new Set([...spellings.values()].flatMap((refs) => refs.slice(0, 2)))].sort(),
+    });
+  }
+  for (const [shortId, definitions] of [...authorityDefinitions.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    if (definitions.size < 2) continue;
+    const path = `identifier-namespace/${shortId}`;
+    const claim = `${shortId} is defined by multiple authority namespaces`;
+    const key = `identifier_namespace\0${path}\0${normalizeClaim(claim)}`;
+    groups.set(key, {
+      claim: normalizeClaim(claim),
+      evidence: [`${shortId}: ${[...definitions.keys()].sort().join(" | ")}`],
+      kind: "identifier_namespace",
+      path,
+      refs: [...new Set([...definitions.values()].flat())].sort(),
+    });
+  }
+
+  const surfaceGaps = executableSurfaceGaps(root, repositoryPaths);
+  if (surfaceGaps.length > 0) {
+    const path = "executable-surface/source-to-gate";
+    const claim = "every production executable package must be proven reachable from a canonical quality gate";
+    const key = `executable_surface_coverage\0${path}\0${normalizeClaim(claim)}`;
+    groups.set(key, {
+      claim: normalizeClaim(claim),
+      evidence: surfaceGaps.map((gap) => gap.evidence).sort(),
+      kind: "executable_surface_coverage",
+      path,
+      refs: [...new Set(surfaceGaps.flatMap((gap) => gap.refs))].sort(),
+    });
+  }
+  for (const path of repositoryPaths) {
+    if (!SOURCE_EXTENSIONS.has(extname(path).toLocaleLowerCase("und"))
+      || /(?:^|\/)(?:__fixtures__|__tests__|dist|fixtures?|generated|node_modules|test|tests|vendor)(?:\/|$)/i.test(path)
+      || /\.(?:spec|test)\.[^.]+$/i.test(path)) continue;
+    const absolute = resolve(root, path);
+    let content = "";
+    try {
+      const stat = lstatSync(absolute);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1_048_576) continue;
+      content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(absolute));
+    } catch {
+      continue;
+    }
+    const persistentFields = unboundedStateFields(path, content);
+    const appendOnlyStore = STATE_APPEND.test(content) && LONG_LIVED_STATE_NAME.test(`${path}\n${content}`);
+    for (const field of persistentFields) add("bounded_state_lifecycle", path, field.line, field.text);
+    if (appendOnlyStore && !APPEND_STATE_BOUND.test(content)) {
+      const lines = content.split(/\r?\n/);
+      const index = lines.findIndex((line) => STATE_APPEND.test(line));
+      if (index >= 0) add("bounded_state_lifecycle", path, index + 1, (lines[index] ?? "").trim());
     }
   }
   return [...groups.values()].map((group) => ({
@@ -353,8 +1008,25 @@ function parseManifest(
       continue;
     }
     const candidate = typeof probe.candidate_id === "string" ? probe.candidate_id.trim() : "";
-    const kind = probe.kind === "construction_boundary" || probe.kind === "composition_root_reachability"
-      ? probe.kind
+    const kind = new Set<SemanticProbeKind>([
+      "acceptance_effect_liveness",
+      "authoritative_projection",
+      "behavioral_dimension",
+      "bounded_state_lifecycle",
+      "composition_root_reachability",
+      "construction_boundary",
+      "environment_semantics",
+      "executable_surface_coverage",
+      "execution_identity_coverage",
+      "failure_domain_independence",
+      "gate_semantic_bite",
+      "historical_evidence_portability",
+      "identifier_namespace",
+      "instruction_polarity",
+      "representation_equivalence",
+      "supersession_lineage",
+    ]).has(probe.kind as SemanticProbeKind)
+      ? probe.kind as SemanticProbeKind
       : undefined;
     const contractRefs = strings(probe.contract_refs);
     const requiredCases = strings(probe.required_cases);
@@ -370,7 +1042,7 @@ function parseManifest(
     const localErrors: string[] = [];
     if (!candidate) localErrors.push("candidate_id is required");
     else if (seen.has(candidate)) localErrors.push(`duplicate candidate_id ${candidate}`);
-    if (!kind) localErrors.push("kind must be construction_boundary or composition_root_reachability");
+    if (!kind) localErrors.push("kind must be one of the registered Mister Clean semantic candidate kinds");
     if (!contractRefs?.length) localErrors.push("contract_refs must be a nonempty string array");
     if (disposition !== "not_applicable" && !requiredCases?.length) localErrors.push("required_cases must be a nonempty string array");
     if (disposition !== "not_applicable" && !exercisedCases) localErrors.push("exercised_cases must be a string array");
@@ -516,9 +1188,37 @@ export function auditSemanticRepository(
       ? manifestRelation.split(sep).join("/")
       : `external-semantic-manifest/${basename(manifestPath)}`)
     : undefined;
-  const workingTreeSha256 = semanticWorkingTreeSha256(root, manifestPath);
-  const candidates = discoverSemanticProbeCandidates(root);
+  const boundRepositoryPaths = repositoryObjectPaths(root);
+  const workingTreeSha256 = semanticWorkingTreeSha256FromPaths(root, boundRepositoryPaths, manifestPath);
+  const candidates = discoverSemanticProbeCandidates(root, boundRepositoryPaths);
   const candidateSetSha256 = semanticCandidateSetSha256(candidates);
+  const postDiscoverySha256 = semanticWorkingTreeSha256(root, manifestPath);
+  if (postDiscoverySha256 !== workingTreeSha256) {
+    const finding: SemanticProbeFinding = {
+      candidate_id: "repository-object",
+      classification: "verification_debt",
+      code: "semantic_probe_execution_error",
+      detail: "repository object changed during semantic discovery; recapture a quiescent subject before assigning or executing probes",
+      kind: "construction_boundary",
+      refs: [],
+    };
+    return {
+      candidate_probe_count: candidates.length,
+      candidate_set_sha256: candidateSetSha256,
+      candidates,
+      confirmed_failure_count: 0,
+      executed_probe_count: 0,
+      executions: [],
+      exitCode: 1,
+      findings: [finding],
+      pending_probe_count: 0,
+      resolved_probe_count: 0,
+      resolutions: [],
+      snapshot,
+      status: "fail",
+      working_tree_sha256: workingTreeSha256,
+    };
+  }
   const findings: SemanticProbeFinding[] = [];
   const executions: SemanticProbeExecution[] = [];
   const resolutions: SemanticProbeResolution[] = [];
@@ -578,6 +1278,14 @@ export function auditSemanticRepository(
             disposition: "not_applicable",
             evidence_refs: definition.notApplicableEvidence ?? [],
             rationale: definition.notApplicableReason ?? "",
+          });
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "verification_debt",
+            code: "semantic_probe_independent_attestation_required",
+            detail: "legacy repository-authored not_applicable evidence cannot clear a semantic obligation without an external independent v2 attestation",
+            kind: candidate.kind,
+            refs: candidate.refs,
           });
           continue;
         }
@@ -685,10 +1393,34 @@ export function auditSemanticRepository(
           findings.push({
             candidate_id: candidate.id,
             classification: "confirmed_product_defect",
-            code: candidate.kind === "construction_boundary"
-              ? "construction_boundary_failure"
-              : "mechanism_unwired_at_composition_root",
+            code: ({
+              acceptance_effect_liveness: "acceptance_effect_liveness_failure",
+              authoritative_projection: "authoritative_projection_failure",
+              behavioral_dimension: "behavioral_dimension_failure",
+              bounded_state_lifecycle: "bounded_state_lifecycle_failure",
+              composition_root_reachability: "mechanism_unwired_at_composition_root",
+              construction_boundary: "construction_boundary_failure",
+              environment_semantics: "environment_semantics_failure",
+              executable_surface_coverage: "executable_surface_coverage_failure",
+              execution_identity_coverage: "execution_identity_coverage_failure",
+              failure_domain_independence: "failure_domain_independence_failure",
+              gate_semantic_bite: "gate_semantic_bite_failure",
+              historical_evidence_portability: "historical_evidence_portability_failure",
+              identifier_namespace: "identifier_namespace_failure",
+              instruction_polarity: "instruction_polarity_failure",
+              representation_equivalence: "representation_equivalence_failure",
+              supersession_lineage: "supersession_lineage_failure",
+            } satisfies Record<SemanticProbeKind, SemanticFindingCode>)[candidate.kind],
             detail: `${definition.boundary} -> ${definition.observedEndpoint} failed cases: ${receiptResult.receipt!.failedCases.join(", ")}`,
+            kind: candidate.kind,
+            refs: candidate.refs,
+          });
+        } else {
+          findings.push({
+            candidate_id: candidate.id,
+            classification: "verification_debt",
+            code: "semantic_probe_independent_attestation_required",
+            detail: "legacy runner-authored PASS is retained as an observation but cannot adjudicate its own semantic obligation; obtain an external independent v2 attestation",
             kind: candidate.kind,
             refs: candidate.refs,
           });

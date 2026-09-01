@@ -3,16 +3,16 @@
    Proves the DTCG token file is a sufficient, standalone source: @font-face + :root scale + every
    [data-style] theme + the typography role classes, with NO reference to the original CSS. */
 
-@font-face{font-family:'Inter';font-weight:400;src:url('../assets/fonts/inter/Inter-Regular.otf') format('opentype');font-display:swap;}
-@font-face{font-family:'Inter';font-weight:500;src:url('../assets/fonts/inter/Inter-Medium.otf') format('opentype');font-display:swap;}
-@font-face{font-family:'Inter';font-weight:600;src:url('../assets/fonts/inter/Inter-SemiBold.otf') format('opentype');font-display:swap;}
-@font-face{font-family:'Inter Display';font-weight:300;src:url('../assets/fonts/inter/InterDisplay-Light.otf') format('opentype');font-display:swap;}
-@font-face{font-family:'Inter Display';font-weight:500;src:url('../assets/fonts/inter/InterDisplay-Medium.otf') format('opentype');font-display:swap;}
-@font-face{font-family:'Inter Display';font-weight:600;src:url('../assets/fonts/inter/InterDisplay-SemiBold.otf') format('opentype');font-display:swap;}
-@font-face{font-family:'Cormorant Garamond';font-weight:500;src:url('../assets/fonts/cormorant-garamond/CormorantGaramond-Medium.ttf') format('truetype');font-display:swap;}
-@font-face{font-family:'Cormorant Garamond';font-weight:600;src:url('../assets/fonts/cormorant-garamond/CormorantGaramond-SemiBold.ttf') format('truetype');font-display:swap;}
-@font-face{font-family:'JetBrains Mono';font-weight:400;src:url('../assets/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf') format('truetype');font-display:swap;}
-@font-face{font-family:'JetBrains Mono';font-weight:500;src:url('../assets/fonts/jetbrains-mono/JetBrainsMono-Medium.ttf') format('truetype');font-display:swap;}
+@font-face{font-family:'Inter';font-weight:400;src:url('./fonts/inter/Inter-Regular.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'Inter';font-weight:500;src:url('./fonts/inter/Inter-Medium.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'Inter';font-weight:600;src:url('./fonts/inter/Inter-SemiBold.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'Inter Display';font-weight:300;src:url('./fonts/inter/InterDisplay-Light.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'Inter Display';font-weight:500;src:url('./fonts/inter/InterDisplay-Medium.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'Inter Display';font-weight:600;src:url('./fonts/inter/InterDisplay-SemiBold.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'Cormorant Garamond';font-weight:500;src:url('./fonts/cormorant-garamond/CormorantGaramond-Medium.ttf') format('truetype');font-display:swap;}
+@font-face{font-family:'Cormorant Garamond';font-weight:600;src:url('./fonts/cormorant-garamond/CormorantGaramond-SemiBold.ttf') format('truetype');font-display:swap;}
+@font-face{font-family:'JetBrains Mono';font-weight:400;src:url('./fonts/jetbrains-mono/JetBrainsMono-Regular.ttf') format('truetype');font-display:swap;}
+@font-face{font-family:'JetBrains Mono';font-weight:500;src:url('./fonts/jetbrains-mono/JetBrainsMono-Medium.ttf') format('truetype');font-display:swap;}
 
 :root{
   /* page / print / presentation layer — promoted from assets/okoa-page.css (Fix 1) */
@@ -34,7 +34,7 @@
   --okoa-page-margin-tabloid: 24mm;
   --okoa-page-margin-a4: 20mm;
   --okoa-page-margin-arch-d: 32mm;
-  --okoa-page-margin: var(--okoa-page-margin-letter);
+  --okoa-page-margin: 20mm;
   --okoa-page-bleed: 3mm;
   --okoa-page-safe: 5mm;
   --okoa-page-crop-length: 4mm;
@@ -48,7 +48,7 @@
   --okoa-page-columns-a4: 12;
   --okoa-page-columns-arch-d: 24;
   --okoa-page-paper: color-mix(in srgb, var(--okoa-semantic-surface-default) 93%, var(--okoa-semantic-fg1) 7%);
-  --okoa-page-edge-shadow: 0 1px 3px rgba(0,0,0,.10), 0 6px 22px rgba(0,0,0,.10);
+  --okoa-page-edge-shadow: 0 1px 3px color-mix(in srgb, var(--okoa-semantic-fg1) 10%, transparent), 0 6px 22px color-mix(in srgb, var(--okoa-semantic-fg1) 10%, transparent);
   --okoa-pt-display-xl: 40pt;
   --okoa-pt-display-l: 28pt;
   --okoa-pt-display-m: 20pt;
@@ -154,8 +154,8 @@
   --okoa-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --okoa-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --okoa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --okoa-elevation-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --okoa-elevation-overlay: 0 12px 32px rgba(0, 0, 0, 0.12);
+  --okoa-elevation-hover: 0 4px 12px color-mix(in srgb, var(--okoa-semantic-fg1) 8%, transparent);
+  --okoa-elevation-overlay: 0 12px 32px color-mix(in srgb, var(--okoa-semantic-fg1) 12%, transparent);
   --okoa-focus-ring-offset: 2px;
   --okoa-focus-ring-width: 2px;
   --okoa-grid-hairline-color: color-mix(in srgb, var(--okoa-semantic-fg1) 12%, transparent);
@@ -195,7 +195,7 @@
   --okoa-rules-default: 1pt;
   --okoa-rules-emphasis: 1.2pt;
   --okoa-rules-hairline: 0.5pt;
-  --okoa-scrim: rgba(0, 0, 0, 0.40);
+  --okoa-scrim: color-mix(in srgb, var(--okoa-semantic-fg1) 40%, transparent);
   --okoa-scroll-distance: 16px;
   --okoa-scroll-duration: 700ms;
   --okoa-scroll-progress-after: 320px;
@@ -1007,7 +1007,7 @@
   --okoa-semantic-surface-chrome: #0D0F13;
   --okoa-semantic-fg1: #ECEEF3;
   --okoa-semantic-fg2: #A6ACB8;
-  --okoa-semantic-fg3: #797F8B;
+  --okoa-semantic-fg3: #7A7A8A;
   --okoa-semantic-fg-on-dark: #F7F8FA;
   --okoa-semantic-fg-accent: #8AA0C4;
   --okoa-semantic-border-default: #2A2F38;
@@ -1018,7 +1018,6 @@
   --okoa-semantic-entity-secondary-b: #93A8C6;
   --okoa-accent-fill-surface: #2C3A52;
   --okoa-accent-fill-text: #F2F5FA;
-  --okoa-scrim: rgba(0,0,0,0.55);
   --okoa-index-number-color: #8AA0C4;
   --okoa-index-label-color: #A6ACB8;
   --okoa-scroll-progress-stroke: #8AA0C4;
@@ -1033,7 +1032,7 @@
   --okoa-semantic-surface-chrome: #0C1A11;
   --okoa-semantic-fg1: #10160F;
   --okoa-semantic-fg2: #45503F;
-  --okoa-semantic-fg3: #6E7967;
+  --okoa-semantic-fg3: #6E6E66;
   --okoa-semantic-fg-on-dark: #EAFBF0;
   --okoa-semantic-fg-accent: #0A7A41;
   --okoa-semantic-border-default: #D6DED4;
@@ -1044,7 +1043,6 @@
   --okoa-semantic-entity-secondary-b: #7AC79B;
   --okoa-accent-fill-surface: #0A6E3B;
   --okoa-accent-fill-text: #EAFBF0;
-  --okoa-scrim: rgba(6,18,11,0.5);
   --okoa-index-number-color: #0A7A41;
   --okoa-index-label-color: #45503F;
   --okoa-scroll-progress-stroke: #0A7A41;
@@ -1059,7 +1057,7 @@
   --okoa-semantic-surface-chrome: #0F120C;
   --okoa-semantic-fg1: #ECEDE4;
   --okoa-semantic-fg2: #A8AD9D;
-  --okoa-semantic-fg3: #7C8170;
+  --okoa-semantic-fg3: #7A8470;
   --okoa-semantic-fg-on-dark: #F3F0E8;
   --okoa-semantic-fg-accent: #9DAE8D;
   --okoa-semantic-border-default: #2D3327;
@@ -1070,7 +1068,6 @@
   --okoa-semantic-entity-secondary-b: #A9B59A;
   --okoa-accent-fill-surface: #49543E;
   --okoa-accent-fill-text: #F3F0E8;
-  --okoa-scrim: rgba(0,0,0,0.5);
   --okoa-index-number-color: #9DAE8D;
   --okoa-index-label-color: #A8AD9D;
   --okoa-scroll-progress-stroke: #9DAE8D;
@@ -1085,7 +1082,7 @@
   --okoa-semantic-surface-chrome: #0E120C;
   --okoa-semantic-fg1: #ECEEE7;
   --okoa-semantic-fg2: #A6AC9E;
-  --okoa-semantic-fg3: #7A8072;
+  --okoa-semantic-fg3: #7A8470;
   --okoa-semantic-fg-on-dark: #F7F8F6;
   --okoa-semantic-fg-accent: #93B089;
   --okoa-semantic-border-default: #2C3327;
@@ -1096,7 +1093,6 @@
   --okoa-semantic-entity-secondary-b: #A2BE9A;
   --okoa-accent-fill-surface: #3F5238;
   --okoa-accent-fill-text: #F1F4EC;
-  --okoa-scrim: rgba(0,0,0,0.52);
   --okoa-index-number-color: #93B089;
   --okoa-index-label-color: #A6AC9E;
   --okoa-scroll-progress-stroke: #93B089;
@@ -1111,7 +1107,7 @@
   --okoa-semantic-surface-chrome: #0C0F11;
   --okoa-semantic-fg1: #E9EEF0;
   --okoa-semantic-fg2: #A2AAB0;
-  --okoa-semantic-fg3: #767E84;
+  --okoa-semantic-fg3: #7D8590;
   --okoa-semantic-fg-on-dark: #F6F7F8;
   --okoa-semantic-fg-accent: #8FB0BE;
   --okoa-semantic-border-default: #283036;
@@ -1122,7 +1118,6 @@
   --okoa-semantic-entity-secondary-b: #93B4C0;
   --okoa-accent-fill-surface: #2B4049;
   --okoa-accent-fill-text: #EFF5F7;
-  --okoa-scrim: rgba(0,0,0,0.55);
   --okoa-index-number-color: #8FB0BE;
   --okoa-index-label-color: #A2AAB0;
   --okoa-scroll-progress-stroke: #8FB0BE;
@@ -1137,7 +1132,7 @@
   --okoa-semantic-surface-chrome: #060708;
   --okoa-semantic-fg1: #F4F5F7;
   --okoa-semantic-fg2: #AEB2B8;
-  --okoa-semantic-fg3: #80858C;
+  --okoa-semantic-fg3: #7D8590;
   --okoa-semantic-fg-on-dark: #F4F5F7;
   --okoa-semantic-fg-accent: #E8EAED;
   --okoa-semantic-border-default: #2A2D31;
@@ -1148,7 +1143,6 @@
   --okoa-semantic-entity-secondary-b: #6E747B;
   --okoa-accent-fill-surface: #ECEEF0;
   --okoa-accent-fill-text: #0E0F11;
-  --okoa-scrim: rgba(0,0,0,0.6);
   --okoa-index-number-color: #E8EAED;
   --okoa-index-label-color: #AEB2B8;
   --okoa-scroll-progress-stroke: #E8EAED;
@@ -1163,7 +1157,7 @@
   --okoa-semantic-surface-chrome: #120F0B;
   --okoa-semantic-fg1: #EFEAE1;
   --okoa-semantic-fg2: #B0A595;
-  --okoa-semantic-fg3: #837868;
+  --okoa-semantic-fg3: #786357;
   --okoa-semantic-fg-on-dark: #F8F6F1;
   --okoa-semantic-fg-accent: #C2A98A;
   --okoa-semantic-border-default: #332C24;
@@ -1174,7 +1168,6 @@
   --okoa-semantic-entity-secondary-b: #C8B596;
   --okoa-accent-fill-surface: #5A4A38;
   --okoa-accent-fill-text: #F8F6F1;
-  --okoa-scrim: rgba(0,0,0,0.5);
   --okoa-index-number-color: #C2A98A;
   --okoa-index-label-color: #B0A595;
   --okoa-scroll-progress-stroke: #C2A98A;

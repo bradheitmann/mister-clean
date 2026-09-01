@@ -44,7 +44,7 @@ current.
 3. Execute the batch under the skill's standing authority and action ledger.
 4. Rerun the affected comparators before another action begins.
 5. Repair or safely roll back every cleanup-introduced regression. Close the
-   action only when `introduced_by_run_open` is zero.
+   action only when its `open_at_boundary_observation_ids` set is empty.
 6. Mark debt paid only from execution and verification evidence. A dispatch,
    plan, queue, or favorable paid/introduced ratio is not payment.
 7. Repeat from fresh ground truth until the terminal condition is established.

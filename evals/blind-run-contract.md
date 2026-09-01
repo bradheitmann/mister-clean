@@ -71,3 +71,43 @@ cascades executed, projections coherent):
 This gate is why "the closeout thinks it is clean" is not clean: an
 independent standardized swarm is the check on the closeout's own blind spots,
 and every blind spot it finds hardens the skill for the next repository.
+
+
+## Pinned dogfood protocol
+
+When the repository under review is Mister Clean itself, self-application is a
+matched evaluation, not self-certification:
+
+1. Pin the last accepted installed release by semantic version, `SKILL.md`
+   digest, and executable/runtime attestation. Candidate prose or executables
+   may not silently replace any part of the pinned evaluator.
+2. Capture the candidate's native tracked-plus-nonignored `RepositoryObject`
+   before dispatch. Freeze repository writes for the matched comparison and
+   capture the same object after every run. A mismatch makes the result stale.
+3. Give each treatment the same custody facts, hard boundaries, mode, and bare
+   invocation. Do not reveal a withheld defect register or another treatment's
+   findings.
+4. Record the exact model + harness + reasoning level, installed release,
+   start/end object, elapsed interval, commands attempted, mutation status, and
+   every finding/disposition. A status-line path count must not masquerade as a
+   file census.
+5. Adjudicate findings against preserved repository evidence. False positives,
+   detector misses, process defects, and repository debt remain distinct. One
+   auditor's assertion does not become ground truth because it is more detailed.
+6. Independently score each result before adding it to tuple-by-capability
+   qualification. The worker may not be its sole judge; an unscored result is
+   directional evidence only.
+7. Convert confirmed misses into general, navigable revisions and adversarial
+   fixtures. Re-run with a newly frozen object only after the revision is part
+   of the candidate. Never coach the next worker with the specific answer.
+8. The candidate earns CLEAN only through the ordinary external acceptance
+   chain on one exact final object. A pinned prior release may expose candidate
+   debt; the working candidate may exercise new detectors; neither alone may
+   certify the release that contains it.
+
+Periodic read-only dogfood audits are required during material development, at
+least before a release candidate and after any change to detection, accounting,
+planning discovery, complexity measurement, routing, evidence identity, or
+release verification. They do not require a commit, but a dirty candidate must
+be bound by the full repository object and must remain `NOT CLEAN` until custody,
+verification, integration, and release parity close.

@@ -7,11 +7,28 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { validateBundle } from "./bundle.js";
-import { prepareCloseout } from "./prepare.js";
+import {
+  prepareCloseout as prepareCloseoutBound,
+  type PrepareCloseoutOptions,
+} from "./prepare.js";
 import { isoTimestamp, validateManifest } from "./records.js";
+import { mintServerAttestationBinding } from "../runtime-binding.js";
 
 type JsonObject = Record<string, unknown>;
 const roots: string[] = [];
+const SOURCE_RUNTIME = mintServerAttestationBinding({
+  record_type: "mister-clean.runtime-attestation-binding",
+  schema_version: "1.0",
+  status: "source_development",
+  package_root: "/fixture/mister-clean",
+  package_root_realpath: "/fixture/mister-clean",
+  entrypoint: { path: "./src/cli.ts", realpath: "/fixture/mister-clean/src/cli.ts", sha256: "b".repeat(64) },
+  reason: "hardening test source execution",
+});
+
+function prepareCloseout(options: Omit<PrepareCloseoutOptions, "runtimeAttestation">) {
+  return prepareCloseoutBound({ ...options, runtimeAttestation: SOURCE_RUNTIME });
+}
 
 function sha(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -52,7 +69,7 @@ async function prepared(name: string): Promise<{ repo: string; proof: string; bu
   writeFileSync(join(repo, "CURRENT-STATE.md"), "state\n");
   command(repo, "git", "add", ".");
   command(repo, "git", "commit", "-m", "fixture");
-  const result = prepareCloseout({
+  const result = await prepareCloseout({
     repo, evidenceHome: root, runId: "run-1", requestRef: "request-1",
     requestText: "$mister-clean", now: () => new Date("2026-08-25T10:00:00Z"),
   });

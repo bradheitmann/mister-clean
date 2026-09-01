@@ -26,6 +26,15 @@ For historical conformance, record:
 
 Prefer append-only amendments, adapters, indices, or normalized projections when rewriting would blur what was known or asserted at the original time.
 
+## Declared-schema closure
+
+Once repository canon declares a field, label, header, ordering rule, or exact
+character shape required for an artifact class, enumerate the complete eligible
+corpus and validate every instance against that declaration. A template, a
+sample pass, or a count of files is not conformance evidence. Missing current or
+future execution identity is payable; unknown historical identity remains
+explicitly `UNRECORDED` and is never guessed merely to make the corpus uniform.
+
 ## Repository-as-context principle
 
 The repository influences future contributors, but uniformity is not automatically truth. Optimize the current entry points and active examples first. Preserve legitimate alternatives and historical evidence rather than deleting counterexamples solely because an agent might imitate them.

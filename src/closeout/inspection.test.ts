@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ import {
   generatePackageManifest,
   loadDenylist,
   scanPublicSafety,
+  scanTrackedPublicSafetySync,
 } from "./inspection.js";
 
 const temporaryRoots: string[] = [];
@@ -81,10 +82,21 @@ describe("scanPublicSafety", () => {
     const result = await scanPublicSafety(root);
     expect(result).toMatchObject({ exitCode: 1, status: "fail" });
     expect(result.findings).toEqual([
-      { path: "sample.txt", line: 1, rule: "email-address" },
-      { path: "sample.txt", line: 2, rule: "posix-home-path" },
+      expect.objectContaining({ path: "sample.txt", line: 1, rule: "email-address", fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) }),
+      expect.objectContaining({ path: "sample.txt", line: 2, rule: "posix-home-path", fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) }),
     ]);
     expect(JSON.stringify(result)).not.toContain(`${"person"}@${"example.org"}`);
+  });
+
+  it("allows only the exact public third-party legal contact on its canonical notice line", async () => {
+    const root = await fixture("public-third-party-notice");
+    const publicContact = ["eemeli", "gmail.com"].join("@");
+    await put(root, "THIRD_PARTY_NOTICES.md", `Copyright Eemeli Aro <${publicContact}>\n`);
+    await put(root, "copied-notice.md", `Copyright Eemeli Aro <${publicContact}>\n`);
+    const result = await scanPublicSafety(root);
+    expect(result.findings).toEqual([
+      expect.objectContaining({ path: "copied-notice.md", line: 1, rule: "email-address" }),
+    ]);
   });
 
   it("loads a comment-aware denylist, folds terms, and ignores excluded trees", async () => {
@@ -98,9 +110,54 @@ describe("scanPublicSafety", () => {
     // The historical scanner traverses the local denylist itself; callers that
     // need to keep it private place it outside the prospective public tree.
     expect(result.findings).toEqual([
-      { path: "denylist.txt", line: 2, rule: "custom-denylist-1" },
-      { path: "source.txt", line: 1, rule: "custom-denylist-1" },
+      expect.objectContaining({ path: "denylist.txt", line: 2, rule: "custom-denylist-1", fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) }),
+      expect.objectContaining({ path: "source.txt", line: 1, rule: "custom-denylist-1", fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) }),
     ]);
+  });
+
+  it("scans only the declared tracked/shippable surface when asked", async () => {
+    const root = await fixture("tracked-public-surface");
+    await put(root, "public.txt", "safe public text\n");
+    await put(root, ".crush/logs/crush.log", `local=/${"Users"}/operator/private\n`);
+
+    const result = scanTrackedPublicSafetySync(root, ["public.txt"]);
+
+    expect(result).toMatchObject({
+      exitCode: 0,
+      findings: [],
+      scope: "tracked_shippable",
+      status: "pass",
+      tracked_path_count: 1,
+      tracked_paths_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      unassessed: [],
+    });
+  });
+
+  it("fails closed when a declared tracked path cannot be assessed", async () => {
+    const root = await fixture("tracked-missing");
+    const result = scanTrackedPublicSafetySync(root, ["missing.txt"]);
+
+    expect(result).toMatchObject({
+      exitCode: 1,
+      findings: [],
+      status: "fail",
+      unassessed: [{
+        path: "missing.txt",
+        reason: "missing_or_unreadable",
+        fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }],
+    });
+  });
+
+  it("scans printable metadata inside binary assets instead of silently skipping them", async () => {
+    const root = await fixture("tracked-binary");
+    const path = join(root, "asset.bin");
+    await writeFile(path, new Uint8Array([0, ...Buffer.from(`owner=${"person"}@${"example.org"}`, "utf8"), 0]));
+
+    const result = scanTrackedPublicSafetySync(root, ["asset.bin"]);
+
+    expect(result.unassessed).toEqual([]);
+    expect(result.findings).toContainEqual(expect.objectContaining({ path: "asset.bin", rule: "email-address" }));
   });
 });
 
@@ -135,10 +192,15 @@ describe("generatePackageManifest", () => {
   it("hashes the declared public package surface rather than unshipped source", async () => {
     const root = await fixture("package-manifest");
     await Promise.all([
-      put(root, "package.json", JSON.stringify({ files: ["bin/*.js", "dist/**", "SKILL.md", "MANIFEST.sha256"] })),
+      put(root, "package.json", JSON.stringify({
+        name: "@example/mister-clean-fixture",
+        version: "1.0.0",
+        files: ["RELEASE_ATTESTATION.json", "bin/*.js", "dist/**", "SKILL.md", "MANIFEST.sha256"],
+      })),
       put(root, "bin/mister-clean.js", "cli\n"),
       put(root, "dist/server.js", "server\n"),
       put(root, "SKILL.md", "skill\n"),
+      put(root, "RELEASE_ATTESTATION.json", "generated after the manifest\n"),
       put(root, "src/private.ts", "source\n"),
       put(root, "MANIFEST.sha256", "old\n"),
       put(root, "node_modules/ignored.js", "dependency\n"),
@@ -153,6 +215,24 @@ describe("generatePackageManifest", () => {
     ]);
     expect(result.entries.some((entry) => entry.path.startsWith("./src/"))).toBe(false);
     expect(result.entries.some((entry) => entry.path === "./MANIFEST.sha256")).toBe(false);
+    expect(result.entries.some((entry) => entry.path === "./RELEASE_ATTESTATION.json")).toBe(false);
     await expect(readFile(join(root, "MANIFEST.sha256"), "utf8")).resolves.toBe("old\n");
+  });
+
+  it("rejects a symlink in the declared package surface", async () => {
+    const root = await fixture("package-manifest-symlink");
+    await Promise.all([
+      put(root, "package.json", JSON.stringify({
+        name: "@example/mister-clean-fixture",
+        version: "1.0.0",
+        files: ["SKILL.md"],
+      })),
+      put(root, "real-skill.md", "skill\n"),
+    ]);
+    await symlink("real-skill.md", join(root, "SKILL.md"));
+
+    await expect(generatePackageManifest(root)).rejects.toThrow(
+      "package manifest rejects symlinked package entry: SKILL.md",
+    );
   });
 });

@@ -6,6 +6,7 @@
  * an unknown stack or public-safety failure in a closeout record.
  */
 import { createHash } from "node:crypto";
+import { lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import {
   readFile,
   readdir,
@@ -14,6 +15,7 @@ import {
 } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
 
+import { generateAttestedPackageManifest } from "../attestation.js";
 import { foldCase } from "./normalization.js";
 
 export const STACK_MARKERS = {
@@ -40,15 +42,44 @@ export interface StackDetectionResult {
 }
 
 export interface PublicSafetyFinding {
+  /** Redacted, stable identity. It never contains the matched source text. */
+  readonly fingerprint: string;
   readonly line: number;
   readonly path: string;
   readonly rule: string;
 }
 
+export type PublicSafetyUnassessedReason =
+  | "binary_content"
+  | "invalid_utf8"
+  | "missing_or_unreadable"
+  | "unsupported_tracked_entry";
+
+export interface PublicSafetyUnassessed {
+  /** Stable identity without source bytes or filesystem error text. */
+  readonly fingerprint: string;
+  readonly path: string;
+  readonly reason: PublicSafetyUnassessedReason;
+}
+
 export interface PublicSafetyScanResult {
   readonly exitCode: 0 | 1;
   readonly findings: readonly PublicSafetyFinding[];
+  /** SHA-256 of the exact frozen denylist bytes, when one configured this run. */
+  readonly input_sha256?: string;
+  /** Present when the caller supplied the precise tracked/shippable surface. */
+  readonly scope?: "tracked_shippable";
   readonly status: "pass" | "fail";
+  /** Canonical tracked path-set binding for tracked/shippable scans. */
+  readonly tracked_path_count?: number;
+  readonly tracked_paths_sha256?: string;
+  /** Files that could not honestly be assessed are debt, never silent skips. */
+  readonly unassessed: readonly PublicSafetyUnassessed[];
+}
+
+export interface SelectedPublicSafetyScanResult extends PublicSafetyScanResult {
+  readonly selected_path_count: number;
+  readonly selected_paths_sha256: string;
 }
 
 export interface ManifestEntry {
@@ -67,6 +98,7 @@ export const PUBLIC_SAFETY_EXCLUDED_PARTS = new Set([
   ".git",
   ".venv",
   ".wrangler",
+  "__pycache__",
   "coverage",
   "dist",
   "node_modules",
@@ -87,14 +119,6 @@ export const MANIFEST_EXCLUDED_FILES = new Set([
   "src/generated-materials.ts",
 ]);
 
-const PACKAGE_MANIFEST_EXCLUDED_DIRS = new Set([
-  ".git",
-  ".wrangler",
-  "__pycache__",
-  "coverage",
-  "node_modules",
-]);
-
 const PUBLIC_SAFETY_RULES: ReadonlyArray<readonly [string, RegExp]> = [
   ["posix-home-path", /\/(?:Users|home)\/[^/\s]+\//],
   ["windows-home-path", /\b[A-Za-z]:\\Users\\[^\\\s]+\\/],
@@ -106,6 +130,15 @@ const PUBLIC_SAFETY_RULES: ReadonlyArray<readonly [string, RegExp]> = [
     /\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*['"]?[A-Za-z0-9_./+=-]{8,}/i,
   ],
 ];
+
+const YAML_PUBLIC_CONTACT = ["eemeli", "gmail.com"].join("@");
+const PUBLIC_THIRD_PARTY_LEGAL_LINES = new Set([
+  `email-address\0THIRD_PARTY_NOTICES.md\0Copyright Eemeli Aro <${YAML_PUBLIC_CONTACT}>`,
+]);
+
+function isPublicThirdPartyLegalIdentifier(path: string, line: string, rule: string): boolean {
+  return PUBLIC_THIRD_PARTY_LEGAL_LINES.has(`${rule}\0${path}\0${line}`);
+}
 
 interface WalkedPath {
   readonly absolute: string;
@@ -164,6 +197,25 @@ async function walkFiles(root: string, excluded: ReadonlySet<string>): Promise<W
   return files.sort((left, right) => compareCodePoints(left.relative, right.relative));
 }
 
+function walkFilesSync(root: string, excluded: ReadonlySet<string>): WalkedPath[] {
+  const absoluteRoot = resolve(root);
+  const files: WalkedPath[] = [];
+
+  function visit(directory: string): void {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (excluded.has(entry.name)) continue;
+      const absolute = resolve(directory, entry.name);
+      const rel = toPosix(relative(absoluteRoot, absolute));
+      if (entry.isSymbolicLink()) files.push({ absolute, relative: rel, symlink: true });
+      else if (entry.isDirectory()) visit(absolute);
+      else if (entry.isFile()) files.push({ absolute, relative: rel, symlink: false });
+    }
+  }
+
+  visit(absoluteRoot);
+  return files.sort((left, right) => compareCodePoints(left.relative, right.relative));
+}
+
 async function containsShellFile(root: string): Promise<boolean> {
   try {
     return (await walkFiles(root, new Set([".git", "node_modules"]))).some((file) => file.relative.endsWith(".sh"));
@@ -202,8 +254,68 @@ export async function loadDenylist(path?: string): Promise<readonly string[]> {
     .filter((line) => line.length > 0 && !line.startsWith("#"));
 }
 
+/** Synchronous form for closeout preparation. */
+export function loadDenylistSync(path?: string): readonly string[] {
+  if (!path) return [];
+  return readFileSync(path, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
 function lines(text: string): readonly string[] {
   return text.split(/\r\n|\n|\r/);
+}
+
+/** Extract redacted-searchable ASCII runs from binary or non-UTF-8 assets. */
+function printableBinaryText(bytes: Uint8Array): string {
+  let result = "";
+  let run = "";
+  const flush = (): void => {
+    if (run.length >= 4) result += `${run}\n`;
+    run = "";
+  };
+  for (const byte of bytes) {
+    if (byte >= 0x20 && byte <= 0x7e) run += String.fromCharCode(byte);
+    else flush();
+  }
+  flush();
+  return result;
+}
+
+/**
+ * Stable redacted finding identity. The rule, repository-relative path, and
+ * line are sufficient to bind ledger rows without serialising secret text.
+ */
+export function publicSafetyFingerprint(finding: Pick<PublicSafetyFinding, "line" | "path" | "rule">): string {
+  return createHash("sha256")
+    .update(`public_safety\0${finding.rule}\0${finding.path}\0${finding.line}`, "utf8")
+    .digest("hex");
+}
+
+export function publicSafetyUnassessedFingerprint(
+  finding: Pick<PublicSafetyUnassessed, "path" | "reason">,
+): string {
+  return createHash("sha256")
+    .update(`public_safety_unassessed\0${finding.reason}\0${finding.path}`, "utf8")
+    .digest("hex");
+}
+
+function publicSafetyUnassessed(
+  path: string,
+  reason: PublicSafetyUnassessedReason,
+): PublicSafetyUnassessed {
+  return { fingerprint: publicSafetyUnassessedFingerprint({ path, reason }), path, reason };
+}
+
+function selectedPathSetSha256(paths: readonly string[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify([...new Set(paths)].sort(compareCodePoints)), "utf8")
+    .digest("hex");
+}
+
+function publicSafetyFinding(path: string, line: number, rule: string): PublicSafetyFinding {
+  return { fingerprint: publicSafetyFingerprint({ path, line, rule }), path, line, rule };
 }
 
 /**
@@ -214,39 +326,125 @@ export async function scanPublicSafety(
   root: string,
   customTerms: readonly string[] = [],
 ): Promise<PublicSafetyScanResult> {
+  return scanPublicSafetySync(root, customTerms);
+}
+
+/** Synchronous form for closeout preparation, which is intentionally sync. */
+export function scanPublicSafetySync(
+  root: string,
+  customTerms: readonly string[] = [],
+): PublicSafetyScanResult {
+  return scanPublicSafetyFilesSync(walkFilesSync(root, PUBLIC_SAFETY_EXCLUDED_PARTS), customTerms);
+}
+
+/**
+ * Scan exactly the caller-selected tracked/shippable paths. This deliberately
+ * does not walk untracked agent logs, evidence caches, or ignored worktrees.
+ */
+export function scanTrackedPublicSafetySync(
+  root: string,
+  trackedPaths: readonly string[],
+  customTerms: readonly string[] = [],
+): PublicSafetyScanResult {
+  const selected = scanSelectedPublicSafetySync(root, trackedPaths, customTerms);
+  return {
+    findings: selected.findings,
+    unassessed: selected.unassessed,
+    exitCode: selected.exitCode,
+    status: selected.status,
+    scope: "tracked_shippable",
+    tracked_path_count: selected.selected_path_count,
+    tracked_paths_sha256: selected.selected_paths_sha256,
+  };
+}
+
+/** Scan an exact caller-supplied surface without assuming Git or package semantics. */
+export function scanSelectedPublicSafetySync(
+  root: string,
+  selectedPaths: readonly string[],
+  customTerms: readonly string[] = [],
+): SelectedPublicSafetyScanResult {
+  const absoluteRoot = resolve(root);
+  const files: WalkedPath[] = [];
+  const canonicalPaths = [...new Set(selectedPaths)].sort(compareCodePoints);
+  const unassessed: PublicSafetyUnassessed[] = [];
+  for (const path of canonicalPaths) {
+    if (!path || path.startsWith("/") || path.split(/[\\/]/).includes("..")) {
+      unassessed.push(publicSafetyUnassessed(path || "<empty>", "unsupported_tracked_entry"));
+      continue;
+    }
+    const absolute = resolve(absoluteRoot, path);
+    const rel = relative(absoluteRoot, absolute);
+    if (rel === ".." || rel.startsWith(`..${sep}`)) {
+      unassessed.push(publicSafetyUnassessed(path, "unsupported_tracked_entry"));
+      continue;
+    }
+    try {
+      const stat = lstatSync(absolute);
+      if (stat.isFile() || stat.isSymbolicLink()) {
+        files.push({ absolute, relative: toPosix(rel), symlink: stat.isSymbolicLink() });
+      } else {
+        unassessed.push(publicSafetyUnassessed(toPosix(rel), "unsupported_tracked_entry"));
+      }
+    } catch {
+      unassessed.push(publicSafetyUnassessed(toPosix(rel), "missing_or_unreadable"));
+    }
+  }
+  return {
+    ...scanPublicSafetyFilesSync(files, customTerms, unassessed),
+    selected_path_count: canonicalPaths.length,
+    selected_paths_sha256: selectedPathSetSha256(canonicalPaths),
+  };
+}
+
+function scanPublicSafetyFilesSync(
+  files: readonly WalkedPath[],
+  customTerms: readonly string[],
+  initialUnassessed: readonly PublicSafetyUnassessed[] = [],
+): PublicSafetyScanResult {
   const findings: PublicSafetyFinding[] = [];
-  const files = await walkFiles(root, PUBLIC_SAFETY_EXCLUDED_PARTS);
+  const unassessed = [...initialUnassessed];
 
   for (const file of files) {
     let text: string;
-    if (file.symlink) {
-      text = `SYMLINK_TARGET=${await readlink(file.absolute)}`;
-    } else {
-      const bytes = await readFile(file.absolute);
-      if (bytes.includes(0)) continue;
-      try {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      } catch {
-        continue;
+    try {
+      if (file.symlink) {
+        text = `SYMLINK_TARGET=${readlinkSync(file.absolute)}`;
+      } else {
+        const bytes = readFileSync(file.absolute);
+        if (bytes.includes(0)) text = printableBinaryText(bytes);
+        else {
+          try {
+            text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+          } catch {
+            text = printableBinaryText(bytes);
+          }
+        }
       }
+    } catch (error) {
+      void error;
+      unassessed.push(publicSafetyUnassessed(file.relative, "missing_or_unreadable"));
+      continue;
     }
 
     for (const [index, line] of lines(text).entries()) {
       for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
-        if (expression.test(line)) findings.push({ path: file.relative, line: index + 1, rule });
+        if (expression.test(line) && !isPublicThirdPartyLegalIdentifier(file.relative, line, rule)) {
+          findings.push(publicSafetyFinding(file.relative, index + 1, rule));
+        }
       }
       const folded = foldCase(line);
       for (const [termIndex, term] of customTerms.entries()) {
         if (folded.includes(foldCase(term))) {
-          findings.push({ path: file.relative, line: index + 1, rule: `custom-denylist-${termIndex + 1}` });
+          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`));
         }
       }
     }
   }
 
-  return findings.length === 0
-    ? { findings, exitCode: 0, status: "pass" }
-    : { findings, exitCode: 1, status: "fail" };
+  return findings.length === 0 && unassessed.length === 0
+    ? { findings, unassessed, exitCode: 0, status: "pass" }
+    : { findings, unassessed, exitCode: 1, status: "fail" };
 }
 
 /**
@@ -281,59 +479,11 @@ export async function generateManifest(root: string): Promise<ManifestResult> {
   };
 }
 
-function packagePatternExpression(pattern: string): RegExp {
-  const normalized = pattern.replace(/^\.\//, "").replace(/\/$/, "");
-  let source = "^";
-  for (let index = 0; index < normalized.length; index += 1) {
-    const character = normalized[index] as string;
-    if (character === "*" && normalized[index + 1] === "*") {
-      source += ".*";
-      index += 1;
-    } else if (character === "*") {
-      source += "[^/]*";
-    } else {
-      source += character.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-    }
-  }
-  return new RegExp(`${source}$`, "u");
-}
-
 /**
  * Deterministic manifest of the files the package declares as public. This is
  * deliberately distinct from the source-tree manifest: a shipped manifest
  * must validate the installed artifact, not files its consumer never receives.
  */
 export async function generatePackageManifest(root: string): Promise<ManifestResult> {
-  const absoluteRoot = resolve(root);
-  const packageData = JSON.parse(await readFile(resolve(absoluteRoot, "package.json"), "utf8")) as {
-    files?: unknown;
-  };
-  if (!Array.isArray(packageData.files) || packageData.files.some((entry) => typeof entry !== "string")) {
-    throw new Error("package.json files must be an array of strings");
-  }
-
-  const patterns = packageData.files
-    .filter((entry): entry is string => entry !== "MANIFEST.sha256")
-    .map(packagePatternExpression);
-  const entries: ManifestEntry[] = [];
-  const files = await walkFiles(absoluteRoot, PACKAGE_MANIFEST_EXCLUDED_DIRS);
-
-  for (const file of files) {
-    if (file.relative === "MANIFEST.sha256") continue;
-    if (basename(file.relative).endsWith(".pyc") || basename(file.relative).endsWith(".skill")) continue;
-    if (file.relative !== "package.json" && !patterns.some((pattern) => pattern.test(file.relative))) continue;
-    if (file.symlink && !(await stat(file.absolute)).isFile()) continue;
-    const bytes = await readFile(file.absolute);
-    entries.push({
-      path: `./${file.relative}`,
-      sha256: createHash("sha256").update(bytes).digest("hex"),
-    });
-  }
-
-  entries.sort((left, right) => compareCodePoints(left.path, right.path));
-  return {
-    entries,
-    content: entries.map((entry) => `${entry.sha256}  ${entry.path}`).join("\n") + (entries.length ? "\n" : ""),
-    exitCode: 0,
-  };
+  return generateAttestedPackageManifest(root);
 }

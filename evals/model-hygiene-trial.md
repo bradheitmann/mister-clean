@@ -27,6 +27,20 @@ inflation, speculative redesign, duplicate evidence, and cleanup-created debt.
    harness adapter supplies these fields from runtime evidence; do not spend the
    candidate's task budget asking it to discover its own model card. The
    candidate may echo the supplied identity but must not infer missing fields.
+   Preserve dispatcher-observed identity and candidate self-report separately.
+   If they disagree, mark the sample `identity_unbound`, retain its technical
+   findings, and exclude it from tuple counts and rankings until an independent
+   runtime receipt resolves the mismatch.
+   Treat the pane/tab title only as the intended configuration and worker
+   self-report only as an untrusted comparison. Immediately before dispatch,
+   externally read back the actual model, harness, reasoning level, route,
+   harness-session token, and process-instance token and bind them to an
+   identity lease with evidence. Read them back again immediately before
+   evaluation. Restart, relaunch, provider fallback, route/configuration change,
+   or session/process replacement invalidates the lease and requires a fresh
+   binding. A mismatch blocks dispatch; a missing or changed scoring-time
+   binding preserves technical findings but contributes zero qualification or
+   ranking credit.
 3. Give every candidate the same read-only task. Write results only to a unique
    path outside the target repository. Do not let one candidate read another's
    result or the scoring key.
@@ -63,6 +77,14 @@ inflation, speculative redesign, duplicate evidence, and cleanup-created debt.
     the same sample in flight. Do not count the continuation as a new attempt or
     model failure. If it repeatedly resumes without forward progress or crosses
     the declared experiment deadline, then apply the terminal rule.
+11. Derive census, reachability, generated-drift, schema, and timing claims from
+    the mechanism that actually establishes them. A collapsed `git status` row
+    is not a file count; modification times are not generated-byte parity; a
+    script is not unreachable until the complete native runner/test-discovery
+    graph has been traced; `schema_valid` requires an executed validator against
+    a named schema; and elapsed time requires the monotonic interval defined
+    below. Preserve unsupported claims as evaluator errors rather than turning
+    them into repository debt.
 
 ## Progressive evaluation design
 
@@ -108,6 +130,32 @@ dispatch_attempted -> accepted_by_harness -> completed -> schema_valid ->
 independently_scored -> integrated_or_field_verified
 ```
 
+`identity_unbound` is an orthogonal evidence state, not a model label. It may
+coexist with completed or schema-valid work but prevents attribution to an
+execution tuple.
+
+Historical ecological samples without both external readbacks remain useful
+hypotheses and defect evidence, but are excluded from qualification thresholds,
+category-champion selection, and leaderboards. Never retroactively bind them
+from tab names or model self-identification.
+
+Record the lease in this minimum shape; evidence fields are byte-bound locators,
+not prose assertions:
+
+```text
+identity_lease_id
+requested_agent_tuple_id
+execution_route_id
+pre_dispatch: observed_model + observed_harness + observed_reasoning +
+              harness_session_token + process_instance_token + observer + evidence
+pre_evaluation: same fields, newly observed
+intended_surface_label
+worker_self_report
+invalidation_events
+disposition: BOUND_FOR_EVALUATION | IDENTITY_UNBOUND | MISMATCH | INVALIDATED
+contributes_quality_credit: true only for BOUND_FOR_EVALUATION
+```
+
 A retry after a transport error, an unsubmitted composer, a provider fallback,
 or a recoverable harness interruption is an orchestration observation, not
 another model-quality sample. A result that never survived independent
@@ -132,6 +180,20 @@ Fill empty tuple cells before repeating already saturated cells when project
 risk and domain fit permit. Production remediation still routes to the agent
 best suited to pay the debt; coverage work uses bounded read-only packets so an
 experiment never delays a critical repair or creates a write-lane traffic jam.
+
+Track every known configured tuple, including empty cells, with exactly one
+qualification state:
+
+```text
+untested | diagnostic_only | role_evidence | trial_pending | qualified |
+disqualified
+```
+
+`qualified` means the full writable promotion rule passed; it never means
+"strong verifier." `disqualified` records a hard-gate counterexample for the
+tested role and fixture class, not a permanent claim about the model family.
+The coverage denominator names whether the provider/harness configuration
+inventory is frozen or incomplete so an absent tuple cannot disappear.
 
 ### Valid contrasts
 
@@ -274,6 +336,32 @@ better runner for that task class.
 
 ## Minimum result provenance
 
+Receipts are immutable, append-only, and content-addressed. Write each result to
+a new digest-named object; never overwrite `/tmp` evidence or reuse a mutable
+filename as the only citation. A scorecard is a derived projection over a
+receipt manifest and records the manifest SHA-256, target object, input-manifest
+SHA-256, prompt/corpus hashes, and Mister Clean version. If an input changes
+during rendering, abort and render again from a quiescent snapshot.
+
+Hashing a mutable evidence locator is not custody. Before rendering, preserve
+the cited bytes in a content-addressed object store and bind the receipt identity
+to their digest. Target binding also fails closed: record the canonical remote,
+the full 40-character target commit, and the source-state digest; never fall
+back to a repository nickname, abbreviated SHA, or `unbound`. An observation
+with neither preserved bytes nor a resolvable commit must be explicitly labeled
+`assertion_only`, remains visible as such, and cannot establish qualification.
+
+A coverage denominator is permitted only when the configured execution-tuple
+universe was frozen before sampling. Otherwise report the observed count and
+`universe_status: not_frozen` without manufacturing an “observed of configured”
+ratio from the same rows.
+
+Elapsed time is scored only when the receipt carries a valid monotonic interval
+covering dispatch acceptance through terminal artifact creation. Record
+`clock_status: valid | invalid | not_recorded` and `clock_source`; an invalid or
+post-analysis clock is excluded from efficiency without erasing the substantive
+result.
+
 ```text
 actual_model:
 reasoning_level:
@@ -295,8 +383,13 @@ mister_clean_version:
 started_at:
 finished_at:
 elapsed_seconds:
+clock_status:
+clock_source:
 result_path:
 result_sha256:
+receipt_sha256:
+input_manifest_sha256:
+target_object:
 repository_mutated: false
 ```
 
@@ -320,6 +413,14 @@ change_amplification:
 artifact_residue_count:
 independent_verifier:
 independent_verdict:
+coordination_domain:
+expected_version:
+expected_state_digest:
+observed_target_before_integration:
+projection_set:
+projection_validation_receipt:
+artifact_inventory_before:
+artifact_inventory_after:
 ```
 
 Promote a model to full-runner consideration only after it passes this trial

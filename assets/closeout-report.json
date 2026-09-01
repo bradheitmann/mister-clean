@@ -4,7 +4,7 @@
   "generated_at": "<ISO-8601 timestamp>",
   "repo": {
     "id": "<portable repository identity, e.g. owner/name>",
-    "commit": "<commit or working-tree snapshot>",
+    "commit": "0000000000000000000000000000000000000000",
     "branch": "<branch or detached>"
   },
   "target_binding": {
@@ -111,8 +111,24 @@
   },
   "regression_control": {
     "policy": "zero_open_run_introduced_debt",
-    "baseline_object": "<full starting commit>",
-    "closing_object": "<full closing subject commit>",
+    "baseline_object": "0000000000000000000000000000000000000000000000000000000000000000",
+    "baseline_repository_object": {
+      "record_type": "mister-clean.repository-object",
+      "schema_version": "1.0",
+      "head_commit": "0000000000000000000000000000000000000000",
+      "surface": "tracked_and_nonignored",
+      "entry_count": 0,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "closing_object": "0000000000000000000000000000000000000000000000000000000000000000",
+    "closing_repository_object": {
+      "record_type": "mister-clean.repository-object",
+      "schema_version": "1.0",
+      "head_commit": "0000000000000000000000000000000000000000",
+      "surface": "tracked_and_nonignored",
+      "entry_count": 0,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
     "baseline_findings": 0,
     "closing_findings": 0,
     "baseline_paid": 0,

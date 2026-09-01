@@ -13,7 +13,7 @@
   },
   "custody": {
     "mode": "sidecar",
-    "subject_commit": "<closing subject commit>",
+    "subject_commit": "0000000000000000000000000000000000000000",
     "evidence_root": null,
     "evidence_paths": []
   },
@@ -37,8 +37,8 @@
     ]
   },
   "change_inventory": {
-    "start_commit": "<full starting commit>",
-    "subject_commit": "<full closing subject commit>",
+    "start_commit": "0000000000000000000000000000000000000000",
+    "subject_commit": "0000000000000000000000000000000000000000",
     "changes": []
   },
   "planning_discovery": {
@@ -75,16 +75,34 @@
     "snapshots": {
       "start": {
         "kind": "repository_snapshot",
-        "object": "<full starting commit>",
+        "object": "0000000000000000000000000000000000000000000000000000000000000000",
+        "repository_object": {
+          "record_type": "mister-clean.repository-object",
+          "schema_version": "1.0",
+          "head_commit": "0000000000000000000000000000000000000000",
+          "surface": "tracked_and_nonignored",
+          "entry_count": 0,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "commit": "0000000000000000000000000000000000000000",
         "command": "<exact snapshot command>",
-        "result": "<digest or census result>",
+        "result": "0000000000000000000000000000000000000000000000000000000000000000",
         "observed_at": "<ISO-8601 timestamp>"
       },
       "end": {
         "kind": "repository_snapshot",
-        "object": "<full closing subject commit>",
+        "object": "0000000000000000000000000000000000000000000000000000000000000000",
+        "repository_object": {
+          "record_type": "mister-clean.repository-object",
+          "schema_version": "1.0",
+          "head_commit": "0000000000000000000000000000000000000000",
+          "surface": "tracked_and_nonignored",
+          "entry_count": 0,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "commit": "0000000000000000000000000000000000000000",
         "command": "<exact snapshot command>",
-        "result": "<digest or census result>",
+        "result": "0000000000000000000000000000000000000000000000000000000000000000",
         "observed_at": "<ISO-8601 timestamp>"
       }
     },
@@ -101,6 +119,10 @@
       "branches": [],
       "remote_refs": [],
       "stashes": [],
+      "process_census_ref": {
+        "path": "<process-census JSON path, relative to this bundle>",
+        "sha256": "<sha256 of process-census JSON>"
+      },
       "processes": [],
       "dirty": 0,
       "unowned": 0,
@@ -117,6 +139,25 @@
         "path": "<current-state designation JSON path, relative to this bundle>",
         "sha256": "<sha256 of current-state designation JSON>"
       }
+    },
+    "native_gate_control": {
+      "discovery_ref": {
+        "path": "<native-gate discovery JSON path, relative to this bundle>",
+        "sha256": "<sha256 of native-gate discovery JSON>"
+      },
+      "coverage_ref": {
+        "path": "<native-gate coverage JSON path, relative to this bundle>",
+        "sha256": "<sha256 of native-gate coverage JSON>"
+      },
+      "validation_ref": {
+        "path": "<native-gate validation JSON path, relative to this bundle>",
+        "sha256": "<sha256 of native-gate validation JSON>"
+      },
+      "evidence_root": "<bundle-relative native-gate output directory>",
+      "required_count": 0,
+      "passed_count": 0,
+      "absent_count": 0,
+      "validation_error_count": 0
     },
     "gates": [
       {

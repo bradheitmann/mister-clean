@@ -4,7 +4,11 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { discoverPlanningRoots } from "./repository.js";
+import {
+  canonicalRemoteRepositoryIdentity,
+  discoverPlanningRoots,
+  localRepositoryIdentity,
+} from "./repository.js";
 
 const roots: string[] = [];
 
@@ -44,5 +48,21 @@ describe("discoverPlanningRoots", () => {
     writeFileSync(join(repository, "src", "closeout", "CURRENT-STATE.md"), "# Current State\n");
 
     expect(discoverPlanningRoots(repository)).toEqual([]);
+  });
+});
+
+describe("portable repository identity v2", () => {
+  it("retains remote authority so equal owner/name paths on different hosts cannot collide", () => {
+    expect(canonicalRemoteRepositoryIdentity(["git", "github.com:owner/project.git"].join("@")))
+      .toBe("remote:github.com/owner/project");
+    expect(canonicalRemoteRepositoryIdentity("https://gitlab.com/owner/project.git"))
+      .toBe("remote:gitlab.com/owner/project");
+  });
+
+  it("uses an opaque path digest for local-only repositories", () => {
+    const identity = localRepositoryIdentity("/private/example/repository");
+    expect(identity).toMatch(/^local-path-sha256:[0-9a-f]{64}$/);
+    expect(identity).not.toContain("private");
+    expect(localRepositoryIdentity("/private/example/other")).not.toBe(identity);
   });
 });

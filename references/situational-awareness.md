@@ -3,8 +3,12 @@
 This skill runs inside orchestration and management systems it did not choose,
 for a successor team whose systems it cannot predict. Acting before
 establishing the four axes below produces confident work aimed at the wrong
-target. Detect what you can; **ask the user what you cannot detect** — one
-round of questions is cheaper than one wrong sweep.
+target. Detect what you can, preserve uncertainty honestly, and make bounded
+assumptions only when they cannot change product intent or cross a hard
+boundary. Do not interrupt an autonomous run for routine ambiguity. An
+undetectable fact that controls a consequential choice becomes
+`decision_or_coordination_required`; finish independent work and report the
+exact choice and evidence needed.
 
 ## Axis 1 — Planning system
 
@@ -52,13 +56,16 @@ orchestrator?
 **Why it matters:**
 
 - **Worktree ownership.** In multi-agent sessions, worktrees belong to live
-  agents. Mid-session, never prune a worktree you cannot prove abandoned; at
-  session close, every worktree must be gone — which means agents finishing
-  work must clean up as part of finishing.
+  agents. Never prune a worktree you cannot prove abandoned. At close, every
+  worktree must be owned and dispositioned under repository policy; task-owned
+  temporary worktrees whose purpose has ended are removed, while policy-owned
+  or intentionally retained worktrees remain mapped rather than being forced
+  into a universal one-worktree topology.
 - **Process ownership.** Multiple harnesses mean multiple process trees
-  touching the repo. Before killing anything: walk the parent chain to a
-  session you own, re-verified in the same execution as the kill. A matching
-  command string is not ownership.
+  touching the repo. Before signaling anything, require a durable task/session
+  record plus the live PID, start time, cwd/resource relationship, and current
+  liveness to agree. Re-verify them in the same execution as the signal. A
+  matching command string or parent chain alone is not ownership.
 - **In-flight state.** "Nothing actionable" can only be declared after
   checking every surface's in-flight work, not just your own.
 

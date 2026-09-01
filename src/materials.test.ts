@@ -1,14 +1,20 @@
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { getMaterial, listMaterials, readMaterialLines } from "./materials.js";
 
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
 describe("Mister Clean materials", () => {
-  it("serves the canonical entrypoint and categories", () => {
+  it("serves the canonical entrypoint bytes and categories", async () => {
     const materials = listMaterials();
     expect(materials.length).toBeGreaterThan(20);
     expect(materials.map((material) => material.id)).toContain("SKILL.md");
     expect(materials.map((material) => material.id)).toContain("templates/orchestration-goal.md");
-    expect(getMaterial("SKILL.md")?.content).toContain("Founding contract");
+    expect(getMaterial("SKILL.md")?.content).toBe(await readFile(join(ROOT, "SKILL.md"), "utf8"));
     expect(getMaterial("templates/orchestration-goal.md")?.content).toContain("Monotonic loop contract");
     expect(listMaterials("reference").every((material) => material.category === "reference")).toBe(true);
   });

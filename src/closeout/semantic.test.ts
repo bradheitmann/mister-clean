@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -78,6 +78,19 @@ process.exit(${result === "pass" ? 0 : 1});
 }
 
 describe("semantic boundary probes", () => {
+  it("does not traverse a canonical planning-file symlink as a directory", () => {
+    const root = repository("The security sanitizer is the credential choke point and must be safe by construction.");
+    try {
+      mkdirSync(join(root, ".claude", "commands"), { recursive: true });
+      symlinkSync("../../planning/STORY.md", join(root, ".claude", "commands", "plan.md"));
+      const candidates = discoverSemanticProbeCandidates(root);
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0]?.path).toBe("planning/STORY.md");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps static candidates distinct from confirmed product defects", () => {
     const root = repository("The security sanitizer is the credential choke point and must be safe by construction.");
     try {
@@ -85,6 +98,444 @@ describe("semantic boundary probes", () => {
       expect(result.candidate_probe_count).toBe(1);
       expect(result.confirmed_failure_count).toBe(0);
       expect(result.findings[0]?.code).toBe("semantic_probe_unassigned");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not manufacture semantic debt from generic sanitizer, validator, or bootstrap prose", () => {
+    const root = repository([
+      "The security sanitizer redacts credential fields.",
+      "The telemetry validator checks token shape.",
+      "Bootstrap QA is complete for the policy documentation.",
+    ].join("\n"));
+    try {
+      expect(discoverSemanticProbeCandidates(root)).toEqual([]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers declared behavioral dimensions and contradictory authority projections", () => {
+    const root = repository([
+      "C-48 remains PROPOSED pending ratification.",
+      "Task-specific routing selects agents according to declared fitness and cost.",
+    ].join("\n"));
+    try {
+      writeFileSync(join(root, "planning", "RATIFICATION.md"), "C-48 is RATIFIED and effective.\n");
+      const candidates = discoverSemanticProbeCandidates(root);
+      expect(candidates.map((candidate) => candidate.kind).sort()).toEqual([
+        "authoritative_projection",
+        "behavioral_dimension",
+      ]);
+      expect(candidates.find((candidate) => candidate.kind === "authoritative_projection")?.refs).toHaveLength(2);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers punctuation-insensitive identifier namespace collisions", () => {
+    const root = repository([
+      "P-3 names the live product problem.",
+      "P3 names the canonical execution plane.",
+    ].join("\n"));
+    try {
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "identifier_namespace");
+      expect(candidate?.evidence).toEqual(["P3: P-3 | P3"]);
+      expect(candidate?.refs).toHaveLength(2);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers identical short identifiers defined by distinct authority namespaces", () => {
+    const root = repository("Current authority definitions are machine readable.");
+    try {
+      writeFileSync(join(root, "planning", "CANON.md"), `---
+artifact_type: reference
+authority_definition:
+  namespace: canon
+  id: D-14
+---
+# Canon decision
+`);
+      writeFileSync(join(root, "planning", "AUDIT.md"), `---
+artifact_type: reference
+authority_definition:
+  namespace: audit
+  id: D-14
+---
+# Audit defect
+`);
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "identifier_namespace");
+      expect(candidate?.evidence).toEqual([
+        "D-14: audit::D-14 | canon::D-14",
+      ]);
+      expect(candidate?.refs).toEqual([
+        "planning/AUDIT.md#authority_definition",
+        "planning/CANON.md#authority_definition",
+      ]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers every systemic observer class without upgrading discovery into a product verdict", () => {
+    const root = repository("The canonical CI gate proves every production parser rejects malformed input.");
+    try {
+      writeFileSync(join(root, ".gitignore"), ".edge-agentic/local/\n");
+      mkdirSync(join(root, "planning", "done"), { recursive: true });
+      writeFileSync(join(root, "planning", "done", "REVIEW.yaml"), `artifact_type: review
+review_id: REVIEW-1
+status: Complete
+evidence_ref: .edge-agentic/local/reviews/REVIEW-1/verdict.json
+`);
+      writeFileSync(join(root, "planning", "done", "OLD.yaml"), `artifact_type: review
+review_id: OLD-1
+status: superseded
+superseded_by: MISSING-1
+`);
+      writeFileSync(join(root, "planning", "done", "PLAYBACK.yaml"), `artifact_type: holdout
+holdout_id: PLAYBACK-1
+status: PASS
+effect_kind: live_external
+proof_kind: url_shape
+`);
+      mkdirSync(join(root, "config"));
+      writeFileSync(join(root, "config", "routing.yaml"), `resilience_claim: true
+fallbacks:
+  - id: primary
+    provider: one-gateway
+    account: shared
+  - id: backup
+    provider: one-gateway
+    account: shared
+`);
+      mkdirSync(join(root, "src"));
+      writeFileSync(join(root, "src", "client.ts"), "// Handwritten typed-React twin; keep in sync with server renderer.\nexport const state = true;\n");
+      writeFileSync(join(root, "planning", "FORBIDDEN.md"), "Do not execute this recipe:\n```sh\nln -s ../../secret ./public/secret\n```\n");
+      mkdirSync(join(root, "scripts"));
+      writeFileSync(join(root, "scripts", "check.sh"), "#!/bin/sh\nset -e\ngrep TODO\nfor f in reports/*.json; do test -f \"$f\"; done\n");
+      const result = auditSemanticRepository(root);
+      expect(result.confirmed_failure_count).toBe(0);
+      expect(new Set(result.candidates.map((candidate) => candidate.kind))).toEqual(new Set([
+        "acceptance_effect_liveness",
+        "environment_semantics",
+        "failure_domain_independence",
+        "gate_semantic_bite",
+        "historical_evidence_portability",
+        "instruction_polarity",
+        "representation_equivalence",
+        "supersession_lineage",
+      ]));
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not manufacture systemic debt when durable, live, independent, and typed controls are explicit", () => {
+    const root = repository("The formatter has an ordinary package-local test.");
+    try {
+      mkdirSync(join(root, "evidence"));
+      writeFileSync(join(root, "evidence", "verdict.json"), "{}\n");
+      mkdirSync(join(root, "planning", "done"), { recursive: true });
+      writeFileSync(join(root, "planning", "done", "CURRENT.yaml"), `artifact_type: review
+review_id: CURRENT-1
+status: Complete
+evidence_ref: evidence/verdict.json
+`);
+      writeFileSync(join(root, "planning", "done", "OLD.yaml"), `artifact_type: review
+review_id: OLD-1
+status: superseded
+superseded_by: CURRENT-1
+`);
+      writeFileSync(join(root, "planning", "done", "PLAYBACK.yaml"), `artifact_type: holdout
+holdout_id: PLAYBACK-1
+status: PASS
+effect_kind: live_external
+proof_kind: operate_time
+`);
+      writeFileSync(join(root, "planning", "FORBIDDEN.md"), `---
+instruction_polarity: forbidden_counterexample
+---
+Do not execute this recipe:
+\`\`\`sh
+ln -s ../../secret ./public/secret
+\`\`\`
+`);
+      mkdirSync(join(root, "config"));
+      writeFileSync(join(root, "config", "routing.yaml"), `resilience_claim: true
+fallbacks:
+  - id: primary
+    provider: provider-a
+    account: account-a
+  - id: backup
+    provider: provider-b
+    account: account-b
+`);
+      mkdirSync(join(root, "src"));
+      writeFileSync(join(root, "src", "client.ts"), "export const viewModel = { state: true };\n");
+      mkdirSync(join(root, "scripts"));
+      writeFileSync(join(root, "scripts", "check.sh"), "#!/bin/sh\nset -e\ngrep TODO README.md || test $? -eq 1\nprintf 'MISTER_CLEAN_SENTINEL\\n'\n");
+      const systemicKinds = new Set([
+        "acceptance_effect_liveness",
+        "environment_semantics",
+        "failure_domain_independence",
+        "gate_semantic_bite",
+        "historical_evidence_portability",
+        "instruction_polarity",
+        "representation_equivalence",
+        "supersession_lineage",
+      ]);
+      expect(discoverSemanticProbeCandidates(root).filter((candidate) => systemicKinds.has(candidate.kind))).toEqual([]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("derives semantic candidates only from the bound tracked and nonignored path census", () => {
+    const root = repository("P-3 names the tracked product problem.");
+    try {
+      writeFileSync(join(root, ".gitignore"), ".local-evidence/\n");
+      mkdirSync(join(root, ".local-evidence", "planning"), { recursive: true });
+      const ignored = join(root, ".local-evidence", "planning", "plan.md");
+      writeFileSync(ignored, "P3 names an ignored local note.\n");
+
+      expect(discoverSemanticProbeCandidates(root).some((item) => item.kind === "identifier_namespace")).toBe(false);
+      const before = semanticWorkingTreeSha256(root);
+      writeFileSync(ignored, "P3 changed outside the RepositoryObject.\n");
+      expect(semanticWorkingTreeSha256(root)).toBe(before);
+      expect(discoverSemanticProbeCandidates(root).some((item) => item.kind === "identifier_namespace")).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("binds candidate refs into the candidate-set digest while preserving stable candidate identity", () => {
+    const contract = "The security sanitizer is the credential choke point and must be safe by construction.";
+    const root = repository(contract);
+    try {
+      const before = discoverSemanticProbeCandidates(root);
+      const beforeDigest = semanticCandidateSetSha256(before);
+      const story = join(root, "planning", "STORY.md");
+      writeFileSync(story, readFileSync(story, "utf8").replace(contract, `Preface.\n${contract}`));
+      const after = discoverSemanticProbeCandidates(root);
+      expect(after[0]?.id).toBe(before[0]?.id);
+      expect(after[0]?.refs).not.toEqual(before[0]?.refs);
+      expect(semanticCandidateSetSha256(after)).not.toBe(beforeDigest);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers every current or future DEV/QA record without an execution-identity binding", () => {
+    const root = repository("Current work must retain externally verified execution identity.");
+    const record = (id: string, type: "DEV" | "QA", extra = "") => `---
+artifact_type: slice
+slice_id: ${id}
+slice_type: ${type}
+status: To Do
+${extra}---
+# ${id}
+`;
+    try {
+      mkdirSync(join(root, "planning", "todo"));
+      mkdirSync(join(root, "planning", "active"));
+      mkdirSync(join(root, "planning", "done"));
+      writeFileSync(join(root, "planning", "todo", "SLICE-DEV.md"), record("SLICE-DEV", "DEV"));
+      writeFileSync(join(root, "planning", "active", "SLICE-QA.md"), `<!-- protected QA primacy instructions -->\n${record("SLICE-QA", "QA")}`);
+      writeFileSync(join(root, "planning", "done", "SLICE-HISTORICAL.md"), record("SLICE-HISTORICAL", "DEV"));
+
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "execution_identity_coverage");
+      expect(candidate?.refs).toEqual([
+        "planning/active/SLICE-QA.md",
+        "planning/todo/SLICE-DEV.md",
+      ]);
+      expect(candidate?.evidence).toHaveLength(2);
+      expect(candidate?.evidence.join("\n")).toContain("missing control_surface");
+
+      writeFileSync(join(root, "planning", "todo", "SLICE-DEV.md"), record(
+        "SLICE-DEV",
+        "DEV",
+        "execution_identity_ref: null\n",
+      ));
+      writeFileSync(join(root, "planning", "active", "SLICE-QA.md"), record(
+        "SLICE-QA",
+        "QA",
+        [
+          "control_surface: surface-1",
+          "inference_provider: provider",
+          "inference_backend: backend",
+          "model_id: model",
+          "model_version: version",
+          "reasoning_level: high",
+          "harness_id: harness",
+          "harness_version: version",
+          "permission_mode: read-only",
+          "",
+        ].join("\n"),
+      ));
+      const invalidReference = discoverSemanticProbeCandidates(root).find((item) => item.kind === "execution_identity_coverage");
+      expect(invalidReference?.refs).toEqual(["planning/todo/SLICE-DEV.md"]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("covers JSON and YAML DEV/QA records in every current lifecycle lane and rejects blank identity values", () => {
+    const root = repository("Current work must retain externally verified execution identity.");
+    try {
+      mkdirSync(join(root, "planning", "ready"));
+      mkdirSync(join(root, "planning", "doing"));
+      writeFileSync(join(root, "planning", "ready", "DEV.json"), `${JSON.stringify({
+        artifact_type: "slice",
+        slice_type: "DEV",
+        status: "ready",
+        execution_identity_ref: null,
+      }, null, 2)}\n`);
+      writeFileSync(join(root, "planning", "doing", "QA.yaml"), `artifact_type: slice
+slice_type: QA
+status: doing
+control_surface: ""
+inference_provider: provider
+inference_backend: backend
+model_id: model
+model_version: version
+reasoning_level: high
+harness_id: harness
+harness_version: version
+permission_mode: read-only
+`);
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "execution_identity_coverage");
+      expect(candidate?.refs).toEqual([
+        "planning/doing/QA.yaml",
+        "planning/ready/DEV.json",
+      ]);
+      expect(candidate?.evidence.join("\n")).toContain("blank control_surface");
+      expect(candidate?.evidence.join("\n")).toContain("invalid execution_identity_ref");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not parse a negated ratification as an effective authority status", () => {
+    const root = repository("C-48 remains PROPOSED and is not ratified.");
+    try {
+      expect(discoverSemanticProbeCandidates(root).some((item) => item.kind === "authoritative_projection")).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("recognizes versioned authority identifiers without borrowing a nonce substring", () => {
+    const root = repository("LEIT-ISO-v0.4 remains PROPOSED.");
+    try {
+      writeFileSync(join(root, "planning", "RATIFICATION.md"), "LEIT-ISO-v0.4 is RATIFIED and effective.\n");
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "authoritative_projection");
+      expect(candidate?.path).toBe("authority-projection/LEIT-ISO-v0.4");
+      expect(candidate?.refs).toHaveLength(2);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers a long-lived state container without a lifecycle bound and accepts an explicit bound", () => {
+    const root = repository("The executor processes requests.");
+    try {
+      mkdirSync(join(root, "src"));
+      const path = join(root, "src", "executor.ts");
+      writeFileSync(path, "export class Executor { readonly #done = new Map<string, string>(); record(id: string) { this.#done.set(id, id); } }\n");
+      expect(discoverSemanticProbeCandidates(root)).toContainEqual(expect.objectContaining({
+        kind: "bounded_state_lifecycle",
+        path: "src/executor.ts",
+      }));
+
+      writeFileSync(path, "export function scan(ids: string[]) { const seen = new Set<string>(); for (const id of ids) seen.add(id); return seen.size; }\n");
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "bounded_state_lifecycle")).toBe(false);
+
+      writeFileSync(path, "export class Executor { readonly #done = new Map<string, string>(); record(id: string) { this.#done.set(id, id); } clearExpired() { this.#done.delete('expired'); } }\n");
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "bounded_state_lifecycle")).toBe(true);
+
+      writeFileSync(path, "export class Executor { readonly #done = new Map<string, string>(); readonly #inflight = new Map<string, string>(); record(id: string) { this.#done.set(id, id); this.#inflight.set(id, id); this.#inflight.delete(id); } }\n");
+      const fieldSpecific = discoverSemanticProbeCandidates(root).filter((candidate) => candidate.kind === "bounded_state_lifecycle");
+      expect(fieldSpecific).toHaveLength(1);
+      expect(fieldSpecific[0]?.evidence.join(" ")).toContain("#done");
+
+      writeFileSync(path, "export class Executor { readonly done = new Map<string, string>(); record(id: string) { this.done.set(id, id); } }\n");
+      expect(discoverSemanticProbeCandidates(root)).toContainEqual(expect.objectContaining({
+        kind: "bounded_state_lifecycle",
+        path: "src/executor.ts",
+      }));
+
+      writeFileSync(path, "const receiptHistory: string[] = []; export function record(id: string) { receiptHistory.push(id); }\n");
+      expect(discoverSemanticProbeCandidates(root)).toContainEqual(expect.objectContaining({
+        kind: "bounded_state_lifecycle",
+        path: "src/executor.ts",
+      }));
+
+      writeFileSync(path, "const receiptHistory: string[] = []; export function record(id: string) { receiptHistory.push(id); if (receiptHistory.length > 100) receiptHistory.splice(0, receiptHistory.length - 100); }\n");
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "bounded_state_lifecycle")).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers a production executable package outside a canonical quality gate", () => {
+    const root = repository("The service package is part of the production runtime.");
+    try {
+      const packageRoot = join(root, "packages", "service");
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(join(packageRoot, "index.mjs"), "export const service = true;\n");
+      writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+        name: "fixture-service",
+        type: "module",
+        main: "index.mjs",
+      }, null, 2)}\n`);
+      const uncovered = discoverSemanticProbeCandidates(root).find((candidate) => candidate.kind === "executable_surface_coverage");
+      expect(uncovered?.refs).toEqual(expect.arrayContaining([
+        "packages/service/index.mjs",
+        "packages/service/package.json",
+      ]));
+
+      writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+        name: "fixture-service",
+        type: "module",
+        main: "index.mjs",
+        scripts: { test: "true" },
+      }, null, 2)}\n`);
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "executable_surface_coverage")).toBe(true);
+
+      writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+        name: "fixture-service",
+        type: "module",
+        main: "index.mjs",
+        scripts: { lint: "eslint index.mjs" },
+      }, null, 2)}\n`);
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "executable_surface_coverage")).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("credits a production package reached by a canonical cross-package test route", () => {
+    const root = repository("The audit plugin is exercised from the repository surface tests.");
+    try {
+      const packageRoot = join(root, "packages", "audit");
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(join(packageRoot, "index.mjs"), "export const audit = true;\n");
+      writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+        name: "fixture-audit",
+        type: "module",
+        main: "index.mjs",
+      }, null, 2)}\n`);
+      mkdirSync(join(root, "tests", "surfaces"), { recursive: true });
+      writeFileSync(join(root, "tests", "surfaces", "audit.test.mjs"), "import '../../packages/audit/index.mjs';\n");
+      writeFileSync(join(root, "package.json"), `${JSON.stringify({
+        name: "fixture-root",
+        private: true,
+        scripts: { test: "node --test tests/**/*.test.mjs" },
+      }, null, 2)}\n`);
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "executable_surface_coverage")).toBe(false);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -154,8 +605,8 @@ describe("semantic boundary probes", () => {
         timeout_ms: 2_000,
       });
       const result = auditSemanticRepository(root, { execute: true, manifestPath: path });
-      expect(result.status).toBe("pass");
-      expect(result.findings).toEqual([]);
+      expect(result.status).toBe("fail");
+      expect(result.findings.map((finding) => finding.code)).toContain("semantic_probe_independent_attestation_required");
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -215,6 +666,70 @@ describe("semantic boundary probes", () => {
     }
   });
 
+  it.each([
+    [
+      "behavioral_dimension",
+      "Task-specific routing selects agents according to declared fitness and cost.",
+      "behavioral_dimension_failure",
+    ],
+    [
+      "bounded_state_lifecycle",
+      "The durable idempotency journal has a bounded-state lifecycle.",
+      "bounded_state_lifecycle_failure",
+    ],
+    [
+      "executable_surface_coverage",
+      "The service package is part of the production runtime.",
+      "executable_surface_coverage_failure",
+    ],
+    [
+      "execution_identity_coverage",
+      "Current DEV and QA records bind externally verified execution identity.",
+      "execution_identity_coverage_failure",
+    ],
+    [
+      "identifier_namespace",
+      "P-3 names one authority while P3 names another authority.",
+      "identifier_namespace_failure",
+    ],
+  ] as const)("maps a failed %s probe to its own product-defect class", (kind, contract, expectedCode) => {
+    const root = repository(contract);
+    try {
+      if (kind === "bounded_state_lifecycle") {
+        mkdirSync(join(root, "src"));
+        writeFileSync(join(root, "src", "journal.ts"), "export class Journal { readonly #done = new Map<string, string>(); record(id: string) { this.#done.set(id, id); } }\n");
+      }
+      if (kind === "executable_surface_coverage") {
+        mkdirSync(join(root, "packages", "service"), { recursive: true });
+        writeFileSync(join(root, "packages", "service", "index.mjs"), "export const service = true;\n");
+        writeFileSync(join(root, "packages", "service", "package.json"), "{\"name\":\"fixture-service\",\"main\":\"index.mjs\",\"type\":\"module\"}\n");
+      }
+      if (kind === "execution_identity_coverage") {
+        mkdirSync(join(root, "planning", "todo"));
+        writeFileSync(join(root, "planning", "todo", "SLICE-DEV.md"), "---\nartifact_type: slice\nslice_id: SLICE-DEV\nslice_type: DEV\nstatus: To Do\n---\n# DEV\n");
+      }
+      writeReceiptProbe(root, "fail", ["negative-control"]);
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === kind)!;
+      const path = manifest(root, {
+        boundary: kind,
+        candidate_id: candidate.id,
+        command: [process.execPath, "probe.mjs"],
+        contract_refs: candidate.refs,
+        disposition: "execute",
+        exercised_cases: ["negative-control"],
+        expected_status: 0,
+        kind,
+        observed_endpoint: "observable behavior",
+        required_cases: ["negative-control"],
+        timeout_ms: 2_000,
+      });
+      const result = auditSemanticRepository(root, { execute: true, manifestPath: path });
+      expect(result.findings[0]?.code).toBe(expectedCode);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps a declared operate-time seam partial instead of calling it unwired", () => {
     const root = repository("The production bootstrap must wire the privacy policy sink at the composition root.");
     try {
@@ -241,7 +756,7 @@ describe("semantic boundary probes", () => {
     }
   });
 
-  it("resolves an honest non-operative candidate only with explicit evidence", () => {
+  it("retains a legacy non-operative resolution but requires independent attestation before clearing it", () => {
     const root = repository("Historical note: the production bootstrap once wired the privacy policy sink at the composition root.");
     try {
       const candidate = discoverSemanticProbeCandidates(root)[0]!;
@@ -256,8 +771,8 @@ describe("semantic boundary probes", () => {
         observed_endpoint: "none; historical record only",
       });
       const result = auditSemanticRepository(root, { execute: true, manifestPath: path });
-      expect(result.status).toBe("pass");
-      expect(result.findings).toEqual([]);
+      expect(result.status).toBe("fail");
+      expect(result.findings.map((finding) => finding.code)).toContain("semantic_probe_independent_attestation_required");
       expect(result.resolved_probe_count).toBe(1);
       expect(result.resolutions[0]).toMatchObject({
         candidate_id: candidate.id,
@@ -384,7 +899,8 @@ process.exit(ok ? 0 : 1);
         timeout_ms: 2_000,
       });
       const result = auditSemanticRepository(root, { execute: true, manifestPath: path });
-      expect(result.status).toBe("pass");
+      expect(result.status).toBe("fail");
+      expect(result.findings.map((finding) => finding.code)).toContain("semantic_probe_independent_attestation_required");
       expect(result.executions[0]?.executable).toBe(basename(process.execPath));
       expect(result.executions[0]?.command_sha256).toMatch(/^[0-9a-f]{64}$/);
     } finally {

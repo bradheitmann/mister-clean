@@ -1,6 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
+import {
+  isVerifiedServerAttestationBinding,
+  type ServerAttestationBinding,
+} from "./runtime-binding.js";
 import { MATERIALS, PACKAGE_VERSION } from "./generated-materials.js";
 import {
   getMaterial,
@@ -11,6 +15,10 @@ import {
 
 const ResponseFormatSchema = z.enum(["markdown", "json"]);
 const MaterialCategorySchema = z.enum(MATERIAL_CATEGORIES);
+
+export interface MisterCleanServerOptions {
+  readonly runtimeAttestation?: ServerAttestationBinding;
+}
 
 const MaterialSummarySchema = z
   .object({
@@ -67,6 +75,100 @@ const ReadMaterialOutputSchema = z
   })
   .strict();
 
+const AttestationInputSchema = z
+  .object({
+    response_format: ResponseFormatSchema.default("json").describe("Human-readable Markdown or machine-readable JSON."),
+  })
+  .strict();
+
+const FileAttestationOutputSchema = z
+  .object({
+    record_type: z.literal("mister-clean.runtime-attestation-diagnostic"),
+    schema_version: z.literal("1.0"),
+    capability: z.literal(false),
+    status: z.enum(["pass", "source_development"]),
+    entrypoint: z.object({
+      path: z.string(),
+      sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    }),
+    package: z.object({ name: z.string(), version: z.string() }).optional(),
+    claimed_source: z.object({ git_commit: z.string(), git_tag: z.string() }).optional(),
+    claim_scope: z.object({
+      covers: z.literal("own_package_regular_file_bytes"),
+      excludes: z.tuple([
+        z.literal("registry_publication_provenance"),
+        z.literal("dependency_resolution_graph"),
+        z.literal("filesystem_mode_bits_xattrs_and_timestamps"),
+        z.literal("release_attestation_self_bytes"),
+        z.literal("claimed_source_authenticity"),
+      ]),
+    }).optional(),
+    manifest: z.object({
+      path: z.literal("./MANIFEST.sha256"),
+      format: z.literal("sha256sum-v1-lf"),
+      entry_count: z.number().int().nonnegative(),
+      sha256: z.string(),
+    }).optional(),
+    reason: z.string().optional(),
+  })
+  .strict();
+
+const BundledContentAttestationOutputSchema = z
+  .object({
+    record_type: z.literal("mister-clean.runtime-attestation-diagnostic"),
+    schema_version: z.literal("1.0"),
+    capability: z.literal(false),
+    status: z.literal("bundled_content"),
+    package: z.object({
+      name: z.literal("@bradheitmann/mister-clean"),
+      version: z.string(),
+    }),
+    bundle: z.object({
+      kind: z.literal("generated_materials"),
+      format: z.literal("canonical-json-sha256-v1"),
+      entry_count: z.number().int().nonnegative(),
+      sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    }),
+    claim_scope: z.literal("bundled_canonical_material_bytes_only"),
+    reason: z.string(),
+  })
+  .strict();
+
+const AttestationOutputSchema = z.union([
+  FileAttestationOutputSchema,
+  BundledContentAttestationOutputSchema,
+]);
+
+function portableRuntimeDiagnostic(binding: ServerAttestationBinding) {
+  if (binding.status === "bundled_content") {
+    return {
+      record_type: "mister-clean.runtime-attestation-diagnostic" as const,
+      schema_version: "1.0" as const,
+      capability: false as const,
+      status: binding.status,
+      package: binding.package,
+      bundle: binding.bundle,
+      claim_scope: binding.claim_scope,
+      reason: binding.reason,
+    };
+  }
+  return {
+    record_type: "mister-clean.runtime-attestation-diagnostic" as const,
+    schema_version: "1.0" as const,
+    capability: false as const,
+    status: binding.status,
+    entrypoint: {
+      path: binding.entrypoint.path,
+      sha256: binding.entrypoint.sha256,
+    },
+    ...(binding.package ? { package: binding.package } : {}),
+    ...(binding.claimed_source ? { claimed_source: binding.claimed_source } : {}),
+    ...(binding.claim_scope ? { claim_scope: binding.claim_scope } : {}),
+    ...(binding.manifest ? { manifest: binding.manifest } : {}),
+    ...(binding.reason ? { reason: binding.reason } : {}),
+  };
+}
+
 function materialUri(id: string): string {
   return `mister-clean://materials/${encodeURIComponent(id)}`;
 }
@@ -83,11 +185,55 @@ function asText(format: "markdown" | "json", markdown: string, value: object): s
   return format === "json" ? JSON.stringify(value, null, 2) : markdown;
 }
 
-export function createMisterCleanServer(): McpServer {
+export function createMisterCleanServer(options: MisterCleanServerOptions = {}): McpServer {
+  if (options.runtimeAttestation && !isVerifiedServerAttestationBinding(options.runtimeAttestation)) {
+    throw new Error("runtime attestation must be minted by Mister Clean's live verifier");
+  }
   const server = new McpServer({
     name: "mister-clean-mcp-server",
     version: PACKAGE_VERSION,
   });
+
+  if (options.runtimeAttestation) {
+    server.registerTool(
+      "mister_clean_attestation",
+      {
+        title: "Read Mister Clean runtime attestation",
+        description:
+          "Return the runtime attestation bound at stdio server startup. This is diagnostic only and never inspects a target repository.",
+        inputSchema: AttestationInputSchema,
+        outputSchema: AttestationOutputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      async ({ response_format }) => {
+        const output = portableRuntimeDiagnostic(options.runtimeAttestation as ServerAttestationBinding);
+        const markdown = [
+          "# Mister Clean runtime attestation",
+          "",
+          `Status: ${output.status}`,
+          ...(output.package ? [`Package: ${output.package.name}@${output.package.version}`] : []),
+          ...("claim_scope" in output && typeof output.claim_scope === "object"
+            ? [`Claim scope: ${output.claim_scope.covers}`]
+            : []),
+          ...("manifest" in output && output.manifest
+            ? [`Manifest: ${output.manifest.sha256} (${output.manifest.entry_count} entries)`]
+            : []),
+          ...("bundle" in output
+            ? [`Bundle: ${output.bundle.sha256} (${output.bundle.entry_count} materials)`, `Claim scope: ${output.claim_scope}`]
+            : []),
+        ].join("\n");
+        return {
+          content: [{ type: "text", text: asText(response_format, markdown, output) }],
+          structuredContent: output,
+        };
+      },
+    );
+  }
 
   server.registerTool(
     "mister_clean_list_materials",

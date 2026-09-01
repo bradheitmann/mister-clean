@@ -1,10 +1,26 @@
 import { createMcpHandler } from "agents/mcp/server";
 
-import { PACKAGE_VERSION } from "./generated-materials.js";
+import { MATERIALS, MATERIALS_SHA256, PACKAGE_VERSION } from "./generated-materials.js";
 import { getMaterial } from "./materials.js";
+import { mintServerAttestationBinding } from "./runtime-binding.js";
 import { createMisterCleanServer } from "./server.js";
 
-const handleMcp = createMcpHandler(createMisterCleanServer);
+const runtimeAttestation = mintServerAttestationBinding({
+  record_type: "mister-clean.runtime-attestation-binding",
+  schema_version: "1.0",
+  status: "bundled_content",
+  package: { name: "@bradheitmann/mister-clean", version: PACKAGE_VERSION },
+  bundle: {
+    kind: "generated_materials",
+    format: "canonical-json-sha256-v1",
+    entry_count: MATERIALS.length,
+    sha256: MATERIALS_SHA256,
+  },
+  claim_scope: "bundled_canonical_material_bytes_only",
+  reason: "Cloudflare runtime has no package filesystem; this binding attests only the generated canonical material table compiled into the worker.",
+});
+
+const handleMcp = createMcpHandler(() => createMisterCleanServer({ runtimeAttestation }));
 
 const baseHeaders = {
   "referrer-policy": "no-referrer",
@@ -37,6 +53,28 @@ function materialResponse(id: string, contentType: string, extraHeaders: Headers
   });
 }
 
+function dashboardStylesResponse(): Response {
+  const material = getMaterial("assets/codebase-state-dashboard/dashboard-tokens.css");
+  if (!material) return response("Bundled material unavailable", { status: 500 });
+  // The packaged dashboard keeps its licensed local font files. The Worker is
+  // intentionally text-only, so its public projection removes font URLs and
+  // uses the token pack's declared system fallbacks instead of serving broken
+  // binary routes.
+  const publicCss = material.content.replaceAll(/@font-face\{[^}]*\}/gu, "");
+  return response(publicCss, {
+    headers: {
+      "cache-control": "public, max-age=300",
+      "content-type": "text/css; charset=utf-8",
+    },
+  });
+}
+
+function dashboardHtmlResponse(id: string): Response {
+  return materialResponse(id, "text/html; charset=utf-8", {
+    "content-security-policy": `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline' https://static.cloudflareinsights.com; connect-src 'self'; img-src 'self' data:; frame-ancestors ${dashboardFrameAncestors}`,
+  });
+}
+
 function landingPage(origin: string): string {
   const escapedOrigin = origin.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
   return `<!doctype html>
@@ -61,6 +99,11 @@ export default {
         service: "mister-clean-mcp-server",
         status: "ok",
         version: PACKAGE_VERSION,
+        attestation: {
+          scope: runtimeAttestation.claim_scope,
+          materials_sha256: runtimeAttestation.bundle.sha256,
+          material_count: runtimeAttestation.bundle.entry_count,
+        },
       };
       return response(JSON.stringify(health), {
         headers: { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" },
@@ -69,13 +112,17 @@ export default {
     if (url.pathname === "/dashboard") {
       return response(null, { status: 308, headers: { location: "/dashboard/" } });
     }
-    if (url.pathname === "/dashboard/") {
-      return materialResponse("assets/codebase-state-dashboard/index.html", "text/html; charset=utf-8", {
-        "content-security-policy": `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline' https://static.cloudflareinsights.com; connect-src 'self'; img-src 'self' data:; frame-ancestors ${dashboardFrameAncestors}`,
-      });
+    if (url.pathname === "/dashboard/" || url.pathname === "/dashboard/index.html") {
+      return dashboardHtmlResponse("assets/codebase-state-dashboard/index.html");
+    }
+    if (url.pathname === "/dashboard/model-scorecard.html") {
+      return dashboardHtmlResponse("assets/codebase-state-dashboard/model-scorecard.html");
+    }
+    if (url.pathname === "/dashboard/product-mark.svg") {
+      return materialResponse("assets/codebase-state-dashboard/product-mark.svg", "image/svg+xml; charset=utf-8");
     }
     if (url.pathname === "/dashboard/dashboard-tokens.css") {
-      return materialResponse("assets/codebase-state-dashboard/dashboard-tokens.css", "text/css; charset=utf-8");
+      return dashboardStylesResponse();
     }
     if (url.pathname === "/" && request.method === "GET") {
       return response(landingPage(url.origin), {

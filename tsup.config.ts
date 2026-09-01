@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/server.ts", "src/stdio.ts", "src/cli.ts"],
+  entry: ["src/public.ts", "src/control-plane.ts", "src/stdio.ts", "src/cli.ts"],
   format: ["esm"],
   dts: true,
   splitting: false,

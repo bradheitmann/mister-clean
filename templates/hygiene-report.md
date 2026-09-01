@@ -22,19 +22,23 @@ ruling forces NOT CLEAN, regardless of everything below.
 ## No-harm delta
 
 Baseline object: {commit} · Closing object: {commit} · Comparator identity:
-{tool/version/digest + scope}. Counts from the digest-bound
-`regression-delta.json`, never from unlike branches or detector versions.
+{tool/version/digest + scope}. Identity sets come from the digest-bound
+schema-1.5 `regression-delta.json`, never from unlike branches, detector
+versions, or arithmetic between raw observations and normalized root debts.
 
-| Origin | Paid | Open at close |
+Observation ledger: baseline {N + digest} · closing {N + digest} · Root-debt
+ledger: baseline-present {N + digest} · closing-present {N + digest}.
+
+| Root-debt origin | Satisfied | Present at close |
 |---|---:|---:|
 | Baseline | | |
 | Newly discovered pre-existing (start-object replay proved) | | |
 | Concurrent external | | |
 | Introduced by this run | | **0 required for CLEAN** |
 
-Action boundaries: {N/N closed with zero introduced debt open; list any final
-interrupted boundary}. Net improvement does not excuse an introduced
-regression.
+Action boundaries: {N/N closed with empty
+`open_at_boundary_observation_ids`; list any final interrupted boundary}. Net
+improvement does not excuse an introduced regression.
 
 ## Explicit acceptance criteria
 
@@ -76,9 +80,9 @@ measured by {exact command/result}. A stale candidate cannot support CLEAN.
 
 | Surface | Target | Before | After | Status |
 |---|---|---|---|---|
-| Local branches | main + ≤1 working | | | |
-| Remote branches | main only | | | |
-| Worktrees | 1 | | | |
+| Local branches | {policy-derived allowed set} | | | |
+| Remote branches | {policy-derived allowed set} | | | |
+| Worktrees | {policy-derived owned/dispositioned set} | | | |
 | Stashes | 0 | | | |
 | Tracked dirty | 0 | | | |
 | Untracked | 0 | | | |

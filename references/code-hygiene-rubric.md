@@ -34,6 +34,21 @@ laundered into clean.**
 10. **Ownership/custody** — every live surface (branch, worktree, lock,
     scheduled job, external binding) has an owner and disposition.
 
+Deployment workflows are executable authorization surfaces, not documentation.
+For every manual trigger and promotion chain, inspect allowed refs, environment
+authority, credential permissions, immutable action/tool inputs, prerequisite
+health failure behavior, temporal upstream-workflow identity, and mutation-
+adequate negative tests. A parked workflow can defer execution, but it does not
+erase a latent arbitrary-ref, historical-rerun, or fail-open deployment defect
+before activation.
+
+Planning custody is executable state too. Close durable maintenance grants;
+keep active ownership claims truthful; derive review projections from review
+verdicts rather than artifact lifecycle; bind designated current/readiness
+surfaces to a fresh commit/tree or machine-derived projection; propagate
+principal-only blockers into dependent prerequisites; and keep admission
+approval distinct from product-scope acceptance.
+
 ## 2. Source-architecture repairs — smallest coherent repair
 
 Findings in this class: generic dumping grounds (`utils/`, `misc/`,

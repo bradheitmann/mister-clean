@@ -103,8 +103,9 @@ directive, execute it **before cosmetic cleanup** — FINISH → CONFORM → CLE
 Honor any actual independence or separation requirement. The dispatch
 MECHANISM is paradigm-relative — in-session subagent or externally
 orchestrated visible agent, per the environment's rules (see the Dispatch
-mechanism section of authorization-and-modes.md); a genuine conflict between
-the two is the one case that asks the user.
+mechanism section of authorization-and-modes.md). A genuine conflict between
+the two is a hard boundary: finish independent work, preserve the evidence,
+and return `NOT CLEAN` unless an interactive operator supplies a ruling.
 
 Do not let one `blocked` debt hold unrelated reversible cleanup hostage.
 Preserve the debt honestly, keep the handoff assessment capped at
@@ -146,11 +147,12 @@ for the reviewer to discover.
 
 ## Reporting
 
-List each debt independently with its state and evidence. An `open` debt
-without a recorded ruling forces the headline verdict to NOT CLEAN. A
-legitimate `deferred` may support `proceed_with_conditions` when the
-condition and owner are explicit. `blocked` and `not_assessed` prevent an
-unconditional recommendation but do not erase progress elsewhere.
+List each debt independently with its state and evidence. Any `open`,
+`blocked`, `deferred`, or `not_assessed` debt forces the headline verdict to
+NOT CLEAN. A legitimate operator-ratified `deferred` item may support the
+separate handoff recommendation `proceed_with_conditions` when its condition
+and owner are explicit, but it never satisfies CLEAN. These states do not
+erase verified progress elsewhere.
 
 ## The momentum argument
 

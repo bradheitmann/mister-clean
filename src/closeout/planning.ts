@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, extname, relative, resolve, sep } from "node:path";
 
 import { parse as parseYaml } from "yaml";
 
 import { foldCase } from "./normalization.js";
+import { proveCurrentProjectionCommand } from "./repository-inspection.js";
 import {
   assertDirectory,
   discoverPlanningRoots,
@@ -30,14 +31,22 @@ export type PlanningFindingCode =
   | "unfinished_completion_marker"
   | "lane_status_conflict"
   | "lifecycle_state_unknown"
+  | "maintenance_header_noncanonical"
   | "maintenance_lifecycle_stale"
+  | "ownership_claim_stale"
   | "orphan_parent_reference"
   | "parent_child_projection_conflict"
   | "parent_completion_stale"
   | "planning_input_unparsed"
   | "planning_relationship_conflict"
   | "planning_relationship_unresolved"
+  | "planning_surface_undiscovered"
   | "preexecution_parent_has_started_children"
+  | "review_projection_unbound"
+  | "current_projection_stale"
+  | "global_blocker_not_propagated"
+  | "admission_scope_ambiguous"
+  | "accepted_artifact_pending_prose"
   | "remediation_finding_open"
   | "remediation_finding_partial";
 
@@ -208,8 +217,8 @@ const ACTIVE = new Set([
   "rejected", "revise", "underway",
 ]);
 const PREEXECUTION = new Set([
-  "backlog", "draft", "not started", "notstarted", "pending", "planned", "ready", "to do",
-  "todo", "unstarted",
+  "abandoned", "backlog", "draft", "not started", "notstarted", "pending", "planned", "ready",
+  "released", "to do", "todo", "unclaimed", "unstarted",
 ]);
 const ARCHIVED = new Set(["archive", "archived", "historical", "history", "superseded"]);
 const FAILED = new Set(["deny", "denied", "fail", "failed", "reject", "rejected", "revise"]);
@@ -288,6 +297,9 @@ const STRUCTURED_STATE_KEYS = [
   "current_lifecycle", "current_phase", "current_stage", "current_state", "current_status",
   "implementation_status", "lifecycle", "phase", "stage", "state", "status",
 ] as const;
+const PRIMARY_STATE_KEYS = [
+  "current_lifecycle", "current_state", "current_status", "lifecycle", "state", "status",
+] as const;
 const STATE_HEADERS = new Set(STRUCTURED_STATE_KEYS.map(normalize));
 const STATE_HEADER_WORDS = new Set(["lifecycle", "phase", "stage", "state", "status"]);
 const ACCEPTANCE_ID_FIELDS = ["acceptance_id", "holdout_id", "qa_id", "review_id"] as const;
@@ -308,14 +320,22 @@ const FINDING_CODES: readonly PlanningFindingCode[] = [
   "unfinished_completion_marker",
   "lane_status_conflict",
   "lifecycle_state_unknown",
+  "maintenance_header_noncanonical",
   "maintenance_lifecycle_stale",
+  "ownership_claim_stale",
   "orphan_parent_reference",
   "parent_child_projection_conflict",
   "parent_completion_stale",
   "planning_input_unparsed",
   "planning_relationship_conflict",
   "planning_relationship_unresolved",
+  "planning_surface_undiscovered",
   "preexecution_parent_has_started_children",
+  "review_projection_unbound",
+  "current_projection_stale",
+  "global_blocker_not_propagated",
+  "admission_scope_ambiguous",
+  "accepted_artifact_pending_prose",
   "remediation_finding_open",
   "remediation_finding_partial",
 ];
@@ -514,7 +534,150 @@ function maintenanceEvidence(metadata: JsonObject, content: string): {
     ["deliverable_status", "implementation_status", "verification_status"],
     "maintenance terminal evidence",
   ).values.some((value) => lifecycle(value) === "done" || acceptance(value) === "passed");
-  return { ...(commit ? { commit } : {}), terminal: Boolean(commit && (bodyMatch || terminalMetadata)) };
+  const completedAt = scalarAliasValues(metadata, ["completed_at"], "maintenance completed_at").values[0];
+  const resolution = scalarAliasValues(metadata, ["resolution"], "maintenance resolution").values[0];
+  const durableTerminal = Boolean(completedAt && resolution);
+  return {
+    ...(commit ? { commit } : {}),
+    terminal: durableTerminal || Boolean(commit && (bodyMatch || terminalMetadata)),
+  };
+}
+
+function validTimestampWithZone(value: string): boolean {
+  return /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:\d\d)$/u.test(value)
+    && !Number.isNaN(Date.parse(value));
+}
+
+function maintenanceHeaderErrors(artifact: Artifact): readonly string[] {
+  if (artifact.type !== "maintenance") return [];
+  const errors: string[] = [];
+  const maintId = scalarAliasValues(artifact.metadata, ["maint_id"], "maint_id");
+  const aliases = topEntries(artifact.metadata, ["maintenance_id", "id"]);
+  const title = scalarAliasValues(artifact.metadata, ["title"], "maintenance title");
+  const timezone = scalarAliasValues(artifact.metadata, ["timezone"], "maintenance timezone");
+  if (maintId.values.length !== 1) errors.push("maintenance header requires exactly one maint_id");
+  if (aliases.length > 0) errors.push("maintenance header forbids maintenance_id/id aliases; use maint_id");
+  if (title.values.length !== 1) errors.push("maintenance header requires exactly one title");
+  if (timezone.values.length !== 1) errors.push("maintenance header requires exactly one timezone");
+  else {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: timezone.values[0] }).format(0);
+    } catch {
+      errors.push(`maintenance timezone is not an IANA timezone: ${JSON.stringify(timezone.values[0])}`);
+    }
+  }
+  if (artifact.declared === "done") {
+    const completedAt = scalarAliasValues(artifact.metadata, ["completed_at"], "maintenance completed_at");
+    const resolution = scalarAliasValues(artifact.metadata, ["resolution"], "maintenance resolution");
+    if (completedAt.values.length !== 1 || !validTimestampWithZone(completedAt.values[0] ?? "")) {
+      errors.push("completed maintenance requires one ISO-8601 completed_at with an explicit timezone");
+    }
+    if (resolution.values.length !== 1) errors.push("completed maintenance requires one nonempty resolution");
+  }
+  return errors;
+}
+
+function ownershipClaimErrors(artifact: Artifact): readonly string[] {
+  if (artifact.state !== "active") return [];
+  const errors: string[] = [];
+  const owners = scalarAliasValues(artifact.metadata, ["assignee", "claimed_by", "owner", "owner_role"], "owner");
+  const staleOwnerTokens = new Set(["abandoned", "expired", "inactive", "none", "released", "stopped", "terminated", "unassigned", "unavailable"]);
+  if (owners.values.some((value) => staleOwnerTokens.has(normalize(value)))) {
+    errors.push("active artifact explicitly names no live owner");
+  }
+  const claimStates = scalarAliasValues(
+    artifact.metadata,
+    ["claim_status", "lease_status", "owner_status", "ownership_status"],
+    "ownership state",
+  );
+  if (claimStates.values.some((value) => staleOwnerTokens.has(normalize(value)))) {
+    errors.push(`active artifact retains stale ownership state ${claimStates.values.map((value) => JSON.stringify(value)).join(", ")}`);
+  }
+  if (artifact.declaredProjection.values.some((value) => normalize(value) === "claimed") && owners.values.length !== 1) {
+    errors.push("claimed artifact must name exactly one owner");
+  }
+  return errors;
+}
+
+function pendingAcceptanceRefs(artifact: Artifact): readonly string[] {
+  const refs: string[] = [];
+  for (const line of scanBody(artifact.content)) {
+    if (line.historical) continue;
+    if (/\b(?:awaiting|pending)\s+(?:acceptance|holdout|qa|review)\b|\b(?:acceptance|holdout|qa|review)\s+(?:not run|pending|unexecuted)\b/iu.test(line.text)) {
+      refs.push(`${artifact.path}#line-${line.lineNumber}`);
+    }
+  }
+  return refs;
+}
+
+function admissionSurface(artifact: Artifact): boolean {
+  const identity = normalize(`${artifact.type} ${artifact.id} ${artifact.path}`);
+  return /\b(?:admission|allowlist|allow list)\b/u.test(identity);
+}
+
+function currentProjectionSurface(artifact: Artifact): boolean {
+  const stem = basename(artifact.path, extname(artifact.path)).toLocaleLowerCase("und")
+    .replace(/_/gu, "-");
+  if (!new Set(["current", "current-state", "readiness", "start-here", "successor-readiness"]).has(stem)) {
+    return false;
+  }
+  const designation = scalarAliasValues(
+    artifact.metadata,
+    ["designation", "document_role", "projection_role", "surface_role"],
+    "current projection designation",
+  );
+  const designated = designation.values.some((value) => new Set([
+    "current", "current projection", "current state", "readiness", "start here", "successor readiness",
+  ]).has(normalize(value)));
+  const carriesBinding = topEntries(artifact.metadata, [
+    "current_commit", "current_projection_command", "current_projection_source", "current_tree",
+    "projection_command", "projection_source", "repository_commit", "repository_tree",
+    "snapshot_commit", "snapshot_tree",
+  ]).length > 0;
+  return designated || carriesBinding;
+}
+
+function currentProjectionErrors(artifact: Artifact, repository?: string): readonly string[] {
+  if (!repository || !currentProjectionSurface(artifact)) return [];
+  const source = scalarAliasValues(
+    artifact.metadata,
+    ["current_projection_source", "projection_source"],
+    "current projection source",
+  );
+  const command = scalarAliasValues(
+    artifact.metadata,
+    ["current_projection_command", "projection_command"],
+    "current projection command",
+  );
+  const machineDerived = source.values.length === 1
+    && new Set(["machine", "machine derived", "machine generated"]).has(normalize(source.values[0] ?? ""))
+    && command.values.length === 1
+    && proveCurrentProjectionCommand(command.values[0] ?? "", repository).status === "pass";
+  if (machineDerived) return [];
+
+  const commit = scalarAliasValues(
+    artifact.metadata,
+    ["current_commit", "repository_commit", "snapshot_commit"],
+    "current projection commit",
+  );
+  const tree = scalarAliasValues(
+    artifact.metadata,
+    ["current_tree", "repository_tree", "snapshot_tree"],
+    "current projection tree",
+  );
+  let expectedCommit = "";
+  let expectedTree = "";
+  try {
+    expectedCommit = git(repository, "rev-parse", "HEAD");
+    expectedTree = git(repository, "rev-parse", "HEAD^{tree}");
+  } catch {
+    return ["designated current-state surface cannot bind to a readable repository commit and tree"];
+  }
+  if (commit.values.length === 1 && tree.values.length === 1
+    && commit.values[0] === expectedCommit && tree.values[0] === expectedTree) return [];
+  return [
+    "designated current-state surface must use a machine-derived current projection or bind the exact live commit and tree",
+  ];
 }
 
 function stateProjection(values: readonly string[]): StateProjection {
@@ -645,10 +808,14 @@ function lifecycleAliasProjection(
   allowAcceptance = false,
 ): { error?: string; projection: StateProjection } {
   const aliases = scalarAliasValues(metadata, STRUCTURED_STATE_KEYS, label);
-  const projection = stateProjection(aliases.values);
-  const unsupported = aliases.values.filter((value) =>
+  const primary = scalarAliasValues(metadata, PRIMARY_STATE_KEYS, label);
+  const primaryStates = [...new Set(primary.values.map(lifecycle).filter((state) => state !== "unknown"))];
+  const decisive = primaryStates.length === 1 && !primary.error;
+  const effectiveValues = decisive ? primary.values : aliases.values;
+  const projection = stateProjection(effectiveValues);
+  const unsupported = effectiveValues.filter((value) =>
     lifecycle(value) === "unknown" && !(allowAcceptance && acceptance(value) !== "unknown"));
-  const lifecycleStates = [...new Set(aliases.values
+  const lifecycleStates = decisive ? primaryStates : [...new Set(aliases.values
     .map(lifecycle)
     .filter((state) => state !== "unknown"))];
   const errors = [
@@ -887,7 +1054,12 @@ function inferredArtifactType(
 
 function artifactType(path: string, metadata: JsonObject): { error?: string; type: string } {
   const projection = scalarAliasValues(metadata, ["artifact_type", "kind", "type"], "artifact type");
-  const types = unique(projection.values.map(keyToken).map((value) => value === "story_review" ? "review" : value));
+  const types = unique(projection.values.map(keyToken)
+    .map((value) => value === "story_review" ? "review" : value)
+    .map((value) => {
+      const retired = value.match(/^archived_(.+)$/);
+      return retired && PLANNING_ARTIFACT_TYPES.has(retired[1] ?? "") ? retired[1] ?? value : value;
+    }));
   const inferred = inferredArtifactType(path, metadata, types.length === 1 ? types[0] : undefined);
   if (types.length === 0) {
     const errors = [projection.error, inferred.error].filter((error): error is string => Boolean(error));
@@ -1383,9 +1555,12 @@ function tableChildren(
     while (row < lines.length && !lines[row]?.historical && (lines[row]?.text ?? "").includes("|")) {
       const bodyLine = lines[row];
       const cells = splitTableRow(bodyLine?.text ?? "");
-      const id = cells[childIndex]?.replace(/[`*]/g, "").trim();
+      const rawIdCell = cells[childIndex] ?? "";
+      const struckRow = /~~[^~]+~~/.test(rawIdCell);
+      const id = rawIdCell.replace(/~~/g, "").replace(/[`*]/g, "").trim()
+        .replace(/\s+(ARCHIVED|RETIRED|SUPERSEDED)\b.*$/i, "").trim();
       const ref = `${path}#table-row-${bodyLine?.lineNumber ?? row + 1}`;
-      const stateValue = stateIndex < 0 ? undefined : cells[stateIndex]?.trim();
+      const stateValue = struckRow ? "archived" : stateIndex < 0 ? undefined : cells[stateIndex]?.trim();
       if (!id) {
         if (cells.some((cell) => cell.trim() !== "")) {
           errors.push({
@@ -1827,7 +2002,7 @@ function parseArtifact(source: PlanningSource): Artifact {
   const acceptanceValues = topEntries(parsed.metadata, EXPLICIT_ACCEPTANCE_FIELDS);
   const selectedAcceptanceValues = acceptanceValues.length > 0
     ? acceptanceValues
-    : isAcceptance
+    : isAcceptance && type !== "review"
       ? topEntries(parsed.metadata, ["status"])
       : [];
   const acceptanceStates = [...new Set(selectedAcceptanceValues.map(([, value]) =>
@@ -1948,6 +2123,7 @@ function affectedProjectionField(code: PlanningFindingCode): string {
     "finding_state_unknown", "remediation_finding_open", "remediation_finding_partial",
   ]).has(code)) return "remediation_state";
   if (code === "maintenance_lifecycle_stale") return "maintenance_lifecycle";
+  if (code === "planning_surface_undiscovered") return "planning_discovery";
   return "planning_input";
 }
 
@@ -1960,7 +2136,7 @@ function stablePlanningId(prefix: string, parts: readonly string[]): string {
   return `${prefix}-${digest}`;
 }
 
-function causalPlanningAccounting(
+export function causalPlanningAccounting(
   findings: readonly PlanningFinding[],
   snapshot: string,
 ): { readonly rawFindings: PlanningRawFinding[]; readonly rootDebts: PlanningRootDebt[] } {
@@ -2062,6 +2238,47 @@ function causalPlanningAccounting(
   return { rawFindings, rootDebts };
 }
 
+function finalizePlanningAudit(
+  findings: readonly PlanningFinding[],
+  snapshot: string,
+  metrics: {
+    readonly artifactCount: number;
+    readonly candidateProbeCount: number;
+    readonly planningRootCount: number;
+    readonly structuredArtifactCount: number;
+    readonly suppressedByTypedNonartifactCount: number;
+  },
+): PlanningAuditResult {
+  const ordered = [...findings].sort((left, right) =>
+    left.code.localeCompare(right.code)
+    || left.path.localeCompare(right.path)
+    || left.detail.localeCompare(right.detail));
+  const counts = Object.fromEntries(
+    FINDING_CODES.map((code) => [code, ordered.filter((item) => item.code === code).length]),
+  ) as Record<PlanningFindingCode, number>;
+  const accounting = causalPlanningAccounting(ordered, snapshot);
+  const status = ordered.length > 0
+    ? "fail"
+    : metrics.planningRootCount === 0
+      ? "not_applicable"
+      : "pass";
+  return {
+    artifactCount: metrics.artifactCount,
+    candidate_probe_count: metrics.candidateProbeCount,
+    counts,
+    exitCode: ordered.length > 0 ? 1 : 0,
+    findings: ordered,
+    planningRootCount: metrics.planningRootCount,
+    raw_finding_count: accounting.rawFindings.length,
+    raw_findings: accounting.rawFindings,
+    root_debt_count: accounting.rootDebts.length,
+    root_debts: accounting.rootDebts,
+    status,
+    structuredArtifactCount: metrics.structuredArtifactCount,
+    suppressed_by_typed_nonartifact_count: metrics.suppressedByTypedNonartifactCount,
+  };
+}
+
 function gateKind(path: readonly string[], fallback = "acceptance"): string {
   const words = path.flatMap((part) => normalize(part).split(" "));
   for (const kind of ["holdout", "review", "qa", "acceptance"]) if (words.includes(kind)) return kind;
@@ -2150,8 +2367,15 @@ function embeddedGateObservations(parent: Artifact): GateObservation[] {
 }
 
 function artifactGateObservations(artifact: Artifact): GateObservation[] {
-  const explicit = topEntries(artifact.metadata, EXPLICIT_ACCEPTANCE_FIELDS);
-  const selected = explicit.length > 0 ? explicit : topEntries(artifact.metadata, ["status"]);
+  const explicit = topEntries(
+    artifact.metadata,
+    artifact.type === "review" ? DECISIVE_ACCEPTANCE_FIELDS : EXPLICIT_ACCEPTANCE_FIELDS,
+  );
+  const selected = explicit.length > 0
+    ? explicit
+    : artifact.type === "review"
+      ? []
+      : topEntries(artifact.metadata, ["status"]);
   const kind = gateKind([artifact.type, artifact.path], artifact.type);
   const identity = artifact.identityExplicit
     ? `id:${normalizedId(artifact.id)}`
@@ -2343,12 +2567,240 @@ function contextualizeDispatchPacketSources(sources: readonly PlanningSource[]):
   });
 }
 
+const GOVERNANCE_CODE_EXTENSIONS = new Set([".cjs", ".js", ".mjs", ".py", ".rb", ".sh", ".ts"]);
+
+function contextualizeGovernanceValidatorSources(
+  sources: readonly PlanningSource[],
+): readonly PlanningSource[] {
+  return sources.map((source) => {
+    if (source.declaredClass !== undefined || source.compoundEnvelope !== undefined) return source;
+    const extension = source.path.slice(source.path.lastIndexOf(".")).toLocaleLowerCase("und");
+    if (!GOVERNANCE_CODE_EXTENSIONS.has(extension)) return source;
+    const parts = source.path.split("/").slice(0, -1).map(normalize);
+    if (!parts.includes("governance")) return source;
+    return {
+      ...source,
+      classificationRationale:
+        "Executable validator/gate tooling inside the planning governance directory; carries no artifact lifecycle by construction.",
+      declaredClass: "reference",
+    };
+  });
+}
+
+/** Index artifact identity and audit repository-wide declarations before edge resolution. */
+function indexPlanningArtifactDeclarations(
+  artifacts: readonly Artifact[],
+  findings: PlanningFinding[],
+): Map<string, Artifact[]> {
+  const byId = new Map<string, Artifact[]>();
+  for (const artifact of artifacts) {
+    if (!artifact.structured || artifact.nonArtifact) continue;
+    const key = normalizedId(artifact.id);
+    const current = byId.get(key) ?? [];
+    current.push(artifact);
+    byId.set(key, current);
+  }
+  for (const duplicates of byId.values()) {
+    if (duplicates.length < 2) continue;
+    for (const artifact of duplicates) {
+      findings.push(finding(
+        "duplicate_artifact_id",
+        artifact,
+        `artifact id ${JSON.stringify(artifact.id)} resolves from ${duplicates.length} artifacts`,
+        duplicates.filter((item) => item !== artifact).map((item) => item.path),
+      ));
+    }
+  }
+
+  for (const blocker of artifacts) {
+    if (!blocker.structured || blocker.nonArtifact) continue;
+    const scope = scalarAliasValues(blocker.metadata, ["blocker_scope", "scope"], "blocker scope");
+    const authority = scalarAliasValues(
+      blocker.metadata,
+      ["decision_authority", "resolution_authority"],
+      "blocker decision authority",
+    );
+    if (scope.values.length !== 1 || normalize(scope.values[0] ?? "") !== "global"
+      || authority.values.length !== 1 || normalize(authority.values[0] ?? "") !== "principal") continue;
+    const dependents = scalarListAliasValues(
+      blocker.metadata,
+      ["dependent_ids", "dependents"],
+      "global blocker dependents",
+    );
+    for (const dependentId of dependents.values) {
+      const dependent = (byId.get(normalizedId(dependentId)) ?? [])
+        .find((artifact) => new Set(["slice", "story"]).has(artifact.type));
+      if (!dependent) {
+        findings.push(finding(
+          "global_blocker_not_propagated",
+          blocker,
+          `global principal-only blocker names unresolved dependent ${JSON.stringify(dependentId)}`,
+        ));
+        continue;
+      }
+      const prerequisites = scalarListAliasValues(
+        dependent.metadata,
+        ["blocked_by", "dependencies", "dependency_ids", "prerequisite_ids", "prerequisites"],
+        "dependent prerequisites",
+      );
+      if (!prerequisites.values.some((value) => normalizedId(value) === normalizedId(blocker.id))) {
+        findings.push(finding(
+          "global_blocker_not_propagated",
+          dependent,
+          `dependent remains claimable because principal-only blocker ${JSON.stringify(blocker.id)} is absent from its prerequisites`,
+          [blocker.path],
+        ));
+      }
+    }
+  }
+
+  for (const story of artifacts) {
+    if (!story.structured || story.nonArtifact || story.type !== "story" || story.state === "archived") continue;
+    const projected = scalarAliasValues(story.metadata, ["story_review_status"], "story review status");
+    if (projected.values.length === 0) continue;
+    const pairedReviews = artifacts.filter((artifact) => artifact.type === "review" && artifact.state !== "archived"
+      && artifact.parentIds.some((id) => normalizedId(id) === normalizedId(story.id)));
+    const projectedState = acceptanceForArtifact(projected.values[0] ?? "", "story", "review");
+    if (projectedState === "passed" && pairedReviews.length === 0) {
+      findings.push(finding(
+        "review_projection_unbound",
+        story,
+        "story projects review PASS without a paired review verdict; use NOT_REQUIRED with rationale only when review is genuinely unnecessary",
+      ));
+    }
+  }
+
+  for (const artifact of artifacts) {
+    if (!artifact.structured || artifact.acceptance || artifact.nonArtifact) continue;
+    if (artifact.childRelationshipRole !== "child_parentage"
+      || !LEAF_ARTIFACT_TYPES.has(artifact.type)
+      || artifact.tableChildren.length === 0) continue;
+    findings.push(finding(
+      "planning_relationship_conflict",
+      artifact,
+      `leaf ${artifact.type} artifact declares ${artifact.tableChildren.length} child projection${artifact.tableChildren.length === 1 ? "" : "s"}`,
+      artifact.tableChildren.map((child) => child.ref),
+    ));
+  }
+  return byId;
+}
+
+/** Audit parent/child completion and acceptance rollups after graph resolution. */
+function auditPlanningCompletionRollups(
+  artifacts: readonly Artifact[],
+  childrenByParent: ReadonlyMap<Artifact, ReadonlySet<Artifact>>,
+  findings: PlanningFinding[],
+): void {
+  for (const parent of artifacts) {
+    if (!parent.structured || parent.acceptance || parent.state === "archived" || parent.nonArtifact) continue;
+    const children = [...(childrenByParent.get(parent) ?? [])]
+      .sort((left, right) => left.path.localeCompare(right.path));
+    const started = children.filter((child) => new Set<Lifecycle>(["active", "done"]).has(child.state));
+    const unfinished = children.filter((child) => child.state !== "done");
+    if (parent.state === "done" && unfinished.length > 0) {
+      findings.push(finding(
+        "parent_child_projection_conflict",
+        parent,
+        `parent is done while ${unfinished.length}/${children.length} direct children are not done`,
+        unfinished.map((child) => child.path),
+      ));
+    }
+    if (parent.declared === "preexecution" && started.length > 0) {
+      findings.push(finding(
+        "preexecution_parent_has_started_children",
+        parent,
+        `parent is preexecution while ${started.length}/${children.length} direct children have started`,
+        started.map((child) => child.path),
+      ));
+    }
+
+    const gates = acceptanceGates(parent, artifacts);
+    for (const gate of gates) {
+      if (gate.states.length > 1) {
+        findings.push(finding(
+          "acceptance_gate_identity_conflict",
+          parent,
+          `${gate.kind} gate has conflicting projections: ${gate.states.join(", ")}`,
+          gate.refs,
+        ));
+      }
+      if (gate.state === "unknown") {
+        findings.push(finding(
+          "acceptance_gate_unknown",
+          parent,
+          gate.states.includes("not_applicable")
+            ? `${gate.kind} gate claims not_applicable without a structured rationale`
+            : `${gate.kind} gate state is missing or outside the recognized vocabulary`,
+          gate.refs,
+        ));
+      }
+    }
+
+    const allChildrenDone = children.length > 0 && children.every((child) => child.state === "done");
+    if (allChildrenDone && gates.length === 0) {
+      findings.push(finding(
+        "acceptance_gate_undiscovered",
+        parent,
+        `all ${children.length} direct children are done but no acceptance gate can be identified`,
+        children.map((child) => child.path),
+      ));
+    }
+    const unrun = gates.filter((gate) => gate.state === "unrun");
+    const failed = gates.filter((gate) => gate.state === "failed");
+    const partial = gates.filter((gate) => gate.state === "partial");
+    if (allChildrenDone && unrun.length > 0) {
+      findings.push(finding(
+        "acceptance_cascade_unexecuted",
+        parent,
+        `all ${children.length} direct children are done but ${unrun.length}/${gates.length} acceptance gates are unexecuted`,
+        unrun.flatMap((gate) => gate.refs),
+      ));
+    }
+    if (failed.length > 0) {
+      findings.push(finding(
+        "acceptance_failure_unpaid",
+        parent,
+        `${failed.length}/${gates.length} acceptance gates record failure`,
+        failed.flatMap((gate) => gate.refs),
+      ));
+    }
+    if (partial.length > 0) {
+      findings.push(finding(
+        "acceptance_partial_unpaid",
+        parent,
+        `${partial.length}/${gates.length} acceptance gates are PARTIAL with named operate-time work remaining`,
+        partial.flatMap((gate) => gate.refs),
+      ));
+    }
+    if (!allChildrenDone && parent.state === "done" && unrun.length > 0) {
+      findings.push(finding(
+        "completed_parent_unexecuted_acceptance",
+        parent,
+        `completed parent has ${unrun.length}/${gates.length} unexecuted acceptance gates`,
+        unrun.flatMap((gate) => gate.refs),
+      ));
+    }
+    if (allChildrenDone && gates.length > 0
+      && gates.every((gate) => new Set<Acceptance>(["not_applicable", "passed"]).has(gate.state))
+      && parent.declared !== "done") {
+      findings.push(finding(
+        "parent_completion_stale",
+        parent,
+        `all ${children.length} direct children and all ${gates.length} acceptance gates are complete but the parent is ${parent.declared}`,
+        gates.flatMap((gate) => gate.refs),
+      ));
+    }
+  }
+}
+
 export function auditPlanningArtifacts(
   sources: readonly PlanningSource[],
   planningRootCount = sources.length > 0 ? 1 : 0,
   options: { readonly repository?: string; readonly snapshot?: string } = {},
 ): PlanningAuditResult {
-  const artifacts = contextualizeDispatchPacketSources(sources).map(parseArtifact);
+  const artifacts = contextualizeGovernanceValidatorSources(
+    contextualizeDispatchPacketSources(sources),
+  ).map(parseArtifact);
   const findings: PlanningFinding[] = [];
 
   for (const artifact of artifacts) {
@@ -2399,7 +2851,49 @@ export function auditPlanningArtifacts(
       }
       continue;
     }
-    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance) {
+    if (artifact.structured && !artifact.nonArtifact) {
+      for (const detail of maintenanceHeaderErrors(artifact)) {
+        findings.push(finding("maintenance_header_noncanonical", artifact, detail));
+      }
+      for (const detail of ownershipClaimErrors(artifact)) {
+        findings.push(finding("ownership_claim_stale", artifact, detail));
+      }
+      for (const detail of currentProjectionErrors(artifact, options.repository)) {
+        findings.push(finding("current_projection_stale", artifact, detail));
+      }
+      if (artifact.type === "review" && artifact.state !== "archived") {
+        const verdicts = topEntries(artifact.metadata, DECISIVE_ACCEPTANCE_FIELDS);
+        if (verdicts.length === 0) {
+          findings.push(finding(
+            "review_projection_unbound",
+            artifact,
+            "review lifecycle is not a verdict; a live review requires one decisive review verdict",
+          ));
+        }
+      }
+      if (admissionSurface(artifact)) {
+        const scope = scalarAliasValues(artifact.metadata, ["approval_scope"], "approval scope");
+        if (artifact.state === "done"
+          && (scope.values.length !== 1 || normalize(scope.values[0] ?? "") !== "admission only")) {
+          findings.push(finding(
+            "admission_scope_ambiguous",
+            artifact,
+            "accepted admission/allowlist evidence must declare approval_scope: admission_only and cannot imply product-scope approval",
+          ));
+        }
+      }
+      const pendingRefs = pendingAcceptanceRefs(artifact);
+      if (artifact.state === "done" && pendingRefs.length > 0) {
+        findings.push(finding(
+          "accepted_artifact_pending_prose",
+          artifact,
+          "durably terminal artifact still presents acceptance work as pending",
+          pendingRefs,
+        ));
+      }
+    }
+    if (artifact.structured && !artifact.nonArtifact && artifact.acceptance
+      && artifact.state !== "archived" && artifact.declared !== "archived") {
       const malformedPartial = artifact.acceptanceState === "partial"
         && (artifact.operateTimeLegCount === 0 || artifact.operateTimeLegErrors.length > 0);
       const terminalWithPendingLeg = artifact.acceptanceState === "passed" && artifact.operateTimeLegCount > 0;
@@ -2416,20 +2910,23 @@ export function auditPlanningArtifacts(
       }
     }
     if (artifact.structured && !artifact.nonArtifact && artifact.type === "maintenance"
-      && artifact.declared === "active" && artifact.maintenanceCommit
-      && artifact.maintenanceTerminalEvidence && options.repository) {
-      let landed = false;
-      try {
-        landed = isGitAncestor(options.repository, artifact.maintenanceCommit, "HEAD");
-      } catch {
-        landed = false;
+      && artifact.declared === "active" && artifact.maintenanceTerminalEvidence) {
+      let terminalEvidenceIsLive = !artifact.maintenanceCommit;
+      if (artifact.maintenanceCommit && options.repository) {
+        try {
+          terminalEvidenceIsLive = isGitAncestor(options.repository, artifact.maintenanceCommit, "HEAD");
+        } catch {
+          terminalEvidenceIsLive = false;
+        }
       }
-      if (landed) {
+      if (terminalEvidenceIsLive) {
         findings.push(finding(
           "maintenance_lifecycle_stale",
           artifact,
-          `maintenance remains active after its verified implementation commit ${artifact.maintenanceCommit} landed in the bound target`,
-          [artifact.maintenanceCommit],
+          artifact.maintenanceCommit
+            ? `maintenance remains active after its verified implementation commit ${artifact.maintenanceCommit} landed in the bound target`
+            : "maintenance remains active after durable completion time and resolution evidence were recorded",
+          artifact.maintenanceCommit ? [artifact.maintenanceCommit] : [],
         ));
       }
     }
@@ -2494,38 +2991,7 @@ export function auditPlanningArtifacts(
     }
   }
 
-  const byId = new Map<string, Artifact[]>();
-  for (const artifact of artifacts) {
-    if (!artifact.structured || artifact.nonArtifact) continue;
-    const key = normalizedId(artifact.id);
-    const current = byId.get(key) ?? [];
-    current.push(artifact);
-    byId.set(key, current);
-  }
-  for (const duplicates of byId.values()) {
-    if (duplicates.length < 2) continue;
-    for (const artifact of duplicates) {
-      findings.push(finding(
-        "duplicate_artifact_id",
-        artifact,
-        `artifact id ${JSON.stringify(artifact.id)} resolves from ${duplicates.length} artifacts`,
-        duplicates.filter((item) => item !== artifact).map((item) => item.path),
-      ));
-    }
-  }
-
-  for (const artifact of artifacts) {
-    if (!artifact.structured || artifact.acceptance || artifact.nonArtifact) continue;
-    if (artifact.childRelationshipRole !== "child_parentage"
-      || !LEAF_ARTIFACT_TYPES.has(artifact.type)
-      || artifact.tableChildren.length === 0) continue;
-    findings.push(finding(
-      "planning_relationship_conflict",
-      artifact,
-      `leaf ${artifact.type} artifact declares ${artifact.tableChildren.length} child projection${artifact.tableChildren.length === 1 ? "" : "s"}`,
-      artifact.tableChildren.map((child) => child.ref),
-    ));
-  }
+  const byId = indexPlanningArtifactDeclarations(artifacts, findings);
 
   const childrenByParent = new Map<Artifact, Set<Artifact>>();
   const explicitParents = new Map<Artifact, Set<Artifact>>();
@@ -2534,6 +3000,7 @@ export function auditPlanningArtifacts(
     const parentArchived = parent.state === "archived";
     const childArchived = child.state === "archived";
     if (parentArchived === childArchived) return true;
+    if (childArchived && child.declared === "archived") return true;
     const key = `${parent.path}\u0000${child.path}`;
     if (!archiveBoundaryEdges.has(key)) {
       archiveBoundaryEdges.add(key);
@@ -2771,131 +3238,83 @@ export function auditPlanningArtifacts(
     }
   }
 
-  for (const parent of artifacts) {
-    if (!parent.structured || parent.acceptance || parent.state === "archived" || parent.nonArtifact) continue;
-    const children = [...(childrenByParent.get(parent) ?? [])]
-      .sort((left, right) => left.path.localeCompare(right.path));
-    const started = children.filter((child) => new Set<Lifecycle>(["active", "done"]).has(child.state));
-    const unfinished = children.filter((child) => child.state !== "done");
-    if (parent.state === "done" && unfinished.length > 0) {
-      findings.push(finding(
-        "parent_child_projection_conflict",
-        parent,
-        `parent is done while ${unfinished.length}/${children.length} direct children are not done`,
-        unfinished.map((child) => child.path),
-      ));
-    }
-    if (parent.declared === "preexecution" && started.length > 0) {
-      findings.push(finding(
-        "preexecution_parent_has_started_children",
-        parent,
-        `parent is preexecution while ${started.length}/${children.length} direct children have started`,
-        started.map((child) => child.path),
-      ));
-    }
+  auditPlanningCompletionRollups(artifacts, childrenByParent, findings);
 
-    const gates = acceptanceGates(parent, artifacts);
-    for (const gate of gates) {
-      if (gate.states.length > 1) {
-        findings.push(finding(
-          "acceptance_gate_identity_conflict",
-          parent,
-          `${gate.kind} gate has conflicting projections: ${gate.states.join(", ")}`,
-          gate.refs,
-        ));
-      }
-      if (gate.state === "unknown") {
-        findings.push(finding(
-          "acceptance_gate_unknown",
-          parent,
-          gate.states.includes("not_applicable")
-            ? `${gate.kind} gate claims not_applicable without a structured rationale`
-            : `${gate.kind} gate state is missing or outside the recognized vocabulary`,
-          gate.refs,
-        ));
-      }
-    }
+  return finalizePlanningAudit(findings, options.snapshot ?? "unbound", {
+    artifactCount: artifacts.length,
+    candidateProbeCount: 0,
+    planningRootCount,
+    structuredArtifactCount: artifacts.filter((artifact) => artifact.structured).length,
+    suppressedByTypedNonartifactCount: artifacts.filter((artifact) => artifact.nonArtifact).length,
+  });
+}
 
-    const allChildrenDone = children.length > 0 && children.every((child) => child.state === "done");
-    if (allChildrenDone && gates.length === 0) {
-      findings.push(finding(
-        "acceptance_gate_undiscovered",
-        parent,
-        `all ${children.length} direct children are done but no acceptance gate can be identified`,
-        children.map((child) => child.path),
-      ));
+const PLANNING_CANDIDATE_DIRECTORIES = new Set(["docs", "documentation", "references", "specs"]);
+const PLANNING_CANDIDATE_IGNORED_SEGMENTS = new Set(["examples", "fixtures", "node_modules", "test-data", "testdata", "vendor"]);
+const ACTIVE_IMPLEMENTATION_STATUS = /^status\s*:\s*[^\n]*(?:implementation\s+)?(?:active|in[ -]progress|pending|underway)\b/imu;
+const IMPLEMENTATION_SEQUENCE_HEADING = /^#{1,6}\s+(?:\d+(?:\.\d+)*\.?\s+)?(?:implementation|migration|remediation|rollout)\s+(?:plan|roadmap|sequence)\b/imu;
+const MAX_PLANNING_CANDIDATE_BYTES = 2 * 1024 * 1024;
+
+interface PlanningCandidate {
+  readonly content: string;
+  readonly path: string;
+}
+
+function planningCandidatePaths(root: string, planningRoots: readonly string[]): string[] {
+  const candidates: string[] = [];
+  const roots = planningRoots.map((path) => path.split("/").join(sep));
+  const insidePlanningRoot = (path: string): boolean => roots.some((candidate) =>
+    path === candidate || path.startsWith(`${candidate}${sep}`));
+  const append = (path: string): void => {
+    const relativePath = relative(root, path);
+    if (!relativePath || insidePlanningRoot(relativePath)) return;
+    const segments = relativePath.split(sep).map((segment) => segment.toLocaleLowerCase("und"));
+    if (segments.some((segment) => PLANNING_CANDIDATE_IGNORED_SEGMENTS.has(segment))) return;
+    if (!isPlanningTextPath(path)) return;
+    candidates.push(path);
+  };
+
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = resolve(root, entry.name);
+    if (entry.isFile()) append(path);
+    else if (entry.isDirectory() && !entry.isSymbolicLink()
+      && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
+      for (const nested of listEntriesRecursively(path)) if (nested.kind === "file") append(nested.path);
     }
-    const unrun = gates.filter((gate) => gate.state === "unrun");
-    const failed = gates.filter((gate) => gate.state === "failed");
-    const partial = gates.filter((gate) => gate.state === "partial");
-    if (allChildrenDone && unrun.length > 0) {
-      findings.push(finding(
-        "acceptance_cascade_unexecuted",
-        parent,
-        `all ${children.length} direct children are done but ${unrun.length}/${gates.length} acceptance gates are unexecuted`,
-        unrun.flatMap((gate) => gate.refs),
-      ));
-    }
-    if (failed.length > 0) {
-      findings.push(finding(
-        "acceptance_failure_unpaid",
-        parent,
-        `${failed.length}/${gates.length} acceptance gates record failure`,
-        failed.flatMap((gate) => gate.refs),
-      ));
-    }
-    if (partial.length > 0) {
-      findings.push(finding(
-        "acceptance_partial_unpaid",
-        parent,
-        `${partial.length}/${gates.length} acceptance gates are PARTIAL with named operate-time work remaining`,
-        partial.flatMap((gate) => gate.refs),
-      ));
-    }
-    if (!allChildrenDone && parent.state === "done" && unrun.length > 0) {
-      findings.push(finding(
-        "completed_parent_unexecuted_acceptance",
-        parent,
-        `completed parent has ${unrun.length}/${gates.length} unexecuted acceptance gates`,
-        unrun.flatMap((gate) => gate.refs),
-      ));
-    }
-    if (allChildrenDone && gates.length > 0
-      && gates.every((gate) => new Set<Acceptance>(["not_applicable", "passed"]).has(gate.state))
-      && parent.declared !== "done") {
-      findings.push(finding(
-        "parent_completion_stale",
-        parent,
-        `all ${children.length} direct children and all ${gates.length} acceptance gates are complete but the parent is ${parent.declared}`,
-        gates.flatMap((gate) => gate.refs),
-      ));
+  }
+  return [...new Set(candidates)].sort();
+}
+
+function discoverUnprojectedPlanningCandidates(
+  root: string,
+  planningRoots: readonly string[],
+  planningSources: readonly PlanningSource[],
+): { readonly candidates: readonly PlanningCandidate[]; readonly findings: readonly PlanningFinding[] } {
+  const candidates: PlanningCandidate[] = [];
+  for (const path of planningCandidatePaths(root, planningRoots)) {
+    try {
+      const stat = lstatSync(path);
+      if (!stat.isFile() || stat.size > MAX_PLANNING_CANDIDATE_BYTES) continue;
+      const content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(path));
+      if (content.includes("\0")
+        || !ACTIVE_IMPLEMENTATION_STATUS.test(content)
+        || !IMPLEMENTATION_SEQUENCE_HEADING.test(content)) continue;
+      candidates.push({ content, path: relative(root, path).split(sep).join("/") });
+    } catch {
+      continue;
     }
   }
 
-  const ordered = findings.sort((left, right) =>
-    left.code.localeCompare(right.code)
-    || left.path.localeCompare(right.path)
-    || left.detail.localeCompare(right.detail));
-  const counts = Object.fromEntries(
-    FINDING_CODES.map((code) => [code, ordered.filter((item) => item.code === code).length]),
-  ) as Record<PlanningFindingCode, number>;
-  const accounting = causalPlanningAccounting(ordered, options.snapshot ?? "unbound");
-  const status = planningRootCount === 0 ? "not_applicable" : ordered.length > 0 ? "fail" : "pass";
-  return {
-    artifactCount: artifacts.length,
-    candidate_probe_count: 0,
-    counts,
-    exitCode: ordered.length > 0 ? 1 : 0,
-    findings: ordered,
-    planningRootCount,
-    raw_finding_count: accounting.rawFindings.length,
-    raw_findings: accounting.rawFindings,
-    root_debt_count: accounting.rootDebts.length,
-    root_debts: accounting.rootDebts,
-    status,
-    structuredArtifactCount: artifacts.filter((artifact) => artifact.structured).length,
-    suppressed_by_typed_nonartifact_count: artifacts.filter((artifact) => artifact.nonArtifact).length,
-  };
+  const findings = candidates
+    .filter((candidate) => !planningSources.some((source) => source.content.includes(candidate.path)))
+    .map((candidate): PlanningFinding => ({
+      code: "planning_surface_undiscovered",
+      detail: "live implementation status and sequence are outside planning discovery and are not projected by a canonical planning artifact",
+      path: candidate.path,
+      related: [...planningRoots],
+      subject: stablePlanningId("PLANNING-CANDIDATE", [candidate.path]),
+    }));
+  return { candidates, findings };
 }
 
 export function auditPlanningRepository(repository: string): PlanningAuditResult {
@@ -2934,5 +3353,13 @@ export function auditPlanningRepository(repository: string): PlanningAuditResult
   } catch {
     snapshot = "unbound";
   }
-  return auditPlanningArtifacts(sources, planningRoots.length, { repository: root, snapshot });
+  const base = auditPlanningArtifacts(sources, planningRoots.length, { repository: root, snapshot });
+  const probes = discoverUnprojectedPlanningCandidates(root, planningRoots, sources);
+  return finalizePlanningAudit([...base.findings, ...probes.findings], snapshot, {
+    artifactCount: base.artifactCount,
+    candidateProbeCount: probes.candidates.length,
+    planningRootCount: base.planningRootCount,
+    structuredArtifactCount: base.structuredArtifactCount,
+    suppressedByTypedNonartifactCount: base.suppressed_by_typed_nonartifact_count,
+  });
 }

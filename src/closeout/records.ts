@@ -1,6 +1,7 @@
 import { posix as pathPosix } from "node:path";
 
 import { canonicalIdentity, foldCase } from "./normalization.js";
+import { canonicalJson, sha256Bytes } from "../canonical-json.js";
 
 /** Pure validation of Mister Clean's closeout report and action-manifest records.
  *
@@ -16,7 +17,8 @@ export const DEBT_STATES = new Set(["satisfied", "accepted_exception", "open", "
 export const RECOMMENDATIONS = new Set(["proceed", "proceed_with_conditions", "do_not_proceed", "not_assessed"]);
 export const MODES = new Set(["AUDIT", "CLEAN", "CLOSE", "CONFORM", "GUARD"]);
 export const EXECUTION_STATES = new Set(["authorized", "executed"]);
-export const MANIFEST_SCHEMA_VERSIONS = new Set(["1.0", "1.1", "1.2"]);
+export const ACTION_STATUSES = new Set(["planned", "executed", "failed", "blocked", "skipped"]);
+export const MANIFEST_SCHEMA_VERSIONS = new Set(["1.0", "1.1", "1.2", "1.3"]);
 export const RISKS = new Set(["reversible_local", "consequential_external", "unrecoverable"]);
 export const AUTH_STATES = new Set(["granted"]);
 export const STANDING_AUTH_SOURCES = new Set(["skill_invocation", "explicit_user", "explicit_operator"]);
@@ -66,6 +68,14 @@ const GUARD_STATES = new Set(["initialized", "collecting", "passed", "crossed", 
 const GUARD_ROLES = new Set(["dev", "qa", "mister_clean", "holdout"]);
 const GUARD_CONCLUSIONS = new Set(["pass", "fail", "conditional", "not_run"]);
 const GUARD_BARRIER_STATES = new Set(["closed", "open", "crossed", "invalidated"]);
+const GUARD_AUTHORITY_KINDS = new Set(["external_custody"]);
+const GUARD_RECEIPT_KEYS = [
+  "id", "run_id", "round_id", "pod_id", "task_id", "role", "actor",
+  "actual_model", "reasoning_level", "harness", "session_id",
+  "baseline_commit", "candidate_tree", "prompt_sha256", "policy_sha256", "criteria_sha256", "checks_sha256",
+  "started_at", "finished_at", "conclusion", "findings_total", "findings_paid", "unresolved",
+  "repository_mutated", "mutation_owner_transfer", "mister_clean_evaluator", "evidence_ref", "receipt_sha256",
+] as const;
 const LOCAL_MUTATION_KINDS = new Set([
   "local_edit", "local_move", "recoverable_delete", "format", "generate", "doc_update",
   "planning_record_update", "historical_conform", "handoff_update",
@@ -86,6 +96,11 @@ export const REGRESSION_COUNT_FIELDS = [
 ] as const;
 
 type ObjectRecord = Record<string, unknown>;
+
+function receiptSeal(receipt: ObjectRecord): string {
+  const { receipt_sha256: _seal, ...content } = receipt;
+  return sha256Bytes(canonicalJson(content));
+}
 
 function object(value: unknown): ObjectRecord | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as ObjectRecord : undefined;
@@ -187,41 +202,59 @@ function validateRegressionControl(
   clean: boolean,
   allowPlaceholders: boolean,
 ): void {
-  requireKeys(value, [
-    "policy", "baseline_object", "closing_object", ...REGRESSION_COUNT_FIELDS, "evidence_ref",
-  ], path, errors);
   const control = object(value);
-  if (!control) return;
+  if (!control) {
+    errors.push(`${path}: expected object`);
+    return;
+  }
+  const modern = control.accounting_schema === "1.5";
+  requireKeys(control, modern
+    ? [
+        "policy", "baseline_object", "baseline_repository_object", "closing_object",
+        "closing_repository_object", "accounting_schema", "evidence_ref",
+      ]
+    : ["policy", "baseline_object", "closing_object", ...REGRESSION_COUNT_FIELDS, "evidence_ref"], path, errors);
   if (control.policy !== REGRESSION_POLICY) errors.push(`${path}.policy: expected ${REGRESSION_POLICY}`);
   for (const field of ["baseline_object", "closing_object"] as const) {
     if (!nonempty(control[field])) errors.push(`${path}.${field}: required`);
   }
-  for (const field of REGRESSION_COUNT_FIELDS) {
-    if (!Number.isInteger(control[field]) || Number(control[field]) < 0) {
-      errors.push(`${path}.${field}: required nonnegative integer`);
+  if (modern) {
+    for (const field of ["baseline_repository_object", "closing_repository_object"] as const) {
+      if (!object(control[field])) errors.push(`${path}.${field}: required repository-object binding`);
     }
   }
-  const countsValid = REGRESSION_COUNT_FIELDS.every((field) => Number.isInteger(control[field]) && Number(control[field]) >= 0);
-  if (countsValid) {
-    const baseline = Number(control.baseline_findings);
-    const expectedBaseline = Number(control.baseline_paid) + Number(control.baseline_open);
-    if (baseline !== expectedBaseline) {
-      errors.push(`${path}.baseline_findings (${baseline}) must equal baseline_paid + baseline_open (${expectedBaseline})`);
+  if (modern) {
+    for (const field of REGRESSION_COUNT_FIELDS) {
+      if (field in control) errors.push(`${path}.${field}: schema 1.5 forbids legacy numeric regression fields`);
     }
-    const closing = Number(control.closing_findings);
-    const expectedClosing = Number(control.baseline_open)
-      + Number(control.newly_discovered_preexisting_open)
-      + Number(control.concurrent_external_open)
-      + Number(control.introduced_by_run_open);
-    if (closing !== expectedClosing) {
-      errors.push(`${path}.closing_findings (${closing}) must equal all open origin buckets (${expectedClosing})`);
+  } else {
+    for (const field of REGRESSION_COUNT_FIELDS) {
+      if (!Number.isInteger(control[field]) || Number(control[field]) < 0) {
+        errors.push(`${path}.${field}: required nonnegative integer`);
+      }
+    }
+    const countsValid = REGRESSION_COUNT_FIELDS.every((field) => Number.isInteger(control[field]) && Number(control[field]) >= 0);
+    if (countsValid) {
+      const baseline = Number(control.baseline_findings);
+      const expectedBaseline = Number(control.baseline_paid) + Number(control.baseline_open);
+      if (baseline !== expectedBaseline) {
+        errors.push(`${path}.baseline_findings (${baseline}) must equal baseline_paid + baseline_open (${expectedBaseline})`);
+      }
+      const closing = Number(control.closing_findings);
+      const expectedClosing = Number(control.baseline_open)
+        + Number(control.newly_discovered_preexisting_open)
+        + Number(control.concurrent_external_open)
+        + Number(control.introduced_by_run_open);
+      if (closing !== expectedClosing) {
+        errors.push(`${path}.closing_findings (${closing}) must equal all open origin buckets (${expectedClosing})`);
+      }
     }
   }
   const referenceHasPlaceholder = findPlaceholders(control.evidence_ref, `${path}.evidence_ref`).length > 0;
   if (!(allowPlaceholders && referenceHasPlaceholder) && !digestRef(control.evidence_ref)) {
     errors.push(`${path}.evidence_ref: required digest-bound regression-delta reference {path,sha256}`);
   }
-  if (clean && control.introduced_by_run_open !== 0) {
+  if (clean && !modern && control.introduced_by_run_open !== 0) {
     errors.push(`${path}.introduced_by_run_open: CLEAN requires zero cleanup-introduced open debt`);
   }
 }
@@ -283,10 +316,37 @@ export function validateReport(data: unknown, allowPlaceholders = false, bundleC
     else if (item.state === "satisfied" && item.evidence.length === 0) errors.push(`$.dimensions.${name}: satisfied requires evidence`);
   }
   const debts = array(report.completion_debts) ?? [];
+  const modernAccounting = object(report.regression_control)?.accounting_schema === "1.5";
   if (!Array.isArray(report.completion_debts)) errors.push("$.completion_debts: expected array");
   for (const [index, raw] of debts.entries()) {
-    const path = `$.completion_debts[${index}]`; const debt = object(raw); requireKeys(raw, ["id", "procedure", "state", "evidence"], path, errors); if (!debt) continue;
+    const path = `$.completion_debts[${index}]`; const debt = object(raw); requireKeys(raw, [
+      "id", "procedure", "state", "evidence",
+      ...(modernAccounting ? ["debt_key", "normalizer", "cause_key", "disposition", "origin", "observation_ids"] : []),
+    ], path, errors); if (!debt) continue;
+    if (modernAccounting) {
+      if (typeof debt.debt_key !== "string" || !/^[0-9a-f]{64}$/.test(debt.debt_key)) {
+        errors.push(`${path}.debt_key: required lowercase SHA-256 root-debt key`);
+      }
+      if (!nonempty(debt.normalizer)) errors.push(`${path}.normalizer: required versioned stable identifier`);
+      if (!object(debt.origin)) errors.push(`${path}.origin: required accounting origin object`);
+      const observationIds = array(debt.observation_ids);
+      if (!observationIds || observationIds.length === 0
+        || observationIds.some((id) => typeof id !== "string" || !/^[0-9a-f]{64}$/.test(id))
+        || JSON.stringify(observationIds) !== JSON.stringify([...new Set(observationIds)].sort())) {
+        errors.push(`${path}.observation_ids: required nonempty sorted unique lowercase SHA-256 array`);
+      }
+    }
     if (!DEBT_STATES.has(String(debt.state))) errors.push(`${path}.state: unsupported value ${JSON.stringify(debt.state)}`);
+    if (debt.detector_finding_fingerprints !== undefined) {
+      const fingerprints = array(debt.detector_finding_fingerprints);
+      if (!fingerprints || fingerprints.some((fingerprint) => typeof fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(fingerprint))) {
+        errors.push(`${path}.detector_finding_fingerprints: expected lowercase SHA-256 array`);
+      } else if (new Set(fingerprints).size !== fingerprints.length) {
+        errors.push(`${path}.detector_finding_fingerprints: duplicates are forbidden`);
+      } else if (JSON.stringify(fingerprints) !== JSON.stringify([...fingerprints].sort())) {
+        errors.push(`${path}.detector_finding_fingerprints: must be sorted`);
+      }
+    }
     if (debt.state === "blocked") { requireKeys(debt, ["blocker", "next_owner", "next_action"], path, errors); if (!array(debt.evidence)?.length) errors.push(`${path}.evidence: blocked debt requires evidence`); for (const field of ["blocker", "next_owner", "next_action"]) if (!nonempty(debt[field])) errors.push(`${path}.${field}: required for blocked debt`); }
     if (debt.state === "deferred") { const ruling = object(debt.ruling); requireKeys(ruling, ["actor", "date", "reason", "ref", "next_owner"], `${path}.ruling`, errors); if (ruling) for (const field of ["actor", "date", "reason", "ref", "next_owner"]) if (!nonempty(ruling[field])) errors.push(`${path}.ruling.${field}: required for deferred debt`); }
   }
@@ -335,6 +395,40 @@ export function validateReport(data: unknown, allowPlaceholders = false, bundleC
     if (STALE_DOC_CLASSES.has(String(residual.class))) errors.push(`${path}: a reviewer-reported stale doc/comment is payable debt, not a residual -- move it to completion_debts and fix it before CLEAN`);
   }
   for (const [index, raw] of (array(report.acceptance_criteria) ?? []).entries()) { const path = `$.acceptance_criteria[${index}]`; const criterion = object(raw); if (!criterion) { errors.push(`${path}: expected object`); continue; } if (!nonempty(criterion.id)) errors.push(`${path}.id: required`); if (typeof criterion.met !== "boolean") errors.push(`${path}.met: required boolean`); if (!nonempty(criterion.source)) errors.push(`${path}.source: required (who set the criterion, e.g. operator)`); if (criterion.waiver !== undefined && (!object(criterion.waiver) || !nonempty(object(criterion.waiver)?.actor) || !nonempty(object(criterion.waiver)?.ref))) errors.push(`${path}.waiver: requires actor AND ref`); else if (object(criterion.waiver) && OPERATOR_ACTORS.has(String(criterion.source)) && !OPERATOR_ACTORS.has(normalizeActor(object(criterion.waiver)?.actor))) errors.push(`${path}.waiver: an operator-source criterion may be waived ONLY by the operator, not by a reviewer (${JSON.stringify(object(criterion.waiver)?.actor)})`); }
+  validateReportCleanReadiness(
+    report,
+    verdict,
+    target,
+    repo,
+    debts,
+    dimensions,
+    claims,
+    assessment,
+    decisionRows,
+    residuals,
+    seenIds,
+    allowPlaceholders,
+    data,
+    errors,
+  );
+
+
+function validateReportCleanReadiness(
+  report: ObjectRecord,
+  verdict: unknown,
+  target: ObjectRecord | undefined,
+  repo: ObjectRecord,
+  debts: readonly unknown[],
+  dimensions: ObjectRecord | undefined,
+  claims: ObjectRecord | undefined,
+  assessment: ObjectRecord | undefined,
+  decisionRows: readonly string[],
+  residuals: readonly unknown[],
+  seenIds: ReadonlySet<string>,
+  allowPlaceholders: boolean,
+  data: unknown,
+  errors: string[],
+): void {
   if (verdict === "CLEAN") {
     if (target?.target_incorporated !== true) errors.push("$.target_binding: CLEAN requires target_incorporated=true"); if (target?.target_commits_missing !== 0) errors.push("$.target_binding: CLEAN requires target_commits_missing=0"); if (target?.candidate_commit !== repo.commit) errors.push("$.target_binding.candidate_commit: CLEAN requires equality with repo.commit"); if (target?.merge_base !== target?.target_commit) errors.push("$.target_binding.merge_base: CLEAN requires current target to be an ancestor of the closing candidate");
     for (const [index, raw] of debts.entries()) { const debt = object(raw); if (!debt) continue; if (OPEN_DEBT_STATES.has(String(debt.state))) errors.push(`$.verdict: CLEAN forbidden -- completion_debts[${index}] (${debt.id ?? "?"}) is ${JSON.stringify(debt.state)} (payable debt remains)`); else if (debt.state === "deferred") errors.push(`$.verdict: CLEAN forbidden -- completion_debts[${index}] (${debt.id ?? "?"}) is deferred (unpaid work cannot be CLEAN regardless of disposition)`); }
@@ -357,6 +451,7 @@ export function validateReport(data: unknown, allowPlaceholders = false, bundleC
   for (const [name, raw] of Object.entries(claims ?? {})) { const claim = object(raw); if (!claim) continue; for (const event of array(claim.evidence) ?? []) { const evidence = object(event); if (evidence?.independence !== undefined && !["established", "not_established", "legacy_unrecoverable"].includes(String(evidence.independence))) errors.push(`$.claims.${name}: independence must be established|not_established|legacy_unrecoverable`); else if (evidence?.independence === "legacy_unrecoverable") for (const key of ["authority", "scope"]) if (!nonempty(evidence[key])) errors.push(`$.claims.${name}: legacy_unrecoverable requires ${key}`); if (evidence?.kind === "independent_qa_verdict" && normalizeActor(evidence.reviewer) && normalizeActor(evidence.reviewer) === normalizeActor(evidence.implementer) && claim.state === "established") errors.push(`$.claims.${name}: reviewer and implementer normalize to the same actor (${JSON.stringify(evidence.reviewer)}) -- independence cannot be established`); } if (claim.state === "not_applicable" && (!nonempty(claim.na_reason) || !nonempty(claim.policy_ref))) errors.push(`$.claims.${name}: not_applicable requires na_reason AND policy_ref (a policy-bound citation, not generic rationale)`); if (claim.state === "established") { const evidence = (array(claim.evidence) ?? []).map(object).find(item => !!item && nonempty(item.commit)); if (evidence) objectCommits.set(name, evidence.commit as string); } }
   if (new Set(objectCommits.values()).size > 1) errors.push(`$.claims: same-object violation -- established claims bind different commits: ${[...objectCommits.entries()].sort().map(([name, commit]) => `${name}=${commit}`).join(", ")}`);
   if (verdict === "CLEAN") { for (const [name, commit] of objectCommits) if (repo.commit && commit !== repo.commit) errors.push(`$.claims.${name}: CLEAN requires claim commit ${JSON.stringify(commit)} to equal repo.commit ${JSON.stringify(repo.commit)}`); const actionIds = new Set<string>(); for (const [index, raw] of (array(report.actions) ?? []).entries()) { const action = object(raw); if (!action) { errors.push(`$.actions[${index}]: expected object`); continue; } if (!nonempty(action.id)) errors.push(`$.actions[${index}].id: required`); else if (actionIds.has(action.id)) errors.push(`$.actions[${index}].id: duplicate ${JSON.stringify(action.id)}`); else actionIds.add(action.id); if (["planned", "failed", "blocked", undefined].includes(action.status as string | undefined)) errors.push(`$.actions[${index}]: CLEAN forbidden with unfinished/failed action (status=${JSON.stringify(action.status)})`); else if (action.status === "skipped" && !nonempty(action.skip_reason)) errors.push(`$.actions[${index}]: skipped action requires skip_reason`); } if (report.mode === "CLOSE" && Object.keys(claims ?? {}).length > 0 && Object.values(claims ?? {}).every(raw => object(raw)?.state === "not_applicable")) errors.push("$.claims: CLEAN in CLOSE mode cannot mark every claim not_applicable"); }
+}
   if (!allowPlaceholders) for (const path of findPlaceholders(data)) errors.push(`${path}: unresolved template placeholder`);
   return errors;
 }
@@ -1042,6 +1137,7 @@ function validateGuard(
   lanes: ReadonlyMap<string, ObjectRecord>,
   errors: string[],
   allowPlaceholders: boolean,
+  schemaVersion: string,
 ): void {
   const guard = object(manifest.guard);
   requireKeys(manifest.guard, [
@@ -1055,7 +1151,7 @@ function validateGuard(
   const repo = object(manifest.repo) ?? {};
   if (!commitObject(guard.baseline_commit, allowPlaceholders)) {
     errors.push("$.guard.baseline_commit: required 7-40 char baseline commit");
-  } else if (nonempty(repo.commit) && guard.baseline_commit !== repo.commit) {
+  } else if (!(schemaVersion === "1.3" && status === "crossed") && nonempty(repo.commit) && guard.baseline_commit !== repo.commit) {
     errors.push("$.guard.baseline_commit: must equal repo.commit at GUARD initialization");
   }
   const candidateBound = status !== "initialized";
@@ -1098,15 +1194,17 @@ function validateGuard(
   if (!receipts) errors.push("$.guard.receipts: expected array");
   else for (const [index, raw] of receipts.entries()) {
     const path = `$.guard.receipts[${index}]`;
-    requireKeys(raw, [
-      "id", "run_id", "round_id", "pod_id", "task_id", "role", "actor",
-      "actual_model", "reasoning_level", "harness", "session_id",
-      "baseline_commit", "candidate_tree", "prompt_sha256", "policy_sha256", "criteria_sha256", "checks_sha256",
-      "started_at", "finished_at", "conclusion", "findings_total", "findings_paid", "unresolved",
-      "repository_mutated", "mutation_owner_transfer", "evidence_ref",
-    ], path, errors);
+    requireKeys(raw, GUARD_RECEIPT_KEYS, path, errors);
     const receipt = object(raw);
     if (!receipt) continue;
+    if (schemaVersion === "1.3") {
+      for (const key of Object.keys(receipt)) {
+        if (!(GUARD_RECEIPT_KEYS as readonly string[]).includes(key)) {
+          errors.push(`${path}.${key}: unexpected field in schema 1.3 GUARD receipt`);
+        }
+      }
+    }
+    if (!sha256(receipt.receipt_sha256, allowPlaceholders) || receipt.receipt_sha256 !== receiptSeal(receipt)) errors.push(`${path}.receipt_sha256: must seal canonical receipt content`);
     const id = String(receipt.id ?? "");
     if (!nonempty(receipt.id)) errors.push(`${path}.id: required`);
     else if (receiptById.has(id)) errors.push(`${path}.id: duplicate ${JSON.stringify(id)}`);
@@ -1155,6 +1253,45 @@ function validateGuard(
       }
     } else if (receipt.mutation_owner_transfer !== null) {
       errors.push(`${path}.mutation_owner_transfer: must be null when the receipt did not mutate the repository`);
+    }
+    const evaluator = object(receipt.mister_clean_evaluator);
+    if (receipt.role === "mister_clean") {
+      requireKeys(receipt.mister_clean_evaluator, [
+        "package_name", "version", "release_state", "registry_integrity",
+        "skill_sha256", "executable_sha256", "manifest_sha256", "entrypoint",
+        "resolved_package_root", "resolved_at", "evidence_ref", "accepted_release_ref",
+      ], `${path}.mister_clean_evaluator`, errors);
+      if (evaluator) {
+        for (const field of ["package_name", "version", "entrypoint", "resolved_package_root"] as const) {
+          if (!nonempty(evaluator[field])) errors.push(`${path}.mister_clean_evaluator.${field}: required`);
+        }
+        if (!new Set(["accepted_release", "candidate_shadow"]).has(String(evaluator.release_state))) {
+          errors.push(`${path}.mister_clean_evaluator.release_state: expected accepted_release or candidate_shadow`);
+        }
+        if (typeof evaluator.registry_integrity !== "string"
+          || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(evaluator.registry_integrity)) {
+          errors.push(`${path}.mister_clean_evaluator.registry_integrity: required npm sha512 integrity`);
+        }
+        for (const field of ["skill_sha256", "executable_sha256", "manifest_sha256"] as const) {
+          if (!sha256(evaluator[field], allowPlaceholders)) {
+            errors.push(`${path}.mister_clean_evaluator.${field}: required SHA-256`);
+          }
+        }
+        if (!(allowPlaceholders && findPlaceholders(evaluator.resolved_at).length > 0)
+          && !isoTimestamp(evaluator.resolved_at)) {
+          errors.push(`${path}.mister_clean_evaluator.resolved_at: required timezone-aware ISO timestamp`);
+        }
+        if (isoTimestamp(evaluator.resolved_at) && isoTimestamp(receipt.started_at)
+          && Date.parse(String(evaluator.resolved_at)) > Date.parse(String(receipt.started_at))) {
+          errors.push(`${path}.mister_clean_evaluator.resolved_at: evaluator identity must be resolved before the run starts`);
+        }
+        if (!digestRefOrPlaceholder(evaluator.evidence_ref, allowPlaceholders)) {
+          errors.push(`${path}.mister_clean_evaluator.evidence_ref: required digest-bound installed-release identity`);
+        }
+        if (!digestRefOrPlaceholder(evaluator.accepted_release_ref, allowPlaceholders)) errors.push(`${path}.mister_clean_evaluator.accepted_release_ref: required external accepted-release record reference`);
+      }
+    } else if (receipt.mister_clean_evaluator !== null) {
+      errors.push(`${path}.mister_clean_evaluator: only the Mister Clean role may bind an evaluator package`);
     }
     if (!digestRefOrPlaceholder(receipt.evidence_ref, allowPlaceholders)) {
       errors.push(`${path}.evidence_ref: required digest-bound exact-tree receipt`);
@@ -1223,16 +1360,17 @@ function validateGuard(
     const seenIds = new Set<string>();
     for (const [index, rawId] of selectedIds.entries()) {
       const path = `$.guard.commit_barrier.receipt_ids[${index}]`;
-      if (!nonempty(rawId)) {
-        errors.push(`${path}: required receipt id`);
+      const seal = object(rawId);
+      if (!seal || !nonempty(seal.receipt_id) || !sha256(seal.receipt_sha256, allowPlaceholders)) {
+        errors.push(`${path}: required immutable receipt_id and receipt_sha256 seal`);
         continue;
       }
-      const id = String(rawId);
+      const id = String(seal.receipt_id);
       if (seenIds.has(id)) errors.push(`${path}: duplicate receipt id ${JSON.stringify(id)}`);
       else seenIds.add(id);
       const receipt = receiptById.get(id);
       if (!receipt) errors.push(`${path}: does not resolve to guard.receipts`);
-      else selectedReceipts.push(receipt);
+      else { if (receipt.receipt_sha256 !== seal.receipt_sha256 || receiptSeal(receipt) !== seal.receipt_sha256) errors.push(`${path}: receipt seal does not match immutable guard receipt`); selectedReceipts.push(receipt); }
     }
   }
 
@@ -1268,6 +1406,14 @@ function validateGuard(
       if (receipt.repository_mutated !== false) {
         errors.push("$.guard.commit_barrier.receipt_ids: a receipt that mutated the repository is stale; mint a new tree and obtain a non-mutating final receipt");
       }
+      if (isoTimestamp(guard.minted_at) && isoTimestamp(receipt.started_at)
+        && Date.parse(String(guard.minted_at)) > Date.parse(String(receipt.started_at))) {
+        errors.push("$.guard.commit_barrier.receipt_ids: guard.minted_at must not follow a selected receipt started_at");
+      }
+      if (isoTimestamp(receipt.finished_at) && isoTimestamp(barrier.opened_at)
+        && Date.parse(String(receipt.finished_at)) > Date.parse(String(barrier.opened_at))) {
+        errors.push("$.guard.commit_barrier.receipt_ids: every selected receipt must finish before the barrier opens");
+      }
     }
     if (taskBindings.size !== 1) {
       errors.push("$.guard.commit_barrier.receipt_ids: all final receipts must bind the same run, round, pod, and task");
@@ -1291,6 +1437,10 @@ function validateGuard(
         errors.push("$.guard.commit_barrier.receipt_ids: holdout must remain the final independent pass");
       }
     }
+    const cleanEvaluator = object(clean?.mister_clean_evaluator);
+    if (!cleanEvaluator || cleanEvaluator.release_state !== "accepted_release") {
+      errors.push("$.guard.commit_barrier.receipt_ids: selected Mister Clean receipt must come from a pinned accepted release; a working candidate may run only as a shadow");
+    }
     if (gates?.state !== "passed") errors.push("$.guard.deterministic_gates.state: commit barrier requires passed exact-tree gates");
     if (noHarm?.state !== "passed" || noHarm?.introduced_by_run_open !== 0) {
       errors.push("$.guard.no_harm: commit barrier requires a passed exact-tree comparator with zero introduced debt");
@@ -1301,49 +1451,36 @@ function validateGuard(
     if (barrier.opened_at !== null) errors.push("$.guard.commit_barrier.opened_at: closed or invalidated barrier must be null");
   }
 
-  const actionById = new Map<string, ObjectRecord>();
-  const executedCommits: ObjectRecord[] = [];
-  for (const [actionIndex, raw] of actions.entries()) {
-    const action = object(raw);
-    if (!action) continue;
-    if (nonempty(action.id)) actionById.set(action.id, action);
-    if (action.status === "executed" && LOCAL_MUTATION_KINDS.has(String(action.kind))
-      && isoTimestamp(action.recorded_at) && isoTimestamp(guard.minted_at)
-      && Date.parse(String(action.recorded_at)) > Date.parse(String(guard.minted_at))
-      && status !== "invalidated") {
-      errors.push(`$.guard: executed mutation ${String(action.id)} occurred after candidate mint; invalidate receipts and mint a new tree`);
+  const { actionById, executedCommits } = validateGuardActions(
+    manifest, guard, actions, lanes, selectedIds, barrier, barrierState, status, allowPlaceholders, errors,
+  );
+  if (schemaVersion === "1.3" && status === "crossed") {
+    const resultingCommit = executedCommits.length === 1 ? executedCommits[0] : undefined;
+    if (!resultingCommit || resultingCommit.after_object !== repo.commit) {
+      errors.push("$.repo.commit: crossed GUARD must equal the executed git_commit result");
     }
-    if (action.kind === "git_commit") {
-      requireKeys(action.guard_commit, [
-        "candidate_tree", "commit", "commit_tree", "receipt_ids", "evidence_ref",
-      ], `$.actions[${actionIndex}].guard_commit`, errors);
-      const commitProof = object(action.guard_commit);
-      const lane = lanes.get(String(action.lane_id));
-      if (lane?.role !== "integrator") errors.push(`$.actions[${actionIndex}].lane_id: GUARD git_commit requires the integrator lane`);
-      if (commitProof) {
-        if (commitProof.candidate_tree !== guard.candidate_tree || commitProof.commit_tree !== guard.candidate_tree) {
-          errors.push(`$.actions[${actionIndex}].guard_commit: candidate_tree and commit_tree must equal the approved guard tree`);
-        }
-        if (action.status === "executed" && commitProof.commit !== action.after_object) {
-          errors.push(`$.actions[${actionIndex}].guard_commit.commit: must equal the executed action after_object`);
-        }
-        const expectedReceipts = [...new Set((selectedIds ?? []).map(String))].sort();
-        const actualReceipts = [...new Set((array(commitProof.receipt_ids) ?? []).map(String))].sort();
-        if (JSON.stringify(expectedReceipts) !== JSON.stringify(actualReceipts)) {
-          errors.push(`$.actions[${actionIndex}].guard_commit.receipt_ids: must equal the commit-barrier receipts`);
-        }
-        if (!digestRefOrPlaceholder(commitProof.evidence_ref, allowPlaceholders)) {
-          errors.push(`$.actions[${actionIndex}].guard_commit.evidence_ref: required digest-bound commit-tree proof`);
-        }
-      }
-      if (action.status === "executed") executedCommits.push(action);
+    const resultingProof = object(resultingCommit?.guard_commit);
+    if (resultingProof && resultingProof.commit !== repo.commit) {
+      errors.push("$.actions: crossed GUARD guard_commit.commit must equal the resulting manifest repo.commit");
     }
-    if (["git_integrate", "git_push"].includes(String(action.kind)) && action.status === "executed" && barrierState !== "crossed") {
-      errors.push(`$.actions[${actionIndex}]: GUARD integration or push requires a crossed exact-tree commit barrier`);
+    const selectedTaskIds = new Set(selectedReceipts.map((receipt) => String(receipt.task_id)));
+    const integratorLane = lanes.get(String(resultingCommit?.lane_id));
+    const selectedTaskId = selectedTaskIds.size === 1 ? [...selectedTaskIds][0] : undefined;
+    if (!selectedTaskId || resultingCommit?.task_id !== selectedTaskId || integratorLane?.task_id !== selectedTaskId) {
+      errors.push("$.guard.commit_barrier.receipt_ids: selected task_id must equal the crossed git_commit and integrator lane task_id");
     }
   }
 
   if (barrierState === "crossed") {
+    if (selectedReceipts.length === 0) {
+      errors.push("$.guard.commit_barrier.receipt_ids: crossed barrier requires selected sealed receipts");
+    }
+    for (const [actionIndex, raw] of actions.entries()) {
+      const action = object(raw);
+      if (action && action.status !== "executed") {
+        errors.push(`$.actions[${actionIndex}].status: crossed barrier cannot coexist with planned, failed, blocked, or skipped actions`);
+      }
+    }
     if (!nonempty(barrier.crossed_action_id)) errors.push("$.guard.commit_barrier.crossed_action_id: crossed barrier requires the executed git_commit action id");
     const crossed = actionById.get(String(barrier.crossed_action_id));
     if (!crossed || crossed.kind !== "git_commit" || crossed.status !== "executed") {
@@ -1356,31 +1493,247 @@ function validateGuard(
     if (barrier.crossed_action_id !== null) errors.push("$.guard.commit_barrier.crossed_action_id: non-crossed barrier must be null");
     if (executedCommits.length > 0) errors.push("$.guard.commit_barrier.state: executed git_commit forbidden before the exact-tree barrier crosses");
   }
+  if (schemaVersion === "1.3") validateGuardAuthority(guard, status, barrierState, allowPlaceholders, errors);
+}
+
+function validateGuardActions(
+  manifest: ObjectRecord,
+  guard: ObjectRecord,
+  actions: readonly unknown[],
+  lanes: ReadonlyMap<string, ObjectRecord>,
+  selectedIds: readonly unknown[] | undefined,
+  barrier: ObjectRecord,
+  barrierState: string,
+  status: string,
+  allowPlaceholders: boolean,
+  errors: string[],
+): { readonly actionById: ReadonlyMap<string, ObjectRecord>; readonly executedCommits: readonly ObjectRecord[] } {
+  const actionById = new Map<string, ObjectRecord>();
+  const executedCommits: ObjectRecord[] = [];
+  for (const [actionIndex, raw] of actions.entries()) {
+    const action = object(raw);
+    if (!action) continue;
+    if (nonempty(action.id)) actionById.set(action.id, action);
+    if (action.status === "executed" && LOCAL_MUTATION_KINDS.has(String(action.kind))
+      && isoTimestamp(action.recorded_at) && isoTimestamp(guard.minted_at)
+      && Date.parse(String(action.recorded_at)) > Date.parse(String(guard.minted_at))
+      && status !== "invalidated") {
+      errors.push(`$.guard: executed mutation ${String(action.id)} occurred after candidate mint; invalidate receipts and mint a new tree`);
+    }
+    if (action.kind === "git_commit" && (action.status === "executed"
+      || nonempty(action.after_object) || object(action.outcome)?.state === "verified")) {
+      requireKeys(action.guard_commit, ["candidate_tree", "commit", "commit_tree", "receipt_ids", "evidence_ref"], `$.actions[${actionIndex}].guard_commit`, errors);
+      const commitProof = object(action.guard_commit);
+      const lane = lanes.get(String(action.lane_id));
+      if (lane?.role !== "integrator") errors.push(`$.actions[${actionIndex}].lane_id: GUARD git_commit requires the integrator lane`);
+      if (commitProof) {
+        if (commitProof.candidate_tree !== guard.candidate_tree || commitProof.commit_tree !== guard.candidate_tree) errors.push(`$.actions[${actionIndex}].guard_commit: candidate_tree and commit_tree must equal the approved guard tree`);
+        if (action.status === "executed" && commitProof.commit !== action.after_object) errors.push(`$.actions[${actionIndex}].guard_commit.commit: must equal the executed action after_object`);
+        if (canonicalJson(selectedIds ?? []) !== canonicalJson(array(commitProof.receipt_ids) ?? [])) errors.push(`$.actions[${actionIndex}].guard_commit.receipt_ids: must equal the commit-barrier receipts`);
+        if (!digestRefOrPlaceholder(commitProof.evidence_ref, allowPlaceholders)) errors.push(`$.actions[${actionIndex}].guard_commit.evidence_ref: required digest-bound commit-tree proof`);
+      }
+      if (action.status === "executed") executedCommits.push(action);
+      if (String(manifest.schema_version) === "1.3" && manifest.manifest_kind === "closeout_guard" && action.status === "executed") {
+        if (barrierState === "crossed" && isoTimestamp(action.recorded_at) && isoTimestamp(barrier.opened_at)
+          && Date.parse(String(action.recorded_at)) < Date.parse(String(barrier.opened_at))) {
+          errors.push(`$.actions[${actionIndex}].recorded_at: crossed git_commit cannot precede guard.commit_barrier.opened_at`);
+        }
+        validateGuardCommitCas(
+          action,
+          object(manifest.coordination),
+          guard.baseline_commit,
+          barrier.opened_at,
+          `$.actions[${actionIndex}]`,
+          allowPlaceholders,
+          errors,
+        );
+      }
+    }
+    if (["git_integrate", "git_push"].includes(String(action.kind)) && action.status === "executed" && barrierState !== "crossed") {
+      errors.push(`$.actions[${actionIndex}]: GUARD integration or push requires a crossed exact-tree commit barrier`);
+    }
+  }
+  return { actionById, executedCommits };
+}
+
+function validateGuardAuthority(
+  guard: ObjectRecord,
+  status: string,
+  barrierState: string,
+  allowPlaceholders: boolean,
+  errors: string[],
+): void {
+  const authorityPath = "$.guard.authority";
+  const authority = object(guard.authority);
+  requireKeys(authority, ["kind", "precommit_sha256", "crossing_sha256"], authorityPath, errors);
+  if (!authority) return;
+  for (const key of Object.keys(authority)) {
+    if (!["kind", "precommit_sha256", "crossing_sha256"].includes(key)) errors.push(`${authorityPath}.${key}: unexpected field`);
+  }
+  if (!GUARD_AUTHORITY_KINDS.has(String(authority.kind))) {
+    errors.push(`${authorityPath}.kind: expected external_custody`);
+  }
+  for (const field of ["precommit_sha256", "crossing_sha256"] as const) {
+    const value = authority[field];
+    if (value !== null && !sha256(value, allowPlaceholders)) {
+      errors.push(`${authorityPath}.${field}: required SHA-256 or null`);
+    }
+  }
+  const precommit = authority.precommit_sha256;
+  const crossing = authority.crossing_sha256;
+  if (status === "initialized" || status === "collecting") {
+    if (precommit !== null) errors.push(`${authorityPath}.precommit_sha256: ${status} GUARD must remain null`);
+    if (crossing !== null) errors.push(`${authorityPath}.crossing_sha256: ${status} GUARD must remain null`);
+  } else if (status === "passed") {
+    if (barrierState !== "open") errors.push(`${authorityPath}: passed GUARD requires an open commit barrier`);
+    if (!sha256(precommit, allowPlaceholders)) errors.push(`${authorityPath}.precommit_sha256: passed GUARD requires external precommit authority`);
+    if (crossing !== null) errors.push(`${authorityPath}.crossing_sha256: passed GUARD must not claim a crossing authority`);
+  } else if (status === "crossed") {
+    if (!sha256(precommit, allowPlaceholders)) errors.push(`${authorityPath}.precommit_sha256: crossed GUARD requires the historical precommit authority`);
+    if (!sha256(crossing, allowPlaceholders)) errors.push(`${authorityPath}.crossing_sha256: crossed GUARD requires external commit authority`);
+  } else if (status === "invalidated" && crossing !== null) {
+    errors.push(`${authorityPath}.crossing_sha256: invalidated GUARD must clear crossing authority`);
+  }
+}
+
+function validateGuardCommitCas(
+  action: ObjectRecord,
+  coordination: ObjectRecord | undefined,
+  baselineCommit: unknown,
+  barrierOpenedAt: unknown,
+  path: string,
+  allowPlaceholders: boolean,
+  errors: string[],
+): void {
+  requireKeys(action.cas, [
+    "compare_and_swap", "target_ref", "expected_target_commit", "observed_target_commit",
+    "candidate_commit", "result", "result_commit", "mutex",
+  ], `${path}.cas`, errors);
+  const cas = object(action.cas);
+  if (!cas) return;
+  if (cas.compare_and_swap !== true) errors.push(`${path}.cas.compare_and_swap: expected true`);
+  const target = object(coordination?.target);
+  if (!nonempty(cas.target_ref) || (target && cas.target_ref !== target.ref)) errors.push(`${path}.cas.target_ref: must equal coordination.target.ref`);
+  if (target && cas.expected_target_commit !== target.expected_commit) errors.push(`${path}.cas.expected_target_commit: must equal coordination.target.expected_commit`);
+  if (cas.expected_target_commit !== action.before_object || cas.expected_target_commit !== baselineCommit) errors.push(`${path}.cas.expected_target_commit: must equal git_commit.before_object and guard.baseline_commit`);
+  if (cas.observed_target_commit !== cas.expected_target_commit) errors.push(`${path}.cas.observed_target_commit: commit authority requires the unchanged guarded target`);
+  if (cas.candidate_commit !== action.after_object || !commitObject(cas.candidate_commit, allowPlaceholders)) errors.push(`${path}.cas.candidate_commit: must equal the resulting git_commit object`);
+  if (cas.result !== "applied" || cas.result_commit !== action.after_object) errors.push(`${path}.cas: executed GUARD git_commit requires applied result_commit equal to after_object`);
+  const mutex = object(cas.mutex);
+  requireKeys(mutex, ["resource", "holder_lane_id", "lease_id", "fencing_token", "acquired_at", "mutation_observed_at", "expires_at", "released_at"], `${path}.cas.mutex`, errors);
+  if (!mutex) return;
+  if (mutex.resource !== cas.target_ref) errors.push(`${path}.cas.mutex.resource: must equal the CAS target_ref`);
+  if (mutex.holder_lane_id !== action.lane_id) errors.push(`${path}.cas.mutex.holder_lane_id: must equal the git_commit lane_id`);
+  if (!nonempty(mutex.lease_id)) errors.push(`${path}.cas.mutex.lease_id: required`);
+  if (!Number.isSafeInteger(mutex.fencing_token) || Number(mutex.fencing_token) < 1) errors.push(`${path}.cas.mutex.fencing_token: required positive integer`);
+  for (const field of ["acquired_at", "mutation_observed_at", "expires_at", "released_at"] as const) {
+    if (!(allowPlaceholders && findPlaceholders(mutex[field]).length > 0) && !isoTimestamp(mutex[field])) errors.push(`${path}.cas.mutex.${field}: required ISO timestamp`);
+  }
+  if (["acquired_at", "mutation_observed_at", "expires_at", "released_at"].every((field) => isoTimestamp(mutex[field]))) {
+    const acquired = Date.parse(String(mutex.acquired_at));
+    const observed = Date.parse(String(mutex.mutation_observed_at));
+    const expires = Date.parse(String(mutex.expires_at));
+    const released = Date.parse(String(mutex.released_at));
+    if (!(acquired <= observed && observed <= expires && released >= observed)) errors.push(`${path}.cas.mutex: invalid lease interval`);
+    if (isoTimestamp(barrierOpenedAt) && observed < Date.parse(String(barrierOpenedAt))) {
+      errors.push(`${path}.cas.mutex.mutation_observed_at: cannot precede guard.commit_barrier.opened_at`);
+    }
+    const maxLeaseSeconds = Number(object(coordination?.integration_mutex)?.max_lease_seconds);
+    if (Number.isSafeInteger(maxLeaseSeconds) && maxLeaseSeconds > 0 && (expires - acquired) / 1000 > maxLeaseSeconds) {
+      errors.push(`${path}.cas.mutex: lease exceeds coordination max_lease_seconds`);
+    }
+  }
 }
 
 export function validateManifest(data: unknown, allowPlaceholders = false): string[] {
   const errors: string[] = []; const manifest = object(data);
   requireKeys(data, ["record_type", "schema_version", "execution_state", "repo", "mode", "request_ref", "authorization_basis", "policy_sources", "actions", "excluded_actions"], "$", errors);
   if (!manifest || errors.length > 0) return errors;
-  if (manifest.record_type !== "mister-clean.action-manifest") errors.push("$.record_type: expected mister-clean.action-manifest"); if (!MANIFEST_SCHEMA_VERSIONS.has(String(manifest.schema_version))) errors.push("$.schema_version: expected 1.0, 1.1, or 1.2"); if (!EXECUTION_STATES.has(String(manifest.execution_state))) errors.push(`$.execution_state: unsupported value ${JSON.stringify(manifest.execution_state)}`); if (!["CLEAN", "CLOSE", "CONFORM", "GUARD"].includes(String(manifest.mode))) errors.push("$.mode: action manifest requires CLEAN, CLOSE, CONFORM, or GUARD"); const repo = object(manifest.repo) ?? {}; if (!allowPlaceholders) { if (!nonempty(repo.id)) errors.push("$.repo.id: required portable repository identity"); if (typeof repo.commit !== "string" || !/^[0-9a-f]{7,40}$/.test(repo.commit)) errors.push("$.repo.commit: required 7-40 char hex object id"); } if (!nonempty(manifest.request_ref)) errors.push("$.request_ref: required"); validateAuthorizationBasis(manifest.authorization_basis, "$.authorization_basis", errors); if (!Array.isArray(manifest.excluded_actions)) errors.push("$.excluded_actions: expected array");
+  if (manifest.record_type !== "mister-clean.action-manifest") errors.push("$.record_type: expected mister-clean.action-manifest"); if (!MANIFEST_SCHEMA_VERSIONS.has(String(manifest.schema_version))) errors.push("$.schema_version: expected 1.0, 1.1, 1.2, or closeout_guard 1.3"); if (!EXECUTION_STATES.has(String(manifest.execution_state))) errors.push(`$.execution_state: unsupported value ${JSON.stringify(manifest.execution_state)}`); if (!["CLEAN", "CLOSE", "CONFORM", "GUARD"].includes(String(manifest.mode))) errors.push("$.mode: action manifest requires CLEAN, CLOSE, CONFORM, or GUARD"); const repo = object(manifest.repo) ?? {}; if (!allowPlaceholders) { if (!nonempty(repo.id)) errors.push("$.repo.id: required portable repository identity"); if (typeof repo.commit !== "string" || !/^[0-9a-f]{7,40}$/.test(repo.commit)) errors.push("$.repo.commit: required 7-40 char hex object id"); } if (!nonempty(manifest.request_ref)) errors.push("$.request_ref: required"); validateAuthorizationBasis(manifest.authorization_basis, "$.authorization_basis", errors); if (!Array.isArray(manifest.excluded_actions)) errors.push("$.excluded_actions: expected array");
   if (manifest.schema_version === "1.0" && manifest.legacy_schema_acknowledged !== true) {
     errors.push("$.legacy_schema_acknowledged: schema 1.0 omits coordination/CAS protections and requires explicit true acknowledgment");
   }
   const actions = array(manifest.actions); if (!actions) { errors.push("$.actions: expected array"); return errors; } const seen = new Set<string>();
-  for (const [index, raw] of actions.entries()) { const path = `$.actions[${index}]`; const action = object(raw); requireKeys(raw, ["id", "kind", "target", "purpose", "risk", "authorization", "preconditions", "verification"], path, errors); if (!action) continue; if (!nonempty(action.id)) errors.push(`${path}.id: required`); else if (seen.has(action.id)) errors.push(`${path}.id: duplicate ${action.id}`); else seen.add(action.id); const kind = String(action.kind); if (PROHIBITED_KINDS.has(kind)) errors.push(`${path}: unrecoverable or prohibited action is outside Mister Clean`); else if (!ALLOWED_ACTION_KINDS.has(kind)) errors.push(`${path}.kind: unsupported action kind ${JSON.stringify(action.kind)}`); if (!nonempty(action.target)) errors.push(`${path}.target: required`); if (!nonempty(action.purpose)) errors.push(`${path}.purpose: required`); if (!RISKS.has(String(action.risk))) errors.push(`${path}.risk: unsupported value ${JSON.stringify(action.risk)}`); if (action.risk === "unrecoverable") errors.push(`${path}: unrecoverable or prohibited action is outside Mister Clean`); if (CONSEQUENT_ACTION_KINDS.has(kind) && action.risk !== "consequential_external") errors.push(`${path}.risk: ${kind} requires consequential_external`); if (!Array.isArray(action.preconditions)) errors.push(`${path}.preconditions: expected array`); if (!Array.isArray(action.verification)) errors.push(`${path}.verification: expected array`); const authorization = object(action.authorization); requireKeys(action.authorization, ["state", "source", "ref"], `${path}.authorization`, errors); if (!authorization) continue; if (!AUTH_STATES.has(String(authorization.state))) errors.push(`${path}.authorization.state: unsupported value ${JSON.stringify(authorization.state)}`); if (EXECUTION_STATES.has(String(manifest.execution_state)) && authorization.state !== "granted") errors.push(`${path}.authorization.state: ${manifest.execution_state} manifest requires granted`); if (CONSEQUENT_ACTION_KINDS.has(kind) || action.risk === "consequential_external") { if (authorization.state === "granted" && !STANDING_AUTH_SOURCES.has(String(authorization.source))) errors.push(`${path}.authorization.source: consequential action requires skill_invocation, explicit_user, or explicit_operator`); if (authorization.state === "granted" && !nonempty(authorization.ref)) errors.push(`${path}.authorization.ref: consequential action requires a reference`); if (!array(action.preconditions)?.length) errors.push(`${path}.preconditions: consequential action requires a bounded preflight`); if (!array(action.verification)?.length) errors.push(`${path}.verification: consequential action requires an exact postcondition`); } if (manifest.execution_state === "executed" && !array(action.verification)?.length) errors.push(`${path}.verification: executed action requires evidence`); if (manifest.execution_state === "executed") { const outcome = object(action.outcome); requireKeys(action.outcome, ["state", "evidence"], `${path}.outcome`, errors); if (outcome) { if (outcome.state !== "verified") errors.push(`${path}.outcome.state: executed action requires verified`); const typed = (array(outcome.evidence) ?? []).map(object).filter((entry): entry is ObjectRecord => !!entry); if (!typed.some(entry => ACTION_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every(key => nonempty(entry[key])) && isoTimestamp(entry.observed_at) && digestRef(entry.evidence_ref))) errors.push(`${path}.outcome.evidence: executed action requires allowlisted, time-bound, digest-referenced execution evidence`); } } }
+  for (const [index, raw] of actions.entries()) {
+    const path = `$.actions[${index}]`;
+    const action = object(raw);
+    requireKeys(raw, ["id", "kind", "target", "purpose", "risk", "authorization", "preconditions", "verification", "status"], path, errors);
+    if (!action) continue;
+
+    const status = String(action.status);
+    const isTerminal = new Set(["executed", "failed", "blocked", "skipped"]).has(status);
+    if (!ACTION_STATUSES.has(status)) errors.push(`${path}.status: required planned, executed, failed, blocked, or skipped status`);
+    if (manifest.execution_state === "executed" && !isTerminal) errors.push(`${path}.status: executed manifest requires terminal action status`);
+    const kind = String(action.kind);
+    if (PROHIBITED_KINDS.has(kind)) errors.push(`${path}: unrecoverable or prohibited action is outside Mister Clean`);
+    else if (!ALLOWED_ACTION_KINDS.has(kind)) errors.push(`${path}.kind: unsupported action kind ${JSON.stringify(action.kind)}`);
+    if (!nonempty(action.target)) errors.push(`${path}.target: required`);
+    if (!nonempty(action.purpose)) errors.push(`${path}.purpose: required`);
+    if (!RISKS.has(String(action.risk))) errors.push(`${path}.risk: unsupported value ${JSON.stringify(action.risk)}`);
+    if (action.risk === "unrecoverable") errors.push(`${path}: unrecoverable or prohibited action is outside Mister Clean`);
+    if (CONSEQUENT_ACTION_KINDS.has(kind) && action.risk !== "consequential_external") errors.push(`${path}.risk: ${kind} requires consequential_external`);
+    if (CONSEQUENT_ACTION_KINDS.has(kind) && !array(action.preconditions)?.length) errors.push(`${path}.preconditions: consequential action requires a bounded preflight`);
+    if (CONSEQUENT_ACTION_KINDS.has(kind) && !array(action.verification)?.length) errors.push(`${path}.verification: consequential action requires an exact postcondition`);
+    if (!nonempty(action.id)) errors.push(`${path}.id: required`);
+    else if (seen.has(action.id)) errors.push(`${path}.id: duplicate ${action.id}`);
+    else seen.add(action.id);
+    if (kind === "git_commit" && manifest.mode !== "GUARD") errors.push(`${path}.kind: every git_commit requires GUARD mode and its exact-tree commit barrier`);
+    requireKeys(action.authorization, ["state", "source", "ref"], `${path}.authorization`, errors);
+
+    const outcome = object(action.outcome);
+    const claimsVerifiedOutcome = outcome?.state === "verified";
+    const hasResultingCommit = kind === "git_commit" && nonempty(action.after_object);
+    if ((claimsVerifiedOutcome && !new Set(["executed", "failed"]).has(status))
+      || (hasResultingCommit && status !== "executed")) {
+      errors.push(`${path}.status: verified outcome requires executed or failed; resulting git_commit requires executed`);
+    }
+    if (status === "executed" || claimsVerifiedOutcome) {
+      requireKeys(action.outcome, ["state", "evidence"], `${path}.outcome`, errors);
+      if (!claimsVerifiedOutcome) errors.push(`${path}.outcome.state: executed action requires verified`);
+      const typed = (array(outcome?.evidence) ?? []).map(object).filter((entry): entry is ObjectRecord => !!entry);
+      if (!typed.some(entry => ACTION_EVIDENCE_KINDS.has(String(entry.kind))
+        && ["object", "command", "result"].every(key => nonempty(entry[key]))
+        && isoTimestamp(entry.observed_at) && digestRef(entry.evidence_ref))) {
+        errors.push(`${path}.outcome.evidence: verified terminal action requires allowlisted, time-bound, digest-referenced execution evidence`);
+      }
+    }
+  }
+  const actionStatuses = actions.map((raw) => String(object(raw)?.status));
+  const failedIndexes = actionStatuses.flatMap((status, index) => status === "failed" ? [index] : []);
+  if (failedIndexes.length > 1 || failedIndexes.some((index) => index !== actions.length - 1)) {
+    errors.push("$.actions: a failed action is terminal and must be the final manifest action");
+  }
+  if (manifest.execution_state === "executed" && actions.length === 0) {
+    errors.push("$.execution_state: executed manifest requires at least one terminal action");
+  }
+  if (manifest.execution_state === "authorized" && actions.length > 0 && !actionStatuses.includes("planned")) {
+    errors.push("$.execution_state: authorized action history requires at least one planned action");
+  }
   const schemaVersion = String(manifest.schema_version);
-  if (manifest.mode === "GUARD" && schemaVersion !== "1.2") {
-    errors.push("$.schema_version: GUARD requires schema 1.2 exact-tree enforcement");
+  if (manifest.mode === "GUARD" && schemaVersion !== "1.2" && schemaVersion !== "1.3") {
+    errors.push("$.schema_version: GUARD requires schema 1.2 or closeout_guard schema 1.3 exact-tree enforcement");
+  }
+  if (schemaVersion === "1.3" && manifest.manifest_kind !== "closeout_guard") {
+    errors.push("$.manifest_kind: schema 1.3 closeout manifests require manifest_kind=closeout_guard");
+  }
+  if (manifest.manifest_kind === "closeout_guard" && schemaVersion !== "1.3") {
+    errors.push("$.manifest_kind: closeout_guard is reserved for schema 1.3");
+  }
+  if (schemaVersion === "1.3" && manifest.manifest_kind === "closeout_guard") {
+    if (manifest.mode !== "GUARD") errors.push("$.mode: closeout_guard schema 1.3 requires GUARD mode");
+    if (!object(manifest.guard)) errors.push("$.guard: closeout_guard schema 1.3 requires a guard object");
   }
   if (manifest.mode !== "GUARD" && manifest.guard !== undefined && manifest.guard !== null) {
     errors.push("$.guard: exact-tree guard record is valid only in GUARD mode");
   }
   const coordination = object(manifest.coordination);
-  const coordinationDomains = schemaVersion === "1.2"
+  const closeoutGuard13 = schemaVersion === "1.3" && manifest.manifest_kind === "closeout_guard";
+  const coordinationDomains = schemaVersion === "1.2" || closeoutGuard13
     ? validateCoordinationDomains(coordination, "$.coordination", errors, allowPlaceholders)
     : new Map<string, CoordinationDomainState>();
-  if (schemaVersion === "1.1" || schemaVersion === "1.2") {
-    const lanes = validateCoordination(coordination, "$.coordination", errors, allowPlaceholders, schemaVersion, coordinationDomains);
+  if (schemaVersion === "1.1" || schemaVersion === "1.2" || closeoutGuard13) {
+    const coordinationCapability = closeoutGuard13 ? "1.2" : schemaVersion;
+    const lanes = validateCoordination(coordination, "$.coordination", errors, allowPlaceholders, coordinationCapability, coordinationDomains);
     const mutexPolicy = object(coordination?.integration_mutex);
     const maxLeaseSeconds = Number(mutexPolicy?.max_lease_seconds);
     const priorLeaseByResource = new Map<string, { readonly effectiveEnd: number; readonly fencingToken: number }>();
@@ -1398,7 +1751,7 @@ export function validateManifest(data: unknown, allowPlaceholders = false): stri
       else if (action.task_id !== lane.task_id) errors.push(`${path}.task_id: must equal the lane task_id`);
       if (!nonempty(action.task_id)) errors.push(`${path}.task_id: required`);
       if (!nonempty(action.before_object)) errors.push(`${path}.before_object: required`);
-      if ((manifest.execution_state === "executed" || action.status === "executed") && !nonempty(action.after_object)) {
+      if (action.status === "executed" && !nonempty(action.after_object)) {
         errors.push(`${path}.after_object: executed operation requires the resulting object`);
       }
       if (!(allowPlaceholders && findPlaceholders(action.recorded_at).length > 0) && !isoTimestamp(action.recorded_at)) {
@@ -1526,7 +1879,7 @@ export function validateManifest(data: unknown, allowPlaceholders = false): stri
             }
           }
         }
-        if (schemaVersion === "1.2") {
+        if (schemaVersion === "1.2" || closeoutGuard13) {
           validateCoordinationCas(action, lanes, coordinationDomains, path, errors, allowPlaceholders);
         }
       }
@@ -1534,8 +1887,8 @@ export function validateManifest(data: unknown, allowPlaceholders = false): stri
         validatePushGate(action, lane, coordination, repo, parentOperations, path, errors, allowPlaceholders);
       }
     }
-    if (manifest.mode === "GUARD" && schemaVersion === "1.2") {
-      validateGuard(manifest, actions, lanes, errors, allowPlaceholders);
+    if (manifest.mode === "GUARD" && (schemaVersion === "1.2" || closeoutGuard13)) {
+      validateGuard(manifest, actions, lanes, errors, allowPlaceholders, schemaVersion);
     }
   }
   if (!allowPlaceholders) for (const path of findPlaceholders(data)) errors.push(`${path}: unresolved template placeholder`);

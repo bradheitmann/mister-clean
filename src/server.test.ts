@@ -1,7 +1,15 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { bindRuntimeAttestation } from "./attestation.js";
+import { MATERIALS, MATERIALS_SHA256, PACKAGE_VERSION } from "./generated-materials.js";
+import { mintServerAttestationBinding } from "./runtime-binding.js";
 import { createMisterCleanServer } from "./server.js";
+
+const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 describe("Mister Clean MCP server", () => {
   let client: Client;
@@ -34,6 +42,96 @@ describe("Mister Clean MCP server", () => {
     ]);
   });
 
+  it("exposes a startup attestation tool when the stdio entrypoint binds one", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const boundClient = new Client({ name: "mister-clean-bound-test-client", version: "1.0.0" });
+    const runtimeAttestation = await bindRuntimeAttestation(repositoryRoot, {
+      moduleUrl: import.meta.url,
+      expectedEntrypoint: "./dist/public.js",
+      allowSourceDevelopment: true,
+      sourceDevelopmentReason: "server test source execution",
+    });
+    const boundServer = createMisterCleanServer({ runtimeAttestation });
+    try {
+      await Promise.all([boundServer.connect(serverTransport), boundClient.connect(clientTransport)]);
+      const tools = await boundClient.listTools();
+      expect(tools.tools.map((tool) => tool.name)).toContain("mister_clean_attestation");
+      const result = await boundClient.callTool({
+        name: "mister_clean_attestation",
+        arguments: { response_format: "json" },
+      });
+      expect(result.structuredContent).toMatchObject({
+        record_type: "mister-clean.runtime-attestation-diagnostic",
+        capability: false,
+        status: "source_development",
+        entrypoint: { path: "./src/server.test.ts" },
+      });
+      expect(result.structuredContent).not.toHaveProperty("package_root");
+      expect(result.structuredContent).not.toHaveProperty("package_root_realpath");
+      expect(result.structuredContent).not.toHaveProperty("entrypoint.realpath");
+      expect(JSON.stringify(result.structuredContent)).not.toContain(repositoryRoot);
+      const roundTripped = JSON.parse(JSON.stringify(result.structuredContent));
+      expect(() => createMisterCleanServer({ runtimeAttestation: roundTripped }))
+        .toThrow("must be minted by Mister Clean's live verifier");
+    } finally {
+      await Promise.all([boundClient.close(), boundServer.close()]);
+    }
+  });
+
+  it("rejects a structurally valid but unverified runtime attestation", () => {
+    expect(() => createMisterCleanServer({
+      runtimeAttestation: {
+        record_type: "mister-clean.runtime-attestation-binding",
+        schema_version: "1.0",
+        status: "pass",
+        package_root: "/tmp/mister-clean",
+        package_root_realpath: "/tmp/mister-clean",
+        entrypoint: {
+          path: "./dist/stdio.js",
+          realpath: "/tmp/mister-clean/dist/stdio.js",
+          sha256: "1".repeat(64),
+        },
+      },
+    })).toThrow("must be minted by Mister Clean's live verifier");
+  });
+
+  it("reports the worker's bounded bundled-content claim without implying package-filesystem verification", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const boundClient = new Client({ name: "mister-clean-worker-test-client", version: "1.0.0" });
+    const binding = mintServerAttestationBinding({
+      record_type: "mister-clean.runtime-attestation-binding",
+      schema_version: "1.0",
+      status: "bundled_content",
+      package: { name: "@bradheitmann/mister-clean", version: PACKAGE_VERSION },
+      bundle: {
+        kind: "generated_materials",
+        format: "canonical-json-sha256-v1",
+        entry_count: MATERIALS.length,
+        sha256: MATERIALS_SHA256,
+      },
+      claim_scope: "bundled_canonical_material_bytes_only",
+      reason: "test worker binding",
+    });
+    const boundServer = createMisterCleanServer({ runtimeAttestation: binding });
+    try {
+      await Promise.all([boundServer.connect(serverTransport), boundClient.connect(clientTransport)]);
+      const result = await boundClient.callTool({
+        name: "mister_clean_attestation",
+        arguments: { response_format: "json" },
+      });
+      expect(result.structuredContent).toMatchObject({
+        record_type: "mister-clean.runtime-attestation-diagnostic",
+        capability: false,
+        status: "bundled_content",
+        bundle: { entry_count: MATERIALS.length, sha256: MATERIALS_SHA256 },
+        claim_scope: "bundled_canonical_material_bytes_only",
+      });
+      expect(result.structuredContent).not.toHaveProperty("package_root");
+    } finally {
+      await Promise.all([boundClient.close(), boundServer.close()]);
+    }
+  });
+
   it("lists and reads canonical content through the protocol", async () => {
     const listed = await client.callTool({
       name: "mister_clean_list_materials",
@@ -59,6 +157,30 @@ describe("Mister Clean MCP server", () => {
     });
   });
 
+  it("lists and reads every evaluation routed by SKILL.md", async () => {
+    const expected = [
+      "evals/blind-run-contract.md",
+      "evals/mcp-evaluation.xml",
+      "evals/model-hygiene-trial.md",
+      "evals/rotation-campaign.md",
+    ];
+    const listed = await client.callTool({
+      name: "mister_clean_list_materials",
+      arguments: { category: "evaluation", limit: 100, response_format: "json" },
+    });
+    const ids = (listed.structuredContent as { items?: Array<{ id?: string }> })?.items
+      ?.map((item) => item.id);
+    expect(ids).toEqual(expected);
+    for (const materialId of expected) {
+      const read = await client.callTool({
+        name: "mister_clean_read_material",
+        arguments: { material_id: materialId, line_count: 1, response_format: "json" },
+      });
+      expect(read.isError, materialId).not.toBe(true);
+      expect(read.structuredContent).toMatchObject({ id: materialId });
+    }
+  });
+
   it("returns a tool error for an unknown or path-like material ID", async () => {
     const result = await client.callTool({
       name: "mister_clean_read_material",
@@ -79,7 +201,9 @@ describe("Mister Clean MCP server", () => {
     expect(content).toBeDefined();
     if (!content) return;
     expect(content).toMatchObject({ mimeType: "text/markdown" });
-    expect("text" in content ? content.text : "").toContain("Founding contract");
+    expect("text" in content ? content.text : "").toBe(
+      MATERIALS.find((material) => material.id === "SKILL.md")?.content,
+    );
   });
 
   it("produces a closeout prompt that preserves authority and boundaries", async () => {

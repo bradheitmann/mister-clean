@@ -1,9 +1,25 @@
 {
   "record_type": "mister-clean.regression-delta",
-  "schema_version": "1.2",
+  "schema_version": "1.4",
   "policy": "zero_open_run_introduced_debt",
-  "baseline_object": "<full starting commit>",
-  "closing_object": "<full closing subject commit>",
+  "baseline_object": "0000000000000000000000000000000000000000000000000000000000000000",
+  "baseline_repository_object": {
+    "record_type": "mister-clean.repository-object",
+    "schema_version": "1.0",
+    "head_commit": "0000000000000000000000000000000000000000",
+    "surface": "tracked_and_nonignored",
+    "entry_count": 0,
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "closing_object": "0000000000000000000000000000000000000000000000000000000000000000",
+  "closing_repository_object": {
+    "record_type": "mister-clean.repository-object",
+    "schema_version": "1.0",
+    "head_commit": "0000000000000000000000000000000000000000",
+    "surface": "tracked_and_nonignored",
+    "entry_count": 0,
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
   "baseline_findings": 0,
   "closing_findings": 0,
   "baseline_paid": 0,
@@ -14,54 +30,106 @@
   "concurrent_external_open": 0,
   "introduced_by_run_paid": 0,
   "introduced_by_run_open": 0,
-  "action_checks": [
-    {
-      "action_id": "<executed or failed action id>",
-      "before_object": "<pre-action snapshot or digest>",
-      "after_object": "<post-action snapshot or digest>",
-      "comparators": [
-        {
-          "id": "<stable comparator id>",
-          "command": "<exact command>",
-          "scope": "<affected scope>",
-          "detector": "<tool and version or digest>",
-          "observations": [
-            {
-              "phase": "before",
-              "object": "<pre-action snapshot or digest>",
-              "command_sha256": "<sha256 of exact command string>",
-              "detector_sha256": "<sha256 of exact detector string>",
-              "result_sha256": "<sha256 of exact comparator output>",
-              "result_ref": {
-                "path": "comparator-results/<action-id>-before.txt",
-                "sha256": "<sha256 of exact comparator output>"
-              },
-              "finding_fingerprints": [],
-              "exit_code": 0,
-              "observed_at": "<ISO-8601 timestamp>"
-            },
-            {
-              "phase": "after",
-              "object": "<post-action snapshot or digest>",
-              "command_sha256": "<sha256 of exact command string>",
-              "detector_sha256": "<sha256 of exact detector string>",
-              "result_sha256": "<sha256 of exact comparator output>",
-              "result_ref": {
-                "path": "comparator-results/<action-id>-after.txt",
-                "sha256": "<sha256 of exact comparator output>"
-              },
-              "finding_fingerprints": [],
-              "exit_code": 0,
-              "observed_at": "<ISO-8601 timestamp>"
-            }
-          ]
-        }
-      ],
-      "introduced": 0,
-      "paid_before_boundary": 0,
-      "open_at_boundary": 0,
-      "boundary_status": "closed",
-      "observed_at": "<ISO-8601 timestamp>"
-    }
-  ]
+  "action_checks": [],
+  "detector_coverage": {
+    "registry_version": "1",
+    "registry_sha256": "803e6d35762a802e980c874a4e8783c219234fdcaef9b9f2c570df9ba3d66f50",
+    "run_policy": {
+      "schema_version": "1",
+      "public_safety": {
+        "disposition": "not_applicable",
+        "basis": "empty_tracked_surface",
+        "scope": "tracked_shippable",
+        "tracked_path_count": 0
+      }
+    },
+    "run_policy_sha256": "9d2c7d1e906b75b7b529f9a002e252376eb69c50ce31bde030da3c9cee640276",
+    "applicability": [
+      {
+        "detector_id": "planning_graph",
+        "disposition": "required",
+        "basis": "core_closeout"
+      },
+      {
+        "detector_id": "public_safety",
+        "disposition": "not_applicable",
+        "basis": "empty_tracked_surface"
+      },
+      {
+        "detector_id": "semantic_boundary",
+        "disposition": "required",
+        "basis": "core_closeout"
+      }
+    ],
+    "baseline_object": "0000000000000000000000000000000000000000000000000000000000000000",
+    "baseline_repository_object": {
+      "record_type": "mister-clean.repository-object",
+      "schema_version": "1.0",
+      "head_commit": "0000000000000000000000000000000000000000",
+      "surface": "tracked_and_nonignored",
+      "entry_count": 0,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "required_detector_ids": [
+      "planning_graph",
+      "semantic_boundary"
+    ],
+    "executions": [
+      {
+        "detector_id": "planning_graph",
+        "phase": "baseline",
+        "object": "0000000000000000000000000000000000000000000000000000000000000000",
+        "repository_object": {
+          "record_type": "mister-clean.repository-object",
+          "schema_version": "1.0",
+          "head_commit": "0000000000000000000000000000000000000000",
+          "surface": "tracked_and_nonignored",
+          "entry_count": 0,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "scope": ".",
+        "command": "mister-clean audit planning . --json",
+        "command_sha256": "12c08dba7549ffcfd939a0885c03e1e562699c348184c99a31909dbeb294f632",
+        "detector": "mister-clean/planning_graph@1",
+        "detector_sha256": "ac8a9785be659163314c9737c5bfea3415604725a981874dfe7b520632dd65b8",
+        "input_refs": [],
+        "result_ref": {
+          "path": "<detector-results/planning-graph.json>",
+          "sha256": "<sha256 of exact planning detector output>"
+        },
+        "result_sha256": "<sha256 of exact planning detector output>",
+        "exit_code": 0,
+        "observed_at": "1970-01-01T00:00:00.000Z",
+        "finding_fingerprints": []
+      },
+      {
+        "detector_id": "semantic_boundary",
+        "phase": "baseline",
+        "object": "0000000000000000000000000000000000000000000000000000000000000000",
+        "repository_object": {
+          "record_type": "mister-clean.repository-object",
+          "schema_version": "1.0",
+          "head_commit": "0000000000000000000000000000000000000000",
+          "surface": "tracked_and_nonignored",
+          "entry_count": 0,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "scope": ".",
+        "command": "mister-clean audit semantic . --json",
+        "command_sha256": "863c2c3a8e9acb3d4859061e0eda748f87fd93cc6b343ab08f7ddb9ffb488481",
+        "detector": "mister-clean/semantic_boundary@1",
+        "detector_sha256": "4c71b4e1ed30476d865b4274934788f64a92dc8ae08e40d9f11749a9921650f5",
+        "input_refs": [],
+        "result_ref": {
+          "path": "<detector-results/semantic-boundary.json>",
+          "sha256": "<sha256 of exact semantic detector output>"
+        },
+        "result_sha256": "<sha256 of exact semantic detector output>",
+        "exit_code": 0,
+        "observed_at": "1970-01-01T00:00:00.000Z",
+        "finding_fingerprints": []
+      }
+    ],
+    "finding_fingerprints": []
+  }
 }
