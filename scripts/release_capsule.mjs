@@ -328,7 +328,7 @@ export function createPortablePackageArchive({ packageParent, archive }) {
   }
   const environment = releaseProcessEnvironment(capsule, process.env, capsule);
   try {
-    execFileSync("tar", [...metadataFlags, "-czf", resolve(archive), "-C", capsule, "package"], {
+    execFileSync("tar", [...metadataFlags, "--format=ustar", "-czf", resolve(archive), "-C", capsule, "package"], {
       env: environment,
       stdio: "pipe",
     });

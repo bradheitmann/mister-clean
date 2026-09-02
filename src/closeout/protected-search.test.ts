@@ -1,7 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, matchesGlob } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -25,8 +24,7 @@ describe("protected search policy", () => {
     put(root, "src/public.txt", "needle\n");
     put(root, "project/planning/holdout/secret.txt", "needle\n");
 
-    const unsafe = execFileSync("rg", ["--files", "--glob", "!holdout/**"], { cwd: root, encoding: "utf8" });
-    expect(unsafe.split(/\r?\n/u)).toContain("project/planning/holdout/secret.txt");
+    expect(matchesGlob("project/planning/holdout/secret.txt", "holdout/**")).toBe(false);
     expect(validateProtectedSearchPolicy({
       allowed_roots: ["src"],
       protected_roots: ["project/planning/holdout"],

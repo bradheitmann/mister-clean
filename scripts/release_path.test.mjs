@@ -73,7 +73,7 @@ function archiveFixture(configure) {
   configure?.(packageRoot);
   const archive = join(temporary, "fixture.tgz");
   const metadataFlags = process.platform === "darwin" ? ["--no-xattrs", "--no-mac-metadata"] : [];
-  execFileSync("tar", [...metadataFlags, "-czf", archive, "-C", temporary, "package"], {
+  execFileSync("tar", [...metadataFlags, "--format=ustar", "-czf", archive, "-C", temporary, "package"], {
     env: { ...process.env, COPYFILE_DISABLE: "1", COPY_EXTENDED_ATTRIBUTES_DISABLE: "1" },
     stdio: "pipe",
   });
