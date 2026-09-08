@@ -1,6 +1,8 @@
 import type { Sha256 } from "./primitives.js";
 import * as z from "zod";
 import { CAPABILITY_DEFINITIONS } from "./capability-taxonomy.js";
+import { agentExecutionProfileSchema } from "./agent-profile.js";
+import { rankAgents, type AgentCandidate, type CapabilitySelection } from "../domain/ranking.js";
 import { DIRECTIVE_STATES } from "./wave-directive.js";
 import { ISSUE_ORIGINS, ISSUE_STATES } from "./run-issue.js";
 
@@ -8,7 +10,7 @@ export const CONTROL_PLANE_SNAPSHOT_SCHEMA_VERSION = "1.0" as const;
 
 export const CONTROL_PLANE_SNAPSHOT_FIELDS = [
   "source", "source_label", "repository", "current_run_id", "current_subject",
-  "current_flow", "previous_flow", "first_flow", "issues", "agents", "runs",
+  "current_observation", "current_flow", "previous_flow", "first_flow", "issues", "agents", "runs",
   "capabilities", "complexity", "manifest", "terminal_contract", "current_authority",
   "detector_coverage", "evidence_freshness",
 ] as const;
@@ -18,7 +20,7 @@ const repositoryCapabilityIdSchema = z.enum(CAPABILITY_DEFINITIONS.map((definiti
 const digest = text.regex(/^[a-f0-9]{64}$/);
 const timestamp = text.regex(/^\d{4}-\d\d-\d\dT/).refine((value) => !Number.isNaN(Date.parse(value)));
 const evidence = z.object({ path: text, sha256: digest }).strict();
-const subjectSchema = z.object({ repository_id: text, branch: text, commit: text, tree: text, repository_object_sha256: digest, observed_at: timestamp }).strict();
+const subjectSchema = z.object({ repository_id: text, branch: text, commit: text, tree: text, repository_object_sha256: digest.nullable(), observed_at: timestamp }).strict();
 const flowSchema = z.object({
   starting_real_issues: z.number().int().nonnegative().safe(), discovered_preexisting: z.number().int().nonnegative().safe(),
   caused_by_remediation: z.number().int().nonnegative().safe(), concurrently_introduced: z.number().int().nonnegative().safe(),
@@ -30,6 +32,20 @@ const flowSchema = z.object({
   if (ending !== value.ending_real_issues) context.addIssue({ code: "custom", message: "debt flow does not reconcile" });
   if (value.boundary_blocked > value.ending_real_issues) context.addIssue({ code: "custom", message: "debt flow boundary-blocked count exceeds ending real issues" });
 });
+const runnerCardSchema = z.object({
+  agent_tuple_id: text, model: text, harness: text, reasoning_level: text,
+  /** Immutable recipe binding. A quality-ranked tuple is not a runnable card
+   * unless its exact admitted execution profile is present here. */
+  profile_id: text, profile_revision: z.number().int().nonnegative().safe(), profile_fingerprint_sha256: digest,
+  category_scores: z.array(z.object({ capability_id: repositoryCapabilityIdSchema, weighted_score: z.number().finite().nonnegative() }).strict()).min(1),
+}).strict();
+const runnerRecommendationSchema = z.object({
+  required_capabilities: z.array(repositoryCapabilityIdSchema).min(1),
+  selection_weights: z.array(z.object({ capability_id: repositoryCapabilityIdSchema, weight: z.union([z.literal(1), z.literal(2), z.literal(3)]) }).strict()).min(1),
+  minimum_qualification: z.literal("Recommended_supervised"),
+  runner_card: runnerCardSchema.nullable(),
+  provenance: z.object({ manifest_assignment_agent_tuple_id: text, routing_evidence: z.array(evidence) }).strict(),
+}).strict();
 const issueSchema = z.object({
   issue_id: text, stable_cause_key: text, title: text, description: text, debt_domain: text,
   technical_or_agentic: z.enum(["technical", "agentic_operational"]), state: z.enum([...ISSUE_STATES] as [string, ...string[]]), origin: z.enum([...ISSUE_ORIGINS] as [string, ...string[]]),
@@ -37,7 +53,7 @@ const issueSchema = z.object({
   first_detected_run_id: text, observation_ids: z.array(text), affected_invariants: z.array(text), affected_paths: z.array(text), acceptance_boundary: z.array(text), evidence: z.array(evidence),
   prerequisite_issue_ids: z.array(text), dependent_issue_ids: z.array(text), unlock_value: z.number().finite().nonnegative(), regression_risk: z.number().finite().nonnegative(),
   coordination_claims: z.array(z.object({ key: text, access: z.enum(["read", "write"]), operation_class: text, commutes_with: z.array(text), commutativity_ref: evidence.nullable() }).strict()),
-  blocked_reasons: z.array(text), owner: text, worktree: text.nullable(), recommended_tuple: text, rationale: text,
+  blocked_reasons: z.array(text), owner: text, worktree: text.nullable(), recommended_tuple: text, runner_recommendation: runnerRecommendationSchema, rationale: text,
 }).strict();
 const qualificationProvenanceSchema = z.object({
   credited_trial_ids: z.array(text), pre_dispatch_observation_ids: z.array(text), pre_evaluation_observation_ids: z.array(text),
@@ -74,7 +90,10 @@ const agentSchema = z.object({
   agent_tuple_id: text, model: text, family: text, harness: text, reasoning_level: text, deployment: text, inference_source: text, route: text, invocation_adapter: text,
   headless: z.boolean().nullable(), available: z.boolean(), availability: z.enum(["available", "busy", "paused", "offline", "unknown"]), active_in_repository: z.boolean(), role: text, control_surface: text.nullable(), familiarity_runs: z.number().int().nonnegative().safe(),
   capability_scores: z.array(capabilityScoreSchema), champion_for: z.array(text), evidence: z.array(evidence),
-  execution_identity: z.object({ intended_surface_label: text, disposition: z.enum(["BOUND_FOR_EVALUATION", "BOUND_FOR_DISPATCH", "IDENTITY_UNBOUND", "MISMATCH", "INVALIDATED", "UNTESTED"]), last_external_verification_at: timestamp.nullable(), evidence: z.array(evidence) }).strict(),
+  /** The latest immutable desired execution recipe admitted for this tuple.
+   * This is configuration evidence, not proof that the current seat ran it. */
+  execution_profile: agentExecutionProfileSchema.nullable(),
+  execution_identity: z.object({ intended_surface_label: text, disposition: z.enum(["BOUND_FOR_EVALUATION", "BOUND_FOR_DISPATCH", "IDENTITY_UNBOUND", "MISMATCH", "INVALIDATED", "UNTESTED"]), assurance: z.enum(["requested_configuration", "active_harness_selection", "provider_execution_attested"]).nullable(), automatic_routing_eligible: z.boolean(), last_external_verification_at: timestamp.nullable(), evidence: z.array(evidence) }).strict(),
   metrics: z.object({ verified_success_rate: z.number().min(0).max(1).nullable(), reliability: z.number().min(0).max(1).nullable(), cost_per_success_usd: z.number().finite().nonnegative().nullable(), tokens_per_success: z.number().finite().nonnegative().nullable(), tokens_per_second: z.number().finite().nonnegative().nullable(), local: z.boolean().nullable() }).strict(),
 }).strict();
 const runSchema = z.object({
@@ -83,6 +102,14 @@ const runSchema = z.object({
 }).strict();
 const countSchema = z.object({ bytes: z.number().int().nonnegative().safe(), lines: z.number().int().nonnegative().safe(), files: z.number().int().nonnegative().safe() }).strict();
 const availabilitySchema = z.enum(["MEASURED", "NOT_MEASURED", "NOT_CONFIGURED", "UNKNOWN"]);
+const currentObservationSchema = z.object({
+  kind: z.enum(["FULL_MISTER_CLEAN_RUN", "PARTIAL"]),
+  evidence_binding: z.object({ kind: z.enum(["REPOSITORY_OBJECT", "OBSERVATION_RECEIPT"]), sha256: digest }).strict(),
+  current_debt_flow: availabilitySchema,
+  remediation_no_harm: availabilitySchema,
+  live_topology: availabilitySchema,
+  current_complexity: availabilitySchema,
+}).strict();
 const ignoredLiveSchema = z.object({
   availability: availabilitySchema,
   observed_at: timestamp.nullable(),
@@ -163,7 +190,7 @@ const repositoryCapabilitySchema = z.object({
 }).strict();
 
 const canonicalSnapshotSchema = z.object({
-  source: z.enum(["live", "demo"]), source_label: text, repository: text, current_run_id: text, current_subject: subjectSchema, current_flow: flowSchema, previous_flow: flowSchema.nullable(), first_flow: flowSchema.nullable(),
+  source: z.enum(["live", "demo"]), source_label: text, repository: text, current_run_id: text, current_subject: subjectSchema, current_observation: currentObservationSchema, current_flow: flowSchema, previous_flow: flowSchema.nullable(), first_flow: flowSchema.nullable(),
   issues: z.array(issueSchema), agents: z.array(agentSchema), runs: z.array(runSchema), capabilities: z.array(repositoryCapabilitySchema), complexity: complexitySchema, manifest: manifestSchema.nullable(), terminal_contract: terminalSchema, current_authority: z.enum(["ADVISE", "OPERATE"]), detector_coverage: text, evidence_freshness: text,
 }).strict();
 
@@ -230,7 +257,26 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
   const subject = record(snapshot.current_subject, "snapshot.current_subject");
   exactKeys(subject, "snapshot.current_subject", ["repository_id", "branch", "commit", "tree", "repository_object_sha256", "observed_at"]);
   const runId = requiredString(snapshot.current_run_id, "snapshot.current_run_id");
-  const objectDigest = sha(subject.repository_object_sha256, "snapshot.current_subject.repository_object_sha256");
+  const objectDigest = subject.repository_object_sha256 === null ? null : sha(subject.repository_object_sha256, "snapshot.current_subject.repository_object_sha256");
+  const currentObservation = strictSnapshot.current_observation;
+  if (currentObservation.kind === "FULL_MISTER_CLEAN_RUN") {
+    if (currentObservation.evidence_binding.kind !== "REPOSITORY_OBJECT" || objectDigest === null || currentObservation.evidence_binding.sha256 !== objectDigest) {
+      throw new Error("Invalid control-plane snapshot at snapshot.current_observation: full run requires the current repository-object binding");
+    }
+  } else {
+    if (currentObservation.evidence_binding.kind !== "OBSERVATION_RECEIPT" || objectDigest !== null) {
+      throw new Error("Invalid control-plane snapshot at snapshot.current_observation: partial observation requires a receipt binding and no repository-object digest");
+    }
+    if (currentObservation.current_debt_flow !== "UNKNOWN" || currentObservation.remediation_no_harm !== "UNKNOWN" || currentObservation.live_topology !== "UNKNOWN" || currentObservation.current_complexity !== "UNKNOWN") {
+      throw new Error("Invalid control-plane snapshot at snapshot.current_observation: partial observation cannot establish current debt, no-harm, topology, or complexity without per-surface evidence");
+    }
+    if (strictSnapshot.current_authority !== "ADVISE") {
+      throw new Error("Invalid control-plane snapshot at snapshot.current_authority: partial observation is ADVISE-only");
+    }
+  }
+  if (currentObservation.current_complexity !== strictSnapshot.complexity.availability) {
+    throw new Error("Invalid control-plane snapshot at snapshot.current_observation.current_complexity: does not match complexity availability");
+  }
 
   if (!Array.isArray(snapshot.issues) || !Array.isArray(snapshot.agents) || !Array.isArray(snapshot.runs) || !Array.isArray(snapshot.capabilities)) {
     throw new Error("Invalid control-plane snapshot at snapshot: issues, agents, runs, and capabilities must be arrays");
@@ -253,7 +299,8 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
   for (const [index, run] of snapshot.runs.entries()) {
     const row = record(run, `snapshot.runs[${index}]`);
     const subjectRow = record(row.subject, `snapshot.runs[${index}].subject`);
-    if (requiredString(row.run_id, `snapshot.runs[${index}].run_id`) === runId && sha(subjectRow.repository_object_sha256, `snapshot.runs[${index}].subject.repository_object_sha256`) !== objectDigest) {
+    const runDigest = subjectRow.repository_object_sha256 === null ? null : sha(subjectRow.repository_object_sha256, `snapshot.runs[${index}].subject.repository_object_sha256`);
+    if (requiredString(row.run_id, `snapshot.runs[${index}].run_id`) === runId && runDigest !== objectDigest) {
       throw new Error("Invalid control-plane snapshot at snapshot.runs: current run subject does not match current subject");
     }
   }
@@ -273,6 +320,9 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
     }
   }
   for (const agent of strictSnapshot.agents) {
+    if (agent.execution_profile !== null && agent.execution_profile.agent_tuple_id !== agent.agent_tuple_id) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.agents.${agent.agent_tuple_id}.execution_profile: profile tuple does not match roster tuple`);
+    }
     const identity = agent.execution_identity;
     if ((identity.disposition === "BOUND_FOR_EVALUATION" || identity.disposition === "BOUND_FOR_DISPATCH")
       && (identity.last_external_verification_at === null || identity.evidence.length === 0)) {
@@ -280,10 +330,61 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
     }
     const performanceClaimed = Object.values(agent.metrics).some((value) => value !== null);
     if (performanceClaimed) throw new Error(`Invalid control-plane snapshot at snapshot.agents.${agent.agent_tuple_id}.metrics: performance attribution is unavailable until a ledger-derived external evaluation projection exists`);
+    if (currentObservation.kind === "PARTIAL" && (agent.available || agent.active_in_repository)) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.agents.${agent.agent_tuple_id}: partial observation cannot claim current availability or repository activity`);
+    }
   }
   const agentTupleIds = strictSnapshot.agents.map((agent) => agent.agent_tuple_id);
   if (new Set(agentTupleIds).size !== agentTupleIds.length) {
     throw new Error("Invalid control-plane snapshot at snapshot.agents: duplicate agent_tuple_id");
+  }
+  const agentByTupleId = new Map(strictSnapshot.agents.map((agent) => [agent.agent_tuple_id, agent]));
+  const candidates: readonly AgentCandidate[] = strictSnapshot.agents.map((agent) => ({
+    agent_tuple_id: agent.agent_tuple_id as never,
+    active_in_repository: agent.active_in_repository,
+    available: agent.available,
+    capability_scores: agent.capability_scores.map((score) => ({ capability_id: score.capability_id as never, score: score.score, confidence: score.confidence, verified_trials: score.verified_trials, qualification: score.qualification })),
+  }));
+  for (const issue of strictSnapshot.issues) {
+    const recommendation = issue.runner_recommendation;
+    const requirements = new Set(recommendation.required_capabilities);
+    const weights = new Set(recommendation.selection_weights.map((selection) => selection.capability_id));
+    if (requirements.size !== recommendation.required_capabilities.length || weights.size !== recommendation.selection_weights.length
+      || requirements.size !== weights.size || [...requirements].some((capabilityId) => !weights.has(capabilityId))) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation: required capabilities and weights must be one-to-one`);
+    }
+    if (recommendation.provenance.manifest_assignment_agent_tuple_id !== issue.recommended_tuple) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation.provenance: does not match the manifest assignment`);
+    }
+    const selections: readonly CapabilitySelection[] = recommendation.selection_weights.map((selection) => ({ capability_id: selection.capability_id as never, weight: selection.weight }));
+    // Ranking preserves historical quality evidence for every available tuple.
+    // A runner card is narrower: it requires a current, exact recipe binding.
+    const runnableCandidates = candidates.filter((candidate) => agentByTupleId.get(String(candidate.agent_tuple_id))?.execution_profile !== null);
+    const expected = rankAgents(runnableCandidates, selections, recommendation.minimum_qualification).at(0) ?? null;
+    const card = recommendation.runner_card;
+    if (card === null) {
+      if (expected !== null) throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation.runner_card: omitted despite an eligible deterministic recommendation`);
+      continue;
+    }
+    const agent = agentByTupleId.get(card.agent_tuple_id);
+    if (agent === undefined || agent.model !== card.model || agent.harness !== card.harness || agent.reasoning_level !== card.reasoning_level) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation.runner_card: tuple identity does not match the admitted agent roster`);
+    }
+    const profile = agent.execution_profile;
+    if (profile === null || card.profile_id !== profile.profile_id || card.profile_revision !== profile.revision || card.profile_fingerprint_sha256 !== profile.fingerprint_sha256) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation.runner_card: execution profile is absent or does not exactly bind the admitted recipe`);
+    }
+    const cardCapabilities = new Set(card.category_scores.map((score) => score.capability_id));
+    if (cardCapabilities.size !== card.category_scores.length || cardCapabilities.size !== requirements.size || [...requirements].some((capabilityId) => !cardCapabilities.has(capabilityId))) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation.runner_card: scores do not cover required capabilities`);
+    }
+    if (expected === null || card.agent_tuple_id !== expected.agent_tuple_id) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation.runner_card: is not the deterministic eligible recommendation`);
+    }
+    const expectedScores = new Map(expected.category_scores.map((score) => [score.capability_id, score.weighted_score]));
+    if (card.category_scores.some((score) => expectedScores.get(score.capability_id) !== score.weighted_score)) {
+      throw new Error(`Invalid control-plane snapshot at snapshot.issues.${issue.issue_id}.runner_recommendation.runner_card: weighted scores do not match roster qualification`);
+    }
   }
   if (strictSnapshot.complexity.availability === "MEASURED" && strictSnapshot.complexity.object_sha256 === null) {
     throw new Error("Invalid control-plane snapshot at snapshot.complexity.object_sha256: required when measured");
@@ -320,10 +421,10 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
   };
   const payableIssueIds = new Set(strictSnapshot.issues.filter((issue) => issue.state !== "paid" && issue.state !== "false_positive").map((issue) => issue.issue_id));
   const falsePositiveIssueIds = new Set(strictSnapshot.issues.filter((issue) => issue.state === "false_positive").map((issue) => issue.issue_id));
-  if (!hasExactIssueSet(currentRun.real_issue_ids, payableIssueIds) || !hasExactIssueSet(currentRun.known_now_issue_ids, payableIssueIds)) {
+  if (currentObservation.kind === "FULL_MISTER_CLEAN_RUN" && (!hasExactIssueSet(currentRun.real_issue_ids, payableIssueIds) || !hasExactIssueSet(currentRun.known_now_issue_ids, payableIssueIds))) {
     throw new Error("Invalid control-plane snapshot at snapshot.runs: current run issue sets do not match payable canonical issue states");
   }
-  if (!hasExactIssueSet(currentRun.false_positive_issue_ids, falsePositiveIssueIds)) {
+  if (currentObservation.kind === "FULL_MISTER_CLEAN_RUN" && !hasExactIssueSet(currentRun.false_positive_issue_ids, falsePositiveIssueIds)) {
     throw new Error("Invalid control-plane snapshot at snapshot.runs: current run false-positive set does not match canonical issue states");
   }
   if (strictSnapshot.terminal_contract.declared_verdict === "CLEAN") {
@@ -341,6 +442,9 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
       throw new Error("Invalid control-plane snapshot at snapshot.terminal_contract.contract: CLEAN requires every terminal condition");
     }
     if (strictSnapshot.terminal_contract.evidence.length === 0) throw new Error("Invalid control-plane snapshot at snapshot.terminal_contract.evidence: required for CLEAN");
+  }
+  if (currentObservation.kind === "PARTIAL" && (strictSnapshot.manifest !== null || strictSnapshot.terminal_contract.declared_verdict !== null || strictSnapshot.terminal_contract.subject !== null || strictSnapshot.terminal_contract.contract !== null || strictSnapshot.terminal_contract.evidence.length !== 0)) {
+    throw new Error("Invalid control-plane snapshot at snapshot.current_observation: partial observation cannot declare manifest or terminal closure evidence");
   }
   // Return the strict wire object without convenience aliases. A parser output
   // must be valid input to the same parser, including after JSON transport.

@@ -47,7 +47,9 @@ The credential validator is a security choke point and is safe by construction.
   return { evidenceRoot, root, policyPath: join(policyDirectory, "trust-policy.json") };
 }
 
-function runtimeRecords(root: string, policyPath: string, evidenceRoot: string) {
+function runtimeRecords(root: string, policyPath: string, evidenceRoot: string, coverage = false) {
+  const caseId = coverage ? "canonical-gate-inputs" : "forged-credential";
+  const observationName = coverage ? "validated_inputs" : "decision";
   const candidates = discoverSemanticProbeCandidates(root);
   const plan = createSemanticPlanV2({
     candidates,
@@ -59,9 +61,9 @@ function runtimeRecords(root: string, policyPath: string, evidenceRoot: string) 
     runId: "run-001",
     runtimeCases: {
       [candidates[0]!.id]: [{
-        case_id: "forged-credential",
-        intent: "reject a forged credential",
-        required_observations: ["decision"],
+        case_id: caseId,
+        intent: coverage ? "prove the canonical gate validates the declared runtime source and its dependencies" : "reject a forged credential",
+        required_observations: [observationName],
       }],
     },
   });
@@ -89,14 +91,14 @@ function runtimeRecords(root: string, policyPath: string, evidenceRoot: string) 
     tree_before_sha256: plan.binding.repository_object_sha256,
     tree_after_sha256: plan.binding.repository_object_sha256,
     cases: [{
-      case_id: "forged-credential",
+      case_id: caseId,
       ended_at: "2026-08-28T00:01:01Z",
       exit_status: 0,
       observations: [{
         evidence_refs: [evidence],
-        name: "decision",
+        name: observationName,
         type: "string",
-        value: "rejected",
+        value: coverage ? "index.mjs" : "rejected",
       }],
       signal: null,
       started_at: "2026-08-28T00:01:00Z",
@@ -142,10 +144,10 @@ function runtimeRecords(root: string, policyPath: string, evidenceRoot: string) 
       role: "independent_qa",
     },
     judgments: [{
-      case_id: "forged-credential",
+      case_id: caseId,
       disposition: "supports",
       evidence_refs: [evidence],
-      rationale: "The observed production decision rejects the forged credential.",
+      rationale: coverage ? "The native gate input receipt includes the complete declared runtime source set." : "The observed production decision rejects the forged credential.",
     }],
     scope: { case_plan_adequacy: "adequate", limitations: [] },
   };
@@ -490,6 +492,151 @@ describe("semantic evidence protocol v2", () => {
         plan,
         repository: root,
       }).verdict).toBe("verification_debt");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+      rmSync(dirname(policyPath), { force: true, recursive: true });
+      rmSync(evidenceRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("routes heuristic bounded-state findings through runtime evidence and rejects a missing state case", () => {
+    const { evidenceRoot, root, policyPath } = fixture();
+    try {
+      writeFileSync(join(root, "invocation-journal.ts"), 'import { appendFileSync } from "node:fs";\nappendFileSync("invocation-journal.jsonl", "event\\n");\n');
+      const candidates = discoverSemanticProbeCandidates(root);
+      const state = candidates.find((candidate) => candidate.kind === "bounded_state_lifecycle")!;
+      const base = { candidates, candidateSetSha256: semanticCandidateSetSha256(candidates), challengeNonce: "state-route", observedAt: "2026-08-28T00:00:00Z", repository: root, repositoryObjectSha256: semanticWorkingTreeSha256(root), runId: "state-route" };
+      expect(() => createSemanticPlanV2({ ...base, runtimeCases: {} })).toThrow(/case plan/);
+      const plan = createSemanticPlanV2({ ...base, runtimeCases: Object.fromEntries(candidates.map((candidate) => [candidate.id, [{ case_id: `case-${candidate.id}`, intent: "observe bounded state", required_observations: ["append_restart_tail"] }]])) });
+      expect(plan.candidates.find((candidate) => candidate.legacy_candidate_ids.includes(state.id))?.resolution_mode).toBe("runtime_attested");
+    } finally { rmSync(root, { force: true, recursive: true }); rmSync(dirname(policyPath), { force: true, recursive: true }); rmSync(evidenceRoot, { force: true, recursive: true }); }
+  });
+
+  it("admits and refutes a discovered bounded-state candidate through signed runtime evidence", () => {
+    const root = mkdtempSync(join(tmpdir(), "mister-clean-semantic-v2-state-"));
+    const policyDirectory = mkdtempSync(join(tmpdir(), "mister-clean-semantic-v2-state-policy-"));
+    const evidenceRoot = mkdtempSync(join(tmpdir(), "mister-clean-semantic-v2-state-evidence-"));
+    try {
+      writeFileSync(join(root, "invocation-journal.ts"), 'import { appendFileSync } from "node:fs";\nappendFileSync("invocation-journal.jsonl", "event\\n");\n');
+      execFileSync("git", ["init", "-q", root]); execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]); execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]); execFileSync("git", ["-C", root, "add", "."]); execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
+      mkdirSync(join(evidenceRoot, "evidence")); writeFileSync(join(evidenceRoot, "evidence", "stdout.txt"), "append restart tail observed\n"); writeFileSync(join(evidenceRoot, "evidence", "stderr.txt"), "");
+      const records = runtimeRecords(root, join(policyDirectory, "trust-policy.json"), evidenceRoot);
+      expect(records.candidate.kind).toBe("bounded_state_lifecycle");
+      expect(records.candidate.resolution_mode).toBe("runtime_attested");
+      expect(verifyRuntimeSemanticCandidateV2({ attestation: records.attestation, evidenceRoot, observations: records.observations, plan: records.plan, repository: root, trustPolicyPath: join(policyDirectory, "trust-policy.json") }).verdict).toBe("attested_satisfied");
+      records.attestation.judgments[0]!.disposition = "refutes"; records.resign();
+      expect(verifyRuntimeSemanticCandidateV2({ attestation: records.attestation, evidenceRoot, observations: records.observations, plan: records.plan, repository: root, trustPolicyPath: join(policyDirectory, "trust-policy.json") }).verdict).toBe("confirmed_failure");
+    } finally { rmSync(root, { force: true, recursive: true }); rmSync(policyDirectory, { force: true, recursive: true }); rmSync(evidenceRoot, { force: true, recursive: true }); }
+  });
+
+  it("resolves unknown coverage through native observations and independent attestation", () => {
+    const { evidenceRoot, root, policyPath } = fixture();
+    try {
+      writeFileSync(join(root, "planning", "STORY.md"), "Ordinary planning note.\n");
+      writeFileSync(join(root, "index.mjs"), "export const shipped = true;\n");
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        name: "unknown-coverage", main: "index.mjs", scripts: { check: "custom-validator --config validator.json" },
+      }));
+      writeFileSync(join(evidenceRoot, "evidence", "stdout.txt"), "native input receipt: index.mjs\n");
+      const records = runtimeRecords(root, policyPath, evidenceRoot, true);
+      expect(records.candidate.kind).toBe("executable_surface_coverage");
+      expect(records.candidate.resolution_mode).toBe("runtime_attested");
+      expect(records.candidate.mechanical_proof).toBeUndefined();
+      expect(verifyDirectSemanticCandidateV2({
+        candidateId: records.candidate.candidate_id, plan: records.plan, repository: root,
+      }).verdict).toBe("verification_debt");
+      expect(verifyRuntimeSemanticCandidateV2({
+        attestation: records.attestation, evidenceRoot, observations: records.observations,
+        plan: records.plan, repository: root, trustPolicyPath: policyPath,
+      })).toMatchObject({ errors: [], verdict: "attested_satisfied" });
+      records.attestation.judgments[0]!.disposition = "refutes";
+      records.attestation.judgments[0]!.rationale = "The native input receipt omits a required runtime input.";
+      records.resign();
+      expect(verifyRuntimeSemanticCandidateV2({
+        attestation: records.attestation, evidenceRoot, observations: records.observations,
+        plan: records.plan, repository: root, trustPolicyPath: policyPath,
+      }).verdict).toBe("confirmed_failure");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+      rmSync(dirname(policyPath), { force: true, recursive: true });
+      rmSync(evidenceRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("binds missing declared targets to existing authority without crashing plan creation", () => {
+    const { evidenceRoot, root, policyPath } = fixture();
+    try {
+      writeFileSync(join(root, "planning", "STORY.md"), "Ordinary planning note.\n");
+      writeFileSync(join(root, "package.json"), '{"name":"missing-entry","main":"dist/missing.js"}\n');
+      const candidates = discoverSemanticProbeCandidates(root);
+      expect(candidates[0]?.refs).toEqual(["package.json"]);
+      expect(candidates[0]?.evidence.join(" ")).toContain("dist/missing.js");
+      const input = {
+        candidates, candidateSetSha256: semanticCandidateSetSha256(candidates),
+        challengeNonce: "missing-target", observedAt: "2026-08-28T00:00:00Z", repository: root,
+        repositoryObjectSha256: semanticWorkingTreeSha256(root), runId: "missing-target",
+      };
+      expect(() => createSemanticPlanV2({ ...input, runtimeCases: {} })).toThrow(/case plan/);
+      const plan = createSemanticPlanV2({
+        ...input, runtimeCases: { [candidates[0]!.id]: [{
+          case_id: "target-resolution", intent: "resolve the declared target from native build evidence",
+          required_observations: ["resolved_target"],
+        }] },
+      });
+      expect(plan.candidates[0]?.resolution_mode).toBe("runtime_attested");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+      rmSync(dirname(policyPath), { force: true, recursive: true });
+      rmSync(evidenceRoot, { force: true, recursive: true });
+    }
+  });
+  it.each([["blank", ""], ["whitespace", "   "], ["padded", " runner-1 "], ["missing", undefined]])(
+    "rejects a %s runner actor identity with a validly rebound and resigned attestation",
+    (_label, actorId) => {
+      const { evidenceRoot, root, policyPath } = fixture();
+      try {
+        const records = runtimeRecords(root, policyPath, evidenceRoot);
+        if (actorId === undefined) delete (records.observations as unknown as Record<string, unknown>).runner;
+        else records.observations.runner.actor_id = actorId;
+        records.observations.observations_sha256 = sha256Bytes(canonicalJson({ ...records.observations, observations_sha256: "" }));
+        records.attestation.binding.observations_sha256 = records.observations.observations_sha256;
+        records.resign();
+        const result = verifyRuntimeSemanticCandidateV2({
+          attestation: records.attestation,
+          evidenceRoot,
+          observations: records.observations,
+          plan: records.plan,
+          repository: root,
+          trustPolicyPath: policyPath,
+        });
+        expect(result.verdict).toBe("verification_debt");
+        expect(result.errors.join(" ")).toMatch(/runner actor_id must be a canonical nonempty string/i);
+      } finally {
+        rmSync(root, { force: true, recursive: true });
+        rmSync(dirname(policyPath), { force: true, recursive: true });
+        rmSync(evidenceRoot, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it.each([
+    ["argv_sha256", "not-a-digest", "semantic runner argv_sha256"],
+    ["executable_sha256", "not-a-digest", "semantic runner executable_sha256"],
+    ["cwd", "/tmp", "semantic runner cwd"],
+  ])("rejects invalid runner %s despite a valid independent signature", (field, value, expectedError) => {
+    const { evidenceRoot, root, policyPath } = fixture();
+    try {
+      const records = runtimeRecords(root, policyPath, evidenceRoot);
+      (records.observations.runner as unknown as Record<string, unknown>)[field!] = value;
+      records.observations.observations_sha256 = sha256Bytes(canonicalJson({ ...records.observations, observations_sha256: "" }));
+      records.attestation.binding.observations_sha256 = records.observations.observations_sha256;
+      records.resign();
+      const result = verifyRuntimeSemanticCandidateV2({
+        attestation: records.attestation, evidenceRoot, observations: records.observations,
+        plan: records.plan, repository: root, trustPolicyPath: policyPath,
+      });
+      expect(result.verdict).toBe("verification_debt");
+      expect(result.errors.join(" ")).toContain(expectedError);
     } finally {
       rmSync(root, { force: true, recursive: true });
       rmSync(dirname(policyPath), { force: true, recursive: true });

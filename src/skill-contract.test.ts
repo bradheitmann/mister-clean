@@ -123,6 +123,24 @@ describe("invocation contract", () => {
     expect(evaluations).toContain("Mister Clean batches uncertified self-commits");
   });
 
+  it("serializes repository-wide verification without charging contention to the candidate or model", async () => {
+    const concurrency = await readFile(join(ROOT, "references", "concurrent-remediation.md"), "utf8");
+    const doctrine = await readFile(join(ROOT, "references", "verification-doctrine.md"), "utf8");
+    const normalizedSkill = skill.replaceAll(/\s+/g, " ");
+    const normalizedConcurrency = concurrency.replaceAll(/\s+/g, " ");
+    const normalizedDoctrine = doctrine.replaceAll(/\s+/g, " ");
+
+    expect(normalizedSkill).toContain("Full root suites use a Git-common-directory lease and registered supervisor");
+    expect(normalizedSkill).toContain("Busy emits a typed `resource_contention` no-start receipt excluded from model scoring");
+    expect(normalizedConcurrency).toContain("Both acquire the same SQLite exclusive transaction, keyed to the repository's Git common directory");
+    expect(normalizedConcurrency).toContain("A per-lease atomic supervisor lock serializes registration before the target starts");
+    expect(normalizedConcurrency).toContain("PIDs are paired with process-birth identities");
+    expect(normalizedConcurrency).toContain("A unique inherited custody marker detects a target that daemonizes outside its process group");
+    expect(normalizedConcurrency).toContain("never steals ownership by elapsed time");
+    expect(normalizedConcurrency).toContain("a raw duplicate root suite is a procedure breach rather than useful corroboration");
+    expect(normalizedDoctrine).toContain("Lease refusal occurs before evidence creation and emits a typed `resource_contention` no-start receipt");
+  });
+
   it("separates generic GUARD history from externally held live closeout authority", async () => {
     const guard = await readFile(join(ROOT, "references", "continuous-clean-development.md"), "utf8");
     const concurrency = await readFile(join(ROOT, "references", "concurrent-remediation.md"), "utf8");
@@ -191,10 +209,10 @@ describe("invocation contract", () => {
     const evaluations = await readFile(join(ROOT, "references", "behavioral-evals.md"), "utf8");
     const trial = await readFile(join(ROOT, "evals", "model-hygiene-trial.md"), "utf8");
     expect(skill).toContain("`continue` resumes the same role, read/write scope, and task");
-    expect(skill).toContain("mark performance evidence `identity_unbound`");
-    expect(skill).toContain("A tab label or worker self-report is not execution identity");
-    expect(skill).toContain("actual provider/backend execution route");
-    expect(skill).toContain("never backfill unknown historical identity");
+    expect(skill).toContain("Retain findings as `identity_unbound`");
+    expect(skill).toContain("Tab labels/self-reports are not execution identity");
+    expect(skill).toContain("provider route before dispatch/scoring");
+    expect(skill).toContain("never backfill unknown identity");
     expect(concurrency).toContain("Role authority survives continuation and compaction unchanged");
     expect(concurrency).toContain("identity_unbound");
     expect(evaluations).toContain("Read-only verifier writes after continuation");
@@ -531,6 +549,9 @@ describe("unified TypeScript distribution contract", () => {
       readFile(join(ROOT, "dist", "cli.js")),
     ]);
     expect(standalone).toEqual(built);
+    const builtText = Buffer.from(built).toString("utf8");
+    expect(builtText).toContain('"node:sqlite"');
+    expect(builtText).not.toContain('from "sqlite"');
   }, 30_000);
 
   it("keeps source and standalone planning behavior identical", async () => {

@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync8, readFileSync as readFileSync13, realpathSync as realpathSync9, statSync as statSync4, writeFileSync as writeFileSync5 } from "fs";
-import { isAbsolute as isAbsolute20, join as join13, relative as relative18, resolve as resolve24, sep as sep17 } from "path";
+import { existsSync as existsSync10, readFileSync as readFileSync15, realpathSync as realpathSync10, statSync as statSync4, writeFileSync as writeFileSync6 } from "fs";
+import { isAbsolute as isAbsolute22, join as join14, relative as relative18, resolve as resolve25, sep as sep17 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -7815,7 +7815,7 @@ function isSourceDevelopmentEntrypoint(root, moduleUrl) {
 }
 
 // src/closeout/bundle.ts
-import { basename as basename10, dirname as dirname10, isAbsolute as isAbsolute17, resolve as resolve19 } from "path";
+import { basename as basename10, dirname as dirname11, isAbsolute as isAbsolute18, resolve as resolve20 } from "path";
 
 // src/census.ts
 import { constants } from "fs";
@@ -10869,7 +10869,7 @@ function captureOnce(repository, visited, projection) {
   field(hash, "surface", SURFACE);
   field(hash, "entry_count", u64(BigInt(before.entries.length)));
   for (const entry of before.entries) hashEntry(hash, repository, entry, visited, projection);
-  const sha25611 = hash.digest("hex");
+  const sha25612 = hash.digest("hex");
   const after = surfaceSnapshot(repository);
   const headAfter = gitLine(repository, ["rev-parse", "--verify", "HEAD^{commit}"]);
   if (headAfter !== headBefore || after.signature !== before.signature) {
@@ -10881,7 +10881,7 @@ function captureOnce(repository, visited, projection) {
     head_commit: headBefore,
     surface: SURFACE,
     entry_count: before.entries.length,
-    sha256: sha25611
+    sha256: sha25612
   };
 }
 function captureStable(root, visited, projection) {
@@ -13980,7 +13980,7 @@ import { spawnSync as spawnSync3 } from "child_process";
 import { existsSync as existsSync3, lstatSync as lstatSync4, readFileSync as readFileSync3, readlinkSync as readlinkSync2 } from "fs";
 import { basename as basename5, dirname as dirname5, extname as extname4, isAbsolute as isAbsolute5, relative as relative6, resolve as resolve7, sep as sep6 } from "path";
 var TEXT_EXTENSIONS2 = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
-var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".cjs", ".go", ".js", ".jsx", ".mjs", ".rs", ".ts", ".tsx"]);
+var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".cjs", ".cts", ".go", ".js", ".jsx", ".mjs", ".mts", ".rs", ".svelte", ".ts", ".tsx"]);
 var CONSTRUCTION_ASSERTION = /\b(choke point|construction[- ]enforced|(?:safe|closed|enforced) by construction)\b/i;
 var CRITICAL_BOUNDARY = /\b(auth(?:entication|orization)?|credential|privacy|policy|redact|secret|security|telemetry|token)\b/i;
 var COMPOSITION_ROOT = /\b(app(?:lication)? factory|composition root|production (?:bootstrap|root)|server factory)\b/i;
@@ -13999,9 +13999,11 @@ var STATE_FIELD_ALLOCATION = /(?:^|[;{}]\s*|\s)(?:(?:public|private|protected|st
 var MODULE_STATE_ALLOCATION = /(?:^|[;}])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*(?:new\s+(?:Map|Set|Array)\b|\[\s*\])/i;
 var STATE_APPEND = /\b(?:appendFileSync?|createWriteStream)\b/i;
 var APPEND_STATE_BOUND = /\b(?:compact(?:ion)?|evict(?:ion)?|expir(?:e|y)|max(?:imum)?(?:[_ -]?(?:age|entries|size))|prun(?:e|ing)|retention|rotat(?:e|ion)|ttl)\b/i;
-var QUALITY_SCRIPT_NAME = /(?:^|:)(?:build|check|lint|test|typecheck|validate|verify)(?::|$)/i;
-var NON_PRODUCT_PATH = /(?:^|\/)(?:__fixtures__|__tests__|dist|fixtures?|generated|node_modules|test|tests|vendor)(?:\/|$)/i;
-var TOOL_CONFIG_SOURCE = /(?:^|\/)(?:eslint|jest|rollup|tsup|vite|vitest|webpack)\.config\.[^.]+$/i;
+var QUALITY_SCRIPT_NAME = /(?:^|[:_-])(?:build|check|lint|test|typecheck|validate|verify)(?:$|[:_-])/i;
+var RELEASE_CRITICAL_SCRIPT_NAME = /(?:^|[:_-])(?:build|deploy|pack|prepack|release)(?:$|[:_-])/i;
+var NON_PRODUCT_PATH = /(?:^|\/)(?:__fixtures__|__tests__|build|coverage|dist|examples?|fixtures?|generated|node_modules|samples?|test|test-data|testdata|tests|vendor)(?:\/|$)/i;
+var NON_AUTHORITATIVE_CONTRACT_PATH = /(?:^|\/)(?:__fixtures__|__tests__|evals?|evaluation-fixtures?|examples?|fixtures?|samples?|test|test-data|testdata|tests)(?:\/|$)/i;
+var DECLARATION_SOURCE_SUFFIX = /\.d\.(?:cts|mts|ts)$/i;
 var IDENTITY_REFERENCE_FIELDS = ["agent_identity_ref", "execution_identity_ref", "identity_lease_id"];
 var EXECUTION_IDENTITY_FIELDS = [
   "control_surface",
@@ -14149,85 +14151,191 @@ ${path}`)) continue;
   }
   return results;
 }
-function executableSurfaceGaps(root, paths) {
-  const packagePaths = paths.filter((path) => basename5(path) === "package.json" && !NON_PRODUCT_PATH.test(path));
-  const packageDirectories = packagePaths.map((path) => dirname5(path) === "." ? "." : dirname5(path).split(sep6).join("/")).sort((left, right) => right.length - left.length || left.localeCompare(right));
-  const parsed = /* @__PURE__ */ new Map();
-  for (const packagePath of packagePaths) {
-    try {
-      const value = JSON.parse(readFileSync3(resolve7(root, packagePath), "utf8"));
-      if (value && typeof value === "object" && !Array.isArray(value)) parsed.set(packagePath, value);
-    } catch {
-    }
+function insidePortablePath(root, cwd, token) {
+  if (!token || token === "." || token === ".." || token.includes("://") || token.includes("\0")) return void 0;
+  const absolute = resolve7(root, cwd === "." ? "" : cwd, token);
+  const relation = relative6(root, absolute);
+  if (relation === ".." || relation.startsWith(`..${sep6}`) || isAbsolute5(relation)) return void 0;
+  return relation.split(sep6).join("/") || ".";
+}
+function globPattern(pattern) {
+  let result = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index] ?? "";
+    if (character === "*" && pattern[index + 1] === "*") {
+      index += 1;
+      if (pattern[index + 1] === "/") {
+        index += 1;
+        result += "(?:.*/)?";
+      } else result += ".*";
+    } else if (character === "*") result += "[^/]*";
+    else if (character === "?") result += "[^/]";
+    else result += regexLiteral(character);
   }
-  const nearestPackage = (sourcePath) => packageDirectories.find((directory) => directory === "." || sourcePath.startsWith(`${directory}/`));
-  const qualityScripts = [];
-  for (const [packagePath, manifest2] of parsed) {
-    const value = manifest2.scripts;
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const directory = dirname5(packagePath) === "." ? "." : dirname5(packagePath).split(sep6).join("/");
-    for (const [name, command] of Object.entries(value)) {
-      if (typeof command !== "string" || !QUALITY_SCRIPT_NAME.test(name)) continue;
-      const normalized = command.trim().replace(/\s+/gu, " ").toLocaleLowerCase("und");
-      if (!normalized || /^(?:true|:|exit 0|echo(?:\s+.*)?)$/u.test(normalized)) continue;
-      qualityScripts.push({ command, directory, name });
-    }
+  return new RegExp(`${result}$`, "u");
+}
+function tokenPaths(root, cwd, rawToken, paths) {
+  const token = rawToken.trim().replace(/^["']|["',]$/gu, "");
+  if (!token || /^[A-Za-z_][A-Za-z0-9_]*=/u.test(token) || token.startsWith("-")) return [];
+  const portable = insidePortablePath(root, cwd, token);
+  if (!portable) return [];
+  if (/[*!?{\[]/u.test(portable)) {
+    const matcher = globPattern(portable);
+    return paths.filter((path) => matcher.test(path));
   }
-  const reachable = /* @__PURE__ */ new Set();
-  for (const script of qualityScripts) {
-    const origin = script.directory === "." ? "" : `${script.directory}/`;
-    for (const path of paths) {
-      const local = origin && path.startsWith(origin) ? path.slice(origin.length) : path;
-      if (script.command.includes(path) || origin && script.command.includes(local)) reachable.add(path);
-    }
-    for (const match of script.command.matchAll(/(?:^|\s)(?:\.\/)?((?:tests?|src|packages?)\/[^\s'";&|]*)/gu)) {
-      const token = String(match[1] ?? "");
-      const wildcard = token.search(/[*!?{\[]/u);
-      const prefix = (wildcard >= 0 ? token.slice(0, wildcard) : token).replace(/\/+$/u, "");
-      const rooted = `${origin}${prefix}`.replace(/^\.\//u, "");
-      for (const path of paths) if (path === rooted || path.startsWith(`${rooted}/`)) reachable.add(path);
-    }
+  if (paths.includes(portable)) return [portable];
+  return paths.filter((path) => path.startsWith(`${portable.replace(/\/+$/u, "")}/`));
+}
+function staticGateRoute(root, command, directory, paths, packages, visited = /* @__PURE__ */ new Set()) {
+  const inputs = /* @__PURE__ */ new Set();
+  const unknown = /* @__PURE__ */ new Set();
+  if (/[\n\r;|<>$`\\"'(){}\[\]*?!#]/u.test(command) || command.replaceAll("&&", "").includes("&")) {
+    return { inputs, unknown: /* @__PURE__ */ new Set(["unsupported shell syntax"]) };
   }
-  const sourcePathSet = new Set(paths);
-  const queue = [...reachable];
+  let cwd = directory;
+  for (const part of command.split("&&")) {
+    const tokens = part.trim().split(/\s+/u);
+    if (!part.trim()) {
+      unknown.add("empty command segment");
+      continue;
+    }
+    if (tokens[0] === "cd" && tokens.length === 2) {
+      const next = insidePortablePath(root, cwd, tokens[1]);
+      if (!next || !existsSync3(resolve7(root, next)) || !lstatSync4(resolve7(root, next)).isDirectory()) {
+        unknown.add("unresolved working directory");
+      } else cwd = next;
+      continue;
+    }
+    if (["npm", "pnpm", "yarn", "bun"].includes(tokens[0] ?? "") && tokens[1] === "run" && tokens.length === 3) {
+      const owner = [...packages].sort((a, b) => b.directory.length - a.directory.length).find((item) => item.directory === "." || cwd === item.directory || cwd.startsWith(item.directory + "/"));
+      const key = owner && owner.packagePath + "\0" + tokens[2];
+      const nested = owner?.scripts.get(tokens[2]);
+      const lifecycleHook = owner && (owner.scripts.has(`pre${tokens[2]}`) || owner.scripts.has(`post${tokens[2]}`));
+      if (!key || !nested || visited.has(key)) {
+        unknown.add("unresolved or recursive package script");
+      } else if (lifecycleHook) {
+        unknown.add("package script lifecycle hooks require native evidence");
+      } else {
+        const route = staticGateRoute(root, nested, owner.directory, paths, packages, new Set(visited).add(key));
+        route.inputs.forEach((path) => inputs.add(path));
+        route.unknown.forEach((reason) => unknown.add(reason));
+      }
+      continue;
+    }
+    if (tokens[0] === "node" && tokens[1] === "--check" && tokens.length === 3) {
+      const path = insidePortablePath(root, cwd, tokens[2]);
+      if (!tokens[2].startsWith("-") && path && paths.includes(path) && /\.(?:cjs|mjs|js)$/u.test(path) && !lstatSync4(resolve7(root, path)).isSymbolicLink()) inputs.add(path);
+      else unknown.add("unresolved node syntax-check input");
+      continue;
+    }
+    if (tokens.length === 1 && (tokens[0] === "true" || tokens[0] === ":")) continue;
+    unknown.add("unsupported command: " + (tokens[0] ?? "<empty>"));
+  }
+  if (unknown.size > 0) inputs.clear();
+  return { inputs, unknown };
+}
+function runtimeSourceClosure(root, seeds, paths) {
+  const found = new Set(seeds);
+  const queue = [...found];
   while (queue.length > 0) {
-    const importer = queue.shift();
-    if (!SOURCE_EXTENSIONS.has(extname4(importer).toLocaleLowerCase("und"))) continue;
+    const path = queue.shift();
     let content = "";
     try {
-      content = readFileSync3(resolve7(root, importer), "utf8");
+      content = readFileSync3(resolve7(root, path), "utf8");
     } catch {
       continue;
     }
     for (const match of content.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)["']([^"']+)["']/gu)) {
-      const specifier = String(match[1] ?? "");
+      const specifier = match[1] ?? "";
       if (!specifier.startsWith(".")) continue;
-      const base = relative6(root, resolve7(root, dirname5(importer), specifier)).split(sep6).join("/");
-      const resolvedCandidates = [
+      const base = insidePortablePath(root, dirname5(path), specifier);
+      if (!base) continue;
+      const candidates = [
         base,
-        ...[...SOURCE_EXTENSIONS].map((extension) => `${base}${extension}`),
-        ...[...SOURCE_EXTENSIONS].map((extension) => `${base}/index${extension}`)
+        ...[...SOURCE_EXTENSIONS].map((extension) => base + extension),
+        ...[...SOURCE_EXTENSIONS].map((extension) => base + "/index" + extension),
+        .../\.[cm]?js$/u.test(base) ? [base.replace(/js$/u, "ts")] : []
       ];
-      for (const candidate of resolvedCandidates) {
-        if (!sourcePathSet.has(candidate) || reachable.has(candidate)) continue;
-        reachable.add(candidate);
+      for (const candidate of candidates) {
+        if (!paths.includes(candidate) || found.has(candidate)) continue;
+        found.add(candidate);
         queue.push(candidate);
       }
     }
   }
+  return found;
+}
+function nestedStrings(value) {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(nestedStrings);
+  const record4 = object3(value);
+  return record4 ? Object.values(record4).flatMap(nestedStrings) : [];
+}
+function executableSurfaceGaps(root, paths) {
+  const packages = [];
+  for (const packagePath of paths.filter((path) => basename5(path) === "package.json" && !NON_PRODUCT_PATH.test(path))) {
+    try {
+      const manifest2 = object3(JSON.parse(readFileSync3(resolve7(root, packagePath), "utf8")));
+      if (!manifest2) continue;
+      const rawScripts = object3(manifest2.scripts) ?? {};
+      packages.push({
+        directory: dirname5(packagePath) === "." ? "." : dirname5(packagePath).split(sep6).join("/"),
+        manifest: manifest2,
+        packagePath,
+        scripts: new Map(Object.entries(rawScripts).filter((entry) => typeof entry[1] === "string"))
+      });
+    } catch {
+    }
+  }
+  const routes = /* @__PURE__ */ new Set();
+  const routeUnknown = /* @__PURE__ */ new Set();
+  for (const item of packages) {
+    for (const [name, command] of item.scripts) {
+      if (!QUALITY_SCRIPT_NAME.test(name)) continue;
+      const lifecycleHook = item.scripts.has(`pre${name}`) || item.scripts.has(`post${name}`);
+      const route = lifecycleHook ? { inputs: /* @__PURE__ */ new Set(), unknown: /* @__PURE__ */ new Set(["package script lifecycle hooks require native evidence"]) } : staticGateRoute(root, command, item.directory, paths, packages);
+      route.inputs.forEach((path) => routes.add(path));
+      route.unknown.forEach((reason) => routeUnknown.add(item.packagePath + ":" + name + ": " + reason));
+    }
+  }
   const gaps = [];
-  for (const packagePath of packagePaths) {
-    const manifest2 = parsed.get(packagePath);
-    if (!manifest2) continue;
-    const directory = dirname5(packagePath) === "." ? "." : dirname5(packagePath).split(sep6).join("/");
-    const sources = paths.filter((sourcePath) => SOURCE_EXTENSIONS.has(extname4(sourcePath).toLocaleLowerCase("und")) && !NON_PRODUCT_PATH.test(sourcePath) && !TOOL_CONFIG_SOURCE.test(sourcePath) && nearestPackage(sourcePath) === directory);
-    const declaredEntrypoint = [manifest2.bin, manifest2.exports, manifest2.main, manifest2.module].some((value) => value !== void 0 && value !== null);
-    if (!declaredEntrypoint && sources.length === 0) continue;
-    const uncovered = sources.filter((source) => !reachable.has(source));
-    if (uncovered.length === 0) continue;
+  for (const item of packages) {
+    const seeds = /* @__PURE__ */ new Set();
+    const reasons = /* @__PURE__ */ new Set();
+    const entries2 = [item.manifest.bin, item.manifest.exports, item.manifest.main, item.manifest.module].flatMap(nestedStrings);
+    for (const entry of entries2) {
+      if (DECLARATION_SOURCE_SUFFIX.test(entry)) continue;
+      const matches = tokenPaths(root, item.directory, entry, paths);
+      if (matches.length === 0) reasons.add("unresolved declared runtime target: " + entry);
+      matches.forEach((path) => seeds.add(path));
+    }
+    if (entries2.length === 0) {
+      const implicit = insidePortablePath(root, item.directory, "index.js");
+      if (implicit && paths.includes(implicit)) seeds.add(implicit);
+    }
+    for (const [name, command] of item.scripts) {
+      if (!RELEASE_CRITICAL_SCRIPT_NAME.test(name)) continue;
+      reasons.add("release input closure requires native evidence: " + name);
+      const runner = /^(?:node|bun)\s+([A-Za-z0-9_./-]+)(?:\s|$)/u.exec(command.trim());
+      if (runner?.[1]) tokenPaths(root, item.directory, runner[1], paths).forEach((path) => seeds.add(path));
+    }
+    const required = runtimeSourceClosure(root, seeds, paths);
+    for (const path of required) {
+      if (!routes.has(path)) reasons.add("validation route unestablished: " + path);
+      let content = "";
+      try {
+        content = readFileSync3(resolve7(root, path), "utf8");
+      } catch {
+      }
+      if (/\b(?:import|require|from|eval|Function)\b/u.test(content)) {
+        reasons.add("runtime dependency closure requires native evidence: " + path);
+      }
+    }
+    if (reasons.size === 0) continue;
+    routeUnknown.forEach((reason) => reasons.add(reason));
     gaps.push({
-      evidence: `${directory}: ${uncovered.length}/${sources.length} production executable source files have no proven reachable quality gate`,
-      refs: [packagePath, ...uncovered].sort()
+      evidence: item.directory + ": coverage-unestablished; " + [...reasons].sort().join("; "),
+      refs: [item.packagePath, ...required].sort()
     });
   }
   return gaps;
@@ -14258,6 +14366,7 @@ function semanticCandidateSetSha256(candidates) {
     evidence: candidate.evidence.map(normalizeClaim).sort(),
     id: candidate.id,
     kind: candidate.kind,
+    ...candidate.mechanical_proof ? { mechanical_proof: candidate.mechanical_proof } : {},
     path: candidate.path,
     refs: [...candidate.refs].sort()
   }))));
@@ -14382,6 +14491,20 @@ function nestedObjects(value) {
   visit(value);
   return result;
 }
+function structuredProductContract(record4) {
+  if (!record4) return false;
+  const type = [record4.artifact_type, record4.contract_type, record4.record_type].find((value) => typeof value === "string");
+  return typeof type === "string" && /^(?:acceptance_contract|epic|plan|product_contract|requirement|slice|story)$/iu.test(type.trim());
+}
+function operativeProductContract(path, record4) {
+  if (NON_AUTHORITATIVE_CONTRACT_PATH.test(path)) return false;
+  const status = typeof record4?.status === "string" ? record4.status.trim() : "";
+  if (/^(?:archived|historical|rejected|retired|superseded)$/iu.test(status)) return false;
+  return structuredProductContract(record4) || currentPlanningLifecycle(path);
+}
+function structuredMirrorContract(record4) {
+  return !!record4 && nestedEntries(record4).some(({ key, value }) => /(?:^|\.)mirror_contract_ref$/iu.test(key) && nonemptyIdentityValue(value));
+}
 function terminalStructuredRecord(record4) {
   return nestedEntries(record4).some(({ key, value }) => /(?:^|\.)(?:result|status|verdict)$/iu.test(key) && typeof value === "string" && /^(?:accepted|complete|completed|done|pass|passed)$/iu.test(value.trim()));
 }
@@ -14440,33 +14563,7 @@ function discoverSemanticProbeCandidates(repository, boundRepositoryPaths) {
     group.evidence.push(text3.slice(0, 240));
     groups.set(key, group);
   };
-  const planningRoots = discoverPlanningRoots(root);
-  const planningPaths = repositoryPaths.filter((path) => TEXT_EXTENSIONS2.has(extname4(path).toLocaleLowerCase("und")) && planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`)));
-  for (const path of planningPaths) {
-    const absolute = resolve7(root, path);
-    if (!repositoryPathSet.has(path)) continue;
-    const stat3 = lstatSync4(absolute);
-    if (!stat3.isFile() || stat3.isSymbolicLink()) continue;
-    let content;
-    try {
-      content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync3(absolute));
-    } catch {
-      continue;
-    }
-    if (content.includes("\0")) continue;
-    const missing = missingExecutionIdentityFields(root, path, content);
-    if (missing && missing.length > 0) missingExecutionIdentity.push({ fields: missing, path });
-    const structured = planningRecord(path, content);
-    const definition = object3(structured?.authority_definition);
-    if (definition && nonemptyIdentityValue(definition.namespace) && nonemptyIdentityValue(definition.id)) {
-      const shortId = String(definition.id).trim();
-      const qualified = `${String(definition.namespace).trim()}::${shortId}`;
-      const definitions = authorityDefinitions.get(shortId) ?? /* @__PURE__ */ new Map();
-      const refs = definitions.get(qualified) ?? [];
-      refs.push(`${path}#authority_definition`);
-      definitions.set(qualified, refs);
-      authorityDefinitions.set(shortId, definitions);
-    }
+  const addContractClaims = (path, content, structured) => {
     for (const item of visibleLines(content)) {
       if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
         add("construction_boundary", path, item.line, item.text);
@@ -14487,6 +14584,41 @@ function discoverSemanticProbeCandidates(repository, boundRepositoryPaths) {
         group.evidence.push(item.text.slice(0, 240));
         groups.set(key, group);
       }
+      if (GATE_BITE_CLAIM.test(item.text)) add("gate_semantic_bite", path, item.line, item.text);
+      if (REPRESENTATION_EQUIVALENCE_CLAIM.test(item.text) && !structuredMirrorContract(structured)) {
+        add("representation_equivalence", path, item.line, item.text);
+      }
+    }
+  };
+  const planningRoots = discoverPlanningRoots(root);
+  const planningPaths = repositoryPaths.filter((path) => TEXT_EXTENSIONS2.has(extname4(path).toLocaleLowerCase("und")) && planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`)));
+  for (const path of planningPaths) {
+    const absolute = resolve7(root, path);
+    if (!repositoryPathSet.has(path)) continue;
+    const stat3 = lstatSync4(absolute);
+    if (!stat3.isFile() || stat3.isSymbolicLink()) continue;
+    let content;
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync3(absolute));
+    } catch {
+      continue;
+    }
+    if (content.includes("\0")) continue;
+    const missing = missingExecutionIdentityFields(root, path, content);
+    if (missing && missing.length > 0) missingExecutionIdentity.push({ fields: missing, path });
+    const structured = planningRecord(path, content);
+    if (operativeProductContract(path, structured)) addContractClaims(path, content, structured);
+    const definition = object3(structured?.authority_definition);
+    if (definition && nonemptyIdentityValue(definition.namespace) && nonemptyIdentityValue(definition.id)) {
+      const shortId = String(definition.id).trim();
+      const qualified = `${String(definition.namespace).trim()}::${shortId}`;
+      const definitions = authorityDefinitions.get(shortId) ?? /* @__PURE__ */ new Map();
+      const refs = definitions.get(qualified) ?? [];
+      refs.push(`${path}#authority_definition`);
+      definitions.set(qualified, refs);
+      authorityDefinitions.set(shortId, definitions);
+    }
+    for (const item of visibleLines(content)) {
       if (!historicalPlanningLifecycle(path)) {
         for (const { identifier, status } of authorityStatuses(item.text)) {
           const record4 = authorityClaims.get(identifier) ?? { proposed: [], ratified: [] };
@@ -14518,18 +14650,10 @@ function discoverSemanticProbeCandidates(repository, boundRepositoryPaths) {
       continue;
     }
     if (content.includes("\0")) continue;
-    const lines2 = visibleLines(content);
-    for (const item of lines2) {
-      if (GATE_BITE_CLAIM.test(item.text)) add("gate_semantic_bite", path, item.line, item.text);
-      if (planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`))) {
-        if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
-          add("construction_boundary", path, item.line, item.text);
-        }
-      }
-    }
-    if (SOURCE_EXTENSIONS.has(extension) && REPRESENTATION_EQUIVALENCE_CLAIM.test(content) && !/\bmirror_contract_ref\b/u.test(content)) {
-      const line = content.split(/\r?\n/).findIndex((item) => REPRESENTATION_EQUIVALENCE_CLAIM.test(item));
-      add("representation_equivalence", path, Math.max(1, line + 1), "declared handwritten mirror/twin has no bound canonical equivalence contract");
+    const structured = planningRecord(path, content);
+    const inPlanning = planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`));
+    if (!inPlanning && structuredProductContract(structured) && operativeProductContract(path, structured)) {
+      addContractClaims(path, content, structured);
     }
     if ((extension === ".md" || extension === ".mdx") && FORBIDDEN_INSTRUCTION.test(content) && DANGEROUS_RECIPE_FENCE.test(content)) {
       const structured2 = planningRecord(path, content);
@@ -14543,7 +14667,6 @@ function discoverSemanticProbeCandidates(repository, boundRepositoryPaths) {
       const hazards = environmentSemanticHazards(content);
       if (hazards.length > 0) add("environment_semantics", path, 1, hazards.join("; "));
     }
-    const structured = planningRecord(path, content);
     if (!structured) continue;
     const identifier = structuredRecordId(structured);
     if (identifier) {
@@ -14677,6 +14800,7 @@ ${content}`);
     evidence: [...new Set(group.evidence)].sort(),
     id: candidateId(group.kind, group.path, group.claim),
     kind: group.kind,
+    ...group.mechanicalProof ? { mechanical_proof: group.mechanicalProof } : {},
     path: group.path,
     refs: [...new Set(group.refs)].sort()
   })).sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
@@ -17158,17 +17282,17 @@ function assertActionHygieneDelta(delta, before, after, label = "action hygiene 
 }
 
 // src/closeout/native-gates.ts
-import { createHash as createHash11 } from "crypto";
+import { createHash as createHash12 } from "crypto";
 import { spawnSync as spawnSync4 } from "child_process";
 import { createReadStream } from "fs";
 import {
   closeSync as closeSync2,
   constants as constants3,
-  lstatSync as lstatSync6,
+  lstatSync as lstatSync7,
   openSync as openSync2,
-  readFileSync as readFileSync5,
+  readFileSync as readFileSync6,
   readSync as readSync2,
-  realpathSync as realpathSync4
+  realpathSync as realpathSync5
 } from "fs";
 import {
   cp,
@@ -17180,10 +17304,476 @@ import {
   rm
 } from "fs/promises";
 import { tmpdir } from "os";
-import { basename as basename6, dirname as dirname6, isAbsolute as isAbsolute8, join as join4, relative as relative9, resolve as resolve10, sep as sep9 } from "path";
+import { basename as basename6, dirname as dirname7, isAbsolute as isAbsolute9, join as join5, relative as relative9, resolve as resolve11, sep as sep9 } from "path";
+
+// src/closeout/execution-lease.ts
+import { createHash as createHash11, randomUUID } from "crypto";
+import { execFileSync as execFileSync4 } from "child_process";
+import { createRequire } from "module";
+import {
+  chmodSync,
+  existsSync as existsSync5,
+  lstatSync as lstatSync6,
+  mkdirSync,
+  readFileSync as readFileSync5,
+  readdirSync as readdirSync5,
+  realpathSync as realpathSync4,
+  renameSync,
+  rmSync,
+  writeFileSync as writeFileSync2
+} from "fs";
+import { dirname as dirname6, isAbsolute as isAbsolute8, join as join4, resolve as resolve10 } from "path";
+var { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+var REPOSITORY_VERIFICATION_RESOURCE = "repository-wide-verification";
+var EXECUTION_LEASE_RECORD_TYPE = "mister-clean.execution-lease-receipt";
+var EXECUTION_LEASE_SCHEMA_VERSION = "1.0";
+var EXECUTION_CONTENTION_RECORD_TYPE = "mister-clean.execution-resource-contention";
+var EXECUTION_CONTENTION_SCHEMA_VERSION = "1.0";
+var ExecutionResourceBusyError = class extends Error {
+  constructor(resource, coordination_key_sha256, observedAt) {
+    super(
+      `execution resource ${JSON.stringify(resource)} is already owned (coordination_key_sha256=${coordination_key_sha256}); do not start a duplicate, wait for the current owner to reach a terminal state`
+    );
+    this.resource = resource;
+    this.coordination_key_sha256 = coordination_key_sha256;
+    this.name = "ExecutionResourceBusyError";
+    this.contention_receipt = Object.freeze({
+      record_type: EXECUTION_CONTENTION_RECORD_TYPE,
+      schema_version: EXECUTION_CONTENTION_SCHEMA_VERSION,
+      resource,
+      coordination_key_sha256,
+      state: "not_started",
+      classification: "resource_contention",
+      model_attribution: "excluded",
+      observed_at: observedAt
+    });
+  }
+  code = "MISTER_CLEAN_EXECUTION_RESOURCE_BUSY";
+  classification = "resource_contention";
+  model_attribution = "excluded";
+  contention_receipt;
+};
+var RECEIPT_KEYS = /* @__PURE__ */ new Set([
+  "record_type",
+  "schema_version",
+  "resource",
+  "coordination_key_sha256",
+  "lease_id",
+  "mechanism",
+  "acquired_at",
+  "released_at",
+  "state"
+]);
+function validateExecutionLeaseReceipt(value, label, errors) {
+  const before = errors.length;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    errors.push(`${label}: expected object`);
+    return false;
+  }
+  const receipt = value;
+  const keys = Reflect.ownKeys(receipt);
+  for (const key of keys) {
+    if (typeof key !== "string" || !RECEIPT_KEYS.has(key)) errors.push(`${label}: unexpected key ${String(key)}`);
+  }
+  for (const key of RECEIPT_KEYS) {
+    if (!Object.hasOwn(receipt, key)) errors.push(`${label}.${key}: required`);
+  }
+  if (receipt.record_type !== EXECUTION_LEASE_RECORD_TYPE) errors.push(`${label}.record_type: invalid`);
+  if (receipt.schema_version !== EXECUTION_LEASE_SCHEMA_VERSION) errors.push(`${label}.schema_version: invalid`);
+  if (receipt.resource !== REPOSITORY_VERIFICATION_RESOURCE) errors.push(`${label}.resource: invalid`);
+  if (typeof receipt.coordination_key_sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(receipt.coordination_key_sha256)) {
+    errors.push(`${label}.coordination_key_sha256: required lowercase SHA-256`);
+  }
+  if (typeof receipt.lease_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(receipt.lease_id)) {
+    errors.push(`${label}.lease_id: required UUIDv4`);
+  }
+  if (receipt.mechanism !== "sqlite_exclusive_transaction") errors.push(`${label}.mechanism: invalid`);
+  if (receipt.state !== "released") errors.push(`${label}.state: expected released`);
+  const acquired = typeof receipt.acquired_at === "string" ? Date.parse(receipt.acquired_at) : Number.NaN;
+  const released = typeof receipt.released_at === "string" ? Date.parse(receipt.released_at) : Number.NaN;
+  if (!Number.isFinite(acquired) || new Date(acquired).toISOString() !== receipt.acquired_at) {
+    errors.push(`${label}.acquired_at: required canonical ISO timestamp`);
+  }
+  if (!Number.isFinite(released) || new Date(released).toISOString() !== receipt.released_at) {
+    errors.push(`${label}.released_at: required canonical ISO timestamp`);
+  }
+  if (Number.isFinite(acquired) && Number.isFinite(released) && released < acquired) {
+    errors.push(`${label}: release precedes acquisition`);
+  }
+  return errors.length === before;
+}
+function canonicalTimestamp(value, label) {
+  const milliseconds = value.getTime();
+  if (!Number.isFinite(milliseconds)) throw new Error(`${label} returned an invalid date`);
+  return value.toISOString();
+}
+function gitCommonDirectory(repository) {
+  const root = realpathSync4(resolve10(repository));
+  const output = execFileSync4(
+    "git",
+    ["--no-optional-locks", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    {
+      encoding: "utf8",
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  ).trim();
+  if (!output || !isAbsolute8(output)) throw new Error("git did not return an absolute common directory");
+  return realpathSync4(output);
+}
+function repositoryVerificationCoordinationKey(repository) {
+  return createHash11("sha256").update(JSON.stringify([
+    "mister-clean.execution-resource.v1",
+    gitCommonDirectory(repository),
+    REPOSITORY_VERIFICATION_RESOURCE
+  ])).digest("hex");
+}
+function ensurePrivateDirectory(path) {
+  try {
+    mkdirSync(path, { mode: 448 });
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    if (code !== "EEXIST") throw error;
+  }
+  const stat3 = lstatSync6(path);
+  if (!stat3.isDirectory() || stat3.isSymbolicLink() || realpathSync4(path) !== path) {
+    throw new Error("execution lease root must be a real directory");
+  }
+  chmodSync(path, 448);
+  return path;
+}
+function executionLeasePaths(repository, key) {
+  const common = gitCommonDirectory(repository);
+  const productRoot = ensurePrivateDirectory(join4(common, "mister-clean"));
+  const root = ensurePrivateDirectory(join4(productRoot, "execution-leases-v1"));
+  const database = join4(root, `${key}.sqlite`);
+  try {
+    const databaseStat = lstatSync6(database);
+    if (!databaseStat.isFile() || databaseStat.isSymbolicLink()) {
+      throw new Error("execution lease database must be a regular non-symlink file");
+    }
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    if (code !== "ENOENT") throw error;
+  }
+  return {
+    database,
+    state: join4(root, `${key}.active.json`),
+    supervisorLock: join4(root, `${key}.supervisor.lock.json`)
+  };
+}
+function sqliteBusy(error) {
+  if (!(error instanceof Error)) return false;
+  return /\bdatabase is (?:busy|locked)\b/iu.test(error.message);
+}
+function processAlive(pid, group) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(group && process.platform !== "win32" ? -pid : pid, 0);
+    return true;
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    return code === "EPERM";
+  }
+}
+function processIdentity(pid) {
+  if (!processAlive(pid, false)) return void 0;
+  try {
+    if (process.platform === "linux") {
+      const stat3 = readFileSync5(`/proc/${String(pid)}/stat`, "utf8");
+      const close = stat3.lastIndexOf(")");
+      if (close < 0) return void 0;
+      const fields = stat3.slice(close + 2).trim().split(/\s+/u);
+      const startTicks = fields[19];
+      return startTicks ? `linux-proc-start:${startTicks}` : void 0;
+    }
+    if (process.platform === "win32") {
+      const ticks = execFileSync4(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `(Get-Process -Id ${String(pid)} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+      ).trim();
+      return ticks ? `windows-start-ticks:${ticks}` : void 0;
+    }
+    const started = execFileSync4(
+      "ps",
+      ["-o", "lstart=", "-o", "comm=", "-p", String(pid)],
+      {
+        encoding: "utf8",
+        env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+        stdio: ["ignore", "pipe", "ignore"]
+      }
+    ).trim();
+    return started ? `ps-lstart:${started}` : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function processIdentityStatus(identity4) {
+  if (!processAlive(identity4.pid, false)) return "dead";
+  if (identity4.process_identity.startsWith("unverifiable:")) return "unverifiable";
+  const observed = processIdentity(identity4.pid);
+  if (observed === void 0) return "unverifiable";
+  return observed === identity4.process_identity ? "same" : "reused";
+}
+function processGroupIdentityStatus(identity4) {
+  if (!processAlive(identity4.pid, true)) return "dead";
+  if (identity4.process_identity.startsWith("unverifiable:")) return "unverifiable";
+  if (!processAlive(identity4.pid, false)) return "same";
+  const observed = processIdentity(identity4.pid);
+  if (observed === void 0) return "unverifiable";
+  return observed === identity4.process_identity ? "same" : "unverifiable";
+}
+function recoveryBlocked(label, identity4) {
+  const error = new Error(
+    `execution lease recovery is blocked: ${label} PID ${String(identity4.pid)} is alive but its process birth identity cannot be verified; inspect that process and terminate it or establish the stale record before retrying`
+  );
+  error.name = "ExecutionLeaseRecoveryBlockedError";
+  return error;
+}
+function parseProcessIdentity(value, label) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} is structurally invalid`);
+  }
+  const record4 = value;
+  if (!Number.isSafeInteger(record4.pid) || Number(record4.pid) <= 0 || typeof record4.process_identity !== "string" || record4.process_identity.length === 0) {
+    throw new Error(`${label} is structurally invalid`);
+  }
+  return record4;
+}
+function parseLeaseState(path) {
+  const value = JSON.parse(readFileSync5(path, "utf8"));
+  if (value.record_type !== "mister-clean.execution-lease-state" || value.schema_version !== "1.1" || value.resource !== REPOSITORY_VERIFICATION_RESOURCE || typeof value.coordination_key_sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(value.coordination_key_sha256) || typeof value.lease_id !== "string" || typeof value.acquired_at !== "string" || !Array.isArray(value.process_groups) || value.process_groups.length > 1 || !Array.isArray(value.custody_processes) || value.custody_census !== "clear" && value.custody_census !== "unverifiable") {
+    throw new Error("execution lease state is structurally invalid");
+  }
+  const owner = parseProcessIdentity(value.owner, "execution lease owner");
+  const processGroups = value.process_groups.map((entry) => parseProcessIdentity(entry, "execution lease process group"));
+  const custodyProcesses = value.custody_processes.map((entry) => parseProcessIdentity(entry, "execution lease custody process"));
+  return { ...value, owner, process_groups: processGroups, custody_processes: custodyProcesses };
+}
+function parseSupervisorLock(path) {
+  const value = JSON.parse(readFileSync5(path, "utf8"));
+  if (value.record_type !== "mister-clean.execution-supervisor-lock" || value.schema_version !== "1.0" || typeof value.coordination_key_sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(value.coordination_key_sha256) || typeof value.lease_id !== "string" || typeof value.custody_token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value.custody_token)) {
+    throw new Error("execution supervisor lock is structurally invalid");
+  }
+  return { ...value, supervisor: parseProcessIdentity(value.supervisor, "execution supervisor lock identity") };
+}
+function writeLeaseState(path, state) {
+  const temporary = join4(dirname6(path), `.${state.lease_id}.${String(process.pid)}.tmp`);
+  writeFileSync2(temporary, `${JSON.stringify(state)}
+`, { encoding: "utf8", flag: "wx", mode: 384 });
+  try {
+    renameSync(temporary, path);
+    chmodSync(path, 384);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
+}
+function releaseDatabase(database) {
+  try {
+    database.exec("ROLLBACK");
+  } finally {
+    database.close();
+  }
+}
+function cleanupStaleStateTemps(root) {
+  for (const name of readdirSync5(root)) {
+    if (/^\.(?:[0-9a-f-]{36}\.[0-9]+|supervisor-[0-9]+-[0-9a-f-]{36})\.tmp$/u.test(name)) {
+      rmSync(join4(root, name), { force: true });
+    }
+  }
+}
+function executionContentionJson(error) {
+  return JSON.stringify(error.contention_receipt);
+}
+function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__ */ new Date()) {
+  const resource = REPOSITORY_VERIFICATION_RESOURCE;
+  const key = repositoryVerificationCoordinationKey(repository);
+  const paths = executionLeasePaths(repository, key);
+  const leaseId = randomUUID();
+  const ownerProcessIdentity = processIdentity(process.pid);
+  if (ownerProcessIdentity === void 0) {
+    throw new Error("cannot establish the execution lease owner's process birth identity");
+  }
+  const database = new DatabaseSync(paths.database);
+  try {
+    database.exec([
+      "PRAGMA busy_timeout = 0",
+      "PRAGMA journal_mode = DELETE",
+      "CREATE TABLE IF NOT EXISTS lease_sentinel (id INTEGER PRIMARY KEY CHECK (id = 1))",
+      "BEGIN EXCLUSIVE"
+    ].join("; "));
+    chmodSync(paths.database, 384);
+  } catch (error) {
+    database.close();
+    if (sqliteBusy(error)) {
+      throw new ExecutionResourceBusyError(
+        resource,
+        key,
+        canonicalTimestamp(now(), "execution contention clock")
+      );
+    }
+    throw error;
+  }
+  let acquiredAt;
+  try {
+    let previousLeaseId;
+    if (existsSync5(paths.state)) {
+      const previous = parseLeaseState(paths.state);
+      previousLeaseId = previous.lease_id;
+      if (previous.coordination_key_sha256 !== key) {
+        throw new Error("execution lease state coordination key does not match its path");
+      }
+      const ownerStatus = processIdentityStatus(previous.owner);
+      if (ownerStatus === "unverifiable") throw recoveryBlocked("recorded owner", previous.owner);
+      const groupStatuses = previous.process_groups.map((group) => processGroupIdentityStatus(group));
+      const unverifiableGroup = previous.process_groups.find((_, index) => groupStatuses[index] === "unverifiable");
+      if (unverifiableGroup !== void 0) throw recoveryBlocked("recorded process group", unverifiableGroup);
+      const custodyStatuses = previous.custody_processes.map((entry) => processIdentityStatus(entry));
+      const unverifiableCustody = previous.custody_processes.find((_, index) => custodyStatuses[index] === "unverifiable");
+      if (unverifiableCustody !== void 0) throw recoveryBlocked("recorded escaped custody process", unverifiableCustody);
+      if (previous.custody_census === "unverifiable") {
+        throw new Error(
+          "execution lease recovery is blocked: the previous supervisor could not establish escaped-process custody; inspect repository-associated processes and explicitly clear the stale lease record before retrying"
+        );
+      }
+      if (ownerStatus === "same" || groupStatuses.includes("same") || custodyStatuses.includes("same")) {
+        releaseDatabase(database);
+        throw new ExecutionResourceBusyError(
+          resource,
+          key,
+          canonicalTimestamp(now(), "execution contention clock")
+        );
+      }
+    }
+    if (existsSync5(paths.supervisorLock)) {
+      const lock = parseSupervisorLock(paths.supervisorLock);
+      if (lock.coordination_key_sha256 !== key) {
+        throw new Error("execution supervisor lock coordination key does not match its path");
+      }
+      if (previousLeaseId !== void 0 && lock.lease_id !== previousLeaseId) {
+        throw new Error("execution supervisor lock does not belong to the recorded lease");
+      }
+      const lockStatus = processGroupIdentityStatus(lock.supervisor);
+      if (lockStatus === "unverifiable") throw recoveryBlocked("execution supervisor", lock.supervisor);
+      if (lockStatus === "same") {
+        releaseDatabase(database);
+        throw new ExecutionResourceBusyError(
+          resource,
+          key,
+          canonicalTimestamp(now(), "execution contention clock")
+        );
+      }
+      rmSync(paths.supervisorLock);
+    }
+    if (existsSync5(paths.state)) rmSync(paths.state);
+    cleanupStaleStateTemps(dirname6(paths.state));
+    acquiredAt = canonicalTimestamp(now(), "execution lease clock");
+    writeLeaseState(paths.state, {
+      record_type: "mister-clean.execution-lease-state",
+      schema_version: "1.1",
+      resource,
+      coordination_key_sha256: key,
+      lease_id: leaseId,
+      owner: { pid: process.pid, process_identity: ownerProcessIdentity },
+      acquired_at: acquiredAt,
+      process_groups: [],
+      custody_processes: [],
+      custody_census: "clear"
+    });
+  } catch (error) {
+    if (!(error instanceof ExecutionResourceBusyError)) releaseDatabase(database);
+    throw error;
+  }
+  let released = false;
+  return Object.freeze({
+    resource,
+    coordination_key_sha256: key,
+    lease_id: leaseId,
+    acquired_at: acquiredAt,
+    supervisor_binding: Object.freeze({
+      state_path: paths.state,
+      supervisor_lock_path: paths.supervisorLock,
+      lease_id: leaseId,
+      coordination_key_sha256: key,
+      owner_pid: process.pid,
+      owner_process_identity: ownerProcessIdentity
+    }),
+    release: () => {
+      if (released) throw new Error(`execution lease ${leaseId} is already released`);
+      const state = parseLeaseState(paths.state);
+      if (state.lease_id !== leaseId || state.coordination_key_sha256 !== key) {
+        throw new Error("execution lease state changed before release");
+      }
+      if (existsSync5(paths.supervisorLock)) {
+        const lock = parseSupervisorLock(paths.supervisorLock);
+        if (lock.lease_id !== leaseId || lock.coordination_key_sha256 !== key) {
+          throw new Error("execution supervisor lock changed before release");
+        }
+        const lockStatus = processGroupIdentityStatus(lock.supervisor);
+        if (lockStatus === "unverifiable") throw recoveryBlocked("execution supervisor", lock.supervisor);
+        if (lockStatus === "same") {
+          throw new Error("execution lease cannot release while a supervised command owns custody");
+        }
+        rmSync(paths.supervisorLock);
+      }
+      const groupStatuses = state.process_groups.map((group) => processGroupIdentityStatus(group));
+      const unverifiableGroup = state.process_groups.find((_, index) => groupStatuses[index] === "unverifiable");
+      if (unverifiableGroup !== void 0) throw recoveryBlocked("recorded process group", unverifiableGroup);
+      if (groupStatuses.includes("same")) {
+        throw new Error("execution lease cannot release while a supervised process group is still alive");
+      }
+      const custodyStatuses = state.custody_processes.map((entry) => processIdentityStatus(entry));
+      const unverifiableCustody = state.custody_processes.find((_, index) => custodyStatuses[index] === "unverifiable");
+      if (unverifiableCustody !== void 0) throw recoveryBlocked("recorded escaped custody process", unverifiableCustody);
+      if (custodyStatuses.includes("same")) {
+        throw new Error("execution lease cannot release while an escaped custody process is still alive");
+      }
+      if (state.custody_census === "unverifiable") {
+        throw new Error("execution lease cannot release after process-custody census became unverifiable");
+      }
+      rmSync(paths.state);
+      released = true;
+      let rollbackError;
+      try {
+        database.exec("ROLLBACK");
+      } catch (error) {
+        rollbackError = error;
+      } finally {
+        database.close();
+      }
+      if (rollbackError !== void 0) throw rollbackError;
+      const releasedAt = canonicalTimestamp(now(), "execution lease clock");
+      if (Date.parse(releasedAt) < Date.parse(acquiredAt)) {
+        throw new Error("execution lease clock moved backward before release");
+      }
+      return Object.freeze({
+        record_type: EXECUTION_LEASE_RECORD_TYPE,
+        schema_version: EXECUTION_LEASE_SCHEMA_VERSION,
+        resource,
+        coordination_key_sha256: key,
+        lease_id: leaseId,
+        mechanism: "sqlite_exclusive_transaction",
+        acquired_at: acquiredAt,
+        released_at: releasedAt,
+        state: "released"
+      });
+    }
+  });
+}
+
+// src/closeout/native-gates.ts
 var DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 var COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
-var SCHEMA_VERSION2 = "1.2";
+var DISCOVERY_SCHEMA_VERSION = "1.3";
+var COVERAGE_SCHEMA_VERSION = "1.3";
+var SCHEMA_VERSION2 = DISCOVERY_SCHEMA_VERSION;
 var DEFAULT_TIMEOUT_MS = 10 * 60 * 1e3;
 var DEFAULT_OUTPUT_BYTES = 1024 * 1024;
 var DEFAULT_TERMINATION_GRACE_MS = 1e3;
@@ -17312,7 +17902,7 @@ function canonicalJson2(value) {
   throw new Error(`canonical JSON refuses ${typeof value}`);
 }
 function sha2567(value) {
-  return createHash11("sha256").update(value).digest("hex");
+  return createHash12("sha256").update(value).digest("hex");
 }
 function identity2(value) {
   return sha2567(canonicalJson2(value));
@@ -17333,13 +17923,13 @@ function assertPositiveInteger(name, value, maximum = Number.MAX_SAFE_INTEGER) {
 function repositoryRelation(repository, target) {
   const relation = relative9(repository, target);
   if (relation === "") return ".";
-  if (relation === ".." || relation.startsWith(`..${sep9}`) || isAbsolute8(relation)) {
+  if (relation === ".." || relation.startsWith(`..${sep9}`) || isAbsolute9(relation)) {
     throw new Error(`path escapes repository root: ${target}`);
   }
   return relation.split(sep9).join("/");
 }
 function validatePortablePath2(path, source) {
-  if (!path || isAbsolute8(path) || path.includes("\0") || sep9 === "\\" && path.includes("\\")) {
+  if (!path || isAbsolute9(path) || path.includes("\0") || sep9 === "\\" && path.includes("\\")) {
     throw new Error(`${source} contains an unsafe path: ${JSON.stringify(path)}`);
   }
   if (path.split("/").some((segment) => !segment || segment === "." || segment === "..")) {
@@ -17468,13 +18058,13 @@ function captureSubjectState(repository) {
 }
 async function copySubjectWorktree(subject, snapshot) {
   for (const entry of await readdir3(snapshot)) {
-    if (entry !== ".git") await rm(join4(snapshot, entry), { recursive: true, force: true });
+    if (entry !== ".git") await rm(join5(snapshot, entry), { recursive: true, force: true });
   }
-  const sourceRoot = realpathSync4(subject);
+  const sourceRoot = realpathSync5(subject);
   for (const entry of await readdir3(sourceRoot)) {
     if (entry === ".git") continue;
-    const source = join4(sourceRoot, entry);
-    const target = join4(snapshot, entry);
+    const source = join5(sourceRoot, entry);
+    const target = join5(snapshot, entry);
     await cp(source, target, {
       recursive: true,
       preserveTimestamps: true,
@@ -17484,8 +18074,8 @@ async function copySubjectWorktree(subject, snapshot) {
         const stat3 = await lstat3(candidate);
         if (stat3.isSymbolicLink()) {
           const link = await readlink(candidate);
-          if (isAbsolute8(link)) throw new Error(`native gate snapshot refuses absolute symlink ${JSON.stringify(candidate)}`);
-          repositoryRelation(sourceRoot, resolve10(dirname6(candidate), link));
+          if (isAbsolute9(link)) throw new Error(`native gate snapshot refuses absolute symlink ${JSON.stringify(candidate)}`);
+          repositoryRelation(sourceRoot, resolve11(dirname7(candidate), link));
           return true;
         }
         if (!stat3.isDirectory() && !stat3.isFile()) {
@@ -17497,9 +18087,9 @@ async function copySubjectWorktree(subject, snapshot) {
   }
 }
 async function createExecutionSnapshot(subject, expected) {
-  const container = await mkdtemp(join4(tmpdir(), "mister-clean-native-gate-snapshot-"));
-  const repository = join4(container, "repository");
-  const home = join4(container, "home");
+  const container = await mkdtemp(join5(tmpdir(), "mister-clean-native-gate-snapshot-"));
+  const repository = join5(container, "repository");
+  const home = join5(container, "home");
   try {
     await mkdir(repository, { mode: 448 });
     await mkdir(home, { mode: 448 });
@@ -17528,8 +18118,8 @@ async function createExecutionSnapshot(subject, expected) {
     }
     return {
       container,
-      repository: realpathSync4(repository),
-      home: realpathSync4(home),
+      repository: realpathSync5(repository),
+      home: realpathSync5(home),
       repository_object: repositoryObject
     };
   } catch (error) {
@@ -17576,21 +18166,21 @@ function trackedPaths(repository) {
 }
 function trackedFile(repository, path) {
   validatePortablePath2(path, "tracked file");
-  const root = realpathSync4(resolve10(repository));
+  const root = realpathSync5(resolve11(repository));
   const segments = path.split("/");
   let cursor = root;
   for (const segment of segments) {
-    cursor = join4(cursor, segment);
-    const stat4 = lstatSync6(cursor);
+    cursor = join5(cursor, segment);
+    const stat4 = lstatSync7(cursor);
     if (stat4.isSymbolicLink()) throw new Error(`native gate discovery refuses symlink traversal at ${JSON.stringify(path)}`);
   }
-  const stat3 = lstatSync6(cursor);
+  const stat3 = lstatSync7(cursor);
   if (!stat3.isFile()) throw new Error(`native gate source is not a regular file: ${JSON.stringify(path)}`);
-  repositoryRelation(root, realpathSync4(cursor));
+  repositoryRelation(root, realpathSync5(cursor));
   return cursor;
 }
 function digestFileSync(path) {
-  const hash = createHash11("sha256");
+  const hash = createHash12("sha256");
   const descriptor = openSync2(path, constants3.O_RDONLY);
   try {
     const buffer = Buffer.allocUnsafe(1024 * 1024);
@@ -17605,7 +18195,7 @@ function digestFileSync(path) {
   return hash.digest("hex");
 }
 async function digestFile(path) {
-  const hash = createHash11("sha256");
+  const hash = createHash12("sha256");
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest("hex");
 }
@@ -17697,7 +18287,7 @@ function verificationRunnerSafetyFindings(repository, paths) {
   for (const path of paths.filter((candidate) => TEST_SOURCE.test(candidate))) {
     let content = "";
     try {
-      const bytes2 = readFileSync5(trackedFile(repository, path));
+      const bytes2 = readFileSync6(trackedFile(repository, path));
       if (bytes2.length > MAX_MANIFEST_BYTES) continue;
       content = UTF82.decode(bytes2);
     } catch {
@@ -17721,7 +18311,7 @@ function packageManager(value) {
 }
 function parentDirectory(path) {
   if (path === ".") return void 0;
-  const parent = dirname6(path);
+  const parent = dirname7(path);
   return parent === "" ? "." : parent.split(sep9).join("/");
 }
 function commandFor(manager, cwd, script) {
@@ -17801,7 +18391,7 @@ function packageScripts(value) {
 }
 function packageSourceRefs(cwd, sourceRefs, managerRoot) {
   const manifestPath = cwd === "." ? "package.json" : `${cwd}/package.json`;
-  return sourceRefs.filter((ref) => ref.path === manifestPath || managerRoot !== void 0 && ref.kind === "lockfile" && dirname6(ref.path) === (managerRoot === "." ? "." : managerRoot));
+  return sourceRefs.filter((ref) => ref.path === manifestPath || managerRoot !== void 0 && ref.kind === "lockfile" && dirname7(ref.path) === (managerRoot === "." ? "." : managerRoot));
 }
 function discoverNodeGates(repository, paths, refs) {
   const packagePaths = paths.filter((path) => basename6(path) === "package.json");
@@ -17809,7 +18399,7 @@ function discoverNodeGates(repository, paths, refs) {
   for (const path of paths) {
     const manager = LOCKFILE_MANAGERS.get(basename6(path));
     if (!manager) continue;
-    const directory = dirname6(path) === "." ? "." : dirname6(path).split(sep9).join("/");
+    const directory = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
     const set = markerByDirectory.get(directory) ?? /* @__PURE__ */ new Set();
     set.add(manager);
     markerByDirectory.set(directory, set);
@@ -17817,14 +18407,14 @@ function discoverNodeGates(repository, paths, refs) {
   const parsed = /* @__PURE__ */ new Map();
   for (const path of packagePaths) {
     try {
-      const bytes2 = readFileSync5(trackedFile(repository, path));
+      const bytes2 = readFileSync6(trackedFile(repository, path));
       if (bytes2.length > MAX_MANIFEST_BYTES) throw new Error("package manifest exceeds the discovery size limit");
       const value = JSON.parse(UTF82.decode(bytes2));
       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("package manifest must be an object");
       parsed.set(path, value);
       const manager = packageManager(value.packageManager);
       if (manager) {
-        const directory = dirname6(path) === "." ? "." : dirname6(path).split(sep9).join("/");
+        const directory = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
         const set = markerByDirectory.get(directory) ?? /* @__PURE__ */ new Set();
         set.add(manager);
         markerByDirectory.set(directory, set);
@@ -17835,7 +18425,7 @@ function discoverNodeGates(repository, paths, refs) {
   }
   const gates = [];
   for (const path of packagePaths) {
-    const cwd = dirname6(path) === "." ? "." : dirname6(path).split(sep9).join("/");
+    const cwd = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
     const manifest2 = parsed.get(path);
     if (manifest2 instanceof Error || !manifest2) {
       const localRefs2 = packageSourceRefs(cwd, refs, cwd);
@@ -17900,7 +18490,7 @@ function discoverNodeGates(repository, paths, refs) {
 function discoverFixedGates(paths, refs) {
   const gates = [];
   for (const path of paths.filter((entry) => basename6(entry) === "Cargo.toml")) {
-    const cwd = dirname6(path) === "." ? "." : dirname6(path).split(sep9).join("/");
+    const cwd = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
     gates.push(gateDefinition({
       id: fixedGateId("cargo", cwd),
       kind: "repository_tests",
@@ -17917,7 +18507,7 @@ function discoverFixedGates(paths, refs) {
     }));
   }
   for (const path of paths.filter((entry) => basename6(entry) === "go.mod")) {
-    const cwd = dirname6(path) === "." ? "." : dirname6(path).split(sep9).join("/");
+    const cwd = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
     gates.push(gateDefinition({
       id: fixedGateId("go", cwd),
       kind: "repository_tests",
@@ -18125,12 +18715,16 @@ function validateDiscoveryIntegrity(discovery) {
     "source_refs",
     "gates",
     "required_gate_ids",
+    "execution_coordination_key_sha256",
     "catalog_sha256"
   ], "discovery", errors);
   if (!raw) return errors;
   if (raw.record_type !== DISCOVERY_RECORD_TYPE) errors.push("discovery.record_type is invalid");
   if (raw.schema_version !== SCHEMA_VERSION2) errors.push("discovery.schema_version is invalid");
   validateRepositoryObjectSchema(raw.repository_object, "discovery.repository_object", errors);
+  if (typeof raw.execution_coordination_key_sha256 !== "string" || !HEX642.test(raw.execution_coordination_key_sha256)) {
+    errors.push("discovery.execution_coordination_key_sha256 is invalid");
+  }
   const validRefs = [];
   if (!Array.isArray(raw.source_refs)) {
     errors.push("discovery.source_refs must be an array");
@@ -18165,7 +18759,7 @@ function validateDiscoveryIntegrity(discovery) {
   return errors;
 }
 function discoverNativeGates(repository, repositoryObject) {
-  const root = realpathSync4(resolve10(repository));
+  const root = realpathSync5(resolve11(repository));
   const observed = captureRepositoryObject(root);
   if (!stableEqual(observed, repositoryObject)) {
     throw new Error("native gate discovery repository object does not match the supplied object");
@@ -18205,6 +18799,7 @@ function discoverNativeGates(repository, repositoryObject) {
     record_type: DISCOVERY_RECORD_TYPE,
     schema_version: SCHEMA_VERSION2,
     repository_object: repositoryObject,
+    execution_coordination_key_sha256: repositoryVerificationCoordinationKey(root),
     source_refs: refs,
     gates,
     required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id)
@@ -18214,7 +18809,7 @@ function discoverNativeGates(repository, repositoryObject) {
 
 // src/closeout/native-gate-validation.ts
 import { lstat as lstat4, realpath as realpath4 } from "fs/promises";
-import { isAbsolute as isAbsolute9, resolve as resolve11 } from "path";
+import { isAbsolute as isAbsolute10, resolve as resolve12 } from "path";
 function validateSubjectState(value, label, errors) {
   const before = errors.length;
   const raw = validateExactKeys(value, [
@@ -18246,7 +18841,7 @@ async function validateOutputRef(value, label, evidenceRoot) {
   } catch (error) {
     return [`${label}.path: ${errorMessage2(error)}`];
   }
-  const absolute = resolve11(evidenceRoot, raw.path);
+  const absolute = resolve12(evidenceRoot, raw.path);
   try {
     repositoryRelation(evidenceRoot, absolute);
     const stat3 = await lstat4(absolute);
@@ -18280,11 +18875,12 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
     "closing_repository_object",
     "required_gate_ids",
     "executions",
+    "execution_lease",
     "coverage_sha256"
   ], "coverage", errors);
   if (!rawCoverage) return errors;
   if (rawCoverage.record_type !== COVERAGE_RECORD_TYPE) errors.push("coverage.record_type is invalid");
-  if (rawCoverage.schema_version !== SCHEMA_VERSION2) errors.push("coverage.schema_version is invalid");
+  if (rawCoverage.schema_version !== COVERAGE_SCHEMA_VERSION) errors.push("coverage.schema_version is invalid");
   if (typeof rawCoverage.discovery_sha256 !== "string" || !HEX642.test(rawCoverage.discovery_sha256)) {
     errors.push("coverage.discovery_sha256 is invalid");
   } else if (rawCoverage.discovery_sha256 !== discovery.catalog_sha256) {
@@ -18299,6 +18895,29 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
   if (rawCoverage.coverage_sha256 !== identity2(withoutField(rawCoverage, "coverage_sha256"))) {
     errors.push("coverage.coverage_sha256 mismatch");
   }
+  const rawExecutionLease = rawCoverage.execution_lease;
+  const validExecutionLease = validateExecutionLeaseReceipt(
+    rawExecutionLease,
+    "coverage.execution_lease",
+    errors
+  );
+  const lease = validExecutionLease ? rawExecutionLease : void 0;
+  const recordedCoordinationKey = record(rawExecutionLease)?.coordination_key_sha256;
+  if (typeof recordedCoordinationKey === "string" && recordedCoordinationKey !== discovery.execution_coordination_key_sha256) {
+    errors.push("coverage.execution_lease.coordination_key_sha256 does not match discovery");
+  }
+  if (options.repository !== void 0) {
+    try {
+      const expected = repositoryVerificationCoordinationKey(options.repository);
+      if (discovery.execution_coordination_key_sha256 !== expected) {
+        errors.push("discovery.execution_coordination_key_sha256 does not match the requested repository");
+      }
+    } catch (error) {
+      errors.push(`requested repository coordination key cannot be validated: ${errorMessage2(error)}`);
+    }
+  }
+  const leaseAcquired = lease ? validClock(lease.acquired_at) : void 0;
+  const leaseReleased = lease ? validClock(lease.released_at) : void 0;
   const validClosingObject = validateRepositoryObjectSchema(
     rawCoverage.closing_repository_object,
     "coverage.closing_repository_object",
@@ -18315,7 +18934,7 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
   }
   let evidenceRoot;
   try {
-    evidenceRoot = await realpath4(resolve11(evidenceDirectory));
+    evidenceRoot = await realpath4(resolve12(evidenceDirectory));
     const evidenceStat = await lstat4(evidenceRoot);
     if (!evidenceStat.isDirectory() || evidenceStat.isSymbolicLink()) {
       errors.push("evidence directory must be a real directory");
@@ -18462,9 +19081,15 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
     if (started === void 0) errors.push(`${label}.started_at is not canonical ISO time`);
     if (finished === void 0) errors.push(`${label}.finished_at is not canonical ISO time`);
     if (started !== void 0 && finished !== void 0 && started > finished) errors.push(`${label}: clock order is invalid`);
+    if (started !== void 0 && leaseAcquired !== void 0 && started < leaseAcquired) {
+      errors.push(`${label}.started_at precedes the execution lease`);
+    }
+    if (finished !== void 0 && leaseReleased !== void 0 && finished > leaseReleased) {
+      errors.push(`${label}.finished_at exceeds the execution lease`);
+    }
     if (started !== void 0 && started > validationTime + futureSkew) errors.push(`${label}.started_at is in the future`);
     if (finished !== void 0 && finished > validationTime + futureSkew) errors.push(`${label}.finished_at is in the future`);
-    const hasExecutable = typeof execution.resolved_executable === "string" && isAbsolute9(execution.resolved_executable);
+    const hasExecutable = typeof execution.resolved_executable === "string" && isAbsolute10(execution.resolved_executable);
     const hasExecutableDigest = typeof execution.executable_sha256 === "string" && HEX642.test(execution.executable_sha256);
     if (execution.resolved_executable !== null && !hasExecutable) errors.push(`${label}.resolved_executable is invalid`);
     if (execution.executable_sha256 !== null && !hasExecutableDigest) errors.push(`${label}.executable_sha256 is invalid`);
@@ -18481,7 +19106,7 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
 }
 
 // src/closeout/regression-accounting.ts
-import { createHash as createHash12 } from "crypto";
+import { createHash as createHash13 } from "crypto";
 var OBSERVATION_IDENTITY_SCHEME = "mister-clean.observation.v1";
 var ROOT_DEBT_IDENTITY_SCHEME = "mister-clean.root-debt.v1";
 var REGRESSION_ACCOUNTING_SCHEMA_VERSION = "1.5";
@@ -18522,7 +19147,7 @@ var UNRESOLVED_STATES = /* @__PURE__ */ new Set([
   "not_assessed"
 ]);
 function sha2568(value) {
-  return createHash12("sha256").update(value, "utf8").digest("hex");
+  return createHash13("sha256").update(value, "utf8").digest("hex");
 }
 function compareCanonicalText(left, right) {
   const leftIterator = left[Symbol.iterator]();
@@ -19267,11 +19892,11 @@ function schema15LegacyNumericFieldErrors(value, path = "$") {
 }
 
 // src/closeout/bundle-runtime.ts
-import { createHash as createHash13 } from "crypto";
+import { createHash as createHash14 } from "crypto";
 import { execFile } from "child_process";
 import { access, copyFile, lstat as lstat5, mkdir as mkdir2, mkdtemp as mkdtemp2, readFile as readFile2, readdir as readdir4, realpath as realpath5, rm as rm2 } from "fs/promises";
 import { tmpdir as tmpdir2 } from "os";
-import { basename as basename7, dirname as dirname7, isAbsolute as isAbsolute10, join as join5, relative as relative10, resolve as resolve12, sep as sep10 } from "path";
+import { basename as basename7, dirname as dirname8, isAbsolute as isAbsolute11, join as join6, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
 import { promisify } from "util";
 var HEX643 = /^[0-9a-f]{64}$/;
 var EVENT_TIMESTAMP_FIELDS = /* @__PURE__ */ new Set([
@@ -19401,7 +20026,7 @@ function compareCodePoints4(left, right) {
   return leftPoints.length - rightPoints.length;
 }
 function sha2569(bytes2) {
-  return createHash13("sha256").update(bytes2).digest("hex");
+  return createHash14("sha256").update(bytes2).digest("hex");
 }
 function stableEqual2(left, right) {
   if (Object.is(left, right)) return true;
@@ -19459,13 +20084,13 @@ var nodeFilePort = {
     return realpath5(path);
   },
   async walk(root, options = {}) {
-    const rootPath = resolve12(root);
+    const rootPath = resolve13(root);
     const rows = [];
     async function visit(directory) {
       const entries2 = await readdir4(directory, { withFileTypes: true });
       for (const entry of entries2) {
         if (options.mode !== "exact_package" && IGNORED_WALK.has(entry.name)) continue;
-        const absolute = resolve12(directory, entry.name);
+        const absolute = resolve13(directory, entry.name);
         const rel = posix(relative10(rootPath, absolute));
         if (entry.isSymbolicLink()) rows.push({ absolute, relative: rel, kind: "symlink" });
         else if (entry.isDirectory()) {
@@ -19485,12 +20110,12 @@ var nodeGitPort = {
       const environment = { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
       let result;
       if (args.length === 1 && args[0] === "write-tree") {
-        const temporary = await mkdtemp2(join5(tmpdir2(), "mc-readonly-index-"));
+        const temporary = await mkdtemp2(join6(tmpdir2(), "mc-readonly-index-"));
         try {
           const sourceIndex = (await execFileAsync("git", ["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "index"], { encoding: "utf8", env: environment })).stdout.trim();
           const sourceObjects = (await execFileAsync("git", ["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects"], { encoding: "utf8", env: environment })).stdout.trim();
-          const externalIndex = join5(temporary, "index");
-          const externalObjects = join5(temporary, "objects");
+          const externalIndex = join6(temporary, "index");
+          const externalObjects = join6(temporary, "objects");
           await mkdir2(externalObjects, { recursive: true });
           await copyFile(sourceIndex, externalIndex);
           result = await execFileAsync("git", ["--no-optional-locks", "-C", repo, "write-tree"], {
@@ -19527,21 +20152,21 @@ var nodeBundlePorts = {
   processes: nodeProcessPort
 };
 async function contained(files, root, candidate) {
-  if (!text(candidate) || isAbsolute10(candidate)) return void 0;
-  const lexical = resolve12(root, candidate);
-  const rel = relative10(resolve12(root), lexical);
-  if (rel === ".." || rel.startsWith(`..${sep10}`) || isAbsolute10(rel)) return void 0;
+  if (!text(candidate) || isAbsolute11(candidate)) return void 0;
+  const lexical = resolve13(root, candidate);
+  const rel = relative10(resolve13(root), lexical);
+  if (rel === ".." || rel.startsWith(`..${sep10}`) || isAbsolute11(rel)) return void 0;
   try {
     const rootReal = await files.realpath(root);
     let existing = lexical;
     const tail = [];
-    while (!await files.exists(existing) && dirname7(existing) !== existing) {
+    while (!await files.exists(existing) && dirname8(existing) !== existing) {
       tail.unshift(basename7(existing));
-      existing = dirname7(existing);
+      existing = dirname8(existing);
     }
-    const targetReal = resolve12(await files.realpath(existing), ...tail);
+    const targetReal = resolve13(await files.realpath(existing), ...tail);
     const realRel = relative10(rootReal, targetReal);
-    if (realRel === ".." || realRel.startsWith(`..${sep10}`) || isAbsolute10(realRel)) return void 0;
+    if (realRel === ".." || realRel.startsWith(`..${sep10}`) || isAbsolute11(realRel)) return void 0;
     return targetReal;
   } catch {
     return lexical;
@@ -20263,7 +20888,7 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
 }
 
 // src/closeout/bundle-detector-evidence.ts
-import { isAbsolute as isAbsolute11 } from "path";
+import { isAbsolute as isAbsolute12 } from "path";
 function detectorRootProjections(detectorId, value, repoId) {
   const result = object5(value);
   if (!result) return [];
@@ -20517,7 +21142,7 @@ async function validateExternalChangeOrigin(ref, debt, debtPath, earliestActionI
     errors.push(`${path}.observation_ids: must exactly equal the attributed root observations`);
   }
   const changedPaths = array2(transition.changed_paths).filter((entry) => typeof entry === "string");
-  if (!Array.isArray(transition.changed_paths) || changedPaths.length === 0 || changedPaths.length !== array2(transition.changed_paths).length || !stableEqual2(changedPaths, sortedUnique(changedPaths)) || changedPaths.some((entry) => isAbsolute11(entry) || entry.includes("\\") || entry.split("/").some((part) => part === "" || part === "." || part === ".."))) {
+  if (!Array.isArray(transition.changed_paths) || changedPaths.length === 0 || changedPaths.length !== array2(transition.changed_paths).length || !stableEqual2(changedPaths, sortedUnique(changedPaths)) || changedPaths.some((entry) => isAbsolute12(entry) || entry.includes("\\") || entry.split("/").some((part) => part === "" || part === "." || part === ".."))) {
     errors.push(`${path}.changed_paths: required nonempty sorted unique safe repository-relative path array`);
   }
   const writer = requireExactObject(
@@ -22055,14 +22680,14 @@ async function validateRegressionDelta(bundle, report, manifest2, base, files, c
 // src/closeout/bundle-live-validation.ts
 import { mkdtemp as mkdtemp3, rm as rm4 } from "fs/promises";
 import { tmpdir as tmpdir4 } from "os";
-import { dirname as dirname9, isAbsolute as isAbsolute16, join as join8, resolve as resolve18 } from "path";
+import { dirname as dirname10, isAbsolute as isAbsolute17, join as join9, resolve as resolve19 } from "path";
 
 // src/closeout/github-actions.ts
 var import_yaml3 = __toESM(require_dist(), 1);
-import { createHash as createHash14 } from "crypto";
-import { execFileSync as execFileSync4 } from "child_process";
-import { lstatSync as lstatSync7, readFileSync as readFileSync6 } from "fs";
-import { isAbsolute as isAbsolute12, join as join6, relative as relative11, resolve as resolve13 } from "path";
+import { createHash as createHash15 } from "crypto";
+import { execFileSync as execFileSync5 } from "child_process";
+import { lstatSync as lstatSync8, readFileSync as readFileSync7 } from "fs";
+import { isAbsolute as isAbsolute13, join as join7, relative as relative11, resolve as resolve14 } from "path";
 var SENSITIVE_COMMAND = /(?:\bflyctl\s+deploy\b|\bwrangler\s+deploy\b|\bpnpm\s+publish\b|\bnpm\s+publish\b|\bdocker\s+push\b|\bkubectl\b|\bterraform\s+apply\b|\bgh\s+release\b|\bgit\s+push\b)/iu;
 var HEALTH_COMMAND = /(?:\bchecks?\s+list\b|\bhealthz\b|\bhealth(?:check)?\b)/iu;
 var FULL_COMMIT_REF = /^[0-9a-f]{40}$/u;
@@ -22080,7 +22705,7 @@ var PRIVILEGED_ACTION_INPUT_ALLOWLISTS = /* @__PURE__ */ new Map([
   ["actions/checkout", /* @__PURE__ */ new Set(["fetch-depth", "ref"])]
 ]);
 function digest2(value) {
-  return createHash14("sha256").update(value, "utf8").digest("hex");
+  return createHash15("sha256").update(value, "utf8").digest("hex");
 }
 function map(value) {
   return value instanceof Map ? value : void 0;
@@ -22188,13 +22813,13 @@ function referencedLocalSourceText(repository, run) {
   for (const match of run.matchAll(pattern)) {
     const candidate = match[1];
     if (!candidate) continue;
-    const absolute = resolve13(repository, candidate);
+    const absolute = resolve14(repository, candidate);
     const relation = relative11(repository, absolute);
-    if (isAbsolute12(relation) || relation === ".." || relation.startsWith("../")) continue;
+    if (isAbsolute13(relation) || relation === ".." || relation.startsWith("../")) continue;
     try {
-      const metadata = lstatSync7(absolute);
+      const metadata = lstatSync8(absolute);
       if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1048576) continue;
-      sources.push(readFileSync6(absolute, "utf8"));
+      sources.push(readFileSync7(absolute, "utf8"));
     } catch {
     }
   }
@@ -22493,14 +23118,14 @@ function auditTrustedUpstream(workflow) {
   return findings;
 }
 function trackedWorkflowPaths(repository) {
-  return execFileSync4("git", ["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"], {
+  return execFileSync5("git", ["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     stdio: ["ignore", "pipe", "pipe"]
   }).split("\0").filter((path) => /\.ya?ml$/iu.test(path)).sort();
 }
 function auditGitHubActionsRepository(root) {
-  const repository = resolve13(execFileSync4("git", ["--no-optional-locks", "-C", root, "rev-parse", "--show-toplevel"], {
+  const repository = resolve14(execFileSync5("git", ["--no-optional-locks", "-C", root, "rev-parse", "--show-toplevel"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     stdio: ["ignore", "pipe", "pipe"]
@@ -22510,13 +23135,13 @@ function auditGitHubActionsRepository(root) {
   let sensitiveWorkflowCount = 0;
   const audits = [];
   for (const path of paths) {
-    const absolute = join6(repository, path);
-    const metadata = lstatSync7(absolute);
+    const absolute = join7(repository, path);
+    const metadata = lstatSync8(absolute);
     if (!metadata.isFile()) {
       findings.push(finding2(path, "workflow_unparseable", "P1", "Tracked workflow is not a regular file.", [path]));
       continue;
     }
-    const result = auditWorkflow(repository, path, readFileSync6(absolute, "utf8"));
+    const result = auditWorkflow(repository, path, readFileSync7(absolute, "utf8"));
     audits.push(result);
     if (result.sensitive) sensitiveWorkflowCount += 1;
     findings.push(...result.findings);
@@ -22541,14 +23166,14 @@ function auditGitHubActionsRepository(root) {
 }
 
 // src/closeout/inspection.ts
-import { createHash as createHash15 } from "crypto";
-import { lstatSync as lstatSync8, readFileSync as readFileSync7, readdirSync as readdirSync5, readlinkSync as readlinkSync4 } from "fs";
+import { createHash as createHash16 } from "crypto";
+import { lstatSync as lstatSync9, readFileSync as readFileSync8, readdirSync as readdirSync6, readlinkSync as readlinkSync4 } from "fs";
 import {
   readFile as readFile3,
   readdir as readdir5,
   stat as stat2
 } from "fs/promises";
-import { basename as basename8, relative as relative12, resolve as resolve14, sep as sep11 } from "path";
+import { basename as basename8, relative as relative12, resolve as resolve15, sep as sep11 } from "path";
 var STACK_MARKERS = {
   node: ["package.json"],
   "node-bun": ["bun.lock", "bun.lockb"],
@@ -22626,13 +23251,13 @@ async function exists(path) {
   }
 }
 async function walkFiles2(root, excluded2) {
-  const absoluteRoot = resolve14(root);
+  const absoluteRoot = resolve15(root);
   const files = [];
   async function visit(directory) {
     const entries2 = await readdir5(directory, { withFileTypes: true });
     for (const entry of entries2) {
       if (excluded2.has(entry.name)) continue;
-      const absolute = resolve14(directory, entry.name);
+      const absolute = resolve15(directory, entry.name);
       const rel = toPosix2(relative12(absoluteRoot, absolute));
       if (entry.isSymbolicLink()) {
         files.push({ absolute, relative: rel, symlink: true });
@@ -22647,12 +23272,12 @@ async function walkFiles2(root, excluded2) {
   return files.sort((left, right) => compareCodePoints5(left.relative, right.relative));
 }
 function walkFilesSync(root, excluded2) {
-  const absoluteRoot = resolve14(root);
+  const absoluteRoot = resolve15(root);
   const files = [];
   function visit(directory) {
-    for (const entry of readdirSync5(directory, { withFileTypes: true })) {
+    for (const entry of readdirSync6(directory, { withFileTypes: true })) {
       if (excluded2.has(entry.name)) continue;
-      const absolute = resolve14(directory, entry.name);
+      const absolute = resolve15(directory, entry.name);
       const rel = toPosix2(relative12(absoluteRoot, absolute));
       if (entry.isSymbolicLink()) files.push({ absolute, relative: rel, symlink: true });
       else if (entry.isDirectory()) visit(absolute);
@@ -22670,10 +23295,10 @@ async function containsShellFile(root) {
   }
 }
 async function detectStack(root) {
-  const absoluteRoot = resolve14(root);
+  const absoluteRoot = resolve15(root);
   const ecosystems = [];
   for (const [ecosystem, markers] of Object.entries(STACK_MARKERS)) {
-    if ((await Promise.all(markers.map((marker) => exists(resolve14(absoluteRoot, marker))))).some(Boolean)) {
+    if ((await Promise.all(markers.map((marker) => exists(resolve15(absoluteRoot, marker))))).some(Boolean)) {
       ecosystems.push(ecosystem);
     }
   }
@@ -22686,7 +23311,7 @@ async function loadDenylist(path) {
 }
 function loadDenylistSync(path) {
   if (!path) return [];
-  return readFileSync7(path, "utf8").split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"));
+  return readFileSync8(path, "utf8").split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"));
 }
 function lines(text3) {
   return text3.split(/\r\n|\n|\r/);
@@ -22707,16 +23332,16 @@ function printableBinaryText(bytes2) {
   return result;
 }
 function publicSafetyFingerprint(finding4) {
-  return createHash15("sha256").update(`public_safety\0${finding4.rule}\0${finding4.path}\0${finding4.line}`, "utf8").digest("hex");
+  return createHash16("sha256").update(`public_safety\0${finding4.rule}\0${finding4.path}\0${finding4.line}`, "utf8").digest("hex");
 }
 function publicSafetyUnassessedFingerprint(finding4) {
-  return createHash15("sha256").update(`public_safety_unassessed\0${finding4.reason}\0${finding4.path}`, "utf8").digest("hex");
+  return createHash16("sha256").update(`public_safety_unassessed\0${finding4.reason}\0${finding4.path}`, "utf8").digest("hex");
 }
 function publicSafetyUnassessed(path, reason) {
   return { fingerprint: publicSafetyUnassessedFingerprint({ path, reason }), path, reason };
 }
 function selectedPathSetSha256(paths) {
-  return createHash15("sha256").update(JSON.stringify([...new Set(paths)].sort(compareCodePoints5)), "utf8").digest("hex");
+  return createHash16("sha256").update(JSON.stringify([...new Set(paths)].sort(compareCodePoints5)), "utf8").digest("hex");
 }
 function publicSafetyFinding(path, line, rule) {
   return { fingerprint: publicSafetyFingerprint({ path, line, rule }), path, line, rule };
@@ -22740,7 +23365,7 @@ function scanTrackedPublicSafetySync(root, trackedPaths2, customTerms = []) {
   };
 }
 function scanSelectedPublicSafetySync(root, selectedPaths, customTerms = []) {
-  const absoluteRoot = resolve14(root);
+  const absoluteRoot = resolve15(root);
   const files = [];
   const canonicalPaths = [...new Set(selectedPaths)].sort(compareCodePoints5);
   const unassessed = [];
@@ -22749,14 +23374,14 @@ function scanSelectedPublicSafetySync(root, selectedPaths, customTerms = []) {
       unassessed.push(publicSafetyUnassessed(path || "<empty>", "unsupported_tracked_entry"));
       continue;
     }
-    const absolute = resolve14(absoluteRoot, path);
+    const absolute = resolve15(absoluteRoot, path);
     const rel = relative12(absoluteRoot, absolute);
     if (rel === ".." || rel.startsWith(`..${sep11}`)) {
       unassessed.push(publicSafetyUnassessed(path, "unsupported_tracked_entry"));
       continue;
     }
     try {
-      const stat3 = lstatSync8(absolute);
+      const stat3 = lstatSync9(absolute);
       if (stat3.isFile() || stat3.isSymbolicLink()) {
         files.push({ absolute, relative: toPosix2(rel), symlink: stat3.isSymbolicLink() });
       } else {
@@ -22781,7 +23406,7 @@ function scanPublicSafetyFilesSync(files, customTerms, initialUnassessed = []) {
       if (file.symlink) {
         text3 = `SYMLINK_TARGET=${readlinkSync4(file.absolute)}`;
       } else {
-        const bytes2 = readFileSync7(file.absolute);
+        const bytes2 = readFileSync8(file.absolute);
         if (bytes2.includes(0)) text3 = printableBinaryText(bytes2);
         else {
           try {
@@ -22813,7 +23438,7 @@ function scanPublicSafetyFilesSync(files, customTerms, initialUnassessed = []) {
   return findings.length === 0 && unassessed.length === 0 ? { findings, unassessed, exitCode: 0, status: "pass" } : { findings, unassessed, exitCode: 1, status: "fail" };
 }
 async function generateManifest(root) {
-  const absoluteRoot = resolve14(root);
+  const absoluteRoot = resolve15(root);
   const entries2 = [];
   const files = await walkFiles2(absoluteRoot, MANIFEST_EXCLUDED_DIRS);
   for (const file of files) {
@@ -22824,7 +23449,7 @@ async function generateManifest(root) {
     const bytes2 = await readFile3(file.absolute);
     entries2.push({
       path: `./${file.relative}`,
-      sha256: createHash15("sha256").update(bytes2).digest("hex")
+      sha256: createHash16("sha256").update(bytes2).digest("hex")
     });
   }
   entries2.sort((left, right) => compareCodePoints5(left.path, right.path));
@@ -22839,12 +23464,385 @@ async function generatePackageManifest(root) {
 }
 
 // src/closeout/native-gate-runner.ts
-import { randomUUID as randomUUID2 } from "crypto";
-import { spawn as spawn2, spawnSync as spawnSync5 } from "child_process";
-import { accessSync as accessSync2, constants as constants4, lstatSync as lstatSync9, realpathSync as realpathSync5 } from "fs";
+import { randomUUID as randomUUID4 } from "crypto";
+import { spawnSync as spawnSync5 } from "child_process";
+import { accessSync as accessSync2, constants as constants4, lstatSync as lstatSync10, realpathSync as realpathSync6 } from "fs";
 import { lstat as lstat6, mkdir as mkdir3, realpath as realpath6, rm as rm3, writeFile as writeFile2 } from "fs/promises";
 import { tmpdir as tmpdir3 } from "os";
-import { delimiter as delimiter2, isAbsolute as isAbsolute13, join as join7, relative as relative13, resolve as resolve15, sep as sep12 } from "path";
+import { delimiter as delimiter2, isAbsolute as isAbsolute14, join as join8, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
+
+// src/closeout/execution-supervisor.ts
+import {
+  spawn as spawn2
+} from "child_process";
+import { randomUUID as randomUUID3 } from "crypto";
+var SPEC_ENV = "MISTER_CLEAN_EXECUTION_SUPERVISOR_V1";
+var CUSTODY_ENV = "MISTER_CLEAN_EXECUTION_CUSTODY_V1";
+var SUPERVISOR_SOURCE = String.raw`
+const { execFileSync, spawn } = require("node:child_process");
+const { chmodSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } = require("node:fs");
+const { dirname, join } = require("node:path");
+
+const encoded = process.env.MISTER_CLEAN_EXECUTION_SUPERVISOR_V1;
+delete process.env.MISTER_CLEAN_EXECUTION_SUPERVISOR_V1;
+delete process.env.MISTER_CLEAN_EXECUTION_CUSTODY_V1;
+if (!encoded) throw new Error("missing execution-supervisor specification");
+const spec = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+
+function fail(message, code = 126) {
+  process.stderr.write("mister-clean execution supervisor: " + message + "\n");
+  process.exit(code);
+}
+
+function readState() {
+  const value = JSON.parse(readFileSync(spec.binding.state_path, "utf8"));
+  if (value.record_type !== "mister-clean.execution-lease-state"
+    || value.schema_version !== "1.1"
+    || value.lease_id !== spec.binding.lease_id
+    || value.coordination_key_sha256 !== spec.binding.coordination_key_sha256
+    || !value.owner
+    || value.owner.pid !== spec.binding.owner_pid
+    || value.owner.process_identity !== spec.binding.owner_process_identity
+    || !Array.isArray(value.process_groups)
+    || !Array.isArray(value.custody_processes)
+    || (value.custody_census !== "clear" && value.custody_census !== "unverifiable")) {
+    throw new Error("lease state no longer authorizes this supervisor");
+  }
+  return value;
+}
+
+function writeState(value) {
+  const temporary = join(dirname(spec.binding.state_path), ".supervisor-" + String(process.pid) + "-" + spec.custody_token + ".tmp");
+  writeFileSync(temporary, JSON.stringify(value) + "\n", { encoding: "utf8", flag: "wx", mode: 0o600 });
+  try {
+    renameSync(temporary, spec.binding.state_path);
+    chmodSync(spec.binding.state_path, 0o600);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
+}
+
+function processAlive(pid, group = false) {
+  try { process.kill(group && process.platform !== "win32" ? -pid : pid, 0); return true; }
+  catch (error) { return Boolean(error && error.code === "EPERM"); }
+}
+
+function processIdentity(pid) {
+  if (!processAlive(pid)) return undefined;
+  try {
+    if (process.platform === "linux") {
+      const stat = readFileSync("/proc/" + String(pid) + "/stat", "utf8");
+      const close = stat.lastIndexOf(")");
+      if (close < 0) return undefined;
+      const fields = stat.slice(close + 2).trim().split(/\s+/);
+      return fields[19] ? "linux-proc-start:" + fields[19] : undefined;
+    }
+    const started = execFileSync("ps", ["-o", "lstart=", "-o", "comm=", "-p", String(pid)], {
+      encoding: "utf8", env: { ...process.env, LC_ALL: "C", TZ: "UTC" }, stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return started ? "ps-lstart:" + started : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const supervisorIdentity = {
+  pid: process.pid,
+  process_identity: processIdentity(process.pid),
+};
+if (!supervisorIdentity.process_identity) fail("cannot establish supervisor process birth identity");
+
+let lockHeld = false;
+let registered = false;
+
+function readLock() {
+  const value = JSON.parse(readFileSync(spec.binding.supervisor_lock_path, "utf8"));
+  if (value.record_type !== "mister-clean.execution-supervisor-lock"
+    || value.schema_version !== "1.0"
+    || value.lease_id !== spec.binding.lease_id
+    || value.coordination_key_sha256 !== spec.binding.coordination_key_sha256
+    || value.custody_token !== spec.custody_token
+    || !value.supervisor
+    || value.supervisor.pid !== supervisorIdentity.pid
+    || value.supervisor.process_identity !== supervisorIdentity.process_identity) {
+    throw new Error("execution supervisor lock no longer belongs to this supervisor");
+  }
+  return value;
+}
+
+function register() {
+  const lock = {
+    record_type: "mister-clean.execution-supervisor-lock",
+    schema_version: "1.0",
+    coordination_key_sha256: spec.binding.coordination_key_sha256,
+    lease_id: spec.binding.lease_id,
+    supervisor: supervisorIdentity,
+    custody_token: spec.custody_token,
+  };
+  writeFileSync(spec.binding.supervisor_lock_path, JSON.stringify(lock) + "\n", {
+    encoding: "utf8", flag: "wx", mode: 0o600,
+  });
+  chmodSync(spec.binding.supervisor_lock_path, 0o600);
+  lockHeld = true;
+  const state = readState();
+  const observedParentIdentity = processIdentity(spec.parent_pid);
+  if (observedParentIdentity !== spec.binding.owner_process_identity) {
+    throw new Error("execution lease owner is no longer the process that dispatched this supervisor"
+      + " (expected " + spec.binding.owner_process_identity + ", observed " + String(observedParentIdentity) + ")");
+  }
+  if (state.process_groups.length !== 0 || state.custody_processes.length !== 0 || state.custody_census !== "clear") {
+    throw new Error("another supervised command already owns execution custody");
+  }
+  writeState({ ...state, process_groups: [supervisorIdentity] });
+  registered = true;
+}
+
+function releaseOwnLock() {
+  readLock();
+  rmSync(spec.binding.supervisor_lock_path);
+  lockHeld = false;
+}
+
+function clearCustodyProcesses() {
+  const state = readState();
+  writeState({ ...state, custody_processes: [], custody_census: "clear" });
+}
+
+function markCustodyUnverifiable() {
+  const state = readState();
+  writeState({ ...state, custody_census: "unverifiable" });
+}
+
+function unregister() {
+  try {
+    const state = readState();
+    if (state.custody_processes.length !== 0) throw new Error("escaped custody processes remain recorded");
+    writeState({
+      ...state,
+      process_groups: state.process_groups.filter((entry) => !(
+        entry.pid === supervisorIdentity.pid
+        && entry.process_identity === supervisorIdentity.process_identity
+      )),
+    });
+    registered = false;
+    releaseOwnLock();
+    return true;
+  } catch (error) {
+    process.stderr.write("mister-clean execution supervisor: failed to clear process custody: "
+      + (error instanceof Error ? error.message : String(error)) + "\n");
+    return false;
+  }
+}
+
+function custodyProcessIds() {
+  const marker = "MISTER_CLEAN_EXECUTION_CUSTODY_V1=" + spec.custody_token;
+  if (process.platform === "win32") return undefined;
+  if (process.platform === "linux") {
+    const ids = [];
+    for (const name of readdirSync("/proc")) {
+      if (!/^\d+$/.test(name)) continue;
+      try {
+        const environment = readFileSync("/proc/" + name + "/environ");
+        if (environment.toString("utf8").split("\0").includes(marker)) ids.push(Number(name));
+      } catch {}
+    }
+    return ids.filter((pid) => pid !== process.pid && processAlive(pid));
+  }
+  try {
+    const output = execFileSync("ps", ["eww", "-axo", "pid=,command="], {
+      encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const ids = [];
+    for (const line of output.split("\n")) {
+      if (!line.includes(marker)) continue;
+      const match = /^\s*(\d+)\s/.exec(line);
+      if (match) ids.push(Number(match[1]));
+    }
+    return ids.filter((pid) => pid !== process.pid && processAlive(pid));
+  } catch {
+    return undefined;
+  }
+}
+
+function recordCustodyProcesses(pids) {
+  const state = readState();
+  const byPid = new Map(state.custody_processes.map((entry) => [entry.pid, entry]));
+  for (const pid of pids) {
+    byPid.set(pid, {
+      pid,
+      process_identity: processIdentity(pid) || "unverifiable:" + spec.custody_token,
+    });
+  }
+  writeState({ ...state, custody_processes: [...byPid.values()].sort((a, b) => a.pid - b.pid) });
+}
+
+let child;
+let terminating = false;
+let settled = false;
+let custodySettling = false;
+let killTimer;
+let parentTimer;
+
+function finish(code) {
+  if (settled) return;
+  settled = true;
+  if (parentTimer) clearInterval(parentTimer);
+  if (killTimer) clearTimeout(killTimer);
+  const clean = unregister();
+  process.exit(clean ? code : 126);
+}
+
+function finishWithoutRelease(code) {
+  if (settled) return;
+  settled = true;
+  if (parentTimer) clearInterval(parentTimer);
+  if (killTimer) clearTimeout(killTimer);
+  process.exit(code);
+}
+
+function settleCustody(code, force = false) {
+  if (settled || custodySettling) return;
+  custodySettling = true;
+  const first = custodyProcessIds();
+  if (first === undefined) {
+    process.stderr.write("mister-clean execution supervisor: process-custody census is unavailable; refusing a clean result\n");
+    try { markCustodyUnverifiable(); } catch {}
+    return finishWithoutRelease(126);
+  }
+  if (first.length === 0) return finish(code);
+  recordCustodyProcesses(first);
+  process.stderr.write("mister-clean execution supervisor: detected a command that escaped its process group; terminating custody processes\n");
+  for (const pid of first) {
+    try { process.kill(pid, force ? "SIGKILL" : "SIGTERM"); } catch {}
+  }
+  setTimeout(() => {
+    const remaining = custodyProcessIds();
+    if (remaining === undefined) {
+      try { markCustodyUnverifiable(); } catch {}
+      return finishWithoutRelease(126);
+    }
+    if (remaining.length === 0) {
+      clearCustodyProcesses();
+      return finish(125);
+    }
+    recordCustodyProcesses(remaining);
+    for (const pid of remaining) {
+      try { process.kill(pid, "SIGKILL"); } catch {}
+    }
+    setTimeout(() => {
+      const final = custodyProcessIds();
+      if (final === undefined) {
+        try { markCustodyUnverifiable(); } catch {}
+        return finishWithoutRelease(126);
+      }
+      if (final.length !== 0) return finishWithoutRelease(126);
+      clearCustodyProcesses();
+      finish(125);
+    }, 100);
+  }, force ? 25 : spec.termination_grace_ms);
+}
+
+function terminateTree(signal = "SIGTERM") {
+  if (terminating || settled) return;
+  terminating = true;
+  if (!child || !child.pid) return finish(125);
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+    } else {
+      process.kill(-process.pid, signal);
+    }
+  } catch (error) {
+    if (!error || error.code !== "ESRCH") {
+      process.stderr.write("mister-clean execution supervisor: failed to signal process tree\n");
+    }
+  }
+  killTimer = setTimeout(() => {
+    settleCustody(137, true);
+  }, spec.termination_grace_ms);
+}
+
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
+  process.on(signal, () => terminateTree(signal));
+}
+
+try { register(); }
+catch (error) {
+  if (registered) {
+    try {
+      const state = readState();
+      writeState({ ...state, process_groups: [] });
+      registered = false;
+    } catch {}
+  }
+  if (lockHeld) {
+    try { releaseOwnLock(); } catch {}
+  }
+  fail(error instanceof Error ? error.message : String(error));
+}
+
+parentTimer = setInterval(() => {
+  if (processIdentity(spec.parent_pid) !== spec.binding.owner_process_identity) terminateTree("SIGTERM");
+}, 100);
+parentTimer.unref();
+
+try {
+  child = spawn(spec.executable, spec.argv, {
+    cwd: spec.cwd,
+    env: { ...process.env, MISTER_CLEAN_EXECUTION_CUSTODY_V1: spec.custody_token },
+    shell: false,
+    detached: false,
+    stdio: ["ignore", "inherit", "inherit"],
+    windowsHide: true,
+  });
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error), 127);
+}
+
+child.once("error", (error) => {
+  process.stderr.write("mister-clean execution supervisor: child spawn failed: " + error.message + "\n");
+  finish(127);
+});
+child.once("close", (code, signal) => {
+  if (signal) return settleCustody(128);
+  settleCustody(code === null ? 1 : code);
+});
+`;
+function supervisorEnvironment(binding, executable, argv2, cwd, environment, terminationGraceMs, custodyToken) {
+  const spec = {
+    binding,
+    parent_pid: process.pid,
+    executable,
+    argv: argv2,
+    cwd,
+    termination_grace_ms: terminationGraceMs,
+    custody_token: custodyToken
+  };
+  const sanitized = {
+    ...environment,
+    [SPEC_ENV]: Buffer.from(JSON.stringify(spec), "utf8").toString("base64")
+  };
+  delete sanitized[CUSTODY_ENV];
+  return sanitized;
+}
+function spawnSupervisedCommand(binding, executable, argv2, cwd, environment, terminationGraceMs, output = "pipe") {
+  if (process.platform === "win32") {
+    throw new Error("Mister Clean refuses unsandboxed supervised execution on Windows because escaped-process custody is unavailable");
+  }
+  const custodyToken = randomUUID3();
+  return spawn2(process.execPath, ["-e", SUPERVISOR_SOURCE], {
+    cwd,
+    env: supervisorEnvironment(binding, executable, argv2, cwd, environment, terminationGraceMs, custodyToken),
+    shell: false,
+    detached: process.platform !== "win32",
+    stdio: output === "pipe" ? ["ignore", "pipe", "pipe"] : ["ignore", "inherit", "inherit"],
+    windowsHide: true
+  });
+}
+
+// src/closeout/native-gate-runner.ts
 function safeIntegerOption(value, fallback, name) {
   const resolved = value ?? fallback;
   assertPositiveInteger(name, resolved, 24 * 60 * 60 * 1e3);
@@ -22852,19 +23850,19 @@ function safeIntegerOption(value, fallback, name) {
 }
 function evidenceOutputName(gateId, stream) {
   const readable = gateId.replaceAll(/[^a-zA-Z0-9._-]/gu, "-").slice(0, 80) || "gate";
-  return `${readable}.${randomUUID2()}.${stream}.bin`;
+  return `${readable}.${randomUUID4()}.${stream}.bin`;
 }
 async function writeOutput(evidenceRoot, gateId, stream, bytes2, complete) {
   const path = evidenceOutputName(gateId, stream);
-  await writeFile2(join7(evidenceRoot, path), bytes2, { flag: "wx", mode: 384 });
+  await writeFile2(join8(evidenceRoot, path), bytes2, { flag: "wx", mode: 384 });
   return { path, sha256: sha2567(bytes2), byte_count: bytes2.length, complete };
 }
 function executableCandidates(name, pathValue) {
   const extensions = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean) : [""];
   const candidates = [];
   for (const directory of pathValue.split(delimiter2)) {
-    if (!directory || !isAbsolute13(directory)) continue;
-    for (const extension of extensions) candidates.push(join7(directory, `${name}${extension}`));
+    if (!directory || !isAbsolute14(directory)) continue;
+    for (const extension of extensions) candidates.push(join8(directory, `${name}${extension}`));
   }
   return candidates;
 }
@@ -22872,10 +23870,10 @@ function resolveExecutable(name, pathValue) {
   if (!/^[a-zA-Z0-9._+-]+$/u.test(name)) return void 0;
   for (const candidate of executableCandidates(name, pathValue)) {
     try {
-      const stat3 = lstatSync9(candidate);
+      const stat3 = lstatSync10(candidate);
       if (!stat3.isFile() && !stat3.isSymbolicLink()) continue;
       accessSync2(candidate, constants4.X_OK);
-      return realpathSync5(candidate);
+      return realpathSync6(candidate);
     } catch {
     }
   }
@@ -22896,7 +23894,7 @@ function scrubbedEnvironment(home) {
     GIT_OPTIONAL_LOCKS: "0",
     NPM_CONFIG_OFFLINE: "true",
     YARN_ENABLE_NETWORK: "0",
-    BUN_INSTALL_CACHE_DIR: join7(home, "bun-cache"),
+    BUN_INSTALL_CACHE_DIR: join8(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
     GOPROXY: "off"
   };
@@ -22925,16 +23923,16 @@ function signalProcessTree(child, signal) {
     return code === "ESRCH";
   }
 }
-async function executeChild(executable, argv2, cwd, env, timeoutMs, maxOutputBytes, graceMs) {
+async function executeChild(executable, argv2, cwd, env, timeoutMs, maxOutputBytes, graceMs, lease) {
   return await new Promise((resolveResult) => {
-    const child = spawn2(executable, argv2, {
+    const child = spawnSupervisedCommand(
+      lease.supervisor_binding,
+      executable,
+      argv2,
       cwd,
-      detached: process.platform !== "win32",
       env,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true
-    });
+      graceMs
+    );
     let exitCode = null;
     let signal = null;
     let termination = null;
@@ -23015,9 +24013,9 @@ async function executeChild(executable, argv2, cwd, env, timeoutMs, maxOutputByt
 }
 function resolveGateCwd(repository, cwd) {
   if (cwd !== ".") validatePortablePath2(cwd, "native gate cwd");
-  const target = realpathSync5(resolve15(repository, cwd));
+  const target = realpathSync6(resolve16(repository, cwd));
   repositoryRelation(repository, target);
-  const stat3 = lstatSync9(target);
+  const stat3 = lstatSync10(target);
   if (!stat3.isDirectory()) throw new Error(`native gate cwd is not a directory: ${cwd}`);
   return target;
 }
@@ -23047,7 +24045,7 @@ async function blockedExecution(gate, reason, object7, evidenceRoot, now, subjec
     stderr_ref: stderrRef
   };
 }
-async function executeGate(repository, gate, discoveryObject, evidenceRoot, options, skip, now) {
+async function executeGate(repository, gate, discoveryObject, evidenceRoot, options, skip, now, lease) {
   const subjectStartState = captureSubjectState(repository);
   const startObject = subjectStartState.repository_object;
   if (!stableEqual(startObject, discoveryObject)) {
@@ -23162,7 +24160,8 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
       scrubbedEnvironment(snapshot.home),
       options.timeout_ms,
       options.max_output_bytes,
-      options.termination_grace_ms
+      options.termination_grace_ms,
+      lease
     );
     endObject = captureRepositoryObject(snapshot.repository);
   } finally {
@@ -23234,64 +24233,92 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
   };
 }
 async function runNativeGates(repository, discovery, evidenceDirectory, runOptions = {}) {
-  const integrityErrors = validateDiscoveryIntegrity(discovery);
-  if (integrityErrors.length > 0) throw new Error(integrityErrors.join("; "));
-  const root = realpathSync5(resolve15(repository));
-  const observed = captureRepositoryObject(root);
-  if (!stableEqual(observed, discovery.repository_object)) {
-    throw new Error("native gate run does not start at its bound discovery repository object");
-  }
-  const timeoutMs = safeIntegerOption(runOptions.timeout_ms, DEFAULT_TIMEOUT_MS, "timeout_ms");
-  const maxOutputBytes = safeIntegerOption(runOptions.max_output_bytes, DEFAULT_OUTPUT_BYTES, "max_output_bytes");
-  const terminationGraceMs = safeIntegerOption(
-    runOptions.termination_grace_ms,
-    DEFAULT_TERMINATION_GRACE_MS,
-    "termination_grace_ms"
-  );
-  const skip = new Set(runOptions.skip_gate_ids ?? []);
-  for (const id of skip) {
-    if (!discovery.required_gate_ids.includes(id)) throw new Error(`cannot skip unknown or non-required gate ${JSON.stringify(id)}`);
-  }
-  await mkdir3(evidenceDirectory, { recursive: true, mode: 448 });
-  const evidenceRoot = await realpath6(resolve15(evidenceDirectory));
-  const relation = relative13(root, evidenceRoot);
-  if (relation === "" || relation !== ".." && !relation.startsWith(`..${sep12}`) && !isAbsolute13(relation)) {
-    throw new Error("native gate evidence directory must be outside the repository surface");
-  }
-  const evidenceStat = await lstat6(evidenceRoot);
-  if (!evidenceStat.isDirectory() || evidenceStat.isSymbolicLink()) {
-    throw new Error("native gate evidence root must be a real directory");
-  }
+  const root = realpathSync6(resolve16(repository));
   const now = runOptions.now ?? (() => /* @__PURE__ */ new Date());
-  const executions = [];
-  for (const gate of discovery.gates) {
-    if (gate.disposition !== "required" || !gate.command) continue;
-    executions.push(await executeGate(
-      root,
-      gate,
-      discovery.repository_object,
-      evidenceRoot,
-      { timeout_ms: timeoutMs, max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
-      skip,
-      now
-    ));
+  const lease = runOptions.execution_lease ?? acquireRepositoryVerificationLease(root, now);
+  let failure;
+  let partial;
+  try {
+    const integrityErrors = validateDiscoveryIntegrity(discovery);
+    if (integrityErrors.length > 0) throw new Error(integrityErrors.join("; "));
+    const expectedCoordinationKey = repositoryVerificationCoordinationKey(root);
+    if (discovery.execution_coordination_key_sha256 !== expectedCoordinationKey) {
+      throw new Error("native gate discovery is not bound to this repository execution coordination key");
+    }
+    if (lease.coordination_key_sha256 !== expectedCoordinationKey) {
+      throw new Error("native gate execution lease is not bound to this repository");
+    }
+    const observed = captureRepositoryObject(root);
+    if (!stableEqual(observed, discovery.repository_object)) {
+      throw new Error("native gate run does not start at its bound discovery repository object");
+    }
+    const timeoutMs = safeIntegerOption(runOptions.timeout_ms, DEFAULT_TIMEOUT_MS, "timeout_ms");
+    const maxOutputBytes = safeIntegerOption(runOptions.max_output_bytes, DEFAULT_OUTPUT_BYTES, "max_output_bytes");
+    const terminationGraceMs = safeIntegerOption(
+      runOptions.termination_grace_ms,
+      DEFAULT_TERMINATION_GRACE_MS,
+      "termination_grace_ms"
+    );
+    const skip = new Set(runOptions.skip_gate_ids ?? []);
+    for (const id of skip) {
+      if (!discovery.required_gate_ids.includes(id)) {
+        throw new Error(`cannot skip unknown or non-required gate ${JSON.stringify(id)}`);
+      }
+    }
+    await mkdir3(evidenceDirectory, { recursive: true, mode: 448 });
+    const evidenceRoot = await realpath6(resolve16(evidenceDirectory));
+    const relation = relative13(root, evidenceRoot);
+    if (relation === "" || relation !== ".." && !relation.startsWith(`..${sep12}`) && !isAbsolute14(relation)) {
+      throw new Error("native gate evidence directory must be outside the repository surface");
+    }
+    const evidenceStat = await lstat6(evidenceRoot);
+    if (!evidenceStat.isDirectory() || evidenceStat.isSymbolicLink()) {
+      throw new Error("native gate evidence root must be a real directory");
+    }
+    const executions = [];
+    for (const gate of discovery.gates) {
+      if (gate.disposition !== "required" || !gate.command) continue;
+      executions.push(await executeGate(
+        root,
+        gate,
+        discovery.repository_object,
+        evidenceRoot,
+        { timeout_ms: timeoutMs, max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
+        skip,
+        now,
+        lease
+      ));
+    }
+    partial = {
+      record_type: COVERAGE_RECORD_TYPE,
+      schema_version: COVERAGE_SCHEMA_VERSION,
+      discovery_sha256: discovery.catalog_sha256,
+      closing_repository_object: captureRepositoryObject(root),
+      required_gate_ids: discovery.required_gate_ids,
+      executions
+    };
+  } catch (error) {
+    failure = error;
   }
-  const closingObject = captureRepositoryObject(root);
-  const record4 = {
-    record_type: COVERAGE_RECORD_TYPE,
-    schema_version: SCHEMA_VERSION2,
-    discovery_sha256: discovery.catalog_sha256,
-    closing_repository_object: closingObject,
-    required_gate_ids: discovery.required_gate_ids,
-    executions
-  };
+  let executionLease;
+  try {
+    executionLease = lease.release();
+  } catch (releaseError) {
+    if (failure !== void 0) {
+      throw new AggregateError([failure, releaseError], "native gate execution and execution-lease release both failed");
+    }
+    throw releaseError;
+  }
+  if (failure !== void 0) throw failure;
+  if (!partial) throw new Error("native gate execution ended without coverage");
+  const record4 = { ...partial, execution_lease: executionLease };
   return { ...record4, coverage_sha256: identity2(record4) };
 }
 
 // src/closeout/semantic-v2.ts
 import { verify } from "crypto";
-import { existsSync as existsSync5, lstatSync as lstatSync10, readFileSync as readFileSync8, readdirSync as readdirSync6, realpathSync as realpathSync6 } from "fs";
-import { isAbsolute as isAbsolute14, relative as relative14, resolve as resolve16, sep as sep13 } from "path";
+import { existsSync as existsSync6, lstatSync as lstatSync11, readFileSync as readFileSync9, readdirSync as readdirSync7, realpathSync as realpathSync7 } from "fs";
+import { isAbsolute as isAbsolute15, relative as relative14, resolve as resolve17, sep as sep13 } from "path";
 var HEX_64 = /^[0-9a-f]{64}$/u;
 var ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
 var VERDICT_KEYS = /* @__PURE__ */ new Set(["disposition", "failed_cases", "passed_cases", "result", "verdict"]);
@@ -23305,28 +24332,30 @@ var DIRECT_CHECKERS = {
   instruction_polarity: { id: "mister-clean/instruction-polarity", version: "2.0.0" },
   supersession_lineage: { id: "mister-clean/supersession-lineage", version: "2.0.0" }
 };
-var DIRECT_KINDS = new Set(Object.keys(DIRECT_CHECKERS));
+var DIRECT_KINDS = new Set(
+  Object.keys(DIRECT_CHECKERS).filter((kind) => kind !== "bounded_state_lifecycle")
+);
 function isInside2(root, path) {
   const relation = relative14(root, path);
-  return relation === "" || relation !== ".." && !relation.startsWith(`..${sep13}`) && !isAbsolute14(relation);
+  return relation === "" || relation !== ".." && !relation.startsWith(`..${sep13}`) && !isAbsolute15(relation);
 }
 function validIsoTimestamp(value) {
   return ISO_TIMESTAMP.test(value) && !Number.isNaN(Date.parse(value));
 }
 function sourceRef2(repository, rawRef) {
   const [rawPath, fragment = ""] = rawRef.split("#", 2);
-  if (!rawPath || isAbsolute14(rawPath) || rawPath === ".." || rawPath.startsWith("../")) {
+  if (!rawPath || isAbsolute15(rawPath) || rawPath === ".." || rawPath.startsWith("../")) {
     throw new Error(`semantic source reference is not repository-relative: ${rawRef}`);
   }
-  const absolute = resolve16(repository, rawPath);
-  if (!isInside2(resolve16(repository), absolute) || !existsSync5(absolute) || !lstatSync10(absolute).isFile() || lstatSync10(absolute).isSymbolicLink()) {
+  const absolute = resolve17(repository, rawPath);
+  if (!isInside2(resolve17(repository), absolute) || !existsSync6(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
     throw new Error(`semantic source reference is missing, non-file, symlinked, or outside the repository: ${rawRef}`);
   }
   const lineMatch = /^line-(\d+)$/u.exec(fragment);
   return {
     ...lineMatch ? { line: Number(lineMatch[1]) } : {},
     path: rawPath.replaceAll("\\", "/"),
-    sha256: sha256Bytes(readFileSync8(absolute))
+    sha256: sha256Bytes(readFileSync9(absolute))
   };
 }
 function directChecker(kind) {
@@ -23368,8 +24397,8 @@ function evidenceRefsIn(value) {
 }
 function walkEvidenceFiles(root, directory = root) {
   const result = [];
-  for (const entry of readdirSync6(directory, { withFileTypes: true })) {
-    const absolute = resolve16(directory, entry.name);
+  for (const entry of readdirSync7(directory, { withFileTypes: true })) {
+    const absolute = resolve17(directory, entry.name);
     if (entry.isSymbolicLink()) throw new Error(`semantic evidence root rejects symlink: ${relative14(root, absolute)}`);
     if (entry.isDirectory()) result.push(...walkEvidenceFiles(root, absolute));
     else if (entry.isFile()) result.push(relative14(root, absolute).split(sep13).join("/"));
@@ -23378,11 +24407,11 @@ function walkEvidenceFiles(root, directory = root) {
   return result.sort();
 }
 function semanticEvidenceRootSha256Once(evidenceRoot) {
-  const root = realpathSync6(resolve16(evidenceRoot));
+  const root = realpathSync7(resolve17(evidenceRoot));
   const paths = walkEvidenceFiles(root);
   const hashInput = [];
   for (const path of paths) {
-    const bytes2 = readFileSync8(resolve16(root, path));
+    const bytes2 = readFileSync9(resolve17(root, path));
     hashInput.push(`${path.length}:${path}\0${bytes2.byteLength}:`, bytes2, "\0");
   }
   return sha256Bytes(Buffer.concat(hashInput.map((item) => typeof item === "string" ? Buffer.from(item) : Buffer.from(item))));
@@ -23395,18 +24424,18 @@ function semanticEvidenceRootSha256(evidenceRoot) {
 }
 function verifyEvidenceRefs(evidenceRoot, refs) {
   const errors = [];
-  const root = realpathSync6(resolve16(evidenceRoot));
+  const root = realpathSync7(resolve17(evidenceRoot));
   for (const ref of refs) {
-    if (ref.store !== "evidence_bundle" || !validIsoTimestamp(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || isAbsolute14(ref.path) || ref.path === ".." || ref.path.startsWith("../") || !HEX_64.test(ref.sha256)) {
+    if (ref.store !== "evidence_bundle" || !validIsoTimestamp(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || isAbsolute15(ref.path) || ref.path === ".." || ref.path.startsWith("../") || !HEX_64.test(ref.sha256)) {
       errors.push(`semantic evidence reference is malformed: ${ref.path || "<blank>"}`);
       continue;
     }
-    const absolute = resolve16(root, ref.path);
-    if (!isInside2(root, absolute) || !existsSync5(absolute) || !lstatSync10(absolute).isFile() || lstatSync10(absolute).isSymbolicLink()) {
+    const absolute = resolve17(root, ref.path);
+    if (!isInside2(root, absolute) || !existsSync6(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
       errors.push(`semantic evidence reference is missing, symlinked, or outside the evidence root: ${ref.path}`);
       continue;
     }
-    if (sha256Bytes(readFileSync8(absolute)) !== ref.sha256) errors.push(`semantic evidence reference digest mismatch: ${ref.path}`);
+    if (sha256Bytes(readFileSync9(absolute)) !== ref.sha256) errors.push(`semantic evidence reference digest mismatch: ${ref.path}`);
   }
   return errors;
 }
@@ -23414,7 +24443,7 @@ function evidenceFilesMap(files) {
   const errors = [];
   const result = /* @__PURE__ */ new Map();
   for (const file of files) {
-    if (!file.path.trim() || isAbsolute14(file.path) || file.path === ".." || file.path.startsWith("../") || !HEX_64.test(file.sha256) || result.has(file.path)) {
+    if (!file.path.trim() || isAbsolute15(file.path) || file.path === ".." || file.path.startsWith("../") || !HEX_64.test(file.sha256) || result.has(file.path)) {
       errors.push(`semantic evidence package has an invalid or duplicate path: ${file.path || "<blank>"}`);
       continue;
     }
@@ -23460,7 +24489,7 @@ function createSemanticPlanV2(input) {
   if (!input.runId.trim() || !input.challengeNonce.trim() || !validIsoTimestamp(input.observedAt)) {
     throw new Error("semantic v2 plan requires run id, unique challenge nonce, and timezone-aware observed_at");
   }
-  const repository = resolve16(input.repository);
+  const repository = resolve17(input.repository);
   const discovered = discoverSemanticProbeCandidates(repository);
   if (semanticCandidateSetSha256(discovered) !== input.candidateSetSha256 || semanticCandidateSetSha256(input.candidates) !== input.candidateSetSha256) {
     throw new Error("semantic v2 plan candidate census does not match Mister Clean discovery");
@@ -23474,6 +24503,7 @@ function createSemanticPlanV2(input) {
       evidence: [...candidate.evidence].sort(),
       kind: candidate.kind,
       legacy_candidate_id: candidate.id,
+      ...candidate.mechanical_proof ? { mechanical_proof: candidate.mechanical_proof } : {},
       path: candidate.path,
       refs
     }));
@@ -23483,10 +24513,11 @@ function createSemanticPlanV2(input) {
       contract_sha256: contractSha256,
       kind: candidate.kind,
       legacy_candidate_ids: [candidate.id],
+      ...candidate.mechanical_proof ? { mechanical_proof: candidate.mechanical_proof } : {},
       refs,
       subject_key: candidate.path
     };
-    if (DIRECT_KINDS.has(candidate.kind)) {
+    if (DIRECT_KINDS.has(candidate.kind) && (candidate.kind !== "executable_surface_coverage" || candidate.mechanical_proof)) {
       const kind2 = candidate.kind;
       return { ...base, checker: directChecker(kind2), kind: kind2, resolution_mode: "direct_check" };
     }
@@ -23556,7 +24587,7 @@ function validatePlanAgainstRepository(plan, repository) {
   return errors;
 }
 function verifyDirectSemanticCandidateV2(input) {
-  const repository = realpathSync6(resolve16(input.repository));
+  const repository = realpathSync7(resolve17(input.repository));
   const errors = validatePlanAgainstRepository(input.plan, repository);
   const candidate = input.plan.candidates.find((item) => item.candidate_id === input.candidateId);
   if (!candidate || candidate.resolution_mode !== "direct_check") {
@@ -23565,7 +24596,9 @@ function verifyDirectSemanticCandidateV2(input) {
   if (errors.length > 0 || !candidate || candidate.resolution_mode !== "direct_check") {
     return { errors, verdict: "verification_debt" };
   }
-  const verdict = candidate.kind === "execution_identity_coverage" || candidate.kind === "executable_surface_coverage" || candidate.kind === "historical_evidence_portability" || candidate.kind === "supersession_lineage" ? "confirmed_failure" : "verification_debt";
+  const executableProof = candidate.kind === "executable_surface_coverage" ? candidate.mechanical_proof : void 0;
+  const mechanicallyProvenExecutableGap = executableProof?.checker === "mister-clean/executable-required-role-reachability" && executableProof.schema_version === "1.0" && executableProof.uncovered_required_roles.length > 0 && executableProof.uncovered_required_roles.every((role) => (role.role === "declared_runtime_entrypoint" || role.role === "release_critical_input") && role.package_path.trim().length > 0 && role.source_path.trim().length > 0 && candidate.refs.some((ref) => ref.path === role.package_path) && candidate.refs.some((ref) => ref.path === role.source_path));
+  const verdict = candidate.kind === "execution_identity_coverage" || mechanicallyProvenExecutableGap || candidate.kind === "historical_evidence_portability" || candidate.kind === "supersession_lineage" ? "confirmed_failure" : "verification_debt";
   return {
     errors: verdict === "verification_debt" ? ["direct candidate requires a stronger structured authority contract before deterministic adjudication"] : [],
     verdict
@@ -23574,8 +24607,8 @@ function verifyDirectSemanticCandidateV2(input) {
 function verifyRuntimeSemanticCandidateV2(input) {
   const { attestation, observations, plan } = input;
   const errors = [];
-  const repository = realpathSync6(resolve16(input.repository));
-  const policyPath = realpathSync6(resolve16(input.trustPolicyPath));
+  const repository = realpathSync7(resolve17(input.repository));
+  const policyPath = realpathSync7(resolve17(input.trustPolicyPath));
   if (isInside2(repository, policyPath)) errors.push("semantic trust policy must live outside the audited repository");
   let evidenceRootSha256 = "";
   let verifyBoundEvidence;
@@ -23583,7 +24616,7 @@ function verifyRuntimeSemanticCandidateV2(input) {
     errors.push("semantic verification requires exactly one external evidence root or inline evidence-file set");
     verifyBoundEvidence = () => [];
   } else if (input.evidenceRoot !== void 0) {
-    const evidenceRoot = realpathSync6(resolve16(input.evidenceRoot));
+    const evidenceRoot = realpathSync7(resolve17(input.evidenceRoot));
     if (isInside2(repository, evidenceRoot)) errors.push("semantic evidence root must live outside the audited repository");
     evidenceRootSha256 = semanticEvidenceRootSha256(evidenceRoot);
     verifyBoundEvidence = (refs) => verifyEvidenceRefs(evidenceRoot, refs);
@@ -23597,7 +24630,7 @@ function verifyRuntimeSemanticCandidateV2(input) {
     verifyBoundEvidence = (refs) => verifyPackagedEvidenceRefs(files, refs);
   }
   let policy;
-  const policyBytes = readFileSync8(policyPath);
+  const policyBytes = readFileSync9(policyPath);
   try {
     policy = JSON.parse(new TextDecoder().decode(policyBytes));
   } catch {
@@ -23620,7 +24653,18 @@ function verifyRuntimeSemanticCandidateV2(input) {
   if (observations.observations_sha256 !== observationDigest(observations)) {
     errors.push("semantic observations self-digest is invalid");
   }
-  if (observations.supervisor.actor_id !== "mister-clean") errors.push("semantic observations were not supervised by Mister Clean");
+  const runnerActorId = observations.runner?.actor_id;
+  if (typeof runnerActorId !== "string" || runnerActorId.length === 0 || runnerActorId.trim() !== runnerActorId) {
+    errors.push("semantic runner actor_id must be a canonical nonempty string");
+  }
+  if (typeof observations.runner?.argv_sha256 !== "string" || !HEX_64.test(observations.runner.argv_sha256)) {
+    errors.push("semantic runner argv_sha256 must be a SHA-256 hex string");
+  }
+  if (typeof observations.runner?.executable_sha256 !== "string" || !HEX_64.test(observations.runner.executable_sha256)) {
+    errors.push("semantic runner executable_sha256 must be a SHA-256 hex string");
+  }
+  if (observations.runner?.cwd !== "subject_root") errors.push("semantic runner cwd must be subject_root");
+  if (observations.supervisor?.actor_id !== "mister-clean") errors.push("semantic observations were not supervised by Mister Clean");
   if (observations.tree_before_sha256 !== plan.binding.repository_object_sha256 || observations.tree_after_sha256 !== plan.binding.repository_object_sha256) {
     errors.push("semantic probe subject changed before or during observation capture");
   }
@@ -23660,7 +24704,7 @@ function verifyRuntimeSemanticCandidateV2(input) {
     errors.push("semantic attestation evidence-root digest does not match the supplied evidence bundle");
   }
   errors.push(...verifyBoundEvidence(evidenceRefsIn(attestation)));
-  if (attestation.attester.actor_id === observations.runner.actor_id || attestation.attester.actor_id === observations.supervisor.actor_id) {
+  if (attestation.attester.actor_id === runnerActorId || attestation.attester.actor_id === observations.supervisor?.actor_id) {
     errors.push("semantic attester must be independent of the runner and supervisor");
   }
   const policySha256 = sha256Bytes(policyBytes);
@@ -23738,11 +24782,11 @@ function packageFinding(candidate, code, classification, detail) {
   };
 }
 function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath) {
-  const root = realpathSync6(resolve16(repository));
-  const externalPackagePath = realpathSync6(resolve16(packagePath));
-  const externalTrustPolicyPath = realpathSync6(resolve16(trustPolicyPath));
+  const root = realpathSync7(resolve17(repository));
+  const externalPackagePath = realpathSync7(resolve17(packagePath));
+  const externalTrustPolicyPath = realpathSync7(resolve17(trustPolicyPath));
   const base = auditSemanticRepository(root);
-  const packageBytes = readFileSync8(externalPackagePath);
+  const packageBytes = readFileSync9(externalPackagePath);
   const manifestSha256 = sha256Bytes(packageBytes);
   const findings = [];
   const executions = [];
@@ -23759,7 +24803,7 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
     packageErrors.push("semantic evidence package must be schema 2.0 with one plan and runtime_records array");
   }
   try {
-    const trustPolicy = JSON.parse(readFileSync8(externalTrustPolicyPath, "utf8"));
+    const trustPolicy = JSON.parse(readFileSync9(externalTrustPolicyPath, "utf8"));
     if (trustPolicy.record_type !== "mister-clean.semantic-trust-policy" || trustPolicy.schema_version !== "1.0" || !Array.isArray(trustPolicy.keys)) {
       packageErrors.push("semantic trust policy record_type, schema_version, or keys are invalid");
     }
@@ -23894,13 +24938,13 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
     resolutions,
     snapshot: base.snapshot,
     status,
-    trust_policy_sha256: sha256Bytes(readFileSync8(externalTrustPolicyPath)),
+    trust_policy_sha256: sha256Bytes(readFileSync9(externalTrustPolicyPath)),
     working_tree_sha256: base.working_tree_sha256
   };
 }
 
 // src/closeout/bundle-guard-authority.ts
-import { dirname as dirname8, isAbsolute as isAbsolute15, relative as relative15, resolve as resolve17, sep as sep14 } from "path";
+import { dirname as dirname9, isAbsolute as isAbsolute16, relative as relative15, resolve as resolve18, sep as sep14 } from "path";
 function guardAuthorityDigest(value) {
   return typeof value === "string" && HEX643.test(value);
 }
@@ -23979,7 +25023,7 @@ function guardAuthorityEnvelope(value, kind, manifest2, bundle, guard, path, err
     if (!guardAuthorityDigest(envelope.precommit_sha256)) errors.push(`${path}.precommit_sha256: required embedded precommit authority SHA-256`);
     const precommitRef = requireExactObject(envelope.precommit_ref, ["path", "sha256"], `${path}.precommit_ref`, errors);
     if (precommitRef) {
-      if (typeof precommitRef.path !== "string" || !isAbsolute15(precommitRef.path)) errors.push(`${path}.precommit_ref.path: required absolute external authority path`);
+      if (typeof precommitRef.path !== "string" || !isAbsolute16(precommitRef.path)) errors.push(`${path}.precommit_ref.path: required absolute external authority path`);
       if (!guardAuthorityDigest(precommitRef.sha256)) errors.push(`${path}.precommit_ref.sha256: required lowercase SHA-256`);
       if (precommitRef.sha256 !== object5(guard.authority)?.precommit_sha256) errors.push(`${path}.precommit_ref.sha256: must equal manifest.guard.authority.precommit_sha256`);
     }
@@ -24009,11 +25053,11 @@ async function loadExternalGuardAuthority(files, selectedPath, kind, manifest2, 
     errors.push(`${path}: live GUARD ${kind} state requires --guard-authority <absolute path>`);
     return {};
   }
-  if (!isAbsolute15(selectedPath)) {
+  if (!isAbsolute16(selectedPath)) {
     errors.push(`${path}: path must be absolute`);
     return {};
   }
-  const resolvedPath = resolve17(selectedPath);
+  const resolvedPath = resolve18(selectedPath);
   let realPath;
   try {
     realPath = await files.realpath(resolvedPath);
@@ -24026,12 +25070,12 @@ async function loadExternalGuardAuthority(files, selectedPath, kind, manifest2, 
   for (const root of forbiddenRoots) {
     let rootReal;
     try {
-      rootReal = await files.realpath(resolve17(root));
+      rootReal = await files.realpath(resolve18(root));
     } catch {
-      rootReal = resolve17(root);
+      rootReal = resolve18(root);
     }
     const relation = relative15(rootReal, realPath);
-    if (!(relation === ".." || relation.startsWith(`..${sep14}`) || isAbsolute15(relation))) {
+    if (!(relation === ".." || relation.startsWith(`..${sep14}`) || isAbsolute16(relation))) {
       errors.push(`${path}: authority file must be outside candidate repository, bundle directory, and every live worktree`);
       break;
     }
@@ -24089,7 +25133,7 @@ async function guardEvidenceSnapshot(files, bundleBase, envelope, manifest2, err
     const ref = object5(entry.value);
     if (!ref) continue;
     const label = `$.guard_authority.evidence[${index}]`;
-    if (typeof ref.path === "string" && isAbsolute15(ref.path)) {
+    if (typeof ref.path === "string" && isAbsolute16(ref.path)) {
       if (!entry.externalAllowed) {
         errors.push(`${label}.path: evidence references inside guard authority must be bundle-relative`);
         continue;
@@ -24101,10 +25145,10 @@ async function guardEvidenceSnapshot(files, bundleBase, envelope, manifest2, err
       const bytes2 = await files.readBytes(ref.path);
       const digest4 = sha2569(bytes2);
       if (ref.sha256 !== digest4) errors.push(`${label}.sha256: digest mismatch`);
-      snapshot.set(resolve17(ref.path), digest4);
+      snapshot.set(resolve18(ref.path), digest4);
     } else {
       const loaded = await loadBytesRef(files, bundleBase, ref, label, errors, false);
-      if (loaded.file && loaded.digest) snapshot.set(resolve17(loaded.file), loaded.digest);
+      if (loaded.file && loaded.digest) snapshot.set(resolve18(loaded.file), loaded.digest);
     }
   }
   return snapshot;
@@ -24116,7 +25160,7 @@ function compareEvidenceSnapshots(before, after, errors) {
 }
 async function repositoryIdentity2(repo, git2, files) {
   const remote = (await git2.run(repo, ["config", "--get", "remote.origin.url"], [0, 1])).stdout;
-  return canonicalRemoteRepositoryIdentity(remote) ?? localRepositoryIdentity(await files.realpath(resolve17(repo)));
+  return canonicalRemoteRepositoryIdentity(remote) ?? localRepositoryIdentity(await files.realpath(resolve18(repo)));
 }
 async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath, repo, ports, selectedPath, errors) {
   const guard = object5(manifest2.guard);
@@ -24143,11 +25187,11 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
   try {
     const listing = (await ports.git.run(repo, ["worktree", "list", "--porcelain"])).stdout;
     const discovered = listing.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => line.slice("worktree ".length).trim()).filter((path) => path.length > 0);
-    worktrees = [.../* @__PURE__ */ new Set([repo, ...discovered.map((path) => resolve17(path))])];
+    worktrees = [.../* @__PURE__ */ new Set([repo, ...discovered.map((path) => resolve18(path))])];
   } catch (error) {
     errors.push(`$.guard_authority.worktrees: unable to independently enumerate live worktrees: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const initialWorktreePaths = new Set(worktrees.map((path) => resolve17(path)));
+  const initialWorktreePaths = new Set(worktrees.map((path) => resolve18(path)));
   const loaded = await loadExternalGuardAuthority(
     ports.files,
     selectedPath,
@@ -24155,7 +25199,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
     manifest2,
     bundle,
     guard,
-    dirname8(resolve17(bundlePath)),
+    dirname9(resolve18(bundlePath)),
     repo,
     worktrees,
     errors
@@ -24171,7 +25215,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
       manifest2,
       bundle,
       guard,
-      dirname8(resolve17(bundlePath)),
+      dirname9(resolve18(bundlePath)),
       repo,
       worktrees,
       errors
@@ -24186,7 +25230,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
   }
   const beforeEvidence = await guardEvidenceSnapshot(
     ports.files,
-    dirname8(resolve17(bundlePath)),
+    dirname9(resolve18(bundlePath)),
     loaded.envelope,
     manifest2,
     errors
@@ -24196,8 +25240,8 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
   const target = object5(object5(manifest2.coordination)?.target);
   const subject = object5(bundle.custody)?.subject_commit;
   try {
-    const liveTop = await ports.files.realpath(resolve17((await ports.git.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
-    const requestedRoot = await ports.files.realpath(resolve17(repo));
+    const liveTop = await ports.files.realpath(resolve18((await ports.git.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
+    const requestedRoot = await ports.files.realpath(resolve18(repo));
     initialTopRealpath = liveTop;
     initialRootRealpath = requestedRoot;
     if (liveTop !== requestedRoot) errors.push("$.guard_authority.repository: live Git top-level differs from the requested repository root");
@@ -24265,7 +25309,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
   let afterWorktrees = [...initialWorktreePaths];
   try {
     const listing = (await ports.git.run(repo, ["worktree", "list", "--porcelain"])).stdout;
-    afterWorktrees = listing.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => resolve17(line.slice("worktree ".length).trim())).filter((path) => path.length > 0);
+    afterWorktrees = listing.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => resolve18(line.slice("worktree ".length).trim())).filter((path) => path.length > 0);
     if (!stableEqual2([...new Set(afterWorktrees)].sort(compareCodePoints4), [...initialWorktreePaths].sort(compareCodePoints4))) {
       errors.push("$.guard_authority.worktrees: live worktree set changed during validation");
     }
@@ -24279,7 +25323,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
     manifest2,
     bundle,
     guard,
-    dirname8(resolve17(bundlePath)),
+    dirname9(resolve18(bundlePath)),
     repo,
     afterWorktrees,
     errors
@@ -24296,7 +25340,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
       manifest2,
       bundle,
       guard,
-      dirname8(resolve17(bundlePath)),
+      dirname9(resolve18(bundlePath)),
       repo,
       afterWorktrees,
       errors
@@ -24305,7 +25349,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
   }
   const afterEvidence = await guardEvidenceSnapshot(
     ports.files,
-    dirname8(resolve17(bundlePath)),
+    dirname9(resolve18(bundlePath)),
     loaded.envelope,
     manifest2,
     errors
@@ -24319,8 +25363,8 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
     errors.push(`$.guard_authority: selected authority file could not be re-read after live Git validation: ${error instanceof Error ? error.message : String(error)}`);
   }
   try {
-    const finalTop = await ports.files.realpath(resolve17((await ports.git.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
-    const finalRoot = await ports.files.realpath(resolve17(repo));
+    const finalTop = await ports.files.realpath(resolve18((await ports.git.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
+    const finalRoot = await ports.files.realpath(resolve18(repo));
     if (finalTop !== finalRoot || finalTop !== initialTopRealpath || finalRoot !== initialRootRealpath) errors.push("$.guard_authority.repository: repository root changed during final custody validation");
     const finalIdentity = await repositoryIdentity2(repo, ports.git, ports.files);
     if (!stableEqual2(object5(manifest2.repo)?.id, finalIdentity)) errors.push("$.guard_authority.repository: repository identity changed during final custody validation");
@@ -24362,8 +25406,8 @@ var LOCAL_ACTION_KINDS = /* @__PURE__ */ new Set([
   "handoff_update"
 ]);
 async function validateLiveRepositoryAndTarget(bundle, report, repo, files, git2, errors) {
-  const top = await files.realpath(resolve18((await git2.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
-  const requestedRoot = await files.realpath(resolve18(repo));
+  const top = await files.realpath(resolve19((await git2.run(repo, ["rev-parse", "--show-toplevel"])).stdout));
+  const requestedRoot = await files.realpath(resolve19(repo));
   if (top !== requestedRoot) errors.push(`$.live_repo: expected worktree root ${top}, got ${requestedRoot}`);
   const head = (await git2.run(repo, ["rev-parse", "HEAD"])).stdout;
   const subject = object5(report.repo)?.commit;
@@ -24419,14 +25463,14 @@ async function validateLiveTopology(successor, repo, head, subject, ports, error
   const reportedWorktrees = /* @__PURE__ */ new Map();
   for (const raw of array2(topology.worktrees)) {
     const row = object5(raw);
-    if (row && text(row.path)) reportedWorktrees.set(await files.realpath(resolve18(row.path)), row);
+    if (row && text(row.path)) reportedWorktrees.set(await files.realpath(resolve19(row.path)), row);
   }
   const liveWorktreePaths = /* @__PURE__ */ new Set();
   let dirty = 0;
   let unowned = 0;
   let unmerged = 0;
   for (const row of liveWorktrees) {
-    const livePath = await files.realpath(resolve18(row.worktree ?? ""));
+    const livePath = await files.realpath(resolve19(row.worktree ?? ""));
     liveWorktreePaths.add(livePath);
     const reported = reportedWorktrees.get(livePath) ?? {};
     if (!owned(reported.owner)) unowned += 1;
@@ -24495,7 +25539,7 @@ async function validateLiveSuccessorFiles(successor, manifest2, repo, subject, f
   if (current.commit !== subject) errors.push("$.successor_readiness.current_state.commit: must equal subject commit");
   for (const [index, entry] of array2(object5(successor.handoff)?.entrypoints).entries()) {
     const resolved = await contained(files, repo, entry);
-    if (!text(entry) || isAbsolute16(entry) || entry === ".git" || entry.startsWith(".git/") || !resolved || !await files.isFile(resolved)) errors.push(`$.successor_readiness.handoff.entrypoints[${index}]: must be an existing repository-relative file outside .git`);
+    if (!text(entry) || isAbsolute17(entry) || entry === ".git" || entry.startsWith(".git/") || !resolved || !await files.isFile(resolved)) errors.push(`$.successor_readiness.handoff.entrypoints[${index}]: must be an existing repository-relative file outside .git`);
   }
   for (const name of ["start", "end"]) {
     const snapshot = object5(object5(successor.snapshots)?.[name]) ?? {};
@@ -24516,7 +25560,7 @@ async function validateLiveSuccessorFiles(successor, manifest2, repo, subject, f
 async function loadLiveRegressionBoundary(report, bundlePath, repo, files, errors) {
   const regressionRecord = (await loadRef(
     files,
-    dirname9(resolve18(bundlePath)),
+    dirname10(resolve19(bundlePath)),
     object5(report.regression_control)?.evidence_ref,
     "$.report.regression_control.evidence_ref",
     errors,
@@ -24546,14 +25590,14 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
     const execution = executionFor(detectorId);
     const input = array2(execution?.input_refs).map(object5).find((ref) => ref?.kind === kind);
     if (!input) return void 0;
-    return contained(files, dirname9(resolve18(bundlePath)), input.path);
+    return contained(files, dirname10(resolve19(bundlePath)), input.path);
   };
   const publicSafetyDenylist = await frozenInput("public_safety", "public_safety_denylist");
   const semanticManifest = await frozenInput("semantic_boundary", "semantic_probe_manifest");
   const semanticEvidencePackage = await frozenInput("semantic_boundary", "semantic_evidence_package");
   const semanticTrustPolicy = await frozenInput("semantic_boundary", "semantic_trust_policy");
   const semanticExecution = executionFor("semantic_boundary");
-  const semanticResult = semanticExecution ? await loadRef(files, dirname9(resolve18(bundlePath)), semanticExecution.result_ref, "$.live_detector_coverage.semantic_boundary.result_ref", errors, false) : {};
+  const semanticResult = semanticExecution ? await loadRef(files, dirname10(resolve19(bundlePath)), semanticExecution.result_ref, "$.live_detector_coverage.semantic_boundary.result_ref", errors, false) : {};
   const executeSemanticProbes = Number(semanticResult.data?.executed_probe_count ?? 0) > 0;
   const acceptedDetectorFindings = /* @__PURE__ */ new Set();
   const acceptedObservationIds = /* @__PURE__ */ new Set();
@@ -24619,7 +25663,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
     const nativeControl = object5(successor.native_gate_control);
     const recordedDiscovery = nativeControl ? (await loadRef(
       files,
-      dirname9(resolve18(bundlePath)),
+      dirname10(resolve19(bundlePath)),
       nativeControl.discovery_ref,
       "$.live_native_gates.recorded_discovery_ref",
       errors,
@@ -24627,7 +25671,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
     )).data : void 0;
     const recordedCoverage = nativeControl ? (await loadRef(
       files,
-      dirname9(resolve18(bundlePath)),
+      dirname10(resolve19(bundlePath)),
       nativeControl.coverage_ref,
       "$.live_native_gates.recorded_coverage_ref",
       errors,
@@ -24643,7 +25687,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
         if (!recordedDiscovery || !stableEqual2(liveDiscovery, recordedDiscovery)) {
           errors.push("$.live_native_gates.discovery: fresh canonical discovery differs from recorded successor discovery");
         }
-        const evidenceDirectory = await mkdtemp3(join8(tmpdir4(), "mister-clean-live-native-"));
+        const evidenceDirectory = await mkdtemp3(join9(tmpdir4(), "mister-clean-live-native-"));
         try {
           const liveCoverage = await runNativeGates(
             repo,
@@ -24655,7 +25699,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
             liveDiscovery,
             liveObject,
             evidenceDirectory,
-            { validation_time: /* @__PURE__ */ new Date(), require_passing: false }
+            { validation_time: /* @__PURE__ */ new Date(), require_passing: false, repository: repo }
           );
           for (const error of liveNativeErrors) errors.push(`$.live_native_gates.execution: ${error}`);
           const liveFailureIds = sortedUnique(nativeGateFailureObservations(
@@ -24759,7 +25803,7 @@ async function discoverPlanningRoots2(repo, files) {
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = /* @__PURE__ */ new Map();
   for (const row of directories) {
-    const parent = dirname10(row.relative);
+    const parent = dirname11(row.relative);
     const children = childrenByDirectory.get(parent) ?? /* @__PURE__ */ new Set();
     children.add(basename10(row.relative).toLocaleLowerCase("und"));
     childrenByDirectory.set(parent, children);
@@ -25018,7 +26062,7 @@ async function validateChangeInventory(bundle, report, manifest2, repo, git2, ba
     const cpath = `${path}.changes[${index}]`;
     const change = requireObject(raw, ["status", "path", "action_ids", "exclusion"], cpath, errors);
     if (!change || !text(change.path)) continue;
-    if (isAbsolute17(change.path) || change.path.split(/[\\/]/).includes("..") || reported.has(change.path)) errors.push(`${cpath}.path: required unique repository-relative path`);
+    if (isAbsolute18(change.path) || change.path.split(/[\\/]/).includes("..") || reported.has(change.path)) errors.push(`${cpath}.path: required unique repository-relative path`);
     reported.set(change.path, String(change.status));
     if (!(/* @__PURE__ */ new Set(["A", "M", "D", "T"])).has(String(change.status))) errors.push(`${cpath}.status: expected A, M, D, or T`);
     if (!Array.isArray(change.action_ids) || !array2(change.action_ids).every(text)) errors.push(`${cpath}.action_ids: required string array`);
@@ -25068,7 +26112,7 @@ async function validateBundleUnsafe(data, bundlePath, options = {}) {
   if (bundle.record_type !== "mister-clean.closure-bundle") errors.push("$.record_type: expected mister-clean.closure-bundle");
   if (bundle.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
   for (const field2 of ["run_id", "request_ref"]) if (!text(bundle[field2])) errors.push(`$.${field2}: required`);
-  const base = dirname10(resolve19(bundlePath));
+  const base = dirname11(resolve20(bundlePath));
   const reportLoad = await loadRef(ports.files, base, bundle.report, "$.report", errors, allowPlaceholders);
   const manifestLoad = await loadRef(ports.files, base, bundle.manifest, "$.manifest", errors, allowPlaceholders);
   const report = reportLoad.data;
@@ -25124,13 +26168,13 @@ async function validateBundleUnsafe(data, bundlePath, options = {}) {
   if (custody) {
     if (custody.mode !== "sidecar") errors.push("$.custody.mode: only sidecar is supported");
     if (!allowPlaceholders && custody.subject_commit !== object5(report.repo)?.commit) errors.push("$.custody.subject_commit: must equal report repo.commit");
-    if (!Array.isArray(custody.evidence_paths) || !array2(custody.evidence_paths).every((entry) => text(entry) && !isAbsolute17(entry) && !entry.split(/[\\/]/).includes(".."))) errors.push("$.custody.evidence_paths: required repository-relative string array");
+    if (!Array.isArray(custody.evidence_paths) || !array2(custody.evidence_paths).every((entry) => text(entry) && !isAbsolute18(entry) && !entry.split(/[\\/]/).includes(".."))) errors.push("$.custody.evidence_paths: required repository-relative string array");
     if (custody.evidence_root !== null || !stableEqual2(custody.evidence_paths, [])) errors.push("$.custody: sidecar mode requires null evidence_root and empty evidence_paths");
   }
-  let repo = options.repoPath ? resolve19(options.repoPath) : void 0;
+  let repo = options.repoPath ? resolve20(options.repoPath) : void 0;
   if (verifyLive && !allowPlaceholders && !repo) {
     const probe = await ports.git.run(base, ["rev-parse", "--show-toplevel"], [0, 128]);
-    if (probe.code === 0 && probe.stdout) repo = resolve19(probe.stdout);
+    if (probe.code === 0 && probe.stdout) repo = resolve20(probe.stdout);
     else errors.push("$.live_repo: pass --repo or store the bundle inside the repository");
   }
   const repoExists = repo ? await ports.files.exists(repo) : false;
@@ -25195,15 +26239,15 @@ async function validateBundleFile(bundlePath, options = {}) {
 }
 
 // src/closeout/prepare.ts
-import { createHash as createHash16 } from "crypto";
-import { existsSync as existsSync6, mkdirSync, readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "fs";
-import { join as join9, resolve as resolve20 } from "path";
+import { createHash as createHash17 } from "crypto";
+import { existsSync as existsSync7, mkdirSync as mkdirSync2, readFileSync as readFileSync10, writeFileSync as writeFileSync3 } from "fs";
+import { join as join10, resolve as resolve21 } from "path";
 function asObject(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
   return value;
 }
 function sha25610(value) {
-  return createHash16("sha256").update(value).digest("hex");
+  return createHash17("sha256").update(value).digest("hex");
 }
 function isoTimestamp3(date) {
   return date.toISOString();
@@ -25214,7 +26258,7 @@ function planningClass(path) {
   return "planning";
 }
 function loadTemplate(root, name) {
-  return structuredClone(readJson(join9(root, "assets", name)));
+  return structuredClone(readJson(join10(root, "assets", name)));
 }
 function unique2(values) {
   return [...new Set(values)];
@@ -25272,298 +26316,313 @@ function validatePrepareMode(options) {
   return mode;
 }
 async function collectPrepareEvidence(options, mode) {
-  const requestedRepository = resolve20(options.repo);
-  const repository = resolve20(git(requestedRepository, "rev-parse", "--show-toplevel"));
+  const requestedRepository = resolve21(options.repo);
+  const repository = resolve21(git(requestedRepository, "rev-parse", "--show-toplevel"));
   const baselineRepositoryObject = captureRepositoryObject(repository);
-  const bundleDirectory = join9(resolve20(options.evidenceHome), "mister-clean", options.runId);
-  if (existsSync6(bundleDirectory)) {
-    throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
-  }
-  mkdirSync(bundleDirectory, { recursive: true });
-  const templates = options.templateRoot ?? packageRoot();
   const clock = options.now ?? (() => /* @__PURE__ */ new Date());
   const now = isoTimestamp3(clock());
-  const head = baselineRepositoryObject.head_commit;
-  const branch = git(repository, "branch", "--show-current") || "detached";
-  const repoId = repositoryIdentity(repository);
-  const upstream = runGit2(
-    repository,
-    ["rev-parse", "--symbolic-full-name", "@{upstream}"],
-    [0, 128]
-  ).stdout;
-  const targetRef = upstream || (branch === "detached" ? head : `refs/heads/${branch}`);
-  const targetCommit = git(repository, "rev-parse", targetRef);
-  const mergeBase = git(repository, "merge-base", targetCommit, head);
-  const divergence = git(
-    repository,
-    "rev-list",
-    "--left-right",
-    "--count",
-    `${targetCommit}...${head}`
-  ).split(/\s+/);
-  const left = Number(divergence[0] ?? 0);
-  const right = Number(divergence[1] ?? 0);
-  let requestBytes;
-  if (options.requestSource !== void 0) requestBytes = readFileSync9(options.requestSource);
-  else if (options.requestText !== void 0) requestBytes = Buffer.from(options.requestText, "utf8");
-  else requestBytes = Buffer.from(options.requestRef, "utf8");
-  const requestSha256 = sha25610(requestBytes);
-  let requestSource2 = null;
-  let sourceKind = "reference_only";
-  if (options.requestSource !== void 0 || options.requestText !== void 0) {
-    const path = join9(bundleDirectory, "operative-request.txt");
-    writeFileSync2(path, requestBytes);
-    requestSource2 = { path: "operative-request.txt", sha256: sha256File2(path) };
-    sourceKind = "exact_bytes";
-  }
-  const criteriaIds2 = unique2(options.criteria ?? []);
-  writeJson(join9(bundleDirectory, "criteria-source.json"), {
-    record_type: "mister-clean.criteria-source",
-    request_ref: options.requestRef,
-    request_sha256: requestSha256,
-    criteria_ids: criteriaIds2
-  });
-  const planningRoots = discoverPlanningRoots(repository);
-  const planningAudit = {
-    ...auditPlanningRepository(repository),
-    object: baselineRepositoryObject.sha256,
-    repository_object: baselineRepositoryObject
-  };
-  const unclassifiedPlanningPaths = new Set(
-    planningAudit.findings.filter((finding4) => finding4.code === "planning_input_unparsed").map((finding4) => finding4.path)
-  );
-  writeJson(join9(bundleDirectory, "planning-audit.json"), planningAudit);
-  const planningAuditRef = {
-    path: "planning-audit.json",
-    sha256: sha256File2(join9(bundleDirectory, "planning-audit.json"))
-  };
-  let publicSafetyInputRef;
-  let publicSafetyDenylistPath;
-  if (options.publicSafetyDenylistPath !== void 0) {
-    const inputPath = join9(bundleDirectory, "public-safety-denylist.txt");
-    writeFileSync2(inputPath, readFileSync9(resolve20(options.publicSafetyDenylistPath)));
-    publicSafetyDenylistPath = inputPath;
-    publicSafetyInputRef = {
-      kind: "public_safety_denylist",
-      path: "public-safety-denylist.txt",
-      sha256: sha256File2(inputPath)
-    };
-  }
-  const trackedPaths2 = trackedShippablePaths(repository);
-  const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths2.length });
-  const publicSafetyAudit = detectorRunPolicy.public_safety.disposition === "required" ? {
-    ...scanTrackedPublicSafetySync(repository, trackedPaths2, loadDenylistSync(publicSafetyDenylistPath)),
-    object: baselineRepositoryObject.sha256,
-    repository_object: baselineRepositoryObject,
-    ...publicSafetyInputRef === void 0 ? {} : { input_sha256: publicSafetyInputRef.sha256 }
-  } : void 0;
-  if (publicSafetyAudit) writeJson(join9(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
-  const publicSafetyAuditRef = publicSafetyAudit === void 0 ? void 0 : {
-    path: "public-safety-audit.json",
-    sha256: sha256File2(join9(bundleDirectory, "public-safety-audit.json"))
-  };
-  const githubActionsAudit = {
-    ...auditGitHubActionsRepository(repository),
-    object: baselineRepositoryObject.sha256,
-    repository_object: baselineRepositoryObject
-  };
-  writeJson(join9(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
-  const githubActionsAuditRef = {
-    path: "github-actions-audit.json",
-    sha256: sha256File2(join9(bundleDirectory, "github-actions-audit.json"))
-  };
-  const semanticInputRefs = [];
-  let semanticManifestPath;
-  let semanticEvidencePackagePath;
-  let semanticTrustPolicyPath;
-  if (options.semanticManifestPath !== void 0) {
-    const inputPath = join9(bundleDirectory, "semantic-probe-manifest.json");
-    writeFileSync2(inputPath, readFileSync9(resolve20(options.semanticManifestPath)));
-    semanticManifestPath = inputPath;
-    semanticInputRefs.push({
-      kind: "semantic_probe_manifest",
-      path: "semantic-probe-manifest.json",
-      sha256: sha256File2(inputPath)
-    });
-  }
-  if (options.semanticEvidencePackagePath !== void 0 && options.semanticTrustPolicyPath !== void 0) {
-    const packageInputPath = join9(bundleDirectory, "semantic-evidence-package.json");
-    const policyInputPath = join9(bundleDirectory, "semantic-trust-policy.json");
-    writeFileSync2(packageInputPath, readFileSync9(resolve20(options.semanticEvidencePackagePath)));
-    writeFileSync2(policyInputPath, readFileSync9(resolve20(options.semanticTrustPolicyPath)));
-    semanticEvidencePackagePath = packageInputPath;
-    semanticTrustPolicyPath = policyInputPath;
-    semanticInputRefs.push({
-      kind: "semantic_evidence_package",
-      path: "semantic-evidence-package.json",
-      sha256: sha256File2(packageInputPath)
-    }, {
-      kind: "semantic_trust_policy",
-      path: "semantic-trust-policy.json",
-      sha256: sha256File2(policyInputPath)
-    });
-  }
-  const semanticAuditResult = semanticEvidencePackagePath !== void 0 && semanticTrustPolicyPath !== void 0 ? auditSemanticEvidencePackageV2(repository, semanticEvidencePackagePath, semanticTrustPolicyPath) : auditSemanticRepository(repository, {
-    execute: options.executeSemanticProbes ?? false,
-    ...semanticManifestPath === void 0 ? {} : { manifestPath: semanticManifestPath }
-  });
-  const semanticAudit = {
-    ...semanticAuditResult,
-    object: baselineRepositoryObject.sha256,
-    repository_object: baselineRepositoryObject
-  };
-  writeJson(join9(bundleDirectory, "semantic-audit.json"), semanticAudit);
-  const semanticAuditRef = {
-    path: "semantic-audit.json",
-    sha256: sha256File2(join9(bundleDirectory, "semantic-audit.json"))
-  };
-  const detectorCoverage = createDetectorCoverage({
-    baselineRepositoryObject,
-    observedAt: now,
-    runPolicy: detectorRunPolicy,
-    runtimeAttestation: options.runtimeAttestation,
-    planningAudit,
-    planningRef: planningAuditRef,
-    ...publicSafetyAudit === void 0 ? {} : { publicSafetyAudit },
-    ...publicSafetyAuditRef === void 0 ? {} : { publicSafetyRef: publicSafetyAuditRef },
-    githubActionsAudit,
-    githubActionsRef: githubActionsAuditRef,
-    semanticAudit,
-    semanticRef: semanticAuditRef,
-    inputRefs: {
-      ...publicSafetyInputRef === void 0 ? {} : { public_safety: [publicSafetyInputRef] },
-      ...semanticInputRefs.length === 0 ? {} : { semantic_boundary: semanticInputRefs }
+  const executionLease = acquireRepositoryVerificationLease(repository, clock);
+  let leaseTransferred = false;
+  try {
+    const bundleDirectory = join10(resolve21(options.evidenceHome), "mister-clean", options.runId);
+    if (existsSync7(bundleDirectory)) {
+      throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
     }
-  });
-  const nativeGateDiscovery = discoverNativeGates(repository, baselineRepositoryObject);
-  const nativeGateOutputDirectory = join9(bundleDirectory, "native-gate-output");
-  const nativeGateCoverage = await runNativeGates(
-    repository,
-    nativeGateDiscovery,
-    nativeGateOutputDirectory,
-    {
-      ...options.nativeGateTimeoutMs === void 0 ? {} : { timeout_ms: options.nativeGateTimeoutMs },
-      now: clock
+    mkdirSync2(bundleDirectory, { recursive: true });
+    const templates = options.templateRoot ?? packageRoot();
+    const head = baselineRepositoryObject.head_commit;
+    const branch = git(repository, "branch", "--show-current") || "detached";
+    const repoId = repositoryIdentity(repository);
+    const upstream = runGit2(
+      repository,
+      ["rev-parse", "--symbolic-full-name", "@{upstream}"],
+      [0, 128]
+    ).stdout;
+    const targetRef = upstream || (branch === "detached" ? head : `refs/heads/${branch}`);
+    const targetCommit = git(repository, "rev-parse", targetRef);
+    const mergeBase = git(repository, "merge-base", targetCommit, head);
+    const divergence = git(
+      repository,
+      "rev-list",
+      "--left-right",
+      "--count",
+      `${targetCommit}...${head}`
+    ).split(/\s+/);
+    const left = Number(divergence[0] ?? 0);
+    const right = Number(divergence[1] ?? 0);
+    let requestBytes;
+    if (options.requestSource !== void 0) requestBytes = readFileSync10(options.requestSource);
+    else if (options.requestText !== void 0) requestBytes = Buffer.from(options.requestText, "utf8");
+    else requestBytes = Buffer.from(options.requestRef, "utf8");
+    const requestSha256 = sha25610(requestBytes);
+    let requestSource2 = null;
+    let sourceKind = "reference_only";
+    if (options.requestSource !== void 0 || options.requestText !== void 0) {
+      const path = join10(bundleDirectory, "operative-request.txt");
+      writeFileSync3(path, requestBytes);
+      requestSource2 = { path: "operative-request.txt", sha256: sha256File2(path) };
+      sourceKind = "exact_bytes";
     }
-  );
-  writeJson(join9(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
-  writeJson(join9(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
-  const nativeGateValidationTime = clock();
-  const nativeGateIntegrityErrors = await validateNativeGateCoverage(
-    nativeGateCoverage,
-    nativeGateDiscovery,
-    nativeGateCoverage.closing_repository_object,
-    nativeGateOutputDirectory,
-    { validation_time: nativeGateValidationTime, require_passing: false }
-  );
-  const nativeGateValidationErrors = await validateNativeGateCoverage(
-    nativeGateCoverage,
-    nativeGateDiscovery,
-    nativeGateCoverage.closing_repository_object,
-    nativeGateOutputDirectory,
-    { validation_time: nativeGateValidationTime }
-  );
-  writeJson(join9(bundleDirectory, "native-gate-validation.json"), {
-    record_type: "mister-clean.native-gate-validation",
-    schema_version: "1.0",
-    discovery_sha256: nativeGateDiscovery.catalog_sha256,
-    coverage_sha256: nativeGateCoverage.coverage_sha256,
-    status: nativeGateValidationErrors.length === 0 ? "pass" : "fail",
-    errors: nativeGateValidationErrors,
-    observed_at: isoTimestamp3(clock())
-  });
-  if (nativeGateIntegrityErrors.length > 0) {
-    throw new Error(
-      `repository-native gate evidence is structurally invalid; closeout preparation stopped: ${nativeGateIntegrityErrors.join("; ")}`
-    );
-  }
-  const nativeGateRows = nativeGateCoverage.executions.map((execution) => {
-    const definition = nativeGateDiscovery.gates.find((gate) => gate.id === execution.gate_id);
-    if (!definition) throw new Error(`native gate execution has no discovery definition: ${execution.gate_id}`);
-    const path = `native-gate-${sha25610(Buffer.from(execution.gate_id, "utf8")).slice(0, 16)}.json`;
-    const command = nativeGateCommand(
-      execution.command.executable,
-      execution.command.argv,
-      execution.command.cwd
-    );
-    const passed = execution.state === "passed";
-    const record4 = {
-      record_type: "mister-clean.gate-result",
-      gate_id: execution.gate_id,
-      object: nativeGateCoverage.closing_repository_object.sha256,
-      command,
-      observed_status: execution.exit_code ?? -1,
-      semantic_status: passed ? "pass" : "fail",
-      verified: passed ? 1 : 0,
-      total: 1,
-      warnings: 0,
-      debt: passed ? 0 : 1,
-      skipped: execution.state === "skipped" ? 1 : 0,
-      observed_at: execution.finished_at,
-      native_definition_sha256: definition.definition_sha256,
-      native_coverage_sha256: nativeGateCoverage.coverage_sha256,
-      stdout_ref: { ...execution.stdout_ref, path: `native-gate-output/${execution.stdout_ref.path}` },
-      stderr_ref: { ...execution.stderr_ref, path: `native-gate-output/${execution.stderr_ref.path}` }
+    const criteriaIds2 = unique2(options.criteria ?? []);
+    writeJson(join10(bundleDirectory, "criteria-source.json"), {
+      record_type: "mister-clean.criteria-source",
+      request_ref: options.requestRef,
+      request_sha256: requestSha256,
+      criteria_ids: criteriaIds2
+    });
+    const planningRoots = discoverPlanningRoots(repository);
+    const planningAudit = {
+      ...auditPlanningRepository(repository),
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject
     };
-    writeJson(join9(bundleDirectory, path), record4);
+    const unclassifiedPlanningPaths = new Set(
+      planningAudit.findings.filter((finding4) => finding4.code === "planning_input_unparsed").map((finding4) => finding4.path)
+    );
+    writeJson(join10(bundleDirectory, "planning-audit.json"), planningAudit);
+    const planningAuditRef = {
+      path: "planning-audit.json",
+      sha256: sha256File2(join10(bundleDirectory, "planning-audit.json"))
+    };
+    let publicSafetyInputRef;
+    let publicSafetyDenylistPath;
+    if (options.publicSafetyDenylistPath !== void 0) {
+      const inputPath = join10(bundleDirectory, "public-safety-denylist.txt");
+      writeFileSync3(inputPath, readFileSync10(resolve21(options.publicSafetyDenylistPath)));
+      publicSafetyDenylistPath = inputPath;
+      publicSafetyInputRef = {
+        kind: "public_safety_denylist",
+        path: "public-safety-denylist.txt",
+        sha256: sha256File2(inputPath)
+      };
+    }
+    const trackedPaths2 = trackedShippablePaths(repository);
+    const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths2.length });
+    const publicSafetyAudit = detectorRunPolicy.public_safety.disposition === "required" ? {
+      ...scanTrackedPublicSafetySync(repository, trackedPaths2, loadDenylistSync(publicSafetyDenylistPath)),
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject,
+      ...publicSafetyInputRef === void 0 ? {} : { input_sha256: publicSafetyInputRef.sha256 }
+    } : void 0;
+    if (publicSafetyAudit) writeJson(join10(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
+    const publicSafetyAuditRef = publicSafetyAudit === void 0 ? void 0 : {
+      path: "public-safety-audit.json",
+      sha256: sha256File2(join10(bundleDirectory, "public-safety-audit.json"))
+    };
+    const githubActionsAudit = {
+      ...auditGitHubActionsRepository(repository),
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject
+    };
+    writeJson(join10(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
+    const githubActionsAuditRef = {
+      path: "github-actions-audit.json",
+      sha256: sha256File2(join10(bundleDirectory, "github-actions-audit.json"))
+    };
+    const semanticInputRefs = [];
+    let semanticManifestPath;
+    let semanticEvidencePackagePath;
+    let semanticTrustPolicyPath;
+    if (options.semanticManifestPath !== void 0) {
+      const inputPath = join10(bundleDirectory, "semantic-probe-manifest.json");
+      writeFileSync3(inputPath, readFileSync10(resolve21(options.semanticManifestPath)));
+      semanticManifestPath = inputPath;
+      semanticInputRefs.push({
+        kind: "semantic_probe_manifest",
+        path: "semantic-probe-manifest.json",
+        sha256: sha256File2(inputPath)
+      });
+    }
+    if (options.semanticEvidencePackagePath !== void 0 && options.semanticTrustPolicyPath !== void 0) {
+      const packageInputPath = join10(bundleDirectory, "semantic-evidence-package.json");
+      const policyInputPath = join10(bundleDirectory, "semantic-trust-policy.json");
+      writeFileSync3(packageInputPath, readFileSync10(resolve21(options.semanticEvidencePackagePath)));
+      writeFileSync3(policyInputPath, readFileSync10(resolve21(options.semanticTrustPolicyPath)));
+      semanticEvidencePackagePath = packageInputPath;
+      semanticTrustPolicyPath = policyInputPath;
+      semanticInputRefs.push({
+        kind: "semantic_evidence_package",
+        path: "semantic-evidence-package.json",
+        sha256: sha256File2(packageInputPath)
+      }, {
+        kind: "semantic_trust_policy",
+        path: "semantic-trust-policy.json",
+        sha256: sha256File2(policyInputPath)
+      });
+    }
+    const semanticAuditResult = semanticEvidencePackagePath !== void 0 && semanticTrustPolicyPath !== void 0 ? auditSemanticEvidencePackageV2(repository, semanticEvidencePackagePath, semanticTrustPolicyPath) : auditSemanticRepository(repository, {
+      execute: options.executeSemanticProbes ?? false,
+      ...semanticManifestPath === void 0 ? {} : { manifestPath: semanticManifestPath }
+    });
+    const semanticAudit = {
+      ...semanticAuditResult,
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject
+    };
+    writeJson(join10(bundleDirectory, "semantic-audit.json"), semanticAudit);
+    const semanticAuditRef = {
+      path: "semantic-audit.json",
+      sha256: sha256File2(join10(bundleDirectory, "semantic-audit.json"))
+    };
+    const detectorCoverage = createDetectorCoverage({
+      baselineRepositoryObject,
+      observedAt: now,
+      runPolicy: detectorRunPolicy,
+      runtimeAttestation: options.runtimeAttestation,
+      planningAudit,
+      planningRef: planningAuditRef,
+      ...publicSafetyAudit === void 0 ? {} : { publicSafetyAudit },
+      ...publicSafetyAuditRef === void 0 ? {} : { publicSafetyRef: publicSafetyAuditRef },
+      githubActionsAudit,
+      githubActionsRef: githubActionsAuditRef,
+      semanticAudit,
+      semanticRef: semanticAuditRef,
+      inputRefs: {
+        ...publicSafetyInputRef === void 0 ? {} : { public_safety: [publicSafetyInputRef] },
+        ...semanticInputRefs.length === 0 ? {} : { semantic_boundary: semanticInputRefs }
+      }
+    });
+    const nativeGateDiscovery = discoverNativeGates(repository, baselineRepositoryObject);
+    const nativeGateOutputDirectory = join10(bundleDirectory, "native-gate-output");
+    leaseTransferred = true;
+    const nativeGateCoverage = await runNativeGates(
+      repository,
+      nativeGateDiscovery,
+      nativeGateOutputDirectory,
+      {
+        ...options.nativeGateTimeoutMs === void 0 ? {} : { timeout_ms: options.nativeGateTimeoutMs },
+        now: clock,
+        execution_lease: executionLease
+      }
+    );
+    writeJson(join10(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
+    writeJson(join10(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
+    const nativeGateValidationTime = clock();
+    const nativeGateIntegrityErrors = await validateNativeGateCoverage(
+      nativeGateCoverage,
+      nativeGateDiscovery,
+      nativeGateCoverage.closing_repository_object,
+      nativeGateOutputDirectory,
+      { validation_time: nativeGateValidationTime, require_passing: false, repository }
+    );
+    const nativeGateValidationErrors = await validateNativeGateCoverage(
+      nativeGateCoverage,
+      nativeGateDiscovery,
+      nativeGateCoverage.closing_repository_object,
+      nativeGateOutputDirectory,
+      { validation_time: nativeGateValidationTime, repository }
+    );
+    writeJson(join10(bundleDirectory, "native-gate-validation.json"), {
+      record_type: "mister-clean.native-gate-validation",
+      schema_version: "1.0",
+      discovery_sha256: nativeGateDiscovery.catalog_sha256,
+      coverage_sha256: nativeGateCoverage.coverage_sha256,
+      status: nativeGateValidationErrors.length === 0 ? "pass" : "fail",
+      errors: nativeGateValidationErrors,
+      observed_at: isoTimestamp3(clock())
+    });
+    if (nativeGateIntegrityErrors.length > 0) {
+      throw new Error(
+        `repository-native gate evidence is structurally invalid; closeout preparation stopped: ${nativeGateIntegrityErrors.join("; ")}`
+      );
+    }
+    const nativeGateRows = nativeGateCoverage.executions.map((execution) => {
+      const definition = nativeGateDiscovery.gates.find((gate) => gate.id === execution.gate_id);
+      if (!definition) throw new Error(`native gate execution has no discovery definition: ${execution.gate_id}`);
+      const path = `native-gate-${sha25610(Buffer.from(execution.gate_id, "utf8")).slice(0, 16)}.json`;
+      const command = nativeGateCommand(
+        execution.command.executable,
+        execution.command.argv,
+        execution.command.cwd
+      );
+      const passed = execution.state === "passed";
+      const record4 = {
+        record_type: "mister-clean.gate-result",
+        gate_id: execution.gate_id,
+        object: nativeGateCoverage.closing_repository_object.sha256,
+        command,
+        observed_status: execution.exit_code ?? -1,
+        semantic_status: passed ? "pass" : "fail",
+        verified: passed ? 1 : 0,
+        total: 1,
+        warnings: 0,
+        debt: passed ? 0 : 1,
+        skipped: execution.state === "skipped" ? 1 : 0,
+        observed_at: execution.finished_at,
+        native_definition_sha256: definition.definition_sha256,
+        native_coverage_sha256: nativeGateCoverage.coverage_sha256,
+        stdout_ref: { ...execution.stdout_ref, path: `native-gate-output/${execution.stdout_ref.path}` },
+        stderr_ref: { ...execution.stderr_ref, path: `native-gate-output/${execution.stderr_ref.path}` }
+      };
+      writeJson(join10(bundleDirectory, path), record4);
+      return {
+        id: execution.gate_id,
+        kind: execution.kind,
+        object: nativeGateCoverage.closing_repository_object.sha256,
+        command,
+        expected_status: 0,
+        observed_status: execution.exit_code ?? -1,
+        semantic_status: passed ? "pass" : "fail",
+        verified: passed ? 1 : 0,
+        total: 1,
+        warnings: 0,
+        debt: passed ? 0 : 1,
+        skipped: execution.state === "skipped" ? 1 : 0,
+        evidence_ref: { path, sha256: sha256File2(join10(bundleDirectory, path)) }
+      };
+    });
+    if (nativeGateCoverage.closing_repository_object.sha256 !== baselineRepositoryObject.sha256) {
+      throw new Error("repository-native gate execution changed the bound repository object; evidence was preserved and closeout stopped");
+    }
     return {
-      id: execution.gate_id,
-      kind: execution.kind,
-      object: nativeGateCoverage.closing_repository_object.sha256,
-      command,
-      expected_status: 0,
-      observed_status: execution.exit_code ?? -1,
-      semantic_status: passed ? "pass" : "fail",
-      verified: passed ? 1 : 0,
-      total: 1,
-      warnings: 0,
-      debt: passed ? 0 : 1,
-      skipped: execution.state === "skipped" ? 1 : 0,
-      evidence_ref: { path, sha256: sha256File2(join9(bundleDirectory, path)) }
+      options,
+      mode,
+      repository,
+      baselineRepositoryObject,
+      bundleDirectory,
+      templates,
+      clock,
+      now,
+      head,
+      branch,
+      repoId,
+      upstream,
+      targetRef,
+      targetCommit,
+      mergeBase,
+      left,
+      right,
+      requestSha256,
+      requestSource: requestSource2,
+      sourceKind,
+      criteriaIds: criteriaIds2,
+      planningRoots,
+      planningAudit,
+      unclassifiedPlanningPaths,
+      planningAuditRef,
+      publicSafetyInputRef,
+      publicSafetyAudit,
+      publicSafetyAuditRef,
+      githubActionsAudit,
+      githubActionsAuditRef,
+      semanticAudit,
+      semanticAuditRef,
+      detectorCoverage,
+      nativeGateDiscovery,
+      nativeGateCoverage,
+      nativeGateValidationErrors,
+      nativeGateRows
     };
-  });
-  if (nativeGateCoverage.closing_repository_object.sha256 !== baselineRepositoryObject.sha256) {
-    throw new Error("repository-native gate execution changed the bound repository object; evidence was preserved and closeout stopped");
+  } catch (error) {
+    if (!leaseTransferred) {
+      try {
+        executionLease.release();
+      } catch (releaseError) {
+        throw new AggregateError([error, releaseError], "closeout preparation and execution-lease release both failed");
+      }
+    }
+    throw error;
   }
-  return {
-    options,
-    mode,
-    repository,
-    baselineRepositoryObject,
-    bundleDirectory,
-    templates,
-    clock,
-    now,
-    head,
-    branch,
-    repoId,
-    upstream,
-    targetRef,
-    targetCommit,
-    mergeBase,
-    left,
-    right,
-    requestSha256,
-    requestSource: requestSource2,
-    sourceKind,
-    criteriaIds: criteriaIds2,
-    planningRoots,
-    planningAudit,
-    unclassifiedPlanningPaths,
-    planningAuditRef,
-    publicSafetyInputRef,
-    publicSafetyAudit,
-    publicSafetyAuditRef,
-    githubActionsAudit,
-    githubActionsAuditRef,
-    semanticAudit,
-    semanticAuditRef,
-    detectorCoverage,
-    nativeGateDiscovery,
-    nativeGateCoverage,
-    nativeGateValidationErrors,
-    nativeGateRows
-  };
 }
 async function collectPrepareTopology(context) {
   const {
@@ -25586,7 +26645,7 @@ async function collectPrepareTopology(context) {
       const census = await captureFileCensus({
         repository_root: repository,
         roots: [rootText],
-        output_path: join9(bundleDirectory, `planning-census-${index + 1}.json`)
+        output_path: join10(bundleDirectory, `planning-census-${index + 1}.json`)
       });
       const artifacts = census.entries.map((entry) => ({
         path: entry.path,
@@ -25632,7 +26691,7 @@ async function collectPrepareTopology(context) {
     ];
   }
   const worktrees = parseWorktrees(repository).map((row) => {
-    const path = resolve20(row.worktree);
+    const path = resolve21(row.worktree);
     const dirtyCount = splitLines(git(path, "status", "--porcelain=v1", "--untracked-files=all")).length;
     return {
       path,
@@ -25673,13 +26732,13 @@ async function collectPrepareTopology(context) {
     options.processPort === void 0 ? {} : { processPort: options.processPort }
   );
   const processes = successorProcessRows(processCensus);
-  writeJson(join9(bundleDirectory, "process-census.json"), processCensus);
+  writeJson(join10(bundleDirectory, "process-census.json"), processCensus);
   const processCensusRef = {
     path: "process-census.json",
-    sha256: sha256File2(join9(bundleDirectory, "process-census.json"))
+    sha256: sha256File2(join10(bundleDirectory, "process-census.json"))
   };
   const currentCandidates = ["CURRENT-STATE.md", "docs/CURRENT-STATE.md", "_STATUS.md", "README.md"];
-  const currentPath = currentCandidates.find((candidate) => existsSync6(join9(repository, candidate)));
+  const currentPath = currentCandidates.find((candidate) => existsSync7(join10(repository, candidate)));
   let policyRef = null;
   let targetObservation;
   if (upstream) {
@@ -25694,13 +26753,13 @@ async function collectPrepareTopology(context) {
       observed_at: now
     };
   } else {
-    writeJson(join9(bundleDirectory, "local-target-policy.json"), {
+    writeJson(join10(bundleDirectory, "local-target-policy.json"), {
       record_type: "mister-clean.local-target-policy",
       policy_ref: "no configured upstream; current branch is the conservative local target"
     });
     policyRef = {
       path: "local-target-policy.json",
-      sha256: sha256File2(join9(bundleDirectory, "local-target-policy.json"))
+      sha256: sha256File2(join10(bundleDirectory, "local-target-policy.json"))
     };
     targetObservation = {
       kind: "local_ref_resolution",
@@ -25960,7 +27019,7 @@ function assemblePrepareReport(context) {
         observed_at: execution?.finished_at ?? now,
         evidence_ref: {
           path: "native-gate-validation.json",
-          sha256: sha256File2(join9(bundleDirectory, "native-gate-validation.json"))
+          sha256: sha256File2(join10(bundleDirectory, "native-gate-validation.json"))
         }
       }]
     }, projection.normalizer, projection.cause_key, [
@@ -26047,11 +27106,11 @@ function assemblePrepareReport(context) {
       validation_error_count: nativeGateValidationErrors.length,
       discovery_ref: {
         path: "native-gate-discovery.json",
-        sha256: sha256File2(join9(bundleDirectory, "native-gate-discovery.json"))
+        sha256: sha256File2(join10(bundleDirectory, "native-gate-discovery.json"))
       },
       coverage_ref: {
         path: "native-gate-coverage.json",
-        sha256: sha256File2(join9(bundleDirectory, "native-gate-coverage.json"))
+        sha256: sha256File2(join10(bundleDirectory, "native-gate-coverage.json"))
       }
     }
   });
@@ -26113,7 +27172,7 @@ function assemblePrepareReport(context) {
     closing_object: closingRepositoryObject.sha256,
     closing_repository_object: closingRepositoryObject
   };
-  writeJson(join9(bundleDirectory, "regression-delta.json"), {
+  writeJson(join10(bundleDirectory, "regression-delta.json"), {
     record_type: "mister-clean.regression-delta",
     schema_version: "1.5",
     ...regressionBinding,
@@ -26126,7 +27185,7 @@ function assemblePrepareReport(context) {
     accounting_schema: "1.5",
     evidence_ref: {
       path: "regression-delta.json",
-      sha256: sha256File2(join9(bundleDirectory, "regression-delta.json"))
+      sha256: sha256File2(join10(bundleDirectory, "regression-delta.json"))
     }
   };
   return {
@@ -26207,13 +27266,13 @@ function assemblePrepareBundle(context) {
   coordination.dispatcher = `mister-clean:${options.runId}`;
   coordination.integrator = `mister-clean:${options.runId}`;
   coordination.target = { ref: targetRef, expected_commit: targetCommit, observed_at: now };
-  writeJson(join9(bundleDirectory, "debris-census.json"), {
+  writeJson(join10(bundleDirectory, "debris-census.json"), {
     record_type: "mister-clean.debris-census",
     removed: 0,
     retained: 0,
     unclassified: 0
   });
-  writeJson(join9(bundleDirectory, "independent-review.json"), {
+  writeJson(join10(bundleDirectory, "independent-review.json"), {
     record_type: "mister-clean.independent-review",
     observed_at: now,
     mechanism: "not yet run",
@@ -26238,7 +27297,7 @@ function assemblePrepareBundle(context) {
       source_kind: sourceKind,
       request_source: requestSource2,
       source_refs: [
-        { path: "criteria-source.json", sha256: sha256File2(join9(bundleDirectory, "criteria-source.json")) }
+        { path: "criteria-source.json", sha256: sha256File2(join10(bundleDirectory, "criteria-source.json")) }
       ],
       request_sha256: requestSha256,
       discovered_count: criteriaIds2.length,
@@ -26285,7 +27344,7 @@ function assemblePrepareBundle(context) {
     current_state: currentPath ? {
       state: "candidate_unverified",
       path: currentPath,
-      sha256: sha256File2(join9(repository, currentPath)),
+      sha256: sha256File2(join10(repository, currentPath)),
       commit: head,
       generator: "discovered candidate; requires explicit designation",
       designation: null
@@ -26300,15 +27359,15 @@ function assemblePrepareBundle(context) {
     native_gate_control: {
       discovery_ref: {
         path: "native-gate-discovery.json",
-        sha256: sha256File2(join9(bundleDirectory, "native-gate-discovery.json"))
+        sha256: sha256File2(join10(bundleDirectory, "native-gate-discovery.json"))
       },
       coverage_ref: {
         path: "native-gate-coverage.json",
-        sha256: sha256File2(join9(bundleDirectory, "native-gate-coverage.json"))
+        sha256: sha256File2(join10(bundleDirectory, "native-gate-coverage.json"))
       },
       validation_ref: {
         path: "native-gate-validation.json",
-        sha256: sha256File2(join9(bundleDirectory, "native-gate-validation.json"))
+        sha256: sha256File2(join10(bundleDirectory, "native-gate-validation.json"))
       },
       evidence_root: "native-gate-output",
       required_count: nativeGateDiscovery.required_gate_ids.length,
@@ -26322,7 +27381,7 @@ function assemblePrepareBundle(context) {
       retained: 0,
       unclassified: 0,
       evidence: [
-        { path: "debris-census.json", sha256: sha256File2(join9(bundleDirectory, "debris-census.json")) }
+        { path: "debris-census.json", sha256: sha256File2(join10(bundleDirectory, "debris-census.json")) }
       ]
     },
     handoff: {
@@ -26344,21 +27403,21 @@ function assemblePrepareBundle(context) {
       unresolved: 0,
       evidence_ref: {
         path: "independent-review.json",
-        sha256: sha256File2(join9(bundleDirectory, "independent-review.json"))
+        sha256: sha256File2(join10(bundleDirectory, "independent-review.json"))
       }
     }
   };
-  writeJson(join9(bundleDirectory, "action-manifest.json"), manifest2);
-  writeJson(join9(bundleDirectory, "closeout-report.json"), report);
+  writeJson(join10(bundleDirectory, "action-manifest.json"), manifest2);
+  writeJson(join10(bundleDirectory, "closeout-report.json"), report);
   bundle.manifest = {
     path: "action-manifest.json",
-    sha256: sha256File2(join9(bundleDirectory, "action-manifest.json"))
+    sha256: sha256File2(join10(bundleDirectory, "action-manifest.json"))
   };
   bundle.report = {
     path: "closeout-report.json",
-    sha256: sha256File2(join9(bundleDirectory, "closeout-report.json"))
+    sha256: sha256File2(join10(bundleDirectory, "closeout-report.json"))
   };
-  const bundlePath = join9(bundleDirectory, "closure-bundle.json");
+  const bundlePath = join10(bundleDirectory, "closure-bundle.json");
   writeJson(bundlePath, bundle);
   const verifiedClosingRepositoryObject = captureRepositoryObject(repository);
   if (verifiedClosingRepositoryObject.sha256 !== closingRepositoryObject.sha256) {
@@ -26368,15 +27427,15 @@ function assemblePrepareBundle(context) {
 }
 
 // src/closeout/repository-boundaries.ts
-import { createHash as createHash17 } from "crypto";
-import { execFileSync as execFileSync5 } from "child_process";
-import { lstatSync as lstatSync11, readFileSync as readFileSync10 } from "fs";
-import { extname as extname5, join as join10, normalize as normalize2, posix as posix2, resolve as resolve21 } from "path";
+import { createHash as createHash18 } from "crypto";
+import { execFileSync as execFileSync6 } from "child_process";
+import { lstatSync as lstatSync12, readFileSync as readFileSync11 } from "fs";
+import { extname as extname5, join as join11, normalize as normalize2, posix as posix2, resolve as resolve22 } from "path";
 var SOURCE_EXTENSIONS2 = /* @__PURE__ */ new Set([".bash", ".cjs", ".go", ".js", ".jsx", ".mjs", ".py", ".rs", ".sh", ".ts", ".tsx"]);
 var FORBIDDEN_MAP_KEYS = Object.freeze(["__proto__", "constructor", "prototype"]);
 var INVENTORY_PATH = ".mister-clean/repository-boundaries.json";
 function digest3(value) {
-  return createHash17("sha256").update(value, "utf8").digest("hex");
+  return createHash18("sha256").update(value, "utf8").digest("hex");
 }
 function finding3(rule, path, detail, relatedPaths = []) {
   const related_paths = [...new Set(relatedPaths)].sort();
@@ -26389,16 +27448,16 @@ function finding3(rule, path, detail, relatedPaths = []) {
   });
 }
 function candidatePaths(root) {
-  return execFileSync5("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
+  return execFileSync6("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
   }).split("\0").filter(Boolean).sort();
 }
 function readableText(root, path) {
   try {
-    const metadata = lstatSync11(join10(root, path));
+    const metadata = lstatSync12(join11(root, path));
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1048576) return void 0;
-    return readFileSync10(join10(root, path), "utf8");
+    return readFileSync11(join11(root, path), "utf8");
   } catch {
     return void 0;
   }
@@ -26435,7 +27494,7 @@ function unsafeParsedMaps(source) {
 }
 function ignored(root, path) {
   try {
-    execFileSync5("git", ["-C", root, "check-ignore", "-q", "--", path], {
+    execFileSync6("git", ["-C", root, "check-ignore", "-q", "--", path], {
       env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
       stdio: "ignore"
     });
@@ -26578,7 +27637,7 @@ function externalContracts(root, paths) {
   if (!paths.has(INVENTORY_PATH)) return { count: 0, findings: [] };
   let data;
   try {
-    data = JSON.parse(readFileSync10(join10(root, INVENTORY_PATH), "utf8"));
+    data = JSON.parse(readFileSync11(join11(root, INVENTORY_PATH), "utf8"));
   } catch (error) {
     return { count: 0, findings: [finding3("topology_inventory_invalid", INVENTORY_PATH, error instanceof Error ? error.message : String(error))] };
   }
@@ -26594,7 +27653,7 @@ function externalContracts(root, paths) {
       continue;
     }
     try {
-      const errors = wireContractErrors(contract, JSON.parse(readFileSync10(join10(root, contract.fixture), "utf8")));
+      const errors = wireContractErrors(contract, JSON.parse(readFileSync11(join11(root, contract.fixture), "utf8")));
       if (errors.length > 0) findings.push(finding3("external_producer_contract_invalid", contract.fixture, `${contract.id}: ${errors.join("; ")}`, [INVENTORY_PATH]));
     } catch (error) {
       findings.push(finding3("external_producer_contract_invalid", contract.fixture, error instanceof Error ? error.message : String(error), [INVENTORY_PATH]));
@@ -26603,7 +27662,7 @@ function externalContracts(root, paths) {
   return { count: contracts.length, findings };
 }
 function auditRepositoryBoundaries(rootInput) {
-  const root = resolve21(rootInput);
+  const root = resolve22(rootInput);
   const paths = candidatePaths(root);
   const pathSet = new Set(paths);
   const sources = /* @__PURE__ */ new Map();
@@ -26662,33 +27721,33 @@ function auditRepositoryBoundaries(rootInput) {
 }
 
 // src/closeout/action-lifecycle.ts
-import { randomUUID as randomUUID4 } from "crypto";
-import { execFileSync as execFileSync6 } from "child_process";
+import { randomUUID as randomUUID6 } from "crypto";
+import { execFileSync as execFileSync7 } from "child_process";
 import {
-  existsSync as existsSync7,
-  mkdirSync as mkdirSync3,
-  realpathSync as realpathSync8,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync4
+  existsSync as existsSync8,
+  mkdirSync as mkdirSync4,
+  realpathSync as realpathSync9,
+  rmSync as rmSync3,
+  writeFileSync as writeFileSync5
 } from "fs";
 import { hostname } from "os";
-import { dirname as dirname12, join as join12, posix as pathPosix2 } from "path";
+import { dirname as dirname13, join as join13, posix as pathPosix2 } from "path";
 
 // src/closeout/action-lifecycle-runtime.ts
-import { createHash as createHash18, randomUUID as randomUUID3 } from "crypto";
+import { createHash as createHash19, randomUUID as randomUUID5 } from "crypto";
 import {
   closeSync as closeSync3,
   copyFileSync,
-  mkdirSync as mkdirSync2,
+  mkdirSync as mkdirSync3,
   openSync as openSync3,
-  readFileSync as readFileSync11,
-  realpathSync as realpathSync7,
-  renameSync,
-  rmSync,
+  readFileSync as readFileSync12,
+  realpathSync as realpathSync8,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
   statSync as statSync2,
-  writeFileSync as writeFileSync3
+  writeFileSync as writeFileSync4
 } from "fs";
-import { dirname as dirname11, isAbsolute as isAbsolute18, join as join11, relative as relative16, resolve as resolve22, sep as sep15 } from "path";
+import { dirname as dirname12, isAbsolute as isAbsolute19, join as join12, relative as relative16, resolve as resolve23, sep as sep15 } from "path";
 var HEX644 = /^[0-9a-f]{64}$/;
 function object6(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
@@ -26730,20 +27789,20 @@ function jsonBytes(value) {
 `;
 }
 function digestBytes(value) {
-  return createHash18("sha256").update(value).digest("hex");
+  return createHash19("sha256").update(value).digest("hex");
 }
 function readJson2(path) {
-  return object6(JSON.parse(readFileSync11(path, "utf8")), path);
+  return object6(JSON.parse(readFileSync12(path, "utf8")), path);
 }
 function portablePath2(base, absolute) {
   return relative16(base, absolute).split(sep15).join("/");
 }
 function resolveContained(base, candidate, label) {
   const path = text2(candidate, label);
-  if (isAbsolute18(path) || path.split(/[\\/]/).includes("..")) throw new Error(`${label}: must be bundle-relative`);
-  const absolute = resolve22(base, path);
+  if (isAbsolute19(path) || path.split(/[\\/]/).includes("..")) throw new Error(`${label}: must be bundle-relative`);
+  const absolute = resolve23(base, path);
   const relation = relative16(base, absolute);
-  if (relation === ".." || relation.startsWith(`..${sep15}`) || isAbsolute18(relation)) {
+  if (relation === ".." || relation.startsWith(`..${sep15}`) || isAbsolute19(relation)) {
     throw new Error(`${label}: resolves outside the bundle directory`);
   }
   return absolute;
@@ -26754,8 +27813,8 @@ function digestRef2(base, path) {
 }
 function writeEvidenceRecord(context, path, record4) {
   const absolute = resolveContained(context.base, path, "action evidence path");
-  mkdirSync2(dirname11(absolute), { recursive: true, mode: 448 });
-  writeFileSync3(absolute, jsonBytes(record4), { encoding: "utf8", mode: 384, flag: "wx" });
+  mkdirSync3(dirname12(absolute), { recursive: true, mode: 448 });
+  writeFileSync4(absolute, jsonBytes(record4), { encoding: "utf8", mode: 384, flag: "wx" });
   return digestRef2(context.base, path);
 }
 function readBoundEvidenceRecord(context, rawRef, label) {
@@ -26782,14 +27841,14 @@ function inferRepository(bundle, report) {
   if (candidates.length !== 1) {
     throw new Error(`cannot infer one live worktree from the bundle (found ${candidates.length}); prepare a bundle with an unambiguous current worktree`);
   }
-  const path = realpathSync7(resolve22(text2(candidates[0]?.path, "$.successor_readiness.topology.worktrees[].path")));
+  const path = realpathSync8(resolve23(text2(candidates[0]?.path, "$.successor_readiness.topology.worktrees[].path")));
   if (!statSync2(path).isDirectory()) throw new Error(`bundle worktree is not a directory: ${path}`);
   return path;
 }
 function loadContext(bundleDirectory) {
-  const base = realpathSync7(resolve22(bundleDirectory));
+  const base = realpathSync8(resolve23(bundleDirectory));
   if (!statSync2(base).isDirectory()) throw new Error(`bundle directory is not a directory: ${base}`);
-  const bundlePath = join11(base, "closure-bundle.json");
+  const bundlePath = join12(base, "closure-bundle.json");
   const bundle = readJson2(bundlePath);
   const reportRef = object6(bundle.report, "$.report");
   const manifestRef = object6(bundle.manifest, "$.manifest");
@@ -26822,24 +27881,24 @@ async function requireValidBundle(context, runtimeAttestation, verifyLive) {
 ${result.errors.join("\n")}`);
 }
 function lockPath(context) {
-  return join11(context.base, ".mister-clean-action.lock.json");
+  return join12(context.base, ".mister-clean-action.lock.json");
 }
 function lifecyclePath(context, id) {
-  return join11(context.base, "action-evidence", id, "lifecycle.json");
+  return join12(context.base, "action-evidence", id, "lifecycle.json");
 }
 function writeExclusive(path, value) {
-  mkdirSync2(dirname11(path), { recursive: true, mode: 448 });
+  mkdirSync3(dirname12(path), { recursive: true, mode: 448 });
   const descriptor = openSync3(path, "wx", 384);
   try {
-    writeFileSync3(descriptor, jsonBytes(value), "utf8");
+    writeFileSync4(descriptor, jsonBytes(value), "utf8");
   } finally {
     closeSync3(descriptor);
   }
 }
 function replaceJson(path, value) {
-  const temporary = `${path}.tmp-${process.pid}-${randomUUID3()}`;
-  writeFileSync3(temporary, jsonBytes(value), { encoding: "utf8", mode: 384, flag: "wx" });
-  renameSync(temporary, path);
+  const temporary = `${path}.tmp-${process.pid}-${randomUUID5()}`;
+  writeFileSync4(temporary, jsonBytes(value), { encoding: "utf8", mode: 384, flag: "wx" });
+  renameSync2(temporary, path);
 }
 async function transactionalWrite(context, values, runtimeAttestation) {
   const sidecars = values.sidecars ?? [];
@@ -26851,11 +27910,11 @@ async function transactionalWrite(context, values, runtimeAttestation) {
     ...sidecars.map((sidecar) => sidecar.path)
   ];
   if (new Set(paths).size !== paths.length) throw new Error("action transaction contains a duplicate output path");
-  const backupDirectory = join11(context.base, `.action-transaction-${randomUUID3()}`);
-  mkdirSync2(backupDirectory, { recursive: true, mode: 448 });
+  const backupDirectory = join12(context.base, `.action-transaction-${randomUUID5()}`);
+  mkdirSync3(backupDirectory, { recursive: true, mode: 448 });
   for (const path of paths) {
     resolveContained(context.base, portablePath2(context.base, path), "action transaction output");
-    copyFileSync(path, join11(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__")));
+    copyFileSync(path, join12(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__")));
   }
   try {
     if (values.regression) replaceJson(context.regressionPath, values.regression);
@@ -26867,14 +27926,14 @@ async function transactionalWrite(context, values, runtimeAttestation) {
     await requireValidBundle(candidate, runtimeAttestation, true);
   } catch (error) {
     for (const path of paths) {
-      const backup = join11(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__"));
-      const restore = `${path}.restore-${randomUUID3()}`;
+      const backup = join12(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__"));
+      const restore = `${path}.restore-${randomUUID5()}`;
       copyFileSync(backup, restore);
-      renameSync(restore, path);
+      renameSync2(restore, path);
     }
     throw error;
   } finally {
-    rmSync(backupDirectory, { recursive: true, force: true });
+    rmSync2(backupDirectory, { recursive: true, force: true });
   }
 }
 function rehashBundle(bundle, report, manifest2, base) {
@@ -26932,7 +27991,7 @@ var SPECIALIZED_ACTION_PROTOCOLS = {
 };
 function currentBranch(repository) {
   try {
-    return execFileSync6("git", ["--no-optional-locks", "-C", repository, "symbolic-ref", "--quiet", "--short", "HEAD"], {
+    return execFileSync7("git", ["--no-optional-locks", "-C", repository, "symbolic-ref", "--quiet", "--short", "HEAD"], {
       encoding: "utf8",
       env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
     }).trim();
@@ -27126,12 +28185,12 @@ async function prepareSnapshot(context, evidenceHome, runId, runtimeAttestation,
     runtimeAttestation,
     now
   });
-  const directory = realpathSync8(prepared.bundleDirectory);
+  const directory = realpathSync9(prepared.bundleDirectory);
   const prefix = portablePath2(context.base, directory);
   const bundle = readJson2(prepared.bundlePath);
-  const report = readJson2(join12(directory, "closeout-report.json"));
-  const manifest2 = readJson2(join12(directory, "action-manifest.json"));
-  const regression = readJson2(join12(directory, "regression-delta.json"));
+  const report = readJson2(join13(directory, "closeout-report.json"));
+  const manifest2 = readJson2(join13(directory, "action-manifest.json"));
+  const regression = readJson2(join13(directory, "regression-delta.json"));
   const detectorCoverage = object6(regression.detector_coverage, "snapshot.regression.detector_coverage");
   const nativeControl = object6(object6(bundle.successor_readiness, "snapshot.successor_readiness").native_gate_control, "snapshot.native_gate_control");
   const discoveryRef = object6(nativeControl.discovery_ref, "snapshot.native_gate_control.discovery_ref");
@@ -27291,10 +28350,10 @@ function rowObservationIds(row) {
 function writeDebtResult(context, id, row, after, status, observedAt) {
   const path = `action-evidence/${id}/debt-results/${text2(row.debt_key, "debt_key")}.json`;
   const absolute = resolveContained(context.base, path, "debt result path");
-  mkdirSync3(dirname12(absolute), { recursive: true, mode: 448 });
+  mkdirSync4(dirname13(absolute), { recursive: true, mode: 448 });
   const command = `mister-clean action finish ${JSON.stringify(context.base)} --id ${JSON.stringify(id)} --status ${status}`;
   const result = "root debt absent from the post-action registered detector/native observation set";
-  writeFileSync4(absolute, jsonBytes({
+  writeFileSync5(absolute, jsonBytes({
     record_type: "mister-clean.debt-result",
     debt_id: row.id,
     kind: "gate_result",
@@ -27402,7 +28461,7 @@ function writeActionResult(context, lifecycle2, after, status, observedAt, hygie
     observed_at: observedAt,
     hygiene
   };
-  writeFileSync4(absolute, jsonBytes(record4), { encoding: "utf8", mode: 384 });
+  writeFileSync5(absolute, jsonBytes(record4), { encoding: "utf8", mode: 384 });
   return {
     kind: actionEvidenceKind(action.kind),
     object: after.sha256,
@@ -27414,7 +28473,7 @@ function writeActionResult(context, lifecycle2, after, status, observedAt, hygie
   };
 }
 function gitLines(repository, args) {
-  const output = execFileSync6("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const output = execFileSync7("git", ["--no-optional-locks", "-C", repository, ...args], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
   }).trim();
@@ -27476,7 +28535,7 @@ function actionRows(regression) {
   });
 }
 function ensureCleanWorkingTree(repository) {
-  const status = execFileSync6("git", ["--no-optional-locks", "-C", repository, "status", "--porcelain=v1", "--untracked-files=all"], {
+  const status = execFileSync7("git", ["--no-optional-locks", "-C", repository, "status", "--porcelain=v1", "--untracked-files=all"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
   });
@@ -27484,7 +28543,7 @@ function ensureCleanWorkingTree(repository) {
 }
 function verifyLock(context, id) {
   const path = lockPath(context);
-  if (!existsSync7(path)) throw new Error("no open Mister Clean action lock exists");
+  if (!existsSync8(path)) throw new Error("no open Mister Clean action lock exists");
   const lock = readJson2(path);
   if (lock.action_id !== id) throw new Error(`action lock belongs to ${JSON.stringify(lock.action_id)}, not ${JSON.stringify(id)}`);
   return lock;
@@ -27509,10 +28568,10 @@ function lifecycleSnapshot(context, lifecycle2) {
   const pre = object6(lifecycle2.pre_snapshot, "lifecycle.pre_snapshot");
   const directory = resolveContained(context.base, pre.directory, "lifecycle.pre_snapshot.directory");
   const prefix = portablePath2(context.base, directory);
-  const bundle = readJson2(join12(directory, "closure-bundle.json"));
-  const report = readJson2(join12(directory, "closeout-report.json"));
-  const manifest2 = readJson2(join12(directory, "action-manifest.json"));
-  const regression = readJson2(join12(directory, "regression-delta.json"));
+  const bundle = readJson2(join13(directory, "closure-bundle.json"));
+  const report = readJson2(join13(directory, "closeout-report.json"));
+  const manifest2 = readJson2(join13(directory, "action-manifest.json"));
+  const regression = readJson2(join13(directory, "regression-delta.json"));
   const detectorCoverage = object6(regression.detector_coverage, "pre.detector_coverage");
   const nativeControl = object6(object6(bundle.successor_readiness, "pre.successor_readiness").native_gate_control, "pre.native_gate_control");
   const discoveryRef = object6(nativeControl.discovery_ref, "pre.native_gate_control.discovery_ref");
@@ -27552,7 +28611,7 @@ async function beginAction(options) {
     throw new Error("the public action lifecycle currently supports CLOSE bundles; GUARD uses its exact-tree commit barrier");
   }
   await requireValidBundle(context, options.runtimeAttestation, true);
-  if (existsSync7(lockPath(context))) throw new Error("another Mister Clean action already owns this evidence home");
+  if (existsSync8(lockPath(context))) throw new Error("another Mister Clean action already owns this evidence home");
   const actions = array4(context.manifest.actions, "$.manifest.actions").map((raw, index) => object6(raw, `$.manifest.actions[${index}]`));
   if (actions.some((row) => row.id === options.id)) throw new Error(`action id already exists: ${options.id}`);
   if (actions.some((row) => row.status === "planned")) throw new Error("an action is already planned; finish it before beginning another");
@@ -27576,10 +28635,10 @@ async function beginAction(options) {
     acquired_at: openedAt
   };
   writeExclusive(lockPath(context), lock);
-  const actionRoot = join12(context.base, "action-evidence", options.id);
+  const actionRoot = join13(context.base, "action-evidence", options.id);
   try {
-    if (existsSync7(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
-    mkdirSync3(actionRoot, { recursive: true, mode: 448 });
+    if (existsSync8(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
+    mkdirSync4(actionRoot, { recursive: true, mode: 448 });
     const branch = currentBranch(context.repository);
     const beforeHygiene = captureActionHygiene(context.repository, { now });
     if (beforeHygiene.processes.status !== "complete") {
@@ -27609,7 +28668,7 @@ async function beginAction(options) {
     );
     const pre = await prepareSnapshot(
       context,
-      join12(actionRoot, "pre-snapshot"),
+      join13(actionRoot, "pre-snapshot"),
       "pre",
       options.runtimeAttestation,
       now,
@@ -27764,8 +28823,8 @@ async function beginAction(options) {
       state: "open"
     };
   } catch (error) {
-    rmSync2(lockPath(context), { force: true });
-    rmSync2(actionRoot, { force: true, recursive: true });
+    rmSync3(lockPath(context), { force: true });
+    rmSync3(actionRoot, { force: true, recursive: true });
     throw error;
   }
 }
@@ -27813,10 +28872,10 @@ async function finishAction(options) {
   const observedAt = now().toISOString();
   const pre = lifecycleSnapshot(context, lifecycle2);
   const inputs = finishInputs(context, lifecycle2);
-  const attemptId = `post-${randomUUID4()}`;
+  const attemptId = `post-${randomUUID6()}`;
   const post = await prepareSnapshot(
     context,
-    join12(context.base, "action-evidence", options.id, "finish-attempts", attemptId),
+    join13(context.base, "action-evidence", options.id, "finish-attempts", attemptId),
     "post",
     options.runtimeAttestation,
     now,
@@ -28005,7 +29064,7 @@ ${catalogErrors.join("\n")}`);
     bundle: hashedBundle,
     sidecars: [{ path: lifecyclePath(context, options.id), value: finalLifecycle }]
   }, options.runtimeAttestation);
-  rmSync2(lockPath(context), { force: true });
+  rmSync3(lockPath(context), { force: true });
   return {
     actionId: options.id,
     bundleDirectory: context.base,
@@ -28049,6 +29108,125 @@ var nodeCloseoutEngine = {
   generatePackageManifest
 };
 
+// src/mister-clean-invocation-journal.ts
+import { appendFileSync, existsSync as existsSync9, mkdirSync as mkdirSync5, readFileSync as readFileSync14 } from "fs";
+import { createHash as createHash21, randomUUID as randomUUID7 } from "crypto";
+import { dirname as dirname14, isAbsolute as isAbsolute21 } from "path";
+function readMisterCleanInvocationJournal(path) {
+  if (!isAbsolute21(path)) throw new Error("Mister Clean invocation journal path must be absolute");
+  if (!existsSync9(path)) return [];
+  const contents = readFileSync14(path, "utf8");
+  if (contents.length === 0) return [];
+  if (contents.length > 0 && !contents.endsWith("\n")) throw new Error("Mister Clean invocation journal must end with a canonical JSONL newline");
+  const started = /* @__PURE__ */ new Map();
+  const ended = /* @__PURE__ */ new Map();
+  for (const [index, line] of contents.slice(0, -1).split("\n").entries()) {
+    if (line.length === 0) throw new Error(`Mister Clean invocation journal has a blank receipt line at ${index + 1}`);
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      throw new Error(`Mister Clean invocation journal is not valid JSONL at line ${index + 1}`);
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error(`Mister Clean invocation journal has an invalid receipt at line ${index + 1}`);
+    const record4 = parsed;
+    if (record4.record_type !== "mister-clean.invocation-receipt" || record4.schema_version !== "1.0") throw new Error(`Mister Clean invocation journal has an invalid receipt at line ${index + 1}`);
+    if (record4.event === "started") {
+      const current = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_status", "evaluation_run_event_id"]);
+      const legacy = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_run_event_id"]);
+      if (!current && !legacy || typeof record4.invocation_id !== "string" || typeof record4.command !== "string" || typeof record4.argv_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(record4.argv_sha256) || typeof record4.observed_at !== "string" || record4.identity_provenance !== "UNOBSERVED" || record4.evaluation_run_event_id !== null || current && record4.evaluation_status !== "PENDING_IDENTITY_EVALUATION") throw new Error(`Mister Clean invocation journal has an invalid start receipt at line ${index + 1}`);
+      const canonical4 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
+      if (line !== canonicalJson(canonical4)) throw new Error(`Mister Clean invocation journal has a non-canonical receipt at line ${index + 1}`);
+      const value = { invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, receipt_sha256: sha25611(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null };
+      const existing = started.get(value.invocation_id);
+      if (existing !== void 0 && canonicalJson(existing) !== canonicalJson(value)) throw new Error(`Mister Clean invocation journal reuses invocation_id with different content at line ${index + 1}`);
+      started.set(value.invocation_id, value);
+    } else if (record4.event === "finished") {
+      if (!sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "status", "exit_code", "observed_at"]) || typeof record4.invocation_id !== "string" || record4.run_event_id !== null && typeof record4.run_event_id !== "string" || record4.status !== "SUCCEEDED" && record4.status !== "FAILED" || typeof record4.exit_code !== "number" || !Number.isInteger(record4.exit_code) || record4.exit_code < 0 || record4.exit_code > 255 || record4.status === "SUCCEEDED" && record4.exit_code !== 0 || record4.status === "FAILED" && record4.exit_code === 0 || typeof record4.observed_at !== "string" || !canonicalTimestamp2(record4.observed_at) || line !== canonicalJson(record4)) {
+        throw new Error(`Mister Clean invocation journal has an invalid terminal receipt at line ${index + 1}`);
+      }
+      if (!started.has(record4.invocation_id)) throw new Error(`Mister Clean invocation journal terminates an unknown invocation at line ${index + 1}`);
+      if (ended.has(record4.invocation_id)) throw new Error(`Mister Clean invocation journal terminates an invocation more than once at line ${index + 1}`);
+      ended.set(record4.invocation_id, { status: record4.status, exit_code: record4.exit_code, observed_at: record4.observed_at, run_event_id: record4.run_event_id });
+    } else if (record4.event !== "evaluation_run_linked" || !sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "observed_at"]) || typeof record4.invocation_id !== "string" || typeof record4.run_event_id !== "string" || typeof record4.observed_at !== "string" || line !== canonicalJson(record4)) {
+      throw new Error(`Mister Clean invocation journal has an invalid receipt at line ${index + 1}`);
+    }
+  }
+  return [...started.values()].map((value) => {
+    const terminal = ended.get(value.invocation_id);
+    return terminal === void 0 ? value : { ...value, terminal_status: terminal.status, terminal_exit_code: terminal.exit_code, terminal_observed_at: terminal.observed_at, terminal_run_event_id: terminal.run_event_id };
+  }).sort((left, right) => left.invocation_id.localeCompare(right.invocation_id));
+}
+function canonicalTimestamp2(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+function sameKeys(record4, expected) {
+  const keys = Object.keys(record4).sort((left, right) => left.localeCompare(right));
+  return keys.length === expected.length && keys.every((key) => expected.includes(key));
+}
+function sha25611(value) {
+  return createHash21("sha256").update(value, "utf8").digest("hex");
+}
+var AppendOnlyLocalMisterCleanInvocationJournal = class {
+  #path;
+  constructor(path) {
+    if (!isAbsolute21(path)) throw new Error("MISTER_CLEAN_INVOCATION_JOURNAL_PATH must be an absolute machine-local path");
+    this.#path = path;
+    mkdirSync5(dirname14(path), { recursive: true });
+    this.#assertExistingIntegrity();
+  }
+  recordStart(input) {
+    const invocationId = `mc-invocation:${randomUUID7()}`;
+    this.#append({
+      record_type: "mister-clean.invocation-receipt",
+      schema_version: "1.0",
+      event: "started",
+      invocation_id: invocationId,
+      command: input.command,
+      argv_sha256: sha25611(canonicalJson(input.argv)),
+      observed_at: input.occurred_at,
+      identity_provenance: "UNOBSERVED",
+      evaluation_status: "PENDING_IDENTITY_EVALUATION",
+      evaluation_run_event_id: null
+    });
+    return invocationId;
+  }
+  recordEvaluationLink(input) {
+    this.#append({
+      record_type: "mister-clean.invocation-receipt",
+      schema_version: "1.0",
+      event: "evaluation_run_linked",
+      invocation_id: input.invocation_id,
+      run_event_id: input.run_event_id,
+      observed_at: input.occurred_at
+    });
+  }
+  recordEnd(input) {
+    if (!Number.isInteger(input.exit_code) || input.exit_code < 0 || input.exit_code > 255 || input.status === "SUCCEEDED" && input.exit_code !== 0 || input.status === "FAILED" && input.exit_code === 0) throw new Error("Mister Clean terminal receipt has an invalid status/exit code");
+    if (!canonicalTimestamp2(input.occurred_at)) throw new Error("Mister Clean terminal receipt requires a canonical timestamp");
+    this.#append({ record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "finished", invocation_id: input.invocation_id, run_event_id: input.run_event_id, status: input.status, exit_code: input.exit_code, observed_at: input.occurred_at });
+  }
+  #append(record4) {
+    appendFileSync(this.#path, `${canonicalJson(record4)}
+`, { encoding: "utf8", flag: "a", mode: 384 });
+  }
+  #assertExistingIntegrity() {
+    readMisterCleanInvocationJournal(this.#path);
+  }
+};
+function invocationJournalPathFromEnvironment(environment) {
+  const override = environment.MISTER_CLEAN_INVOCATION_JOURNAL_PATH;
+  const stateRoot = environment.XDG_STATE_HOME ?? (environment.HOME === void 0 || environment.HOME.trim().length === 0 ? void 0 : `${environment.HOME}/.local/state`);
+  const path = override === void 0 || override.trim().length === 0 ? stateRoot === void 0 ? void 0 : `${stateRoot}/mister-clean/invocations.jsonl` : override;
+  if (path === void 0) throw new Error("Mister Clean requires HOME or XDG_STATE_HOME to resolve its machine-local invocation journal");
+  if (!isAbsolute21(path)) throw new Error("MISTER_CLEAN_INVOCATION_JOURNAL_PATH must be an absolute machine-local path");
+  return path;
+}
+function journalFromEnvironment(environment) {
+  return new AppendOnlyLocalMisterCleanInvocationJournal(invocationJournalPathFromEnvironment(environment));
+}
+
 // src/cli.ts
 var UsageError = class extends Error {
 };
@@ -28086,16 +29264,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside2(root, candidate) {
-  const rootPath = resolve24(root);
-  const candidatePath = resolve24(candidate);
+  const rootPath = resolve25(root);
+  const candidatePath = resolve25(candidate);
   const relation = relative18(
-    existsSync8(rootPath) ? realpathSync9(rootPath) : rootPath,
-    existsSync8(candidatePath) ? realpathSync9(candidatePath) : candidatePath
+    existsSync10(rootPath) ? realpathSync10(rootPath) : rootPath,
+    existsSync10(candidatePath) ? realpathSync10(candidatePath) : candidatePath
   );
   return relation === "" || !relation.startsWith(`..${sep17}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync13(path, "utf8"));
+  return JSON.parse(readFileSync15(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -28110,11 +29288,11 @@ async function runSemantic(args, io) {
     const proposalsPath = removeOption(args, "--case-proposals", true);
     const runId = removeOption(args, "--run-id", true);
     const challengeNonce = removeOption(args, "--nonce", true);
-    const outputPath = resolve24(removeOption(args, "--output", true));
+    const outputPath = resolve25(removeOption(args, "--output", true));
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync8(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync10(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -28136,7 +29314,7 @@ async function runSemantic(args, io) {
       runId,
       runtimeCases
     });
-    writeFileSync5(outputPath, `${canonicalJson(plan2)}
+    writeFileSync6(outputPath, `${canonicalJson(plan2)}
 `, { flag: "wx" });
     if (json2) io.stdout(JSON.stringify(plan2, null, 2));
     else io.stdout(`semantic-plan: WROTE candidates=${plan2.candidates.length} sha256=${plan2.plan_sha256} path=${outputPath}`);
@@ -28298,19 +29476,19 @@ async function runValidate(args, io, runtimeAttestation) {
   if (kind !== "bundle" && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for bundle validation");
   }
-  if (acceptedEvaluatorPath !== void 0 && !isAbsolute20(acceptedEvaluatorPath)) {
+  if (acceptedEvaluatorPath !== void 0 && !isAbsolute22(acceptedEvaluatorPath)) {
     throw new UsageError("--accepted-evaluator requires an absolute path");
   }
   if (structural && acceptedEvaluatorPath !== void 0) {
     throw new UsageError("--accepted-evaluator is only valid for live bundle validation");
   }
-  if (guardAuthorityPath !== void 0 && !isAbsolute20(guardAuthorityPath)) {
+  if (guardAuthorityPath !== void 0 && !isAbsolute22(guardAuthorityPath)) {
     throw new UsageError("--guard-authority requires an absolute path");
   }
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join13(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join14(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -28336,6 +29514,7 @@ async function runValidate(args, io, runtimeAttestation) {
   try {
     data = readJson3(path);
   } catch (error) {
+    if (error instanceof ExecutionResourceBusyError) io.stderr(executionContentionJson(error));
     io.stderr(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
     return 2;
   }
@@ -28354,8 +29533,8 @@ async function runDetect(args, io) {
   if (!root) throw new UsageError("detect stack requires a repository path");
   const listOnly = removeFlag(args, "--list");
   assertNoArgs(args);
-  if (!existsSync8(root) || !statSync4(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve24(root)}`);
+  if (!existsSync10(root) || !statSync4(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve25(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
@@ -28365,9 +29544,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join13(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync8(reference)) return 0;
-  const text3 = readFileSync13(reference, "utf8");
+  const reference = join14(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync10(reference)) return 0;
+  const text3 = readFileSync15(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -28476,16 +29655,16 @@ async function runManifest(args, io) {
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join13(resolve24(root), "MANIFEST.sha256");
+  const path = join14(resolve25(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync8(path) || readFileSync13(path, "utf8") !== result.content) {
+    if (!existsSync10(path) || readFileSync15(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
     io.stdout(`manifest: PASS (${result.entries.length} entries)`);
     return 0;
   }
-  writeFileSync5(path, result.content, "utf8");
+  writeFileSync6(path, result.content, "utf8");
   io.stdout(`manifest: wrote ${result.entries.length} entries`);
   return 0;
 }
@@ -28526,8 +29705,8 @@ async function runCensus(args, io) {
       exclusions,
       output_path: output
     });
-    writeFileSync5(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
-    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve24(output)}`);
+    writeFileSync6(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
+    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve25(output)}`);
     return 0;
   }
   if (subcommand === "validate") {
@@ -28586,28 +29765,52 @@ async function bindCliRuntime(io) {
 function usage(io) {
   io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare)");
 }
-async function runCli(argv2, io = defaultIO()) {
+async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = void 0) {
   const args = [...argv2];
   const command = args.shift();
+  let invocationId;
+  let lifecycleRunEventId = null;
+  let terminalRecorded = false;
   try {
-    if (command === "attest") return await runAttest(args, io);
-    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic"])).has(String(command))) {
+    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "attest"])).has(String(command))) {
       usage(io);
       return 2;
     }
-    const runtimeAttestation = await bindCliRuntime(io);
-    if (!runtimeAttestation) return 2;
-    if (command === "prepare") return await runPrepare(args, io, runtimeAttestation);
-    if (command === "action") return await runAction(args, io, runtimeAttestation);
-    if (command === "validate") return await runValidate(args, io, runtimeAttestation);
-    if (command === "detect") return await runDetect(args, io);
-    if (command === "audit") return await runAudit(args, io);
-    if (command === "inspect") return await runInspect(args, io);
-    if (command === "census") return await runCensus(args, io);
-    if (command === "manifest") return await runManifest(args, io);
-    if (command === "semantic") return await runSemantic(args, io);
-    return 2;
+    invocationId = journal?.recordStart({ command, argv: argv2, occurred_at: (/* @__PURE__ */ new Date()).toISOString() });
+    if (lifecycle2 !== void 0) {
+      const evaluation = await lifecycle2.recordRunStart();
+      lifecycleRunEventId = evaluation.run_event_id;
+      if (invocationId !== void 0) journal?.recordEvaluationLink({ invocation_id: invocationId, run_event_id: evaluation.run_event_id, occurred_at: (/* @__PURE__ */ new Date()).toISOString() });
+    }
+    let exitCode;
+    if (command === "attest") exitCode = await runAttest(args, io);
+    else {
+      const runtimeAttestation = await bindCliRuntime(io);
+      if (!runtimeAttestation) exitCode = 2;
+      else if (command === "prepare") exitCode = await runPrepare(args, io, runtimeAttestation);
+      else if (command === "action") exitCode = await runAction(args, io, runtimeAttestation);
+      else if (command === "validate") exitCode = await runValidate(args, io, runtimeAttestation);
+      else if (command === "detect") exitCode = await runDetect(args, io);
+      else if (command === "audit") exitCode = await runAudit(args, io);
+      else if (command === "inspect") exitCode = await runInspect(args, io);
+      else if (command === "census") exitCode = await runCensus(args, io);
+      else if (command === "manifest") exitCode = await runManifest(args, io);
+      else if (command === "semantic") exitCode = await runSemantic(args, io);
+      else exitCode = 2;
+    }
+    if (invocationId !== void 0) {
+      journal?.recordEnd({ invocation_id: invocationId, run_event_id: lifecycleRunEventId, status: exitCode === 0 ? "SUCCEEDED" : "FAILED", exit_code: exitCode, occurred_at: (/* @__PURE__ */ new Date()).toISOString() });
+      terminalRecorded = true;
+    }
+    return exitCode;
   } catch (error) {
+    if (invocationId !== void 0 && !terminalRecorded) {
+      try {
+        journal?.recordEnd({ invocation_id: invocationId, run_event_id: lifecycleRunEventId, status: "FAILED", exit_code: 2, occurred_at: (/* @__PURE__ */ new Date()).toISOString() });
+      } catch (journalError) {
+        io.stderr(`ERROR: ${journalError instanceof Error ? journalError.message : String(journalError)}`);
+      }
+    }
     io.stderr(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
     if (error instanceof UsageError) usage(io);
     return 2;
@@ -28616,14 +29819,23 @@ async function runCli(argv2, io = defaultIO()) {
 function isDirectInvocation(argvPath, moduleUrl) {
   if (!argvPath) return false;
   try {
-    return realpathSync9(argvPath) === realpathSync9(fileURLToPath3(moduleUrl));
+    return realpathSync10(argvPath) === realpathSync10(fileURLToPath3(moduleUrl));
   } catch {
-    const invokedPath = resolve24(argvPath);
+    const invokedPath = resolve25(argvPath);
     return invokedPath === fileURLToPath3(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }
 if (isDirectInvocation(process.argv[1], import.meta.url)) {
-  process.exitCode = await runCli(process.argv.slice(2));
+  const directArgs = process.argv.slice(2);
+  const directCommand = directArgs[0];
+  const isHelpOrVersion = directCommand === void 0 || directCommand === "--help" || directCommand === "help" || directCommand === "--version" || directCommand === "version";
+  try {
+    process.exitCode = await runCli(directArgs, defaultIO(), void 0, isHelpOrVersion ? void 0 : journalFromEnvironment(process.env));
+  } catch (error) {
+    process.stderr.write(`ERROR: ${error instanceof Error ? error.message : String(error)}
+`);
+    process.exitCode = 2;
+  }
 }
 export {
   isDirectInvocation,

@@ -1,6 +1,6 @@
 /** Sandboxed, sequential execution of one discovered native-gate catalog. */
 import { randomUUID } from "node:crypto";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import { accessSync, constants, lstatSync, realpathSync } from "node:fs";
 import { lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,11 +8,17 @@ import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from "n
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import {
+  acquireRepositoryVerificationLease,
+  repositoryVerificationCoordinationKey,
+  type HeldExecutionLease,
+} from "./execution-lease.js";
+import { spawnSupervisedCommand } from "./execution-supervisor.js";
+import {
   COVERAGE_RECORD_TYPE,
+  COVERAGE_SCHEMA_VERSION,
   DEFAULT_OUTPUT_BYTES,
   DEFAULT_TERMINATION_GRACE_MS,
   DEFAULT_TIMEOUT_MS,
-  SCHEMA_VERSION,
   assertPositiveInteger,
   captureSubjectState,
   createExecutionSnapshot,
@@ -151,16 +157,17 @@ export async function executeChild(
   timeoutMs: number,
   maxOutputBytes: number,
   graceMs: number,
+  lease: HeldExecutionLease,
 ): Promise<ChildResult> {
   return await new Promise<ChildResult>((resolveResult) => {
-    const child = spawn(executable, argv, {
+    const child = spawnSupervisedCommand(
+      lease.supervisor_binding,
+      executable,
+      argv,
       cwd,
-      detached: process.platform !== "win32",
       env,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
+      graceMs,
+    );
     let exitCode: number | null = null;
     let signal: string | null = null;
     let termination: ChildResult["termination"] = null;
@@ -299,6 +306,7 @@ export async function executeGate(
   options: Required<Pick<RunNativeGateOptions, "timeout_ms" | "max_output_bytes" | "termination_grace_ms">>,
   skip: ReadonlySet<string>,
   now: () => Date,
+  lease: HeldExecutionLease,
 ): Promise<NativeGateExecution> {
   const subjectStartState = captureSubjectState(repository);
   const startObject = subjectStartState.repository_object;
@@ -416,6 +424,7 @@ export async function executeGate(
       options.timeout_ms,
       options.max_output_bytes,
       options.termination_grace_ms,
+      lease,
     );
     endObject = captureRepositoryObject(snapshot.repository);
   } finally {
@@ -494,59 +503,88 @@ export async function runNativeGates(
   evidenceDirectory: string,
   runOptions: RunNativeGateOptions = {},
 ): Promise<NativeGateCoverage> {
-  const integrityErrors = validateDiscoveryIntegrity(discovery);
-  if (integrityErrors.length > 0) throw new Error(integrityErrors.join("; "));
   const root = realpathSync(resolve(repository));
-  const observed = captureRepositoryObject(root);
-  if (!stableEqual(observed, discovery.repository_object)) {
-    throw new Error("native gate run does not start at its bound discovery repository object");
-  }
-
-  const timeoutMs = safeIntegerOption(runOptions.timeout_ms, DEFAULT_TIMEOUT_MS, "timeout_ms");
-  const maxOutputBytes = safeIntegerOption(runOptions.max_output_bytes, DEFAULT_OUTPUT_BYTES, "max_output_bytes");
-  const terminationGraceMs = safeIntegerOption(
-    runOptions.termination_grace_ms,
-    DEFAULT_TERMINATION_GRACE_MS,
-    "termination_grace_ms",
-  );
-  const skip = new Set(runOptions.skip_gate_ids ?? []);
-  for (const id of skip) {
-    if (!discovery.required_gate_ids.includes(id)) throw new Error(`cannot skip unknown or non-required gate ${JSON.stringify(id)}`);
-  }
-
-  await mkdir(evidenceDirectory, { recursive: true, mode: 0o700 });
-  const evidenceRoot = await realpath(resolve(evidenceDirectory));
-  const relation = relative(root, evidenceRoot);
-  if (relation === "" || (relation !== ".." && !relation.startsWith(`..${sep}`) && !isAbsolute(relation))) {
-    throw new Error("native gate evidence directory must be outside the repository surface");
-  }
-  const evidenceStat = await lstat(evidenceRoot);
-  if (!evidenceStat.isDirectory() || evidenceStat.isSymbolicLink()) {
-    throw new Error("native gate evidence root must be a real directory");
-  }
-
   const now = runOptions.now ?? (() => new Date());
-  const executions: NativeGateExecution[] = [];
-  for (const gate of discovery.gates) {
-    if (gate.disposition !== "required" || !gate.command) continue;
-    executions.push(await executeGate(
-      root,
-      gate as NativeGateDefinition & { readonly command: NativeGateCommand },
-      discovery.repository_object,
-      evidenceRoot,
-      { timeout_ms: timeoutMs, max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
-      skip,
-      now,
-    ));
+  const lease = runOptions.execution_lease ?? acquireRepositoryVerificationLease(root, now);
+  let failure: unknown;
+  let partial: Omit<NativeGateCoverage, "execution_lease" | "coverage_sha256"> | undefined;
+  try {
+    const integrityErrors = validateDiscoveryIntegrity(discovery);
+    if (integrityErrors.length > 0) throw new Error(integrityErrors.join("; "));
+    const expectedCoordinationKey = repositoryVerificationCoordinationKey(root);
+    if (discovery.execution_coordination_key_sha256 !== expectedCoordinationKey) {
+      throw new Error("native gate discovery is not bound to this repository execution coordination key");
+    }
+    if (lease.coordination_key_sha256 !== expectedCoordinationKey) {
+      throw new Error("native gate execution lease is not bound to this repository");
+    }
+    const observed = captureRepositoryObject(root);
+    if (!stableEqual(observed, discovery.repository_object)) {
+      throw new Error("native gate run does not start at its bound discovery repository object");
+    }
+
+    const timeoutMs = safeIntegerOption(runOptions.timeout_ms, DEFAULT_TIMEOUT_MS, "timeout_ms");
+    const maxOutputBytes = safeIntegerOption(runOptions.max_output_bytes, DEFAULT_OUTPUT_BYTES, "max_output_bytes");
+    const terminationGraceMs = safeIntegerOption(
+      runOptions.termination_grace_ms,
+      DEFAULT_TERMINATION_GRACE_MS,
+      "termination_grace_ms",
+    );
+    const skip = new Set(runOptions.skip_gate_ids ?? []);
+    for (const id of skip) {
+      if (!discovery.required_gate_ids.includes(id)) {
+        throw new Error(`cannot skip unknown or non-required gate ${JSON.stringify(id)}`);
+      }
+    }
+
+    await mkdir(evidenceDirectory, { recursive: true, mode: 0o700 });
+    const evidenceRoot = await realpath(resolve(evidenceDirectory));
+    const relation = relative(root, evidenceRoot);
+    if (relation === "" || (relation !== ".." && !relation.startsWith(`..${sep}`) && !isAbsolute(relation))) {
+      throw new Error("native gate evidence directory must be outside the repository surface");
+    }
+    const evidenceStat = await lstat(evidenceRoot);
+    if (!evidenceStat.isDirectory() || evidenceStat.isSymbolicLink()) {
+      throw new Error("native gate evidence root must be a real directory");
+    }
+
+    const executions: NativeGateExecution[] = [];
+    for (const gate of discovery.gates) {
+      if (gate.disposition !== "required" || !gate.command) continue;
+      executions.push(await executeGate(
+        root,
+        gate as NativeGateDefinition & { readonly command: NativeGateCommand },
+        discovery.repository_object,
+        evidenceRoot,
+        { timeout_ms: timeoutMs, max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
+        skip,
+        now,
+        lease,
+      ));
+    }
+    partial = {
+      record_type: COVERAGE_RECORD_TYPE,
+      schema_version: COVERAGE_SCHEMA_VERSION,
+      discovery_sha256: discovery.catalog_sha256,
+      closing_repository_object: captureRepositoryObject(root),
+      required_gate_ids: discovery.required_gate_ids,
+      executions,
+    };
+  } catch (error) {
+    failure = error;
   }
-  const closingObject = captureRepositoryObject(root);
-  const record = {
-    record_type: COVERAGE_RECORD_TYPE,
-    schema_version: SCHEMA_VERSION,
-    discovery_sha256: discovery.catalog_sha256,
-    closing_repository_object: closingObject,
-    required_gate_ids: discovery.required_gate_ids,
-    executions,
-  } as const;
+
+  let executionLease;
+  try {
+    executionLease = lease.release();
+  } catch (releaseError) {
+    if (failure !== undefined) {
+      throw new AggregateError([failure, releaseError], "native gate execution and execution-lease release both failed");
+    }
+    throw releaseError;
+  }
+  if (failure !== undefined) throw failure;
+  if (!partial) throw new Error("native gate execution ended without coverage");
+  const record = { ...partial, execution_lease: executionLease };
   return { ...record, coverage_sha256: identity(record) };
 }

@@ -31,7 +31,27 @@ function observationProblems(
   if (observation.evidence.some((item) => item.path.trim().length === 0 || !/^[0-9a-f]{64}$/i.test(String(item.sha256)))) reasons.push(`${phase} observation has invalid external evidence`);
   if (observation.observer_actor_id.trim().length === 0) reasons.push(`${phase} observation has no external observer`);
   if (observation.harness_session_token.trim().length === 0) reasons.push(`${phase} observation has no harness session token`);
-  if (observation.process_instance_token.trim().length === 0) reasons.push(`${phase} observation has no process instance token`);
+  if (observation.control_target.kind === "cmux") {
+    const target = observation.control_target;
+    if ([target.host_socket_namespace, target.workspace_id, target.window_id, target.surface_id].some((value) => value.trim().length === 0)) {
+      reasons.push(`${phase} cmux target is missing namespace, workspace, window, or surface identity`);
+    }
+  } else if (observation.control_target.kind === "desktop") {
+    const target = observation.control_target;
+    if ([target.application_id, target.thread_id, target.turn_id, target.session_id, target.settings_record_sha256].some((value) => value.trim().length === 0)) {
+      reasons.push(`${phase} desktop target is missing application, thread, turn, session, or settings identity`);
+    }
+    if (!/^[0-9a-f]{64}$/i.test(target.settings_record_sha256)) reasons.push(`${phase} desktop settings identity is not a SHA-256 digest`);
+  } else if ([observation.control_target.adapter_id, observation.control_target.request_or_session_id].some((value) => value.trim().length === 0)) {
+    reasons.push(`${phase} headless target is missing adapter or request/session identity`);
+  }
+  const sessionBoundVisualReadback = observation.control_target.kind === "cmux"
+    && observation.evidence_kind === "external_visual_readback"
+    && observation.harness_session_token.trim().length > 0;
+  if (observation.control_target.kind !== "headless" && !sessionBoundVisualReadback
+    && (observation.process_instance_token === null || observation.process_instance_token.trim().length === 0)) {
+    reasons.push(`${phase} observation has no process instance token`);
+  }
   return reasons;
 }
 
@@ -62,7 +82,10 @@ export function evaluateAgentIdentityLease(
   if (stage === "dispatch") {
     return {
       disposition: "BOUND_FOR_DISPATCH",
-      dispatch_allowed: true,
+      // This pure structural check cannot see an authority-issued assurance
+      // token. The recorder may separately admit an explicit exploratory run,
+      // but automatic/qualified routing stays false until that token exists.
+      dispatch_allowed: false,
       contributes_quality_credit: false,
       reasons: [],
     };
@@ -82,7 +105,34 @@ export function evaluateAgentIdentityLease(
     if (lease.pre_dispatch.harness_session_token !== lease.pre_evaluation.harness_session_token) {
       evaluationProblems.push("harness session changed between dispatch and evaluation");
     }
-    if (lease.pre_dispatch.process_instance_token !== lease.pre_evaluation.process_instance_token) {
+    if (lease.pre_dispatch.control_target.kind !== lease.pre_evaluation.control_target.kind) {
+      evaluationProblems.push("identity route target kind changed between dispatch and evaluation");
+    } else if (lease.pre_dispatch.control_target.kind === "cmux" && lease.pre_evaluation.control_target.kind === "cmux") {
+      const dispatch = lease.pre_dispatch.control_target;
+      const evaluation = lease.pre_evaluation.control_target;
+      if (dispatch.host_socket_namespace !== evaluation.host_socket_namespace || dispatch.workspace_id !== evaluation.workspace_id
+        || dispatch.window_id !== evaluation.window_id || dispatch.surface_id !== evaluation.surface_id
+        || dispatch.tool_target_root !== evaluation.tool_target_root || dispatch.command_cwd !== evaluation.command_cwd) {
+        evaluationProblems.push("cmux target changed between dispatch and evaluation");
+      }
+    } else if (lease.pre_dispatch.control_target.kind === "desktop" && lease.pre_evaluation.control_target.kind === "desktop") {
+      const dispatch = lease.pre_dispatch.control_target;
+      const evaluation = lease.pre_evaluation.control_target;
+      // The active turn normally advances. The stable desktop identity is the
+      // app/thread/session/settings tuple, not a single turn ID.
+      if (dispatch.application_id !== evaluation.application_id || dispatch.thread_id !== evaluation.thread_id
+        || dispatch.session_id !== evaluation.session_id || dispatch.settings_record_sha256 !== evaluation.settings_record_sha256) {
+        evaluationProblems.push("desktop thread, session, or settings changed between dispatch and evaluation");
+      }
+    } else if (lease.pre_dispatch.control_target.kind === "headless" && lease.pre_evaluation.control_target.kind === "headless") {
+      const dispatch = lease.pre_dispatch.control_target;
+      const evaluation = lease.pre_evaluation.control_target;
+      if (dispatch.adapter_id !== evaluation.adapter_id || dispatch.request_or_session_id !== evaluation.request_or_session_id
+        || dispatch.tool_target_root !== evaluation.tool_target_root || dispatch.command_cwd !== evaluation.command_cwd) {
+        evaluationProblems.push("headless adapter/request target changed between dispatch and evaluation");
+      }
+    }
+    if (lease.pre_dispatch.control_target.kind !== "headless" && lease.pre_dispatch.process_instance_token !== lease.pre_evaluation.process_instance_token) {
       evaluationProblems.push("process instance changed between dispatch and evaluation");
     }
   }
@@ -97,7 +147,7 @@ export function evaluateAgentIdentityLease(
   }
   return {
     disposition: "BOUND_FOR_EVALUATION",
-    dispatch_allowed: true,
+    dispatch_allowed: false,
     contributes_quality_credit: true,
     reasons: [],
   };

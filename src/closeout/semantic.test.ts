@@ -78,6 +78,62 @@ process.exit(${result === "pass" ? 0 : 1});
 }
 
 describe("semantic boundary probes", () => {
+  it.each(["retired", "archived", "historical", "rejected", "superseded", "done", "completed", "closed"]
+    .flatMap((status) => ["planning/active", "contracts"].map((directory) => ({ status, directory }))))(
+    "applies the same $status contract lifecycle in $directory", ({ status, directory }) => {
+      const root = repository("ordinary description");
+      try {
+        mkdirSync(join(root, directory), { recursive: true });
+        const path = `${directory}/CONTRACT.yaml`;
+        writeFileSync(join(root, path), `artifact_type: product_contract\nstatus: ${status}\nclaim: The canonical CI gate proves every production parser rejects malformed input.\n`);
+        const discovered = discoverSemanticProbeCandidates(root).some((candidate) => (
+          candidate.kind === "gate_semantic_bite" && candidate.path === path
+        ));
+        expect(discovered).toBe(["done", "completed", "closed"].includes(status));
+      } finally {
+        rmSync(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it.each(["done", "completed", "closed"])("keeps %s structured contracts subject to semantic verification", (status) => {
+    const root = repository("ordinary description");
+    try {
+      mkdirSync(join(root, "planning", "done"));
+      writeFileSync(join(root, "planning", "done", "CONTRACT.md"), `---
+artifact_type: story
+story_id: COMPLETED-CONTRACT
+status: ${status}
+---
+The canonical CI gate proves every production parser rejects malformed input.
+`);
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => (
+        candidate.kind === "gate_semantic_bite" && candidate.path === "planning/done/CONTRACT.md"
+      ))).toBe(true);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("respects explicit contract retirement even in an active folder", () => {
+    const root = repository("ordinary description");
+    try {
+      mkdirSync(join(root, "planning", "active"));
+      writeFileSync(join(root, "planning", "active", "RETIRED.md"), `---
+artifact_type: story
+story_id: RETIRED-CONTRACT
+status: superseded
+---
+The canonical CI gate proves every production parser rejects malformed input.
+`);
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => (
+        candidate.kind === "gate_semantic_bite" && candidate.path === "planning/active/RETIRED.md"
+      ))).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("does not traverse a canonical planning-file symlink as a directory", () => {
     const root = repository("The security sanitizer is the credential choke point and must be safe by construction.");
     try {
@@ -111,6 +167,64 @@ describe("semantic boundary probes", () => {
     ].join("\n"));
     try {
       expect(discoverSemanticProbeCandidates(root)).toEqual([]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not treat unstructured planning prose as an operative product contract", () => {
+    const root = repository("ordinary description");
+    try {
+      writeFileSync(join(root, "planning", "SECURITY.md"), "The credential validator is a security choke point and must be safe by construction.\n");
+      expect(discoverSemanticProbeCandidates(root)).toEqual([]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("admits gate-bite claims only from operative planning or structured product contracts", () => {
+    const root = repository("The canonical CI gate proves every shipped parser rejects malformed input.");
+    try {
+      writeFileSync(join(root, "README.md"), "The documentation gate proves every example is current.\n");
+      mkdirSync(join(root, "contracts"));
+      writeFileSync(join(root, "contracts", "runtime.yaml"), `artifact_type: product_contract
+status: active
+gate_guarantee: The release gate proves the shipped decoder rejects a corrupt envelope.
+`);
+      const gateBites = discoverSemanticProbeCandidates(root).filter((candidate) => candidate.kind === "gate_semantic_bite");
+      expect(gateBites.map((candidate) => candidate.path)).toEqual([
+        "contracts/runtime.yaml",
+        "planning/STORY.md",
+      ]);
+      expect(gateBites.flatMap((candidate) => candidate.refs)).not.toContain("README.md#line-1");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps tests, examples, eval fixtures, regex literals, diagnostics, and detector self-source non-blocking", () => {
+    const root = repository("The formatter has an ordinary package-local test.");
+    try {
+      mkdirSync(join(root, "src"));
+      writeFileSync(join(root, "src", "semantic.ts"), `
+const GATE_BITE_CLAIM = /gate.*proves.*rejects/i;
+throw new Error("the validator rejects malformed input when the check proves coverage");
+// Handwritten typed-React twin; keep in sync with server renderer.
+`);
+      writeFileSync(join(root, "src", "semantic.test.ts"), `
+it("proves the gate rejects a broken fixture", () => {});
+const diagnostic = "declared handwritten mirror/twin has no bound canonical equivalence contract";
+`);
+      mkdirSync(join(root, "planning", "examples"));
+      writeFileSync(join(root, "planning", "examples", "sample.md"), "The gate proves the validator rejects this example.\n");
+      mkdirSync(join(root, "planning", "evals"));
+      writeFileSync(join(root, "planning", "evals", "case.md"), "Expected: reject; the check proves the gate catches it.\n");
+      mkdirSync(join(root, "fixtures"));
+      writeFileSync(join(root, "fixtures", "contract.yaml"), "artifact_type: product_contract\ngate: The gate proves the validator rejects input.\n");
+      const selfMatches = discoverSemanticProbeCandidates(root).filter((candidate) => (
+        candidate.kind === "gate_semantic_bite" || candidate.kind === "representation_equivalence"
+      ));
+      expect(selfMatches).toEqual([]);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -181,7 +295,10 @@ authority_definition:
   });
 
   it("discovers every systemic observer class without upgrading discovery into a product verdict", () => {
-    const root = repository("The canonical CI gate proves every production parser rejects malformed input.");
+    const root = repository([
+      "The canonical CI gate proves every production parser rejects malformed input.",
+      "The handwritten client twin mirrors the server renderer.",
+    ].join("\n"));
     try {
       writeFileSync(join(root, ".gitignore"), ".edge-agentic/local/\n");
       mkdirSync(join(root, "planning", "done"), { recursive: true });
@@ -228,6 +345,8 @@ fallbacks:
         "representation_equivalence",
         "supersession_lineage",
       ]));
+      expect(result.candidates.find((candidate) => candidate.kind === "representation_equivalence")?.refs)
+        .toEqual(["planning/STORY.md#line-8"]);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -496,6 +615,8 @@ permission_mode: read-only
         "packages/service/index.mjs",
         "packages/service/package.json",
       ]));
+      expect(uncovered?.mechanical_proof).toBeUndefined();
+      expect(uncovered?.evidence.join(" ")).toContain("coverage-unestablished");
 
       writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
         name: "fixture-service",
@@ -509,7 +630,7 @@ permission_mode: read-only
         name: "fixture-service",
         type: "module",
         main: "index.mjs",
-        scripts: { lint: "eslint index.mjs" },
+        scripts: { check: "node --check index.mjs" },
       }, null, 2)}\n`);
       expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "executable_surface_coverage")).toBe(false);
     } finally {
@@ -517,7 +638,75 @@ permission_mode: read-only
     }
   });
 
-  it("credits a production package reached by a canonical cross-package test route", () => {
+  it("retains an explicitly exported generated bundle while leaving unrelated development sources out", () => {
+    const root = repository("The formatter has an ordinary package-local test.");
+    try {
+      const packageRoot = join(root, "packages", "surface");
+      mkdirSync(join(packageRoot, "scripts"), { recursive: true });
+      mkdirSync(join(packageRoot, "fixtures"));
+      writeFileSync(join(packageRoot, "index.test.ts"), "export const testOnly = true;\n");
+      writeFileSync(join(packageRoot, "index.spec.mts"), "export const specOnly = true;\n");
+      writeFileSync(join(packageRoot, "index.d.ts"), "export declare const declared: boolean;\n");
+      writeFileSync(join(packageRoot, "fixtures", "input.ts"), "export const fixture = true;\n");
+      writeFileSync(join(packageRoot, "scripts", "report.mjs"), "export const report = true;\n");
+      writeFileSync(join(packageRoot, "bundle.js"), [
+        "var __defProp = Object.defineProperty;",
+        "var __commonJS = (cb) => cb;",
+        "var __copyProps = (to, from) => to;",
+      ].join("\n"));
+      writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+        name: "fixture-surface",
+        exports: { types: "./index.d.ts", import: "./bundle.js" },
+        scripts: { "report:history": "node scripts/report.mjs" },
+      }, null, 2)}\n`);
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+      expect(candidate?.refs).toEqual(["packages/surface/bundle.js", "packages/surface/package.json"]);
+      expect(candidate?.mechanical_proof).toBeUndefined();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    "eslint --exclude index.mjs",
+    "eslint --exclude=index.mjs",
+  ])("never treats negative command input %s as positive gate coverage", (command) => {
+    const root = repository("The formatter has an ordinary package-local test.");
+    try {
+      const packageRoot = join(root, "packages", "excluded");
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(join(packageRoot, "index.mjs"), "export const shipped = true;\n");
+      writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+        name: "fixture-excluded",
+        main: "index.mjs",
+        scripts: { lint: command },
+      }, null, 2)}\n`);
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+      expect(candidate?.refs).toContain("packages/excluded/index.mjs");
+      expect(candidate?.mechanical_proof).toBeUndefined();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("resolves command inputs after cd before evaluating gate reachability", () => {
+    const root = repository("The formatter has an ordinary package-local test.");
+    try {
+      const packageRoot = join(root, "packages", "cd-service");
+      mkdirSync(join(packageRoot, "app"), { recursive: true });
+      writeFileSync(join(packageRoot, "app", "index.mjs"), "export const shipped = true;\n");
+      writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+        name: "fixture-cd-service",
+        main: "app/index.mjs",
+        scripts: { check: "cd app && node --check index.mjs" },
+      }, null, 2)}\n`);
+      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "executable_surface_coverage")).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("requires native test-input evidence for a cross-package test route", () => {
     const root = repository("The audit plugin is exercised from the repository surface tests.");
     try {
       const packageRoot = join(root, "packages", "audit");
@@ -535,7 +724,123 @@ permission_mode: read-only
         private: true,
         scripts: { test: "node --test tests/**/*.test.mjs" },
       }, null, 2)}\n`);
-      expect(discoverSemanticProbeCandidates(root).some((candidate) => candidate.kind === "executable_surface_coverage")).toBe(false);
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+      expect(candidate?.refs).toContain("packages/audit/index.mjs");
+      expect(candidate?.mechanical_proof).toBeUndefined();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    ["compiler excludes", "tsc --project tsconfig.json", "tsconfig.json", '{"include":["src/**/*"],"exclude":["src/runtime.mjs"]}'],
+    ["compiler JSONC", "tsc --project tsconfig.json", "tsconfig.json", '{/* valid JSONC */"include":["src/**/*"]}'],
+    ["compiler inheritance", "tsc --project tsconfig.json", "tsconfig.json", '{"extends":"./tsconfig.base.json"}'],
+    ["config ignores", "eslint --config eslint.config.js src/safe.mjs", "eslint.config.js", 'export default [{ignores:["src/runtime.mjs"]}];'],
+    ["positive and negative inputs", "eslint src --ignore-pattern src/runtime.mjs", "", ""],
+    ["arbitrary script argument", 'node -e "console.log(1)" src/runtime.mjs', "", ""],
+    ["non-validator", "wc -l src/runtime.mjs", "", ""],
+    ["unreachable branch", "true || node --check src/runtime.mjs", "", ""],
+    ["masked failure", "node --check src/runtime.mjs || true", "", ""],
+    ["ignored early failure", "node --check src/runtime.mjs; true", "", ""],
+    ["compound echo", "echo src/runtime.mjs && true", "", ""],
+    ["environment expansion", "VALIDATOR=node node --check src/runtime.mjs", "", ""],
+    ["unknown command before validator", "custom-command && node --check src/runtime.mjs", "", ""],
+  ])("keeps %s as coverage debt without inventing validation or a negative proof", (_label, command, configPath, configContent) => {
+    const root = repository("Ordinary package task.");
+    try {
+      mkdirSync(join(root, "src"));
+      writeFileSync(join(root, "src", "runtime.mjs"), "export const runtime = 1;\n");
+      writeFileSync(join(root, "src", "safe.mjs"), "export const safe = 1;\n");
+      writeFileSync(join(root, "tsconfig.base.json"), '{"include":["src/**/*"]}\n');
+      if (configPath) writeFileSync(join(root, configPath), configContent);
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        name: "coverage-adversary", main: "src/runtime.mjs", scripts: { check: command },
+      }));
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+      expect(candidate?.refs).toContain("src/runtime.mjs");
+      expect(candidate?.evidence.join(" ")).toContain("coverage-unestablished");
+      expect(candidate?.mechanical_proof).toBeUndefined();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each(["dist/runtime.js", "src/runtime.mjs", "src/runtime.test.mjs", "examples/runtime.mjs"])(
+    "keeps explicit shipped target %s visible regardless of path or generated header",
+    (entry) => {
+      const root = repository("Ordinary package task.");
+      try {
+        mkdirSync(join(root, entry.split("/")[0]!), { recursive: true });
+        writeFileSync(join(root, entry), "// Do not edit this user-facing value without approval\nexport const runtime = 1;\n");
+        writeFileSync(join(root, "package.json"), JSON.stringify({ name: "shipped-target", main: entry }));
+        const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+        expect(candidate?.refs).toContain(entry);
+        expect(candidate?.mechanical_proof).toBeUndefined();
+      } finally {
+        rmSync(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it("collects possible runtime dependencies without crediting lint or syntax checks with import coverage", () => {
+    const root = repository("Ordinary package task.");
+    try {
+      writeFileSync(join(root, "index.mjs"), 'import "./unguarded.mjs";\n');
+      writeFileSync(join(root, "unguarded.mjs"), "export const runtime = 1;\n");
+      for (const command of ["eslint index.mjs", "node --check index.mjs"]) {
+        writeFileSync(join(root, "package.json"), JSON.stringify({
+          name: "import-closure", main: "index.mjs", scripts: { check: command },
+        }));
+        const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+        expect(candidate?.refs).toContain("unguarded.mjs");
+        expect(candidate?.evidence.join(" ")).toContain("validation route unestablished: unguarded.mjs");
+        expect(candidate?.mechanical_proof).toBeUndefined();
+      }
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps an implicit package entrypoint and unsupported dependency resolution visible", () => {
+    const root = repository("Ordinary package task.");
+    try {
+      writeFileSync(join(root, "index.js"), 'import "@workspace/runtime";\n');
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        name: "implicit-entry", scripts: { check: "node --check index.js" },
+      }));
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+      expect(candidate?.refs).toContain("index.js");
+      expect(candidate?.evidence.join(" ")).toContain("runtime dependency closure requires native evidence");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("resolves a literal delegated syntax-check route without claiming execution success", () => {
+    const root = repository("Ordinary package task.");
+    try {
+      writeFileSync(join(root, "index.mjs"), "export const runtime = 1;\n");
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        name: "literal-delegation", main: "index.mjs",
+        scripts: { check: "npm run syntax", syntax: "node --check index.mjs" },
+      }));
+      expect(discoverSemanticProbeCandidates(root).filter((item) => item.kind === "executable_surface_coverage")).toEqual([]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not mistake a node option-looking token for a file operand", () => {
+    const root = repository("Ordinary package task.");
+    try {
+      writeFileSync(join(root, "-runtime.mjs"), "export const runtime = 1;\n");
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        name: "option-boundary", main: "./-runtime.mjs", scripts: { check: "node --check -runtime.mjs" },
+      }));
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+      expect(candidate?.refs).toContain("-runtime.mjs");
+      expect(candidate?.mechanical_proof).toBeUndefined();
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -1020,3 +1325,52 @@ process.exit(ok ? 0 : 1);
     }
   });
 });
+
+  it.each([
+    ["root pre-hook", { check: "npm run syntax", precheck: "false", syntax: "node --check index.mjs" }],
+    ["root post-hook", { check: "npm run syntax", postcheck: "false", syntax: "node --check index.mjs" }],
+    ["nested pre-hook", { check: "cd service && npm run syntax", service: { syntax: "node --check index.mjs", presyntax: "false" } }],
+    ["nested post-hook", { check: "cd service && npm run syntax", service: { syntax: "node --check index.mjs", postsyntax: "false" } }],
+  ])("keeps %s package-manager lifecycle hooks as runtime evidence debt", (_label, fixture) => {
+    const root = repository("Ordinary package task.");
+    try {
+      writeFileSync(join(root, "index.mjs"), "export const runtime = 1;\n");
+      if ("service" in fixture) {
+        mkdirSync(join(root, "service"), { recursive: true });
+        writeFileSync(join(root, "service", "index.mjs"), "export const runtime = 1;\n");
+        writeFileSync(join(root, "service", "package.json"), JSON.stringify({
+          name: "nested-lifecycle", main: "index.mjs", scripts: fixture.service,
+        }));
+        writeFileSync(join(root, "package.json"), JSON.stringify({
+          name: "root-lifecycle", scripts: { check: fixture.check },
+        }));
+      } else {
+        writeFileSync(join(root, "package.json"), JSON.stringify({
+          name: "root-lifecycle", main: "index.mjs", scripts: fixture,
+        }));
+      }
+      const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+      expect(candidate?.evidence.join(" ")).toContain("package script lifecycle hooks require native evidence");
+      expect(candidate?.mechanical_proof).toBeUndefined();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each(["release-build", "release_build", "foo-release"])(
+    "retains %s as a release-input obligation even when it contains a literal syntax check",
+    (scriptName) => {
+      const root = repository("Ordinary package task.");
+      try {
+        writeFileSync(join(root, "cli.js"), "export const runtime = 1;\n");
+        writeFileSync(join(root, "package.json"), JSON.stringify({
+          name: "release-role", bin: "cli.js", scripts: { [scriptName]: "node --check cli.js" },
+        }));
+        const candidate = discoverSemanticProbeCandidates(root).find((item) => item.kind === "executable_surface_coverage");
+        expect(candidate?.evidence.join(" ")).toContain(`release input closure requires native evidence: ${scriptName}`);
+        expect(candidate?.mechanical_proof).toBeUndefined();
+      } finally {
+        rmSync(root, { force: true, recursive: true });
+      }
+    },
+  );

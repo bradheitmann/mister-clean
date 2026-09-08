@@ -13,6 +13,10 @@ import { loadDenylist, scanTrackedPublicSafetySync } from "./closeout/inspection
 import { inspectRepositoryObject } from "./closeout/repository-inspection.js";
 import { packageRoot, trackedShippablePaths } from "./closeout/repository.js";
 import {
+  executionContentionJson,
+  ExecutionResourceBusyError,
+} from "./closeout/execution-lease.js";
+import {
   discoverSemanticProbeCandidates,
   semanticCandidateSetSha256,
   semanticWorkingTreeSha256,
@@ -28,6 +32,8 @@ import {
 } from "./closeout/semantic-v2.js";
 import type { FileRuntimeAttestationBinding } from "./runtime-binding.js";
 import { canonicalJson } from "./canonical-json.js";
+import type { MisterCleanRunLifecycle } from "./mister-clean-lifecycle.js";
+import { journalFromEnvironment, type MisterCleanInvocationJournal } from "./mister-clean-invocation-journal.js";
 import {
   captureFileCensus,
   compareFileCensuses,
@@ -356,6 +362,7 @@ async function runValidate(
   try {
     data = readJson(path);
   } catch (error) {
+    if (error instanceof ExecutionResourceBusyError) io.stderr(executionContentionJson(error));
     io.stderr(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
     return 2;
   }
@@ -623,28 +630,56 @@ function usage(io: CliIO): void {
   io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare)");
 }
 
-export async function runCli(argv: readonly string[], io: CliIO = defaultIO()): Promise<number> {
+export async function runCli(
+  argv: readonly string[],
+  io: CliIO = defaultIO(),
+  lifecycle: MisterCleanRunLifecycle | undefined = undefined,
+  journal: MisterCleanInvocationJournal | undefined = undefined,
+): Promise<number> {
   const args = [...argv];
   const command = args.shift();
+  let invocationId: string | undefined;
+  let lifecycleRunEventId: string | null = null;
+  let terminalRecorded = false;
   try {
-    if (command === "attest") return await runAttest(args, io);
-    if (!new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic"]).has(String(command))) {
+    if (!new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "attest"]).has(String(command))) {
       usage(io);
       return 2;
     }
+    // Every actual CLI hygiene invocation has an identity-unobserved receipt
+    // before execution. A strict evaluator event is linked only if one was
+    // explicitly supplied; no tuple or telemetry is invented otherwise.
+    invocationId = journal?.recordStart({ command: command!, argv, occurred_at: new Date().toISOString() });
+    if (lifecycle !== undefined) {
+      const evaluation = await lifecycle.recordRunStart();
+      lifecycleRunEventId = evaluation.run_event_id;
+      if (invocationId !== undefined) journal?.recordEvaluationLink({ invocation_id: invocationId, run_event_id: evaluation.run_event_id, occurred_at: new Date().toISOString() });
+    }
+    let exitCode: number;
+    if (command === "attest") exitCode = await runAttest(args, io);
+    else {
     const runtimeAttestation = await bindCliRuntime(io);
-    if (!runtimeAttestation) return 2;
-    if (command === "prepare") return await runPrepare(args, io, runtimeAttestation);
-    if (command === "action") return await runAction(args, io, runtimeAttestation);
-    if (command === "validate") return await runValidate(args, io, runtimeAttestation);
-    if (command === "detect") return await runDetect(args, io);
-    if (command === "audit") return await runAudit(args, io);
-    if (command === "inspect") return await runInspect(args, io);
-    if (command === "census") return await runCensus(args, io);
-    if (command === "manifest") return await runManifest(args, io);
-    if (command === "semantic") return await runSemantic(args, io);
-    return 2;
+      if (!runtimeAttestation) exitCode = 2;
+      else if (command === "prepare") exitCode = await runPrepare(args, io, runtimeAttestation);
+      else if (command === "action") exitCode = await runAction(args, io, runtimeAttestation);
+      else if (command === "validate") exitCode = await runValidate(args, io, runtimeAttestation);
+      else if (command === "detect") exitCode = await runDetect(args, io);
+      else if (command === "audit") exitCode = await runAudit(args, io);
+      else if (command === "inspect") exitCode = await runInspect(args, io);
+      else if (command === "census") exitCode = await runCensus(args, io);
+      else if (command === "manifest") exitCode = await runManifest(args, io);
+      else if (command === "semantic") exitCode = await runSemantic(args, io);
+      else exitCode = 2;
+    }
+    if (invocationId !== undefined) {
+      journal?.recordEnd({ invocation_id: invocationId, run_event_id: lifecycleRunEventId, status: exitCode === 0 ? "SUCCEEDED" : "FAILED", exit_code: exitCode, occurred_at: new Date().toISOString() });
+      terminalRecorded = true;
+    }
+    return exitCode;
   } catch (error) {
+    if (invocationId !== undefined && !terminalRecorded) {
+      try { journal?.recordEnd({ invocation_id: invocationId, run_event_id: lifecycleRunEventId, status: "FAILED", exit_code: 2, occurred_at: new Date().toISOString() }); } catch (journalError) { io.stderr(`ERROR: ${journalError instanceof Error ? journalError.message : String(journalError)}`); }
+    }
     io.stderr(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
     if (error instanceof UsageError) usage(io);
     return 2;
@@ -662,5 +697,13 @@ export function isDirectInvocation(argvPath: string | undefined, moduleUrl: stri
 }
 
 if (isDirectInvocation(process.argv[1], import.meta.url)) {
-  process.exitCode = await runCli(process.argv.slice(2));
+  const directArgs = process.argv.slice(2);
+  const directCommand = directArgs[0];
+  const isHelpOrVersion = directCommand === undefined || directCommand === "--help" || directCommand === "help" || directCommand === "--version" || directCommand === "version";
+  try {
+    process.exitCode = await runCli(directArgs, defaultIO(), undefined, isHelpOrVersion ? undefined : journalFromEnvironment(process.env));
+  } catch (error) {
+    process.stderr.write(`ERROR: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 2;
+  }
 }

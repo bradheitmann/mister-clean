@@ -657,6 +657,28 @@ status: archived
     expect(result.counts.planning_relationship_conflict ?? 0).toBe(0);
   });
 
+  it("rejects a lane-archived child under a live parent when archival is not declared", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/active/LIVE-PARENT.md", `---
+artifact_type: story
+story_id: LIVE-PARENT
+status: active
+---
+| Child | Status |
+| ARCHIVED-CHILD | Archived |
+`),
+      source("planning/archive/ARCHIVED-CHILD.md", `---
+artifact_type: task
+task_id: ARCHIVED-CHILD
+parent_id: LIVE-PARENT
+---
+`),
+    ]);
+
+    expect(result.counts.planning_relationship_conflict).toBe(1);
+    expect(result.status).toBe("fail");
+  });
+
   it("allows an archived parent and archived child to remain a coherent historical graph", () => {
     const result = auditPlanningArtifacts([
       source("planning/archive/HISTORICAL-PARENT.md", `---
@@ -1166,6 +1188,22 @@ ${fields}
       ]);
       expect(result.counts.lifecycle_state_unknown ?? 0).toBe(0);
     }
+  });
+
+  it("fails closed when progress fields conflict without a primary lifecycle status", () => {
+    const result = auditPlanningArtifacts([
+      source("planning/items/PROGRESS-ONLY-CONFLICT.md", `---
+artifact_type: task
+task_id: PROGRESS-ONLY-CONFLICT
+top_level: true
+phase: done
+stage: active
+---
+`),
+    ]);
+
+    expect(result.counts.lifecycle_state_unknown).toBe(1);
+    expect(result.status).toBe("fail");
   });
 
   it("uses explicit acceptance outcomes ahead of generic status independent of key order", () => {

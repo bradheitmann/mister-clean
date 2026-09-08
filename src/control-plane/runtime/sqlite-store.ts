@@ -36,6 +36,8 @@ import {
   type DirectiveEventView,
   type EvidenceInput,
   type IssueView,
+  type PendingEvaluationInvocationView,
+  type PendingEvaluationInvocationsView,
   type RunView,
 } from "./protocol.js";
 import type {
@@ -47,7 +49,7 @@ import {
   assertDirectiveAppendSealed,
   type AuthorizedDirectiveAppendRequest,
 } from "./transition-seal.js";
-import { deriveQualification } from "../domain/qualification.js";
+import { deriveQualification, type QualificationEvidence } from "../domain/qualification.js";
 
 interface RunRow {
   readonly run_id: string;
@@ -88,11 +90,24 @@ interface AgentRow {
   readonly reasoning_level: string;
 }
 
+interface PendingEvaluationInvocationRow {
+  readonly invocation_id: string;
+  readonly command: string;
+  readonly argv_sha256: string;
+  readonly observed_at: string;
+  readonly receipt_sha256: string;
+  readonly pending_count: number;
+}
+
 interface CreditedTrialRow {
   readonly trial_id: string;
   readonly agent_tuple_id: string;
   readonly capability_id: string;
-  readonly repository_cohort_token: string;
+  /** Actual machine-local repository provenance; legacy cohort labels never
+   * satisfy the distinct-repository qualification requirement. */
+  readonly repository_id: string;
+  /** Null until provenance-backed logical-project aliasing is implemented. */
+  readonly logical_project_id: string | null;
   readonly verified_success: number;
   readonly independent_evaluation: number;
   readonly pre_dispatch_observation_id: string;
@@ -110,10 +125,10 @@ interface CreditedTrialRow {
   readonly evaluation_evidence_digests_json: string;
 }
 
-const CREDITED_TRIALS = `
+export const CREDITED_TRIALS = `
   WITH credited_trials AS (
-    SELECT t.trial_id, t.agent_tuple_id, t.capability_id, t.repository_cohort_token,
-      CASE WHEN EXISTS (
+    SELECT t.trial_id, t.agent_tuple_id, t.capability_id, t.repository_id, alias.logical_project_id,
+      CASE WHEN t.verified_success = 0 OR EXISTS (
         SELECT 1
         FROM trial_evaluations result
         JOIN capability_evaluators evaluator ON evaluator.evaluator_id = result.evaluator_id
@@ -173,6 +188,9 @@ const CREDITED_TRIALS = `
     JOIN agent_run_events r ON r.run_event_id = t.run_event_id
       AND r.agent_tuple_id = t.agent_tuple_id
       AND r.capability_id = t.capability_id
+      AND r.repository_id = t.repository_id
+    JOIN local_repository_identities repository ON repository.repository_id = t.repository_id
+    LEFT JOIN logical_project_repository_aliases alias ON alias.repository_id = t.repository_id
     JOIN execution_routes route ON route.execution_route_id = r.execution_route_id
       AND route.agent_tuple_id = t.agent_tuple_id
     JOIN agent_tuples tuple ON tuple.agent_tuple_id = t.agent_tuple_id
@@ -190,11 +208,22 @@ const CREDITED_TRIALS = `
       AND evaluation.observed_model_id = tuple.model_id
       AND evaluation.observed_harness_id = tuple.harness_id
       AND evaluation.observed_reasoning_level = tuple.reasoning_level
+    JOIN agent_identity_observation_targets dispatch_target ON dispatch_target.observation_id = dispatch.observation_id
+    JOIN agent_identity_observation_targets evaluation_target ON evaluation_target.observation_id = evaluation.observation_id
+    JOIN evaluation_identity_receipt_verifications dispatch_receipt ON dispatch_receipt.run_event_id = r.run_event_id
+      AND dispatch_receipt.phase = 'pre_dispatch'
+      AND dispatch_receipt.identity_assurance IN ('active_harness_selection', 'provider_execution_attested')
+    JOIN evaluation_identity_receipt_verifications evaluation_receipt ON evaluation_receipt.run_event_id = r.run_event_id
+      AND evaluation_receipt.phase = 'pre_evaluation'
+      AND evaluation_receipt.identity_assurance IN ('active_harness_selection', 'provider_execution_attested')
+    JOIN evaluation_dispatch_subjects dispatch_subject ON dispatch_subject.run_event_id = r.run_event_id
+    JOIN evaluation_evaluated_candidates evaluated_candidate ON evaluated_candidate.run_event_id = r.run_event_id
     JOIN agent_evaluation_evidence dispatch_evidence ON dispatch_evidence.evidence_sha256 = dispatch.evidence_sha256
     JOIN agent_evaluation_evidence evaluation_evidence ON evaluation_evidence.evidence_sha256 = evaluation.evidence_sha256
     JOIN agent_evaluation_evidence trial_evidence ON trial_evidence.evidence_sha256 = t.evidence_sha256
     WHERE t.identity_disposition = 'BOUND_FOR_EVALUATION'
       AND t.contributes_quality_credit = 1
+      AND t.repository_id IS NOT NULL
       AND r.evaluation_required = 1
       AND length(trim(t.worker_actor_id)) > 0
       AND length(trim(t.author_actor_id)) > 0
@@ -206,10 +235,36 @@ const CREDITED_TRIALS = `
       AND dispatch.observer_actor_id NOT IN (t.worker_actor_id, t.author_actor_id)
       AND evaluation.observer_actor_id NOT IN (t.worker_actor_id, t.author_actor_id, dispatch.observer_actor_id)
       AND length(trim(dispatch.harness_session_token)) > 0 AND length(trim(evaluation.harness_session_token)) > 0
-      AND length(trim(dispatch.process_instance_token)) > 0 AND length(trim(evaluation.process_instance_token)) > 0
+      AND length(trim(dispatch.harness_session_token)) > 0 AND length(trim(evaluation.harness_session_token)) > 0
       AND dispatch.harness_session_token = evaluation.harness_session_token
-      AND dispatch.process_instance_token = evaluation.process_instance_token
-      AND evaluation.observed_at > dispatch.observed_at
+      AND dispatch_target.target_kind = evaluation_target.target_kind
+      AND dispatch_target.target_sha256 <> '' AND evaluation_target.target_sha256 <> ''
+      AND dispatch_target.local_target_binding = 'bound_authorized_checkout'
+      AND evaluation_target.local_target_binding = 'bound_authorized_checkout'
+      AND dispatch_target.target_git_evidence_sha256 IS NOT NULL
+      AND evaluation_target.target_git_evidence_sha256 IS NOT NULL
+      AND dispatch_target.canonical_git_top_level = evaluation_target.canonical_git_top_level
+      AND dispatch_target.canonical_git_common_directory = evaluation_target.canonical_git_common_directory
+      AND (
+        (dispatch_target.target_kind = 'cmux' AND dispatch_target.target_sha256 = evaluation_target.target_sha256)
+        OR (dispatch_target.target_kind = 'desktop'
+          AND json_extract(dispatch_target.canonical_target_json, '$.application_id') = json_extract(evaluation_target.canonical_target_json, '$.application_id')
+          AND json_extract(dispatch_target.canonical_target_json, '$.thread_id') = json_extract(evaluation_target.canonical_target_json, '$.thread_id')
+          AND json_extract(dispatch_target.canonical_target_json, '$.session_id') = json_extract(evaluation_target.canonical_target_json, '$.session_id')
+          AND json_extract(dispatch_target.canonical_target_json, '$.settings_record_sha256') = json_extract(evaluation_target.canonical_target_json, '$.settings_record_sha256')
+        )
+        OR (dispatch_target.target_kind = 'headless' AND dispatch_target.target_sha256 = evaluation_target.target_sha256)
+      )
+      AND (dispatch_target.target_kind = 'headless' OR (
+        length(trim(dispatch.process_instance_token)) > 0 AND length(trim(evaluation.process_instance_token)) > 0
+        AND dispatch.process_instance_token = evaluation.process_instance_token
+      ))
+      -- Dispatch identity must be observed no later than run start; the
+      -- evaluation identity is observed after task completion and before the
+      -- separately recorded evaluation outcome. Do not infer a stricter order
+      -- merely from receipt timestamps.
+      AND dispatch.observed_at <= r.occurred_at
+      AND evaluation.observed_at >= t.completed_at
       AND EXISTS (SELECT 1 FROM agent_identity_lease_events issued WHERE issued.identity_lease_id = r.identity_lease_id
         AND issued.event_kind = 'issued' AND issued.requested_agent_tuple_id = t.agent_tuple_id AND issued.execution_route_id = r.execution_route_id)
       AND EXISTS (SELECT 1 FROM agent_identity_lease_events bound WHERE bound.identity_lease_id = r.identity_lease_id
@@ -290,16 +345,64 @@ const CREDITED_TRIALS = `
           AND evaluator.active = 1
           AND evaluator.capability_id = t.capability_id
       )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM trial_evaluations result
-        JOIN capability_evaluators evaluator ON evaluator.evaluator_id = result.evaluator_id
-        WHERE result.trial_id = t.trial_id AND evaluator.active = 1
-          AND evaluator.capability_id = t.capability_id
-          AND evaluator.evaluation_dimension IN ('independent_evaluation', 'no_harm', 'authority')
-          AND result.result <> 1
-      )
   )`;
+
+/**
+ * Reuses the same evidence-derived credit projection shown to the router.
+ * Intake calls this before recording a new run so sampling cannot be advanced
+ * by legacy cohort labels or by rows with missing retained evidence.
+ */
+export function readQualificationEvidence(
+  global: OpenControlPlaneDatabase,
+  agentTupleId: string,
+  capabilityId: string,
+): QualificationEvidence {
+  if (global.kind !== "global") throw new Error("qualification evidence requires the machine-local global database");
+  const retainedEvidence = global.database.query<{ evidence_sha256: string; evidence_bytes: Uint8Array }>(
+    "SELECT evidence_sha256, evidence_bytes FROM agent_evaluation_evidence",
+  ).all();
+  const validDigests = new Set(retainedEvidence
+    .filter((evidence) => sha256Bytes(evidence.evidence_bytes) === evidence.evidence_sha256)
+    .map((evidence) => evidence.evidence_sha256));
+  const rows = global.database.query<CreditedTrialRow>(
+    `${CREDITED_TRIALS}
+     SELECT * FROM credited_trials WHERE agent_tuple_id = ? AND capability_id = ? ORDER BY trial_id`,
+  ).all(agentTupleId, capabilityId).filter((trial) => {
+    try {
+      const evaluationDigests = JSON.parse(trial.evaluation_evidence_digests_json) as unknown;
+      return Array.isArray(evaluationDigests)
+        && evaluationDigests.length > 0
+        && evaluationDigests.every((digest) => typeof digest === "string" && validDigests.has(digest))
+        && validDigests.has(trial.pre_dispatch_evidence_sha256)
+        && validDigests.has(trial.pre_evaluation_evidence_sha256)
+        && validDigests.has(trial.trial_evidence_sha256);
+    } catch {
+      return false;
+    }
+  });
+  const unresolved = global.database.query<{ event_kind: string }>(
+    `SELECT event_kind FROM qualification_events q
+     WHERE agent_tuple_id = ? AND capability_id = ?
+       AND event_kind IN ('no_harm_violation', 'authority_violation', 'explicit_disqualification')
+       AND NOT EXISTS (
+         SELECT 1 FROM qualification_events resolved
+         WHERE resolved.related_event_id = q.event_id
+           AND ((q.event_kind IN ('no_harm_violation', 'authority_violation') AND resolved.event_kind = 'violation_resolved')
+             OR (q.event_kind = 'explicit_disqualification' AND resolved.event_kind = 'disqualification_lifted'))
+       )`,
+  ).all(agentTupleId, capabilityId);
+  return {
+    verified_trials: rows.length,
+    verified_successes: rows.reduce((sum, trial) => sum + trial.verified_success, 0),
+    // Physical Git identities prevent worktree duplication, but clones/moves
+    // cannot establish distinct logical projects without alias provenance.
+    repository_cohort_count: new Set(rows.flatMap((trial) => trial.logical_project_id === null ? [] : [trial.logical_project_id])).size,
+    independently_evaluated: rows.every((trial) => trial.independent_evaluation === 1),
+    unresolved_no_harm_violations: unresolved.filter((event) => event.event_kind === "no_harm_violation").length,
+    unresolved_authority_violations: unresolved.filter((event) => event.event_kind === "authority_violation").length,
+    explicitly_disqualified: unresolved.some((event) => event.event_kind === "explicit_disqualification"),
+  };
+}
 
 interface DirectiveRow {
   readonly directive_id: string;
@@ -631,7 +734,7 @@ export class SqliteControlPlaneStore implements RepositoryControlPlaneStore {
         reasoning_level: row.reasoning_level,
         capabilities: [...byCapability.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([id, trials]): CapabilityTrialSummary => {
           const verifiedSuccessCount = trials.reduce((sum, trial) => sum + trial.verified_success, 0);
-          const repositoryCohortCount = new Set(trials.map((trial) => trial.repository_cohort_token)).size;
+          const repositoryCohortCount = new Set(trials.flatMap((trial) => trial.logical_project_id === null ? [] : [trial.logical_project_id])).size;
           const independentlyEvaluated = trials.every((trial) => trial.independent_evaluation === 1);
           const unresolved = this.#unresolvedQualificationViolations(row.agent_tuple_id, id);
           const qualification = deriveQualification({
@@ -672,6 +775,36 @@ export class SqliteControlPlaneStore implements RepositoryControlPlaneStore {
         }),
       };
     });
+  }
+
+  async listPendingEvaluationInvocations(limit: number): Promise<PendingEvaluationInvocationsView> {
+    if (this.#global === null) throw new ControlPlaneFault("PRECONDITION_FAILED", "Global agent inventory is not configured");
+    const rows = this.#global.database.query<PendingEvaluationInvocationRow>(
+      `WITH pending AS (
+         SELECT invocation.invocation_id, invocation.command, invocation.argv_sha256,
+                invocation.observed_at, invocation.receipt_sha256
+         FROM local_mister_clean_invocations AS invocation
+         LEFT JOIN evaluation_run_invocations AS linked ON linked.invocation_id = invocation.invocation_id
+         WHERE linked.invocation_id IS NULL AND invocation.identity_provenance = 'UNOBSERVED'
+       )
+       SELECT invocation_id, command, argv_sha256, observed_at, receipt_sha256,
+              COUNT(*) OVER () AS pending_count
+       FROM pending
+       ORDER BY observed_at, invocation_id
+       LIMIT ?`,
+    ).all(limit);
+    return {
+      pending_count: rows[0]?.pending_count ?? 0,
+      invocations: rows.map((row): PendingEvaluationInvocationView => ({
+        invocation_id: row.invocation_id,
+        command: row.command,
+        argv_sha256: row.argv_sha256 as Sha256,
+        observed_at: row.observed_at as IsoTimestamp,
+        receipt_sha256: row.receipt_sha256 as Sha256,
+        identity_provenance: "UNOBSERVED",
+        quality_credit: false,
+      })),
+    };
   }
 
   #unresolvedQualificationViolations(agentTupleId: string, capabilityId: string): { readonly no_harm: number; readonly authority: number; readonly disqualified: boolean } {

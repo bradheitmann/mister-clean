@@ -30,6 +30,15 @@ Create collision-free temporary directories and account for:
 
 State exactly what the isolated check established.
 
+When a gate fails only in the long-lived working directory, compare its exact
+input inventory with the isolated candidate before changing product code.
+Retained reports, caches, and fixtures may affect a directory scan without
+belonging to the shipped tree. Classify each hit by content and provenance;
+being ignored does not make a credential harmless. Preserve the failed receipt
+and retained evidence, avoid blanket directory suppressions, and prove any
+scan-scope correction still detects an in-scope planted defect. Count a proven
+control false positive separately from product debt or agent failure.
+
 ## Evidence locators are not claims
 
 An evidence reference establishes neither its own bytes nor the meaning claimed
@@ -99,6 +108,9 @@ For shell controls, unexpected stderr, parser diagnostics, or substitutions
 unsupported by the repository's oldest declared shell are semantic failures
 even when the wrapper exits zero. Run a representative positive and negative
 case under that oldest shell and require the documented stderr contract.
+Bind every failure explanation to that gate's own log and input state. An
+earlier test failure cannot explain a later post-build gate without reading
+the later log; a correct FAIL verdict does not validate an incorrect cause.
 
 ## Volatile actions
 

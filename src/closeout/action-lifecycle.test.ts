@@ -3,9 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { beginAction, finishAction } from "./action-lifecycle.js";
+import { nodeProcessPort } from "./action-hygiene.js";
 import { validateBundleFile } from "./bundle.js";
 import { prepareCloseout } from "./prepare.js";
 import { createSemanticPlanV2 } from "./semantic-v2.js";
@@ -107,7 +108,20 @@ function writeEmptySemanticV2(repository: string, directory: string): {
   return { packagePath, policyPath };
 }
 
+beforeEach(() => {
+  vi.spyOn(nodeProcessPort, "processTable").mockReturnValue([{
+    pid: process.pid,
+    ppid: 0,
+    start_identity: "action-lifecycle-test-process",
+    executable: process.execPath,
+  }]);
+  vi.spyOn(nodeProcessPort, "pathTable").mockReturnValue(
+    new Map([[process.pid, { cwd: "/", open_paths: [] }]]),
+  );
+});
+
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) rmSync(root, { force: true, recursive: true });
 });
 

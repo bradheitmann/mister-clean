@@ -120,6 +120,33 @@ evidence verifiers, clocks, stores, services, authenticators, and adapters are
 internal composition capabilities and cannot be injected through the public
 function. Package deep imports are blocked; use only the documented export.
 
+For retained logical-project alias admission, startup may additionally receive
+`logical_project_registration_receipts`: a bounded list of exact receipt
+digest/operator pairs. This is a declarative trusted-runtime allowlist, not a
+client bearer claim or callback. Each registration retains bytes whose
+canonical content binds that logical project, its physical repository IDs, and
+the configured actor; an omitted, altered, or unlisted receipt is denied.
+
+The canonical `runCli` lifecycle accepts one explicitly installed local
+evaluation adapter. At CLI run start it submits an already observed,
+evidence-bound `evaluation.run.start` envelope to loopback control-plane RPC.
+It does not launch a model, inspect providers or unrelated processes, infer an
+agent identity, or synthesize an outcome. Without this adapter, no activity is
+monitored and no evaluation event is invented.
+
+The shipped CLI resolves its machine-local invocation journal under
+`XDG_STATE_HOME/mister-clean/` (or `HOME/.local/state/mister-clean/`), with an
+optional absolute `MISTER_CLEAN_INVOCATION_JOURNAL_PATH` override. It appends
+an identity-unobserved invocation receipt before every accepted hygiene command
+runs, including when it later fails or no evaluator envelope is supplied; only
+a retained evaluator start can append a link to an agent run event. A journal
+integrity or write failure stops the command. Help/version-style input is not a
+hygiene invocation and does not create a receipt. The MCP server exposes
+bundled read-only materials and does not share this hygiene execution path;
+free-form use of the skill outside the CLI or an explicitly integrated
+lifecycle remains unobservable rather than being represented as machine-wide
+surveillance.
+
 ## Validate a closeout
 
 The authoritative local validators are exposed through one Node-compatible

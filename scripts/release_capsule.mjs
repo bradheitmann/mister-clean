@@ -278,12 +278,15 @@ export function createExternalPnpmArchive({
   const externalDependencies = join(buildRoot, "node_modules");
   let capsuleFailure = null;
   try {
-    execFileSync("pnpm", ["install", "--frozen-lockfile", "--prod=false", "--ignore-scripts"], {
+    execFileSync("pnpm", ["install", "--frozen-lockfile", "--config.production=false", "--ignore-scripts"], {
       cwd: buildRoot,
       env: buildEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    execFileSync("bun", ["run", "build"], {
+    // This outer capsule is the tree pnpm will pack. `build` only verifies a
+    // nested candidate, so it cannot materialize ignored package entrypoints
+    // here. Build the outer isolated tree before packing it.
+    execFileSync("pnpm", ["run", "build:raw"], {
       cwd: buildRoot,
       env: buildEnvironment,
       stdio: ["ignore", "pipe", "pipe"],

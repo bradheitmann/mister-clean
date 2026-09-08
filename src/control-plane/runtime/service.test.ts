@@ -135,6 +135,7 @@ class FakeStore implements RepositoryControlPlaneStore {
   async getManifestHead(): Promise<ManifestRevision | null> { return this.revision; }
   async listIssues(): Promise<readonly IssueView[]> { return []; }
   async listAgents(): Promise<readonly AgentView[]> { return []; }
+  async listPendingEvaluationInvocations() { return { pending_count: 0, invocations: [] } as const; }
   async listDirectiveEvents(): Promise<readonly DirectiveEventView[]> { return this.events; }
   async getReceipt(receiptId: ReceiptId): Promise<RuntimeBoundReceipt | null> { return this.receipts.get(receiptId) ?? null; }
   async getClosingRepositoryObject() { return { repository: { ...manifest().canonical_manifest.repository, repository_object_sha256: sha("9") }, evidence: [] }; }

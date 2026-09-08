@@ -446,7 +446,7 @@ describe("release archive boundary", () => {
       version: "1.0.0",
       files: ["built.txt"],
       scripts: {
-        build: "node -e \"const fs=require('node:fs');fs.writeFileSync('built.txt','built\\\\n');fs.writeFileSync('node_modules/CAPSULE_WRITE_PROBE','isolated\\\\n')\"",
+        "build:raw": "node -e \"const fs=require('node:fs');fs.writeFileSync('built.txt','built\\\\n');fs.writeFileSync('node_modules/CAPSULE_WRITE_PROBE','isolated\\\\n')\"",
         prepack: "node -e \"require('node:fs').writeFileSync('SOURCE_MUTATED', 'bad')\"",
       },
     }, null, 2)}\n`;
@@ -487,7 +487,7 @@ describe("release archive boundary", () => {
       name: "failing-external-capsule-fixture",
       version: "1.0.0",
       scripts: {
-        build: "node -e \"const fs=require('node:fs');fs.writeFileSync('capsule-only.txt','written\\\\n');fs.writeFileSync('node_modules/capsule-only.txt','written\\\\n');process.exit(23)\"",
+        "build:raw": "node -e \"const fs=require('node:fs');fs.writeFileSync('capsule-only.txt','written\\\\n');fs.writeFileSync('node_modules/capsule-only.txt','written\\\\n');process.exit(23)\"",
       },
     }, null, 2)}\n`;
     writeFileSync(packagePath, packageBytes, "utf8");
@@ -516,6 +516,9 @@ describe("release archive boundary", () => {
     execFileSync("git", ["add", "--all", "--force"], { cwd: source, stdio: "pipe" });
     execFileSync("git", ["commit", "--quiet", "-m", "exact candidate"], { cwd: source, stdio: "pipe" });
     const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }).trim();
+    expect(existsSync(join(source, "dist"))).toBe(false);
+    const committedPaths = execFileSync("git", ["ls-tree", "-r", "--name-only", commit], { cwd: source, encoding: "utf8" }).trim().split("\n").filter(Boolean);
+    expect(committedPaths.some((path) => path.startsWith("dist/"))).toBe(false);
 
     const archive = createExternalPnpmArchive({ sourceRoot: source, commit, staging });
     const unpacked = join(temporary, "real-package-unpacked");
@@ -523,8 +526,19 @@ describe("release archive boundary", () => {
     execFileSync("tar", ["-xzf", archive, "-C", unpacked], { stdio: "pipe" });
     const packageRoot = join(unpacked, "package");
     expect(JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")).version).toBe("7.0.0");
-    expect(readFileSync(join(packageRoot, "MANIFEST.sha256"), "utf8")).toContain("./bin/mister-clean.js");
+    const manifest = readFileSync(join(packageRoot, "MANIFEST.sha256"), "utf8");
+    expect(manifest).toContain("./bin/mister-clean.js");
     expect(existsSync(join(packageRoot, "bin", "mister-clean.js"))).toBe(true);
+    const distRows = manifest.trimEnd().split("\n").map((row) => {
+      const [sha256, path] = row.split("  ");
+      return { sha256, path };
+    }).filter((row) => row.path?.startsWith("./dist/"));
+    expect(distRows).toHaveLength(19);
+    for (const row of distRows) {
+      const path = row.path?.slice(2);
+      expect(path).toBeTruthy();
+      expect(sha256File(join(packageRoot, path))).toBe(row.sha256);
+    }
     expect(existsSync(join(packageRoot, ".git"))).toBe(false);
   }, 120_000);
 

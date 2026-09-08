@@ -19,6 +19,10 @@ import {
   semanticWorkingTreeSha256,
 } from "./semantic.js";
 import type { ActionHygieneProcessPort } from "./action-hygiene.js";
+import {
+  ExecutionResourceBusyError,
+  acquireRepositoryVerificationLease,
+} from "./execution-lease.js";
 import { mintServerAttestationBinding } from "../runtime-binding.js";
 
 const roots: string[] = [];
@@ -32,8 +36,18 @@ const SOURCE_RUNTIME = mintServerAttestationBinding({
   reason: "prepare test source execution",
 });
 
+const TEST_PROCESS_PORT: ActionHygieneProcessPort = {
+  processTable: () => [{
+    pid: process.pid,
+    ppid: 0,
+    start_identity: "prepare-test-process",
+    executable: process.execPath,
+  }],
+  pathTable: () => new Map([[process.pid, { cwd: "/", open_paths: [] }]]),
+};
+
 function prepareCloseout(options: Omit<PrepareCloseoutOptions, "runtimeAttestation">) {
-  return prepareCloseoutBound({ ...options, runtimeAttestation: SOURCE_RUNTIME });
+  return prepareCloseoutBound({ ...options, processPort: options.processPort ?? TEST_PROCESS_PORT, runtimeAttestation: SOURCE_RUNTIME });
 }
 
 function command(cwd: string, executable: string, ...args: string[]): string {
@@ -106,6 +120,23 @@ afterEach(() => {
 });
 
 describe("prepareCloseout", { timeout: 60_000 }, async () => {
+  it("refuses repository-wide contention before creating a run directory", async () => {
+    const { evidence, repo } = fixture("prepare-contention");
+    writeFileSync(join(repo, "README.md"), "fixture\n");
+    commit(repo);
+    const lease = acquireRepositoryVerificationLease(repo);
+    try {
+      await expect(prepareCloseout({
+        repo,
+        evidenceHome: evidence,
+        runId: "prepare-contention",
+        requestRef: "request-1",
+      })).rejects.toBeInstanceOf(ExecutionResourceBusyError);
+      expect(existsSync(join(evidence, "mister-clean", "prepare-contention"))).toBe(false);
+    } finally {
+      lease.release();
+    }
+  });
   it("copies exact operative request bytes and remains honestly NOT_CLEAN", async () => {
     const { evidence, repo } = fixture("request");
     writeFileSync(join(repo, "README.md"), "fixture\n");
@@ -466,8 +497,10 @@ jobs:
     commit(repo);
     const moments = [
       "2026-08-25T12:00:00.000Z",
+      "2030-08-25T11:59:59.000Z",
       "2030-08-25T12:00:00.000Z",
       "2030-08-25T12:00:01.000Z",
+      "2030-08-25T12:00:02.000Z",
       "2026-08-25T12:00:01.000Z",
       "2026-08-25T12:00:02.000Z",
     ].map((value) => new Date(value));
@@ -672,6 +705,10 @@ Status: active
     const { evidence, repo } = fixture("semantic-debt-integration");
     mkdirSync(join(repo, "planning"));
     writeFileSync(join(repo, "planning", "SECURITY.md"), [
+      "---",
+      "artifact_type: product_contract",
+      "status: active",
+      "---",
       "The credential validator is a security choke point and must be safe by construction.",
       "The production composition root must wire the credential validator.",
       "",

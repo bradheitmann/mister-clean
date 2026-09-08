@@ -4,12 +4,16 @@ import { isAbsolute, resolve } from "node:path";
 
 import type { RepositoryObject } from "./repository-object.js";
 import {
+  repositoryVerificationCoordinationKey,
+  validateExecutionLeaseReceipt,
+} from "./execution-lease.js";
+import {
   COVERAGE_RECORD_TYPE,
+  COVERAGE_SCHEMA_VERSION,
   HEX64,
   NATIVE_GATE_FAILURE_REASONS,
   NATIVE_GATE_KINDS,
   NATIVE_GATE_STATES,
-  SCHEMA_VERSION,
   digestFile,
   errorMessage,
   identity,
@@ -104,11 +108,11 @@ export async function validateNativeGateCoverage(
     : [];
   const rawCoverage = validateExactKeys(coverage, [
     "record_type", "schema_version", "discovery_sha256", "closing_repository_object",
-    "required_gate_ids", "executions", "coverage_sha256",
+    "required_gate_ids", "executions", "execution_lease", "coverage_sha256",
   ], "coverage", errors);
   if (!rawCoverage) return errors;
   if (rawCoverage.record_type !== COVERAGE_RECORD_TYPE) errors.push("coverage.record_type is invalid");
-  if (rawCoverage.schema_version !== SCHEMA_VERSION) errors.push("coverage.schema_version is invalid");
+  if (rawCoverage.schema_version !== COVERAGE_SCHEMA_VERSION) errors.push("coverage.schema_version is invalid");
   if (typeof rawCoverage.discovery_sha256 !== "string" || !HEX64.test(rawCoverage.discovery_sha256)) {
     errors.push("coverage.discovery_sha256 is invalid");
   } else if (rawCoverage.discovery_sha256 !== discovery.catalog_sha256) {
@@ -125,6 +129,30 @@ export async function validateNativeGateCoverage(
   if (rawCoverage.coverage_sha256 !== identity(withoutField(rawCoverage, "coverage_sha256"))) {
     errors.push("coverage.coverage_sha256 mismatch");
   }
+  const rawExecutionLease = rawCoverage.execution_lease;
+  const validExecutionLease = validateExecutionLeaseReceipt(
+    rawExecutionLease,
+    "coverage.execution_lease",
+    errors,
+  );
+  const lease = validExecutionLease ? rawExecutionLease : undefined;
+  const recordedCoordinationKey = record(rawExecutionLease)?.coordination_key_sha256;
+  if (typeof recordedCoordinationKey === "string"
+    && recordedCoordinationKey !== discovery.execution_coordination_key_sha256) {
+    errors.push("coverage.execution_lease.coordination_key_sha256 does not match discovery");
+  }
+  if (options.repository !== undefined) {
+    try {
+      const expected = repositoryVerificationCoordinationKey(options.repository);
+      if (discovery.execution_coordination_key_sha256 !== expected) {
+        errors.push("discovery.execution_coordination_key_sha256 does not match the requested repository");
+      }
+    } catch (error) {
+      errors.push(`requested repository coordination key cannot be validated: ${errorMessage(error)}`);
+    }
+  }
+  const leaseAcquired = lease ? validClock(lease.acquired_at as string) : undefined;
+  const leaseReleased = lease ? validClock(lease.released_at as string) : undefined;
   const validClosingObject = validateRepositoryObjectSchema(
     rawCoverage.closing_repository_object,
     "coverage.closing_repository_object",
@@ -271,6 +299,12 @@ export async function validateNativeGateCoverage(
     if (started === undefined) errors.push(`${label}.started_at is not canonical ISO time`);
     if (finished === undefined) errors.push(`${label}.finished_at is not canonical ISO time`);
     if (started !== undefined && finished !== undefined && started > finished) errors.push(`${label}: clock order is invalid`);
+    if (started !== undefined && leaseAcquired !== undefined && started < leaseAcquired) {
+      errors.push(`${label}.started_at precedes the execution lease`);
+    }
+    if (finished !== undefined && leaseReleased !== undefined && finished > leaseReleased) {
+      errors.push(`${label}.finished_at exceeds the execution lease`);
+    }
     if (started !== undefined && started > validationTime + futureSkew) errors.push(`${label}.started_at is in the future`);
     if (finished !== undefined && finished > validationTime + futureSkew) errors.push(`${label}.finished_at is in the future`);
     const hasExecutable = typeof execution.resolved_executable === "string" && isAbsolute(execution.resolved_executable);

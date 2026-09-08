@@ -26,6 +26,11 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
+import {
+  repositoryVerificationCoordinationKey,
+  type ExecutionLeaseReceipt,
+  type HeldExecutionLease,
+} from "./execution-lease.js";
 
 export type NativeGateKind = "established_ci" | "repository_tests" | "lint" | "typecheck" | "build";
 export type NativeGateDisposition = "required" | "not_applicable" | "absent";
@@ -88,8 +93,9 @@ export interface NativeGateDefinition {
 
 export interface NativeGateDiscovery {
   readonly record_type: "mister-clean.native-gate-discovery";
-  readonly schema_version: "1.2";
+  readonly schema_version: "1.3";
   readonly repository_object: RepositoryObject;
+  readonly execution_coordination_key_sha256: string;
   readonly source_refs: readonly NativeGateSourceRef[];
   readonly gates: readonly NativeGateDefinition[];
   readonly required_gate_ids: readonly string[];
@@ -127,11 +133,12 @@ export interface NativeGateExecution {
 
 export interface NativeGateCoverage {
   readonly record_type: "mister-clean.native-gate-coverage";
-  readonly schema_version: "1.2";
+  readonly schema_version: "1.3";
   readonly discovery_sha256: string;
   readonly closing_repository_object: RepositoryObject;
   readonly required_gate_ids: readonly string[];
   readonly executions: readonly NativeGateExecution[];
+  readonly execution_lease: ExecutionLeaseReceipt;
   readonly coverage_sha256: string;
 }
 
@@ -163,6 +170,8 @@ export interface RunNativeGateOptions {
   readonly termination_grace_ms?: number;
   readonly skip_gate_ids?: readonly string[];
   readonly now?: () => Date;
+  /** A caller may acquire before emitting any run evidence, then transfer ownership here. */
+  readonly execution_lease?: HeldExecutionLease;
 }
 
 export interface ValidateNativeGateOptions {
@@ -170,6 +179,8 @@ export interface ValidateNativeGateOptions {
   readonly max_future_skew_ms?: number;
   /** False validates evidence integrity without pretending a failing gate passed. */
   readonly require_passing?: boolean;
+  /** When available, recompute the repository-bound coordination key instead of trusting recorded evidence. */
+  readonly repository?: string;
 }
 
 type NodeManager = "bun" | "pnpm" | "npm" | "yarn";
@@ -206,7 +217,9 @@ export interface VerificationRunnerSafetyFinding {
 
 const DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 export const COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
-export const SCHEMA_VERSION = "1.2";
+export const DISCOVERY_SCHEMA_VERSION = "1.3";
+export const COVERAGE_SCHEMA_VERSION = "1.3";
+export const SCHEMA_VERSION = DISCOVERY_SCHEMA_VERSION;
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 export const DEFAULT_OUTPUT_BYTES = 1024 * 1024;
 export const DEFAULT_TERMINATION_GRACE_MS = 1_000;
@@ -1276,12 +1289,16 @@ export function validateDiscoveryIntegrity(discovery: NativeGateDiscovery): read
   const errors: string[] = [];
   const raw = validateExactKeys(discovery, [
     "record_type", "schema_version", "repository_object", "source_refs", "gates",
-    "required_gate_ids", "catalog_sha256",
+    "required_gate_ids", "execution_coordination_key_sha256", "catalog_sha256",
   ], "discovery", errors);
   if (!raw) return errors;
   if (raw.record_type !== DISCOVERY_RECORD_TYPE) errors.push("discovery.record_type is invalid");
   if (raw.schema_version !== SCHEMA_VERSION) errors.push("discovery.schema_version is invalid");
   validateRepositoryObjectSchema(raw.repository_object, "discovery.repository_object", errors);
+  if (typeof raw.execution_coordination_key_sha256 !== "string"
+    || !HEX64.test(raw.execution_coordination_key_sha256)) {
+    errors.push("discovery.execution_coordination_key_sha256 is invalid");
+  }
   const validRefs: NativeGateSourceRef[] = [];
   if (!Array.isArray(raw.source_refs)) {
     errors.push("discovery.source_refs must be an array");
@@ -1375,6 +1392,7 @@ export function discoverNativeGates(
     record_type: DISCOVERY_RECORD_TYPE,
     schema_version: SCHEMA_VERSION,
     repository_object: repositoryObject,
+    execution_coordination_key_sha256: repositoryVerificationCoordinationKey(root),
     source_refs: refs,
     gates,
     required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id),

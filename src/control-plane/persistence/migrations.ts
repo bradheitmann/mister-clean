@@ -674,6 +674,170 @@ const globalV5Statements = [
   ...appendOnly("execution_treatments"),
 ] as const;
 
+/**
+ * A cohort token is a scheduling label, not evidence that two trials came
+ * from different repositories.  Keep legacy rows readable but require this
+ * additive physical checkout binding before a new trial can count. Distinct
+ * logical-project qualification remains deliberately unresolved until an
+ * evidence-backed local registration/alias policy is added.
+ */
+const globalV6Statements = [
+  `CREATE TABLE local_repository_identities (
+    repository_id TEXT PRIMARY KEY,
+    canonical_git_common_directory TEXT NOT NULL UNIQUE,
+    identity_evidence_sha256 TEXT NOT NULL REFERENCES agent_evaluation_evidence(evidence_sha256),
+    first_observed_at TEXT NOT NULL
+  ) STRICT`,
+  `ALTER TABLE agent_run_events ADD COLUMN repository_id TEXT REFERENCES local_repository_identities(repository_id)`,
+  `ALTER TABLE agent_run_events ADD COLUMN repository_identity_evidence_sha256 TEXT REFERENCES agent_evaluation_evidence(evidence_sha256)`,
+  `ALTER TABLE trials ADD COLUMN repository_id TEXT REFERENCES local_repository_identities(repository_id)`,
+  `CREATE INDEX agent_run_repository_identity_idx ON agent_run_events(repository_id)`,
+  `CREATE INDEX trials_repository_identity_idx ON trials(repository_id)`,
+] as const;
+
+const globalV7Statements = [
+  `CREATE TABLE logical_projects (
+    logical_project_id TEXT PRIMARY KEY,
+    operator_actor_id TEXT NOT NULL,
+    registration_evidence_sha256 TEXT NOT NULL REFERENCES agent_evaluation_evidence(evidence_sha256),
+    registered_at TEXT NOT NULL
+  ) STRICT`,
+  `CREATE TABLE logical_project_repository_aliases (
+    repository_id TEXT PRIMARY KEY REFERENCES local_repository_identities(repository_id),
+    logical_project_id TEXT NOT NULL REFERENCES logical_projects(logical_project_id),
+    operator_actor_id TEXT NOT NULL,
+    attestation_evidence_sha256 TEXT NOT NULL REFERENCES agent_evaluation_evidence(evidence_sha256),
+    attested_at TEXT NOT NULL
+  ) STRICT`,
+  `CREATE INDEX logical_project_alias_project_idx ON logical_project_repository_aliases(logical_project_id)`,
+  ...appendOnly("logical_projects"),
+  ...appendOnly("logical_project_repository_aliases"),
+] as const;
+
+/** Actual CLI invocations are imported without a profile, tuple, route, or
+ * outcome. A later evaluator may bind one-or-more imported invocations to one
+ * trial, but a journal receipt can never be reused for a second trial. */
+const globalV8Statements = [
+  `CREATE TABLE local_mister_clean_invocations (
+    invocation_id TEXT PRIMARY KEY,
+    command TEXT NOT NULL,
+    argv_sha256 TEXT NOT NULL CHECK(length(argv_sha256) = 64 AND argv_sha256 NOT GLOB '*[^0-9a-f]*'),
+    observed_at TEXT NOT NULL,
+    identity_provenance TEXT NOT NULL CHECK(identity_provenance = 'UNOBSERVED'),
+    receipt_sha256 TEXT NOT NULL CHECK(length(receipt_sha256) = 64 AND receipt_sha256 NOT GLOB '*[^0-9a-f]*'),
+    journal_path_sha256 TEXT NOT NULL CHECK(length(journal_path_sha256) = 64 AND journal_path_sha256 NOT GLOB '*[^0-9a-f]*'),
+    imported_at TEXT NOT NULL
+  ) STRICT`,
+  `CREATE TABLE evaluation_run_invocations (
+    invocation_id TEXT PRIMARY KEY REFERENCES local_mister_clean_invocations(invocation_id),
+    run_event_id TEXT NOT NULL REFERENCES agent_run_events(run_event_id),
+    linked_at TEXT NOT NULL,
+    UNIQUE(run_event_id, invocation_id)
+  ) STRICT`,
+  `CREATE INDEX evaluation_run_invocations_run_idx ON evaluation_run_invocations(run_event_id)`,
+  ...appendOnly("local_mister_clean_invocations"),
+  ...appendOnly("evaluation_run_invocations"),
+  `ALTER TABLE agent_run_events ADD COLUMN identity_receipt_trusted INTEGER NOT NULL DEFAULT 0
+    CHECK(identity_receipt_trusted IN (0, 1))`,
+  `CREATE TRIGGER trials_trusted_identity_receipt_admission BEFORE INSERT ON trials
+    WHEN NEW.contributes_quality_credit = 1
+    BEGIN
+      SELECT CASE WHEN (SELECT identity_receipt_trusted FROM agent_run_events WHERE run_event_id = NEW.run_event_id) <> 1
+        THEN RAISE(ABORT, 'credited trial requires runtime-verified identity receipt custody') END;
+    END`,
+  `CREATE TABLE evaluation_identity_receipt_verifications (
+    run_event_id TEXT NOT NULL REFERENCES agent_run_events(run_event_id),
+    phase TEXT NOT NULL CHECK(phase IN ('pre_dispatch', 'pre_evaluation')),
+    receipt_sha256 TEXT NOT NULL CHECK(length(receipt_sha256) = 64 AND receipt_sha256 NOT GLOB '*[^0-9a-f]*'),
+    observer_actor_id TEXT NOT NULL,
+    verified_at TEXT NOT NULL,
+    PRIMARY KEY(run_event_id, phase)
+  ) STRICT`,
+  ...appendOnly("evaluation_identity_receipt_verifications"),
+  `CREATE TRIGGER trials_public_receipt_pair_admission BEFORE INSERT ON trials
+    WHEN NEW.contributes_quality_credit = 1
+    BEGIN
+      SELECT CASE WHEN (SELECT COUNT(*) FROM evaluation_identity_receipt_verifications WHERE run_event_id = NEW.run_event_id) <> 2
+        THEN RAISE(ABORT, 'credited public trial requires pre-dispatch and pre-evaluation verified receipt custody') END;
+    END`,
+] as const;
+
+/** Route-specific targets and task evidence are appended separately so the
+ * original identity observation remains immutable. Existing custody rows are
+ * conservatively classified as requested-only and cannot receive new credit. */
+const globalV9Statements = [
+  `ALTER TABLE evaluation_identity_receipt_verifications ADD COLUMN identity_assurance TEXT NOT NULL DEFAULT 'requested_configuration'
+    CHECK(identity_assurance IN ('requested_configuration', 'active_harness_selection', 'provider_execution_attested'))`,
+  `CREATE TABLE agent_identity_observation_targets (
+    observation_id TEXT PRIMARY KEY REFERENCES agent_identity_observations(observation_id),
+    target_kind TEXT NOT NULL CHECK(target_kind IN ('cmux', 'desktop', 'headless')),
+    target_sha256 TEXT NOT NULL CHECK(length(target_sha256) = 64 AND target_sha256 NOT GLOB '*[^0-9a-f]*'),
+    canonical_target_json TEXT NOT NULL CHECK(json_valid(canonical_target_json)),
+    recorded_at TEXT NOT NULL
+  ) STRICT`,
+  `CREATE TABLE evaluation_dispatch_subjects (
+    run_event_id TEXT PRIMARY KEY REFERENCES agent_run_events(run_event_id),
+    dispatch_scope_evidence_sha256 TEXT NOT NULL REFERENCES agent_evaluation_evidence(evidence_sha256),
+    subject_repository_object_sha256 TEXT NOT NULL CHECK(length(subject_repository_object_sha256) = 64 AND subject_repository_object_sha256 NOT GLOB '*[^0-9a-f]*'),
+    recorded_at TEXT NOT NULL
+  ) STRICT`,
+  `CREATE TABLE evaluation_evaluated_candidates (
+    run_event_id TEXT PRIMARY KEY REFERENCES agent_run_events(run_event_id),
+    transition_scope_evidence_sha256 TEXT NOT NULL REFERENCES agent_evaluation_evidence(evidence_sha256),
+    evaluated_repository_object_sha256 TEXT NOT NULL CHECK(length(evaluated_repository_object_sha256) = 64 AND evaluated_repository_object_sha256 NOT GLOB '*[^0-9a-f]*'),
+    recorded_at TEXT NOT NULL
+  ) STRICT`,
+  ...appendOnly("agent_identity_observation_targets"),
+  ...appendOnly("evaluation_dispatch_subjects"),
+  ...appendOnly("evaluation_evaluated_candidates"),
+  `CREATE TRIGGER trials_active_identity_assurance_admission BEFORE INSERT ON trials
+    WHEN NEW.contributes_quality_credit = 1
+    BEGIN
+      SELECT CASE WHEN (SELECT COUNT(*) FROM evaluation_identity_receipt_verifications
+        WHERE run_event_id = NEW.run_event_id
+          AND identity_assurance IN ('active_harness_selection', 'provider_execution_attested')) <> 2
+        THEN RAISE(ABORT, 'credited trial requires active-or-provider identity assurance at both phases') END;
+      SELECT CASE WHEN (SELECT COUNT(*) FROM agent_identity_observation_targets target
+        JOIN agent_identity_observations observation ON observation.observation_id = target.observation_id
+        JOIN agent_run_events run ON run.identity_lease_id = observation.identity_lease_id
+        WHERE run.run_event_id = NEW.run_event_id) <> 2
+        THEN RAISE(ABORT, 'credited trial requires two route-specific identity targets') END;
+      SELECT CASE WHEN (SELECT COUNT(*) FROM evaluation_dispatch_subjects WHERE run_event_id = NEW.run_event_id) <> 1
+        OR (SELECT COUNT(*) FROM evaluation_evaluated_candidates WHERE run_event_id = NEW.run_event_id) <> 1
+        THEN RAISE(ABORT, 'credited trial requires dispatch subject and evaluated candidate evidence') END;
+    END`,
+] as const;
+
+/** A route-declared tool target is separate from the harness launch CWD. When
+ * one is observed, bind its Git top-level to the run's exact authorized
+ * checkout, not merely to a shared linked-worktree common directory. */
+const globalV10Statements = [
+  `ALTER TABLE agent_identity_observation_targets ADD COLUMN local_target_binding TEXT NOT NULL DEFAULT 'not_declared'
+    CHECK(local_target_binding IN ('not_declared', 'bound_authorized_checkout'))`,
+  `ALTER TABLE agent_identity_observation_targets ADD COLUMN target_git_evidence_sha256 TEXT REFERENCES agent_evaluation_evidence(evidence_sha256)`,
+  `ALTER TABLE agent_identity_observation_targets ADD COLUMN canonical_tool_target_root TEXT`,
+  `ALTER TABLE agent_identity_observation_targets ADD COLUMN canonical_command_cwd TEXT`,
+  `ALTER TABLE agent_identity_observation_targets ADD COLUMN canonical_git_top_level TEXT`,
+  `ALTER TABLE agent_identity_observation_targets ADD COLUMN canonical_git_common_directory TEXT`,
+  `CREATE TRIGGER trials_local_target_checkout_admission BEFORE INSERT ON trials
+    WHEN NEW.contributes_quality_credit = 1
+    BEGIN
+      SELECT CASE WHEN (
+        SELECT COUNT(*)
+        FROM agent_identity_observation_targets target
+        JOIN agent_identity_observations observation ON observation.observation_id = target.observation_id
+        JOIN agent_run_events run ON run.identity_lease_id = observation.identity_lease_id
+        JOIN agent_evaluation_evidence repository_evidence ON repository_evidence.evidence_sha256 = run.repository_identity_evidence_sha256
+        WHERE run.run_event_id = NEW.run_event_id
+          AND target.local_target_binding = 'bound_authorized_checkout'
+          AND target.target_git_evidence_sha256 IS NOT NULL
+          AND target.canonical_git_top_level = json_extract(CAST(repository_evidence.evidence_bytes AS TEXT), '$.canonical_local_repository_root')
+          AND target.canonical_git_common_directory = json_extract(CAST(repository_evidence.evidence_bytes AS TEXT), '$.canonical_git_common_directory')
+      ) <> 2
+        THEN RAISE(ABORT, 'credited trial requires each declared tool target to bind the authorized local Git checkout') END;
+    END`,
+] as const;
+
 export const REPOSITORY_MIGRATIONS: readonly SqliteMigration[] = Object.freeze([{
   version: 1,
   description: "immutable repository runs, issues, plans, manifests, directives, receipts, and metrics",
@@ -708,6 +872,26 @@ export const GLOBAL_MIGRATIONS: readonly SqliteMigration[] = Object.freeze([{
   version: 5,
   description: "portable agent execution profiles and immutable evaluated treatments",
   statements: globalV5Statements,
+}, {
+  version: 6,
+  description: "machine-local repository identity provenance for distinct-repository qualification",
+  statements: globalV6Statements,
+}, {
+  version: 7,
+  description: "immutable operator-attested logical-project aliases for physical local checkouts",
+  statements: globalV7Statements,
+}, {
+  version: 8,
+  description: "canonical invocation import, one-trial binding, and runtime-configured identity receipt custody credit gate",
+  statements: globalV8Statements,
+}, {
+  version: 9,
+  description: "route-aware identity targets, authority-assigned assurance, and separate task-subject/evaluated-candidate custody",
+  statements: globalV9Statements,
+}, {
+  version: 10,
+  description: "route-declared target Git checkout binding for credited identity receipts",
+  statements: globalV10Statements,
 }]);
 
 export function migrationsFor(kind: ControlPlaneStoreKind): readonly SqliteMigration[] {

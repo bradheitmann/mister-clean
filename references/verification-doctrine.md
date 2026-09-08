@@ -273,6 +273,20 @@ terminate only the owned process tree, record `INDETERMINATE` runner debt, and
 rerun quiescently after repair. Never trust the broad-gate result or kill an
 unowned process merely to make the suite finish.
 
+Mister Clean's native-gate and clean-CI runners therefore share one
+Git-common-directory execution lease and registered process supervisor. The
+target cannot start before atomic single-supervisor registration and durable
+process-group custody exist. Process-birth identity defeats PID reuse; parent
+death terminates the owned tree; and a custody-marker sweep rejects and reaps a
+target that daemonizes outside its group. An unverifiable identity or census
+blocks recovery visibly instead of timing out or stealing the lease. A
+deliberate escape from OS-visible custody requires a stronger sandbox and keeps
+the run NOT CLEAN.
+Lease refusal occurs before evidence creation and emits a typed
+`resource_contention` no-start receipt, not a gate verdict or model result.
+Focused checks may remain lane-local; a full root suite may not bypass the
+guarded runner.
+
 ## 22. External producer serialization is a versioned contract
 
 An authority or health validator that consumes another tool's machine output

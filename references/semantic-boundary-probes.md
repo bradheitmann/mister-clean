@@ -2,9 +2,12 @@
 
 Static language such as “safe by construction,” “wired at the production
 composition root,” or “task-specific routing” identifies a **candidate
-contract**. So do contradictory authority projections, missing execution
-identity, uncovered executable source, ambiguous identifiers, and long-lived
-state with no visible lifecycle bound. Discovery establishes an obligation to
+contract** only when it appears in operative planning or a structured product
+contract. Unstructured prose, examples, eval fixtures, tests, regex literals,
+diagnostics, and detector source are non-blocking observations. Contradictory
+authority projections, missing execution identity, unestablished required-role
+coverage, ambiguous identifiers, and long-lived state with no visible lifecycle
+bound may also establish candidates. Discovery establishes an obligation to
 adjudicate. It proves neither correctness nor a product defect.
 
 The governing trust split is non-negotiable:
@@ -42,8 +45,10 @@ coverage, and namespaces:
 - `authoritative_projection`: derive current status from structured authority;
 - `bounded_state_lifecycle`: prove explicit bounds and enforcement for
   long-lived state;
-- `executable_surface_coverage`: prove every production source surface is
-  reachable from a non-vacuous canonical quality gate;
+- `executable_surface_coverage`: retain declared runtime entrypoints, possible
+  runtime dependencies, and release-input obligations, including generated or
+  missing targets. Establish validator input coverage with native evidence;
+  incidental command arguments and configuration strings are not proof;
 - `execution_identity_coverage`: require the externally verifiable
   model+harness+reasoning+provider runtime tuple before current/future DEV or QA
   execution; and
@@ -71,10 +76,15 @@ The observer-derived systemic layer closes eight additional seams:
 
 Identity, authority, source coverage, state, and namespaces use Mister
 Clean-owned direct checkers only where their inputs and comparison are
-mechanically representable. Construction, composition, and behavioral routing
-require runtime observations plus independent judgment. A heuristic discovery
-that lacks structured authority remains `verification_debt`; it is not upgraded
-to a confirmed defect merely because the heuristic fired.
+mechanically representable. The bounded executable-coverage recognizer only
+establishes literal syntax-check input routes; it does not prove execution or
+general compiler, linter, test, or build coverage. Unestablished coverage uses
+runtime observations plus independent attestation, not a manufactured direct
+failure. Missing targets bind evidence to their existing package authority so
+they remain adjudicable. Construction, composition, and behavioral routing
+likewise require runtime observations plus independent judgment. A heuristic
+discovery that lacks structured authority remains `verification_debt`; it is
+not upgraded to a confirmed defect merely because the heuristic fired.
 
 ## Protocol v2: four distinct authorities
 

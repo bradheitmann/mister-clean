@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { demoSnapshot } from "./fixture.js";
-import { cycleCapabilityWeight, manifestBinding, parseSnapshot, rankSnapshotAgents, terminalVerdict } from "./read-model.js";
+import { cycleCapabilityWeight, issueRunnerRecommendation, manifestBinding, parseSnapshot, rankSnapshotAgents, terminalVerdict } from "./read-model.js";
 import { bootstrapTheme } from "./theme-storage.js";
 import { parseCanonicalLiveSnapshot } from "../../src/control-plane/contracts/snapshot.js";
 import { CONTROL_PLANE_META_CAPABILITY } from "../../src/control-plane/contracts/capability-taxonomy.js";
@@ -87,7 +87,7 @@ describe("fail-closed control-plane projections", () => {
     expect(twice).toEqual(once);
     expect(transported).toEqual(once);
     expect(Object.keys(once).sort()).toEqual([
-      "agents", "capabilities", "complexity", "current_authority", "current_flow", "current_run_id",
+      "agents", "capabilities", "complexity", "current_authority", "current_flow", "current_observation", "current_run_id",
       "current_subject", "detector_coverage", "evidence_freshness", "first_flow", "issues", "manifest",
       "previous_flow", "repository", "runs", "source", "source_label", "terminal_contract",
     ].sort());
@@ -120,6 +120,40 @@ describe("fail-closed control-plane projections", () => {
     (malformed.terminal_contract as Record<string, unknown>).contract = {};
     expect(() => parseCanonicalLiveSnapshot(malformed, { allow_demo: true })).toThrow(/terminal_contract\.contract/u);
     expect(() => parseSnapshot(malformed)).toThrow(/terminal_contract\.contract/u);
+  });
+  it("rejects a partial receipt relabeled as a repository object", () => {
+    const partial = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    partial.source = "live";
+    partial.current_observation = { kind: "PARTIAL", evidence_binding: { kind: "OBSERVATION_RECEIPT", sha256: "a".repeat(64) }, current_debt_flow: "UNKNOWN", remediation_no_harm: "UNKNOWN", live_topology: "UNKNOWN", current_complexity: "UNKNOWN" };
+    (partial.current_subject as Record<string, unknown>).repository_object_sha256 = "a".repeat(64);
+    const current = (partial.runs as Record<string, unknown>[]).find((run) => run.run_id === partial.current_run_id)!;
+    (current.subject as Record<string, unknown>).repository_object_sha256 = "a".repeat(64);
+    partial.manifest = null;
+    partial.terminal_contract = { declared_verdict: null, subject: null, contract: null, evidence: [] };
+    expect(() => parseSnapshot(partial)).toThrow(/partial observation requires a receipt binding/i);
+  });
+  it("rejects a partial current-surface claim, OPERATE authority, and live historical tuple", () => {
+    const partial = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    partial.source = "live";
+    partial.current_observation = { kind: "PARTIAL", evidence_binding: { kind: "OBSERVATION_RECEIPT", sha256: "a".repeat(64) }, current_debt_flow: "UNKNOWN", remediation_no_harm: "UNKNOWN", live_topology: "UNKNOWN", current_complexity: "UNKNOWN" };
+    (partial.current_subject as Record<string, unknown>).repository_object_sha256 = null;
+    const current = (partial.runs as Record<string, unknown>[]).find((run) => run.run_id === partial.current_run_id)!;
+    (current.subject as Record<string, unknown>).repository_object_sha256 = null;
+    partial.manifest = null;
+    partial.terminal_contract = { declared_verdict: null, subject: null, contract: null, evidence: [] };
+    (partial.complexity as Record<string, unknown>).availability = "UNKNOWN";
+    (partial.complexity as Record<string, unknown>).object_sha256 = null;
+    partial.current_authority = "OPERATE";
+    expect(() => parseSnapshot(partial)).toThrow(/partial observation is ADVISE-only/i);
+    partial.current_authority = "ADVISE";
+    (partial.agents as Record<string, unknown>[])[0]!.available = true;
+    expect(() => parseSnapshot(partial)).toThrow(/partial observation cannot claim current availability/i);
+    for (const agent of partial.agents as Record<string, unknown>[]) {
+      agent.available = false;
+      agent.active_in_repository = false;
+    }
+    (partial.current_observation as Record<string, unknown>).live_topology = "MEASURED";
+    expect(() => parseSnapshot(partial)).toThrow(/partial observation cannot establish current debt, no-harm, topology, or complexity/i);
   });
   it("rejects protocol meta-capabilities and forged repository capability definitions", () => {
     const meta = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
@@ -183,6 +217,53 @@ describe("fail-closed control-plane projections", () => {
     const result = rankSnapshotAgents(agents, [{ capability_id: "planning_projection_reconciliation", weight: 3 }]);
     expect(result.ranked.map((item) => item.agent.agent_tuple_id)).toContain("tuple-glm-pi-high");
     expect(result.ranked.find((item) => item.agent.agent_tuple_id === "tuple-glm-pi-high")?.agent.execution_identity.disposition).toBe("IDENTITY_UNBOUND");
+  });
+
+  it("keeps the quality-derived runner card distinct from the manifest assignment and bound to an exact execution recipe", () => {
+    const fixture = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    const agent = (fixture.agents as Record<string, unknown>[])[0]!;
+    const issue = (fixture.issues as Record<string, unknown>[])[0]!;
+    const recommendation = issue.runner_recommendation as Record<string, unknown>;
+    const snapshot = parseSnapshot(fixture);
+    const projection = issueRunnerRecommendation(snapshot, snapshot.issues[0]!.issue_id);
+    expect(projection.manifest_assigned_tuple_id).toBe(snapshot.issues[0]!.recommended_tuple);
+    expect(projection.required_capabilities).toEqual(snapshot.issues[0]!.runner_recommendation.required_capabilities);
+    expect(projection.quality_runner).toMatchObject({ agent_tuple_id: agent.agent_tuple_id, model: agent.model, harness: agent.harness, reasoning_level: agent.reasoning_level });
+    expect(snapshot.current_authority).toBe("ADVISE");
+
+    (recommendation.runner_card as Record<string, unknown>).harness = "forged harness";
+    expect(() => parseSnapshot(fixture)).toThrow(/runner_card.*identity/i);
+
+    const profileForged = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    const profileCard = (((profileForged.issues as Record<string, unknown>[])[0]!.runner_recommendation as Record<string, unknown>).runner_card as Record<string, unknown>);
+    profileCard.profile_fingerprint_sha256 = "0".repeat(64);
+    expect(() => parseSnapshot(profileForged)).toThrow(/runner_card.*execution profile/i);
+  });
+
+  it("does not turn a profile-unknown quality candidate into a runnable runner card", () => {
+    const fixture = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    const agents = fixture.agents as Record<string, unknown>[];
+    const recommendations = (fixture.issues as Record<string, unknown>[]).map((issue) => issue.runner_recommendation as Record<string, unknown>);
+    for (const agent of agents) agent.execution_profile = null;
+    for (const recommendation of recommendations) recommendation.runner_card = null;
+    expect(() => parseSnapshot(fixture)).not.toThrow();
+  });
+
+  it("rejects a runner card that is offline, unqualified, non-top-ranked, or score-forged", () => {
+    const assignmentMismatch = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    (((assignmentMismatch.issues as Record<string, unknown>[])[0]!.runner_recommendation as Record<string, unknown>).provenance as Record<string, unknown>).manifest_assignment_agent_tuple_id = "forged-manifest-assignment";
+    expect(() => parseSnapshot(assignmentMismatch)).toThrow(/provenance.*manifest assignment/i);
+
+    const offline = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    const offlineAgent = (offline.agents as Record<string, unknown>[])[0]!;
+    offlineAgent.available = false;
+    offlineAgent.availability = "offline";
+    expect(() => parseSnapshot(offline)).toThrow(/deterministic eligible recommendation/i);
+
+    const scoreForged = structuredClone(demoSnapshot) as unknown as Record<string, unknown>;
+    const category = ((((scoreForged.issues as Record<string, unknown>[])[0]!.runner_recommendation as Record<string, unknown>).runner_card as Record<string, unknown>).category_scores as Record<string, unknown>[])[0]!;
+    category.weighted_score = 0.999;
+    expect(() => parseSnapshot(scoreForged)).toThrow(/weighted scores/i);
   });
 
   it("rejects a caller-forged qualification that lacks the policy trial threshold", () => {

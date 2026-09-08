@@ -1,4 +1,5 @@
 export * from "./agent-evaluation.js";
+export * from "./capability-evaluator-registry.js";
 export * from "./agent-profile.js";
 export * from "./primitives.js";
 export * from "./run-issue.js";

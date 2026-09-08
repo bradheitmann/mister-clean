@@ -164,12 +164,13 @@ For supported generic local mutations, use `mister-clean action begin`/`finish`;
 
 For sealed material, install mechanical least-read custody; prose-only prohibition is not custody. Exposure freezes the lane, revokes that actor's positive authority, and requires replacement. Read `references/concurrent-remediation.md`.
 When policy requires separation of duty, use a genuinely distinct actor. `continue` resumes the same role, read/write scope, and task; it grants no new authority.
-A verifier that writes cannot certify its diff. A tab label or worker self-report is not execution identity. Externally bind model + harness + reasoning + the actual provider/backend execution route before dispatch and scoring. Restart, fallback, or mismatch invalidates the lease; never backfill unknown historical identity. Retain findings but mark performance evidence `identity_unbound`.
+A verifier that writes cannot certify its diff. Tab labels/self-reports are not execution identity. Bind model + harness + reasoning + provider route before dispatch/scoring. Restart, fallback, or mismatch invalidates the lease; never backfill unknown identity. Retain findings as `identity_unbound`.
 
 ### 4. Freeze and verify the candidate
 
 Stage intended bytes and bind the immutable tree with `git write-tree` or its VCS equivalent. Any byte change mints a candidate and expires prior receipts; independent QA never edits its review object. A positive headline containing any substantiated payable finding is a rejection.
 Serialize Git-stateful commands. Expensive gates claim one-owner resource domains: record overlap, use process-group/child timeouts, rerun INDETERMINATE timeouts quiescent, and never inflate deadlines first.
+Focused checks stay local. Full root suites use a Git-common-directory lease and registered supervisor. Atomic registration, birth IDs, and escape custody prevent overlap. Busy emits a typed `resource_contention` no-start receipt excluded from model scoring. Unknown custody is NOT CLEAN; never duplicate a root suite.
 
 In `GUARD`, DEV, QA, Mister Clean, holdout, deterministic gates, and no-harm
 evidence must bind the same tree before an accepted ref advances. Mister Clean

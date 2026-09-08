@@ -17,13 +17,14 @@ completed_steps:
   - exact RepositoryObject complexity measurement
   - ten-theme OKOA Svelte control plane
   - public package, CLI, MCP, and local-runtime boundaries
+  - machine-local evaluation intake, invocation reconciliation, and custody-gated quality credit
   - generated-output, archive, and release-capsule negative controls
   - exact clean-capsule CI and prospective-package privacy checks
   - repository-boundary and protected-search detector controls
   - responsive browser proof across 26 configured viewports
   - operational-truth probes for projection, behavior, state lifecycle, executable-gate reachability, and identifier namespace
-current_step: run the exact clean-capsule matrix and freeze the repaired version-7 candidate
-next_step: obtain independent frozen-object QA before any GUARD or release action
+current_step: add a bounded read-only projection for imported, unlinked invocation receipts
+next_step: bind current-object semantic proof, independent acceptance, and clean verification custody
 closing_gate: exact-object native suite, prior-release dogfood, independent code/package/design review, OKOA validation, GUARD, and clean Git custody
 ---
 
@@ -36,53 +37,48 @@ the working candidate; it does not declare that candidate clean.
 
 ## Current verdict
 
-**NOT CLEAN — repaired candidate awaits independent exact-object QA.**
+**NOT CLEAN — active candidate checkpoint, 2026-09-08.**
 
-Independent QA rejected RepositoryObject
-`a4d158ab8f0df239a4b5d16505b414612db6df97722080865365d69831c1b541`.
-The working repair adds one exact-candidate clean materialization command,
-prospective-package privacy, an executable repository-object successor command,
-case-folded GitHub/secrets context coverage, repository-boundary and protected-
-search detectors, and a planning-audit seam refactor. Focused tests are
-necessary evidence only. A new RepositoryObject must pass the complete cold
-matrix and independent review before any positive verdict.
+The working lane is `fix/gate-execution-leases` at main base
+`4694bfed34dcc3e77fc422c03245ce62f951ed75`. No current candidate acceptance,
+release, production qualification, or cryptographic identity claim is made.
 
-One Git-topology obligation is explicit: `fix/detector-fp-classes` remains in
-the secondary worktree at `../.mc-wt/detector-fp`. Its committed detector work
-must be proven present in the accepted version-7 tree and the branch/worktree
-must then receive an explicit integrated or superseded disposition. There are
-no stashes. `main` remains the sole writer and is intentionally dirty until the
-candidate crosses GUARD.
+Machine-local evaluation intake is integrated and covered by focused runtime
+tests. Direct CLI invocations are retained as `UNOBSERVED` receipts; runtime
+reconciliation records them without fabricating a tuple, route, capability,
+trial, sampling ordinal, or quality credit. A strict evaluation may bind many
+such receipts to one run, while each receipt can bind to at most one run. Only
+startup-configured, two-phase receipt custody can make an evaluated outcome
+eligible for quality credit. This is same-OS-user local custody, not a claim of
+remote principal identity or cryptographic authenticity.
 
-## Latest measured repository object
+The current small slice makes unlinked imported receipts inspectable through
+the authenticated local query plane. It does not add a command-obligation
+table, turn commands into trials, alter journal retention, or change the
+10/25/50 qualification policy.
 
-The latest pre-freeze measurement covered the full tracked-plus-nonignored
-working object. Documentation reconciliation changes the object digest, so the
-terminal receipt must replace this identity with a fresh one rather than reuse
-it. This historical measurement is bound to RepositoryObject
-`11cccee7d0274ff8cfa29c31473d30f256c78136a2b956a98ee4dc1eafcbf368`.
+Historic repair findings remain historical. The earlier `7ffa77d637821d421f6973c8530a79731b58b67fc86860da39689befdc2ac124`
+clean-CI receipt is immutable evidence for that exact object only; later bytes
+do not inherit its pass. F03 is a historical partial-observation worktree
+finding: its source behavior is subsumed by active reporting code and detached
+worktree cleanup is paid by external
+`F03_PARTIAL_OBSERVATION_WORKTREE_CLEANUP_RECEIPT_20260908.md`
+(`be30d16bf2b31fb750b3f6329918e4852418e38bf0dbe240aef3d89f946c0b3e`).
+Detector-fp retirement is likewise historical external evidence; neither
+receipt accepts this newer candidate.
 
-| Measure | Value |
-|---|---:|
-| RepositoryObject entries | 221 |
-| Total bytes | 10,871,341 |
-| Total physical lines | 92,001 |
-| Production-code files / lines | 76 / 31,183 |
-| Test files / lines | 58 / 20,080 |
-| Public + planning documentation files / lines | 30 / 6,109 |
-| Documentation : production lines | 19.590802680947952% |
-| Functions | 1,960 |
-| Function p50 / p95 / maximum lines | 3 / 57 / 537 |
-| Cyclomatic p50 / p95 / maximum | 1 / 16 / 200 |
-| Supported modules / internal edges | 73 / 203 |
-| Dependency cycles | 0 |
-| Unresolved relative imports | 0 |
+Outstanding work is semantic executable-surface proof, independent acceptance,
+and verification/GUARD custody on one newly frozen object. These close through
+bound executed evidence, not this document or historic focused tests.
 
-Generated distribution mirrors remain visible as shipped weight but do not
-inflate authored complexity. CSS, HTML, and Svelte are present unsupported
-structural languages and are reported as such; they are not silently treated as
-zero complexity. The declared generated-material import boundary remains
-separate from genuinely unresolved imports.
+## Historical exact-object CI evidence
+
+The retained clean-CI receipt for RepositoryObject
+`7ffa77d637821d421f6973c8530a79731b58b67fc86860da39689befdc2ac124` recorded
+`268` tracked-plus-nonignored entries, no source mutation, and eight matrix
+commands passing. It is historical evidence, not acceptance of this current
+working object. A new object requires regenerated outputs, a fresh object
+capture, and its own verification receipt.
 
 ## Terminal evidence contract
 
@@ -102,34 +98,30 @@ release receipt must bind one RepositoryObject and record all of the following:
 | Self-dogfood | the pinned accepted 6.3 package runs Mister Clean against the same object and its negative controls fail as designed |
 | Git/release | GUARD binds the accepted tree; branch/worktree disposition is explicit; publication follows acceptance |
 
-The browser proof exercises all seven views, dependency-closed directive
-selection, every requested theme, terminal-blocker progressive disclosure, and
-the capability autocomplete/weighting path. The exercise found and paid one UI
-defect: selecting `Spit-shine` had filtered agent names instead of applying a
-capability weight. The repaired path now ranks category champions and supports
-both pointer and Enter-key selection. Demo mode remains visibly labeled
+Historical baseline browser evidence exercised all seven views, dependency-
+closed directive selection, every requested theme, terminal-blocker progressive
+disclosure, and the capability autocomplete/weighting path. It found and paid
+one UI defect: selecting `Spit-shine` had filtered agent names instead of
+applying a capability weight. That historical repair ranks category champions
+and supports both pointer and Enter-key selection. It is not a render proof or
+exact-object visual acceptance for this active candidate; fresh independent
+render proof remains required. Demo mode remains visibly labeled
 `DEMONSTRATION DATA — NOT A CLEANLINESS VERDICT`; live evidence absence remains
 fail-closed.
 
 ## Required sequence
 
-1. Run `pnpm run ci:check`; it alone reconstructs the exact dirty candidate,
-   installs declared dependencies, runs `build:raw`, and executes the complete
-   test/package/public/generated matrix in one pristine capsule.
-2. Capture the unchanged source RepositoryObject and the same-analyzer
-   complexity comparison with 6.3.0.
-3. Obtain independent frozen-object QA for the repair and all retained
-   detector negatives.
-4. Render-proof the accepted object and obtain independent design, package, and
-   contract verdicts without source mutation during review.
-5. Run the accepted 6.3 evaluator and its negative controls against that same
+1. Finish and independently review the pending-invocation visibility slice;
+   regenerate all affected derived surfaces and bind a fresh RepositoryObject.
+2. Capture the semantic executable-surface plan, supervised observations, and
+   external independent attestation required for the current object.
+3. Run the complete clean-capsule matrix once for that frozen object, retaining
+   its raw receipt and source pre/post identity.
+4. Obtain independent frozen-object package, contract, and design review;
+   then run the accepted evaluator and its negative controls against that same
    object.
-6. Stage exactly the accepted surface, cross GUARD, commit, and prove the
-   staged/committed tree is the reviewed tree.
-7. Prove the detector branch is integrated or superseded, remove obsolete
-   topology only after that proof, and rerun the closing Git census.
-8. Only then publish the version-bound GitHub/npm/website transaction and
-   update global harness installs.
+5. Cross GUARD and reconcile branch/worktree custody before any commit,
+   publication, or release action.
 
 ## Pinned evaluator
 
