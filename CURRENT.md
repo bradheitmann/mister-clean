@@ -180,15 +180,27 @@ local Bun pin is tracked as LE-002 in
 | 1 | Bun 1.3.9 | FAIL before capsule: `No such built-in module: node:sqlite` |
 | 2 | Bun 1.4.0, pristine capsule store | FAIL in `pnpm install`: registry throughput ~150 KiB/s; undici request timeout on large native tarballs (workerd, rolldown, esbuild, typescript) |
 | 3 | Bun 1.4.0, pristine store, env-based fetch tolerance | FAIL identically (pnpm ignored env settings) |
-| 4 | Bun 1.4.0, `--fetch-retries` flag | FAIL: flag does not exist in pnpm 11 |
-| 5 | Bun 1.4.0, **warm-store variant**: `pnpm install` given `--store-dir=<operator pnpm store v11> --fetch-timeout=900000 --network-concurrency=4` via a PATH shim; dependency set still governed by the frozen lockfile | **PASS** — 8 matrix commands, source RepositoryObject unchanged before/after; test:node 38 files / 795 tests, test:bun 30 files / 199 tests, control-plane:check 7 files / 67 tests, package-surface 6 and public-surface 31 tests, pack/public/boundaries/generated checks green (2026-09-21T12:03Z, 18 min wall clock) |
+| 4 | Bun 1.4.0, `--fetch-retries` flag | FAIL: flag does not exist in pnpm 11 (`ci-check-attempt4-badflag.log`) |
+| 5 | Bun 1.4.0, warm-store shim through the `pnpm` launcher (pnpm 12) | FAIL: the launcher's self-download of pnpm 11.0.3 exceeded the 10-minute supervisor timeout; supervised command exited 128 (`ci-check-attempt5-pnpm12-selfdownload-timeout.log`, 11:32:51Z–11:43:36Z) |
+| 6 | Bun 1.4.0, **warm-store variant**: PATH shim execs pnpm 11.0.3 directly and gives `pnpm install` `--store-dir=<operator pnpm store v11> --fetch-timeout=900000 --network-concurrency=4`; dependency set still governed by the frozen lockfile | **PASS** — 8 matrix commands, source RepositoryObject unchanged before/after; test:node 38 files / 795 tests, test:bun 30 files / 199 tests, control-plane:check 7 files / 67 tests, package-surface 6 and public-surface 31 tests, pack/public/boundaries/generated checks green (`ci-check.log`, START 2026-09-21T11:44:33Z, END 12:00:19Z, 15 min 46 s wall clock) |
 
 The warm-store variant deviates from the capsule doctrine that a release child
 never sees ambient package-manager state. It is recorded as bounded evidence
 only; the terminal receipt still requires a pristine-store `pnpm run ci:check`
-on adequate bandwidth. RepositoryObject reported by attempt 5: `96cc89fccfe92075216eec04b6db93fd88621bacff03910d01cf6712271ca946`.
+on adequate bandwidth. RepositoryObject reported by attempt 6: `96cc89fccfe92075216eec04b6db93fd88621bacff03910d01cf6712271ca946`.
 Logs: `/tmp/sprint-20260921/mister-clean/ci-check*.log` (machine-local, not
 committed).
+
+Independent QA re-ran the same warm-store variant on the documentation
+commit `60c62b8` (`qa-ci-check.log`, START 2026-09-21T12:09:02Z, END
+12:25:27Z): PASS, 8 matrix commands, identical test counts, RepositoryObject
+`5bba9764bd05d4cad2c087b4ed42bab5a9221bf19a16ed413d504f3b2bb1427f`. Both
+receipts are bounded warm-store evidence for their exact objects only; the
+commit that records this paragraph is a new object and inherits neither pass.
+
+A closeout review on 2026-09-21 corrected this table: the first committed
+version (e5ce729) listed five attempts, omitted the pnpm-12 launcher timeout,
+and cited a 12:03Z / 18-minute window that did not match the receipt.
 
 ### Evaluator runs (AUDIT only, no source mutation)
 
@@ -201,6 +213,9 @@ committed).
 | 7.0 candidate (source) | itself @ 2a8aed0 | `audit repository-boundaries .` | PASS (parsers=70, findings=0) |
 | 7.0 candidate (source) | itself @ 2a8aed0 | `audit public-safety .` | PASS |
 | 7.0 candidate (source) | itself @ 2a8aed0 | `detect stack .` | exit 0 |
+| accepted 6.3.0 global CLI | this branch @ 60c62b8 | `audit planning .` | PASS (artifacts=4, structured=4, findings=0) |
+| accepted 6.3.0 global CLI | this branch @ 60c62b8 | `audit public-safety .` | FAIL (1): `THIRD_PARTY_NOTICES.md:8` `email-address` only; both `posix-home-path` findings discharged |
+| 7.0 candidate (source) | itself @ 60c62b8 | `audit planning .` / `audit repository-boundaries .` / `audit public-safety .` | PASS / PASS (parsers=70) / PASS |
 
 The 6.3.0 `email-address` finding on `THIRD_PARTY_NOTICES.md` is pre-existing
 and is accepted by the 7.0 denylist policy; it is not repaired here. The two
