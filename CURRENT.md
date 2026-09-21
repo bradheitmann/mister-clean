@@ -71,6 +71,25 @@ Outstanding work is semantic executable-surface proof, independent acceptance,
 and verification/GUARD custody on one newly frozen object. These close through
 bound executed evidence, not this document or historic focused tests.
 
+## Git topology disposition (2026-09-21)
+
+One Git-topology obligation is now dispositioned: `fix/detector-fp-classes`
+(4efb0ee, "fix(detector): repair five empirically-proven false-positive classes
+(v6.3.1)") is **SUPERSEDED** by `7500a0b` on `main` (and therefore by this
+candidate). Proof, run 2026-09-21: every implementation identifier introduced by
+4efb0ee (`PRIMARY_STATE_KEYS`, decisive-status projection, `archived_<type>`
+resolution, `struckRow`, `GOVERNANCE_CODE_EXTENSIONS`,
+`contextualizeGovernanceValidatorSources`) is present in
+`src/closeout/planning.ts` at 2a8aed0 (`git grep -F <id> 2a8aed0 --
+src/closeout/`), and all nine 4efb0ee test cases have equivalent tests in
+`src/closeout/planning.test.ts` under reworded titles (`git log -S
+PRIMARY_STATE_KEYS --oneline main` -> 7500a0b). The textual reverse-apply of
+the 4efb0ee patch onto 2a8aed0 is non-empty (comments and titles were
+reworded during the seam refactor), so the branch is **retained, not
+deleted**, until a human confirms deletion; no worktree for it exists (the
+former `../.mc-wt/detector-fp` reference was stale and is removed here).
+There are no stashes. `main` remains the sole writer.
+
 ## Historical exact-object CI evidence
 
 The retained clean-CI receipt for RepositoryObject
@@ -137,3 +156,65 @@ and package-manifest SHA-256
 All 43 pinned package-manifest entries must rehash successfully before it is
 allowed to judge the candidate. Current-candidate bytes cannot substitute for
 that evaluator.
+
+## Sprint 2026-09-21 receipts (wave 1, dev lead: Claude Fable 5.1)
+
+These receipts bind evidence to commit `2a8aed0` (the candidate before this
+documentation reconciliation). They do not change the verdict above: the
+candidate remains **NOT CLEAN** pending independent exact-object QA.
+
+### Toolchain finding
+
+`pnpm run ci:check` requires `node:sqlite` (imported by
+`src/closeout/execution-lease.ts`). Bun 1.3.9, the machine default, has no
+such built-in and the gate fails before creating a capsule. `.github/workflows/
+ci.yml` pins Bun 1.4.0, which provides it. Sprint runs used a pinned Bun 1.4.0
+installed outside the repository; no global tool was changed. A repository-
+local Bun pin is tracked as LE-002 in
+[`project/planning/hygiene/MANUAL-LOOSE-ENDS-LEDGER.md`](project/planning/hygiene/MANUAL-LOOSE-ENDS-LEDGER.md).
+
+### Clean-capsule CI on 2a8aed0
+
+| Attempt | Environment | Result |
+|---|---|---|
+| 1 | Bun 1.3.9 | FAIL before capsule: `No such built-in module: node:sqlite` |
+| 2 | Bun 1.4.0, pristine capsule store | FAIL in `pnpm install`: registry throughput ~150 KiB/s; undici request timeout on large native tarballs (workerd, rolldown, esbuild, typescript) |
+| 3 | Bun 1.4.0, pristine store, env-based fetch tolerance | FAIL identically (pnpm ignored env settings) |
+| 4 | Bun 1.4.0, `--fetch-retries` flag | FAIL: flag does not exist in pnpm 11 |
+| 5 | Bun 1.4.0, **warm-store variant**: `pnpm install` given `--store-dir=<operator pnpm store v11> --fetch-timeout=900000 --network-concurrency=4` via a PATH shim; dependency set still governed by the frozen lockfile | **PASS** — 8 matrix commands, source RepositoryObject unchanged before/after; test:node 38 files / 795 tests, test:bun 30 files / 199 tests, control-plane:check 7 files / 67 tests, package-surface 6 and public-surface 31 tests, pack/public/boundaries/generated checks green (2026-09-21T12:03Z, 18 min wall clock) |
+
+The warm-store variant deviates from the capsule doctrine that a release child
+never sees ambient package-manager state. It is recorded as bounded evidence
+only; the terminal receipt still requires a pristine-store `pnpm run ci:check`
+on adequate bandwidth. RepositoryObject reported by attempt 5: `96cc89fccfe92075216eec04b6db93fd88621bacff03910d01cf6712271ca946`.
+Logs: `/tmp/sprint-20260921/mister-clean/ci-check*.log` (machine-local, not
+committed).
+
+### Evaluator runs (AUDIT only, no source mutation)
+
+| Evaluator | Target | Command | Result |
+|---|---|---|---|
+| accepted 6.3.0 global CLI | `main` @ 4694bfe | `mister-clean audit planning .` | PASS (artifacts=1, findings=0) |
+| accepted 6.3.0 global CLI | `main` @ 4694bfe | `mister-clean audit public-safety .` | FAIL (3): untracked root handoff x2 `posix-home-path`, `THIRD_PARTY_NOTICES.md:8` `email-address` |
+| accepted 6.3.0 global CLI | `main` @ 4694bfe | `mister-clean detect stack .` | exit 0 |
+| 7.0 candidate (source) | itself @ 2a8aed0 | `audit planning .` | PASS (artifacts=1, findings=0) |
+| 7.0 candidate (source) | itself @ 2a8aed0 | `audit repository-boundaries .` | PASS (parsers=70, findings=0) |
+| 7.0 candidate (source) | itself @ 2a8aed0 | `audit public-safety .` | PASS |
+| 7.0 candidate (source) | itself @ 2a8aed0 | `detect stack .` | exit 0 |
+
+The 6.3.0 `email-address` finding on `THIRD_PARTY_NOTICES.md` is pre-existing
+and is accepted by the 7.0 denylist policy; it is not repaired here. The two
+6.3.0 `posix-home-path` findings are discharged by the handoff adoption below.
+
+### Handoff adoption and planning root
+
+`HANDOFF-2026-09-08-PM.md` (untracked at the repository root since 2026-09-08)
+is adopted at
+[`project/planning/handoffs/HANDOFF-2026-09-08-PM.md`](project/planning/handoffs/HANDOFF-2026-09-08-PM.md)
+with a `reference` classification header and a marked redaction of two
+operator home paths. `project/planning` is auto-discovered as a planning root
+by both evaluators; every file placed there carries `artifact_type: reference`
+plus a classification rationale, verified with `audit planning` under both
+6.3.0 and 7.0 before commit (a frontmatter-less copy reports
+`planning_input_unparsed`). The root copy is left in place on `main` until
+this branch is reviewed; it is not deleted.
