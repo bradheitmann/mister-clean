@@ -69,4 +69,59 @@ sequence" steps 3-8). Human decision: delete `fix/detector-fp-classes`
 
 ## Upstream intake
 
-`/tmp/sprint-20260921/upstream-intake/mister-clean-handoff-layout-assumes-planning-root.md`
+- `mister-clean-handoff-layout-assumes-planning-root.md` (machine-local packet
+  under `/tmp/sprint-20260921/upstream-intake/`) — routed to
+  `edge_agentic_orchestration_system` as
+  `SLICE-GOVHOOK-HANDOFF-LAYOUT-{DEV,QA}-001` under
+  `STORY-GOVHOOK-UPSTREAM-INTAKE-001` (defect HK-C1). The defect is in the
+  Edge-Agentic handoff skill/template. The mister-clean behaviour the packet
+  describes as a second-order effect (a frontmatter-less file under
+  `project/planning/` classified `planning_input_unparsed`) is by design and
+  needs no mister-clean change.
+
+## Defects observed during 2026-09-21 sprint
+
+Owner: this repo. Filed as ledger row LE-003 in
+`project/planning/hygiene/MANUAL-LOOSE-ENDS-LEDGER.md`; condensed here so the
+handoff stays self-contained. Not fixed on this branch (outside the sprint's
+scope; `main` was read-only this sprint).
+
+### LE-003 — `prepare` aborts with ENOTDIR on an ignored `plan.md` symlink (skill bundle v6.3.1)
+
+Observed by the holden closeout run `mc-20260921-closeout`. holden carries
+`.claude/commands/plan.md`, a gitignored symlink to a skill file. Running
+
+    node <skill-bundle>/bin/mister-clean.js prepare --repo <holden> \
+      --evidence-home <holden>/.tmp/evidence --run-id x --request-ref r --request-text t
+
+fails with `ERROR: ENOTDIR: not a directory, scandir <holden>/.claude/commands/plan.md`,
+exit 2, and leaves a partial run dir behind (`criteria-source.json`,
+`operative-request.txt`, `planning-audit.json`). `audit planning` on the same
+tree does not crash and lists the file as `planning_input_unparsed`, so the
+two entry points disagree about the same object.
+
+Diagnosis (from the bundled source): `isCanonicalPlanningFileName()` promotes
+any `plan.md` to a planning-root candidate; `prepare`'s discovery `scandir`s
+each root without an `lstat`, so a file / symlink-to-file throws and nothing
+catches it or cleans up; the audit path uses
+`git ls-files -co --exclude-standard`, the prepare walk apparently does not,
+so ignored machine-local symlinks leak into discovery.
+
+Proposed fix:
+
+1. `lstat` each candidate root; treat file / symlink-to-file candidates as
+   single planning inputs (or skip them) instead of `scandir`.
+2. Use the same `--exclude-standard` census in `prepare` as in
+   `audit planning`, so ignored paths never become roots.
+3. On any discovery exception, remove the partially written run directory (or
+   write `prepare-failed.json`) so a retry does not collide on `--run-id`.
+4. Regression test: fixture repo with an ignored `.claude/commands/plan.md`
+   symlink to a file; `prepare` must succeed and the closure bundle must not
+   list the symlink.
+
+Workaround used by the reporter: `--repo` pointed at an isolated lane worktree
+(no ignored symlinks); the aborted partial dir was moved to ignored scratch and
+recorded in that repo's debris census.
+
+Source: sprint 2026-09-21 upstream-intake packet
+`mister-clean-prepare-walker-enotdir-on-plan-stem-symlink.md` (machine-local).
