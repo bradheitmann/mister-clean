@@ -202,6 +202,27 @@ A closeout review on 2026-09-21 corrected this table: the first committed
 version (e5ce729) listed five attempts, omitted the pnpm-12 launcher timeout,
 and cited a 12:03Z / 18-minute window that did not match the receipt.
 
+### Pristine-store attempt 7 on 7f50acd (closeout, 2026-09-21)
+
+The closeout ran the first genuinely pristine-store capsule: PATH shim execs
+the pinned pnpm 11.0.3 binary directly (no launcher self-download) and adds
+only `--fetch-timeout=900000 --network-concurrency=4` to `pnpm install`;
+no `--store-dir`, so the capsule used its own empty store
+(`resolved 308, reused 0, downloaded 308`). Result: **FAIL**, START
+12:33:11Z, END 12:55:02Z. The install and 794 of 795 node tests passed; the
+single failure is `scripts/release_path.test.mjs > release archive boundary
+> runs this package's real build inside an exact external Git capsule`,
+which timed out at its 120 s limit after 285 s. That test performs a second,
+nested cold `pnpm install` inside its own release capsule; at this machine's
+~466 KiB/s registry throughput that install alone exceeds the limit. The same
+test passes in the warm-store variant and in established CI on `main`
+(4694bfe, GitHub runner bandwidth). Classification: bandwidth-bound
+environment failure, not a candidate defect; the pristine receipt remains
+owed and is obtainable by running `pnpm run ci:check` where a cold 308-
+package install completes well under 120 s, or by opening a pull request so
+the `CI` workflow (which runs `pnpm run ci:check`) measures the branch.
+Log: `closeout-ci-check-attempt7-pristine.log` (machine-local).
+
 ### Evaluator runs (AUDIT only, no source mutation)
 
 | Evaluator | Target | Command | Result |
