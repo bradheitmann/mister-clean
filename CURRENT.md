@@ -23,8 +23,8 @@ completed_steps:
   - repository-boundary and protected-search detector controls
   - responsive browser proof across 26 configured viewports
   - operational-truth probes for projection, behavior, state lifecycle, executable-gate reachability, and identifier namespace
-current_step: add a bounded read-only projection for imported, unlinked invocation receipts
-next_step: bind current-object semantic proof, independent acceptance, and clean verification custody
+current_step: bind exact-object CI, independent acceptance, and GUARD dogfood receipts to PR 1 head (sprint 2026-09-22)
+next_step: merge PR 1 with history preserved, tag v7.0.0, publish the receipt-bound release archive, bump the global install
 closing_gate: exact-object native suite, prior-release dogfood, independent code/package/design review, OKOA validation, GUARD, and clean Git custody
 ---
 
@@ -37,11 +37,19 @@ the working candidate; it does not declare that candidate clean.
 
 ## Current verdict
 
-**NOT CLEAN — active candidate checkpoint, 2026-09-08.**
+**NOT CLEAN — active candidate checkpoint, 2026-09-22 (acceptance in flight).**
 
 The working lane is `fix/gate-execution-leases` at main base
-`4694bfed34dcc3e77fc422c03245ce62f951ed75`. No current candidate acceptance,
-release, production qualification, or cryptographic identity claim is made.
+`4694bfed34dcc3e77fc422c03245ce62f951ed75`, published as pull request 1.
+This file does not certify the object containing it. Acceptance of the commit
+that carries this text is established only by external receipts bound to that
+exact commit: the `CI` workflow `ci:check` run for that commit on pull
+request 1, the independent QA/acceptance verdict file named in
+`project/planning/slices/done/SLICE-LE-003-QA-001.md`, and the pinned 6.3.0
+GUARD dogfood bundle recorded in the sprint 2026-09-22 section below. If any
+of those is missing or not PASS for this commit, the candidate is not
+accepted and must not be merged. No production qualification or cryptographic
+identity claim is made.
 
 Machine-local evaluation intake is integrated and covered by focused runtime
 tests. Direct CLI invocations are retained as `UNOBSERVED` receipts; runtime
@@ -254,3 +262,59 @@ plus a classification rationale, verified with `audit planning` under both
 6.3.0 and 7.0 before commit (a frontmatter-less copy reports
 `planning_input_unparsed`). The root copy is left in place on `main` until
 this branch is reviewed; it is not deleted.
+
+## Sprint 2026-09-22 (dev lead: Claude Fable 5.1) — acceptance and ship lane
+
+Scope: accept and ship 7.0 from this branch through pull request 1
+(`fix/gate-execution-leases` -> `main`, history preserved). Nothing in this
+section is a verdict on the commit that contains it; each row names the
+external receipt that binds the exact object.
+
+### LE-003 repaired on this branch
+
+`SLICE-LE-003-DEV-001` / `SLICE-LE-003-QA-001` under
+`project/planning/slices/done/`. One-condition change in
+`src/closeout/repository.ts` (`discoverPlanningRoots()` promotes only regular
+files to exact-file planning roots), regression test in
+`src/closeout/repository.test.ts`, regenerated `bin/mister-clean.js` and
+`MANIFEST.sha256`. Fixture reproduction before/after, focused tests (3 files /
+165 tests), and `build:raw` receipts are machine-local under
+`/tmp/sprint-20260922/mister-clean/`. Ledger LE-003 is closed; LE-001 and
+LE-002 remain open.
+
+### Pinned evaluator custody check (2026-09-22)
+
+All 43 `MANIFEST.sha256` entries of `mister-clean-accepted-release-6.3.0`
+rehashed OK; `SKILL.md`, `bin/mister-clean.js`, and `MANIFEST.sha256` SHA-256
+match the pins above (`evaluator-rehash.log`). The evaluator is therefore
+allowed to judge this candidate.
+
+### Evaluator AUDIT runs on this working tree (pre-commit, bounded)
+
+| Evaluator | Command | Result |
+|---|---|---|
+| pinned 6.3.0 (custodied package, not the global install) | `audit planning .` | PASS artifacts=4 structured=4 findings=0 |
+| pinned 6.3.0 | `audit public-safety .` | FAIL (1): `THIRD_PARTY_NOTICES.md:8 email-address` (pre-existing, accepted by the 7.0 denylist policy) |
+| 7.0 candidate (source) | `audit planning .` / `audit public-safety .` / `audit repository-boundaries .` | PASS / PASS / PASS (parsers=70) |
+
+These runs preceded the planning-pair and current-state edits; the QA seat
+re-runs `audit planning` on the frozen tree.
+
+### Receipts owed by the exact commit (recorded outside this file)
+
+| Receipt | Where | Binding |
+|---|---|---|
+| Pristine-store `pnpm run ci:check` | `CI` workflow run for the PR 1 head commit (GitHub) ; polled log `ci-check-<sha>.log` | commit SHA |
+| Independent QA + exact-object acceptance (contract, package, design review; LE-003 QA) | `/tmp/sprint-20260922/mister-clean/qa-verdict-le003-and-acceptance.md` | `git write-tree` SHA; commit must satisfy `commit^{tree}` = that tree |
+| GUARD dogfood by the pinned 6.3.0 evaluator (`prepare --mode GUARD`, read-only) plus `validate bundle --structural` | `/tmp/sprint-20260922/mister-clean/guard-630/` | RepositoryObject of the frozen tree |
+| Accepted-evaluator negative controls | same directory, `guard-630-negative-controls.log` | fixture objects, must FAIL as designed |
+
+GUARD scope decision: the live schema-1.3 `closeout_guard` crossed/executed
+boundary requires an operator-authored external `guard-precommit-authority`
+record (four-role receipts, commit-barrier chronology, precommit authority)
+for which this repository ships validators but no producer. This sprint runs
+the read-only pinned-evaluator GUARD dogfood and structural bundle validation
+on the frozen object and records that as bounded GUARD evidence; it does not
+claim a crossed live GUARD boundary. The pull-request merge is the ref
+advance, executed only after the CI, QA, and dogfood receipts above are PASS
+for the same commit.
