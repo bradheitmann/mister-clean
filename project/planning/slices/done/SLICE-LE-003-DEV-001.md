@@ -26,7 +26,7 @@ symbolic link to `skills/plan-skill.md`.
 |---|---|---|
 | accepted 6.3.0 `prepare` | `ERROR: ENOTDIR: not a directory, scandir .../.claude/commands/plan.md`, exit 2 | unchanged (6.3.0 is the pinned evaluator; not repaired) |
 | 7.0 candidate `prepare` | `ERROR: census root resolves through a symbolic-link path: .claude/commands/plan.md`, exit 2, partial run directory left behind | exit 0, bundle directory printed, `commands/plan.md` absent from every bundle record |
-| 7.0 candidate `audit planning` | PASS, artifactCount 1 | PASS, artifactCount 1 |
+| 7.0 candidate `audit planning` | PASS, artifactCount 1 (the symlink counted as an artifact) | NOT_APPLICABLE, artifacts=0 findings=0 (the symlink is no longer a planning input; `audit` and `prepare` now agree) — corrected per QA finding 1 |
 
 Root cause: `discoverPlanningRoots()` in `src/closeout/repository.ts` promoted
 any entry with a canonical planning stem to an exact-file planning root when
