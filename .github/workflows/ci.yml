@@ -29,6 +29,16 @@ jobs:
           node-version: 22
       - name: Reconstruct and verify the exact candidate in one clean capsule
         run: pnpm run ci:check
+      # The release-archive source check (generate_release_attestation.mjs
+      # --source-check) regenerates MANIFEST.sha256 from the attested package
+      # surface of THIS checkout, which includes the built dist/ outputs.
+      # ci:check builds only inside its private capsule, so the tagged
+      # checkout must be built in place first or the check reports the
+      # tracked manifest as stale (observed on tag v7.0.0, run 35784649561).
+      # No untrusted event input is used here.
+      - name: Build the tagged checkout in place for the release source check
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: pnpm install --frozen-lockfile && pnpm run build:raw && pnpm run manifest:package:check
       - name: Verify exact, read-only tagged release archive
         if: startsWith(github.ref, 'refs/tags/v')
         run: node scripts/prepare_release_archive.mjs --destination "$RUNNER_TEMP/mister-clean-release"

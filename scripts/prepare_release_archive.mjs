@@ -252,7 +252,7 @@ if ((immutableArchive.mode & 0o777) !== 0o444) {
 
 const npmjsRegistry = "https://registry.npmjs.org/";
 const archiveFile = basename(archivePath);
-const scopedRegistryOverride = `--@bradheitmann:registry=${npmjsRegistry}`;
+const scopedRegistryOverride = `--config.@bradheitmann:registry=${npmjsRegistry}`;
 const publishArgv = [
   "publish", "--access", "public", "--registry", npmjsRegistry,
   scopedRegistryOverride,

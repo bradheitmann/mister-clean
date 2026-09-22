@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
 
 const NPMJS_REGISTRY = "https://registry.npmjs.org/";
-const SCOPED_REGISTRY_OVERRIDE = `--@bradheitmann:registry=${NPMJS_REGISTRY}`;
+const SCOPED_REGISTRY_OVERRIDE = `--config.@bradheitmann:registry=${NPMJS_REGISTRY}`;
 
 function usage() {
   console.error("usage: node publish_release_archive.mjs --receipt <release-archive-receipt.json>");
@@ -132,6 +132,24 @@ function pnpm(args, cwd, stdio = ["ignore", "pipe", "pipe"]) {
   return result;
 }
 
+// An unpublished version is reported differently across pnpm generations:
+// pnpm 10 (JavaScript CLI) printed "E404 Not Found" text; pnpm 11+ (Rust CLI)
+// prints a JSON error object with code ERR_PNPM_PACKAGE_NOT_FOUND and
+// "No matching version found for <spec>". Only these exact shapes count as
+// "absent"; every other non-zero exit stays a hard failure.
+function registryReportsAbsent(stdout, diagnostic) {
+  try {
+    const parsed = JSON.parse(stdout);
+    const code = parsed?.error?.code;
+    const message = String(parsed?.error?.message ?? "");
+    if (code === "ERR_PNPM_PACKAGE_NOT_FOUND" || code === "ERR_PNPM_NO_MATCHING_VERSION"
+      || /No matching version found/iu.test(message)) return true;
+  } catch {
+    // not JSON; fall through to the text patterns
+  }
+  return /\bE404\b|404 Not Found|is not in this registry|ERR_PNPM_PACKAGE_NOT_FOUND|No matching version found/iu.test(diagnostic);
+}
+
 function observeRegistry(spec, cwd) {
   const result = pnpm([
     "view", spec, "version", "dist.integrity", "dist.shasum", "--json",
@@ -139,7 +157,7 @@ function observeRegistry(spec, cwd) {
   ], cwd);
   if (result.status !== 0) {
     const diagnostic = `${String(result.stdout)}\n${String(result.stderr)}`;
-    if (/\bE404\b|404 Not Found|is not in this registry/iu.test(diagnostic)) return { status: "absent" };
+    if (registryReportsAbsent(String(result.stdout), diagnostic)) return { status: "absent" };
     throw new Error(`registry observation failed before publication truth was established: ${diagnostic.trim()}`);
   }
   let value;
