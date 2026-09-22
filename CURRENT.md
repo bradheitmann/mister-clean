@@ -23,8 +23,8 @@ completed_steps:
   - repository-boundary and protected-search detector controls
   - responsive browser proof across 26 configured viewports
   - operational-truth probes for projection, behavior, state lifecycle, executable-gate reachability, and identifier namespace
-current_step: bind exact-object CI, independent acceptance, and GUARD dogfood receipts to PR 1 head (sprint 2026-09-22)
-next_step: merge PR 1 with history preserved, tag v7.0.0, publish the receipt-bound release archive, bump the global install
+current_step: ship 7.0.1 through PR 2 (release-path repair — pnpm 11 scoped-registry argv, in-place tag build in CI, version bump) with the same exact-object gates
+next_step: tag v7.0.1 on main, build the receipt-bound archive, publish it once a valid npmjs token exists (LE-004), then bump the global install and the skill bundle
 closing_gate: exact-object native suite, prior-release dogfood, independent code/package/design review, OKOA validation, GUARD, and clean Git custody
 ---
 
@@ -37,19 +37,27 @@ the working candidate; it does not declare that candidate clean.
 
 ## Current verdict
 
-**NOT CLEAN — active candidate checkpoint, 2026-09-22 (acceptance in flight).**
+**MERGED, TAGGED v7.0.0, NOT PUBLISHED — 7.0.1 release-path repair in flight, 2026-09-22.**
 
-The working lane is `fix/gate-execution-leases` at main base
-`4694bfed34dcc3e77fc422c03245ce62f951ed75`, published as pull request 1.
+Pull request 1 (`fix/gate-execution-leases`, head 9209fb1, tree
+`312c9d0d516e4f9cc63185ecf576aa859dc9f67a`) was merged into `main` as
+0248c95 with history preserved after three independent receipts bound that
+exact tree: CI run 35783607000 (`ci:check` PASS, RepositoryObject
+`5a8cb6f8c7c0f4dbbb866b9bfca7af6ca8664306adbd338c6bd4879cbaaac591`), the
+Opus 5.5 read-only QA/acceptance verdicts (PASS on ff33cad, delta PASS on
+312c9d0), and the pinned 6.3.0 GUARD dogfood (prepare exit 0, structural and
+live bundle validation PASS, negative controls 4/4). Tag `v7.0.0` points at
+0248c95. Its release archive was built and verified locally from the tagged
+checkout, but 7.0.0 cannot be published: the tagged tree's publish helper
+uses a pnpm-10 argv that pnpm 11.0.3 rejects (LE-005), and the only npmjs
+token on this machine is rejected with 401 (LE-004). The 7.0.1 lane repairs
+the helper and the CI tag path; publication waits on a valid token.
+
 This file does not certify the object containing it. Acceptance of the commit
 that carries this text is established only by external receipts bound to that
-exact commit: the `CI` workflow `ci:check` run for that commit on pull
-request 1, the independent QA/acceptance verdict file named in
-`project/planning/slices/done/SLICE-LE-003-QA-001.md`, and the pinned 6.3.0
-GUARD dogfood bundle recorded in the sprint 2026-09-22 section below. If any
-of those is missing or not PASS for this commit, the candidate is not
-accepted and must not be merged. No production qualification or cryptographic
-identity claim is made.
+exact commit (CI `ci:check` on the pull request 2 head, an independent QA
+verdict on the same tree, and the pinned 6.3.0 GUARD dogfood). No production
+qualification or cryptographic identity claim is made.
 
 Machine-local evaluation intake is integrated and covered by focused runtime
 tests. Direct CLI invocations are retained as `UNOBSERVED` receipts; runtime
@@ -318,3 +326,28 @@ on the frozen object and records that as bounded GUARD evidence; it does not
 claim a crossed live GUARD boundary. The pull-request merge is the ref
 advance, executed only after the CI, QA, and dogfood receipts above are PASS
 for the same commit.
+
+### Sprint 2026-09-22 outcomes (recorded after merge)
+
+| Step | Object | Receipt |
+|---|---|---|
+| CI on PR 1 head ad963ce | tree of ad963ce | run 35780981335 FAIL: `skill-contract` parity test, Node 22 `node:sqlite` ExperimentalWarning on stderr (repaired by 3b443bd) |
+| CI on PR 1 head 58a44a5 | ff33cad | run 35782626540 PASS, RepositoryObject `e2a7ce2ff6d21ddaf2ad3029509ae36674faadeaa215ec41b5ca1c4db038c0d9` |
+| Independent QA (Opus 5.5, read-only) | ff33cad | PASS, six non-blocking findings; finding 1 (DEV slice audit row) repaired by 9209fb1 |
+| CI on PR 1 head 9209fb1 | 312c9d0 | run 35783607000 PASS, RepositoryObject `5a8cb6f8c7c0f4dbbb866b9bfca7af6ca8664306adbd338c6bd4879cbaaac591` |
+| Independent QA delta | 312c9d0 | PASS; prior verdict carries; no new findings |
+| GUARD dogfood, pinned 6.3.0 (`prepare --mode GUARD`, `validate bundle --structural` and live) | ff33cad and 312c9d0 | prepare exit 0, both validations PASS, tree unchanged; negative controls NC1-NC4 fail/pass as designed |
+| Merge | 0248c95 (`--merge`) | `0248c95^{tree}` = 312c9d0; CI on main push run 35784595910 PASS |
+| Tag v7.0.0 CI | 0248c95 | run 35784649561: `ci:check` PASS, release-archive step FAIL (`MANIFEST.sha256: stale or not generated from attested package surface`; the job never built the checkout in place) |
+| Local release archive from the tagged checkout (`build:raw`, `manifest:package:check` PASS 79 entries, `prepare_release_archive.mjs`) | 0248c95 / v7.0.0 | `release-archive-receipt.json` status `verified_not_published`, archive sha256 `9e90a98f551e2c800494d084b7fc98dfd82625b46342a285c1dac7be1c049479` |
+| Publication attempt | same archive | FAIL before publish: pnpm rejects `--@bradheitmann:registry=` on `view` (LE-005); token check `/-/whoami` HTTP 401 (LE-004) |
+
+Machine-local receipts live under `/tmp/sprint-20260922/mister-clean/` (CI
+poll logs, QA verdict files, GUARD bundles, release directory, publish
+attempt log). The untracked root copy of `HANDOFF-2026-09-08-PM.md` was moved
+out of the repository after the adopted copy under
+`project/planning/handoffs/` merged; no tracked file was deleted.
+
+GUARD scope on this sprint stays as decided above: bounded pinned-evaluator
+dogfood plus structural and live bundle validation on each frozen tree, not
+a crossed live schema-1.3 barrier.
