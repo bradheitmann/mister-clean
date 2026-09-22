@@ -1065,7 +1065,10 @@ describe("release archive boundary", () => {
       "#!/usr/bin/env node",
       "const fs = require('node:fs');",
       "fs.appendFileSync(process.env.MC_ARGV_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');",
-      "if (process.argv[2] === 'view' && !fs.existsSync(process.env.MC_PUBLISHED_MARK)) { console.error('E404 Not Found'); process.exit(1); }",
+      // Model pnpm 11+ (Rust CLI): the pnpm-10 `--@scope:registry=` spelling is rejected at argument parsing,
+      // and an unpublished version is reported as a JSON error object on stdout, not "E404 Not Found".
+      "if (process.argv.slice(2).some((argument) => argument.startsWith('--@'))) { console.error(\"error: unexpected argument '--@bradheitmann:registry' found\"); process.exit(2); }",
+      "if (process.argv[2] === 'view' && !fs.existsSync(process.env.MC_PUBLISHED_MARK)) { console.log(JSON.stringify({ error: { code: 'ERR_PNPM_PACKAGE_NOT_FOUND', message: 'No matching version found for ' + process.argv[3] } })); process.exit(1); }",
       "else if (process.argv[2] === 'view') console.log(JSON.stringify({ version: process.env.MC_VERSION, 'dist.integrity': process.env.MC_INTEGRITY, 'dist.shasum': process.env.MC_SHASUM }));",
       "else if (process.argv[2] === 'publish') { fs.writeFileSync(process.env.MC_PUBLISHED_MARK, 'published\\n'); process.exit(97); }",
       "else process.exit(98);",
