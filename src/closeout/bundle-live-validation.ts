@@ -376,7 +376,7 @@ async function validateLiveNativeGates(
               liveDiscovery,
               liveObject,
               evidenceDirectory,
-              { validation_time: new Date(), require_passing: false },
+              { validation_time: new Date(), require_passing: false, repository: repo },
             );
             for (const error of liveNativeErrors) errors.push(`$.live_native_gates.execution: ${error}`);
             const liveFailureIds = sortedUnique(nativeGateFailureObservations(

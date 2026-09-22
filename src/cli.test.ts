@@ -242,7 +242,12 @@ jobs:
   it("makes unproved critical-boundary claims exit-relevant", async () => {
     const root = fixture("semantic-audit");
     mkdirSync(join(root, "planning"));
-    writeFileSync(join(root, "planning", "SECURITY.md"), "The credential validator is a security choke point and must be safe by construction.\n");
+    writeFileSync(join(root, "planning", "SECURITY.md"), `---
+artifact_type: product_contract
+status: active
+---
+The credential validator is a security choke point and must be safe by construction.
+`);
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
@@ -266,7 +271,12 @@ jobs:
   it("generates a v2 semantic plan outside the audited RepositoryObject and verifies direct candidates internally", async () => {
     const root = fixture("semantic-v2-plan-subject");
     mkdirSync(join(root, "planning", "todo"), { recursive: true });
-    writeFileSync(join(root, "planning", "STORY.md"), "The credential validator is a security choke point and must be safe by construction.\n");
+    writeFileSync(join(root, "planning", "STORY.md"), `---
+artifact_type: product_contract
+status: active
+---
+The credential validator is a security choke point and must be safe by construction.
+`);
     writeFileSync(join(root, "planning", "todo", "DEV.yaml"), "artifact_type: slice\nslice_type: DEV\nstatus: To Do\n");
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);

@@ -25,6 +25,14 @@ describe("control-plane read-model adapters", () => {
     expect(dependencyClosure(demoSnapshot.issues, ["MC-102"])).toEqual(["MC-102", "MC-101"]);
   });
 
+  it("treats paid prerequisites as satisfied without recommending the paid issue again", () => {
+    const issues = demoSnapshot.issues.map((issue) => issue.issue_id === "MC-101" ? { ...issue, state: "paid" as const } : issue);
+    const result = planSnapshotIssues(issues, "default");
+    expect(result.items.map((issue) => issue.issue_id)).not.toContain("MC-101");
+    expect(result.items.find((issue) => issue.issue_id === "MC-102")?.plan.concurrency).toBe("Parallelizable");
+    expect(dependencyClosure(issues, ["MC-102"])).toEqual(["MC-102"]);
+  });
+
   it("applies hard availability and qualification gates before ranking", () => {
     const result = rankSnapshotAgents(demoSnapshot.agents, [{ capability_id: "planning_projection_reconciliation", weight: 3 }]);
     expect(result.ranked.every((item) => item.agent.available)).toBe(true);

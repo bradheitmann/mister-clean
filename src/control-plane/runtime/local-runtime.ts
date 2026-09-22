@@ -9,6 +9,11 @@ import { startUnixSocketAdapter, type RunningUnixSocketAdapter } from "./unix-so
 import { SqliteControlPlaneSnapshotProducer } from "./snapshot-producer.js";
 import { openControlPlaneDatabase, type OpenControlPlaneDatabase } from "../persistence/sqlite.js";
 import { nullPrototypeRecord } from "./null-prototype-record.js";
+import { SqliteMachineLocalEvaluationIntake } from "./evaluation-intake.js";
+import type { LogicalProjectRegistrationAuthority } from "./evaluation-intake.js";
+import type { EvaluationIdentityObservationAdapter, EvaluationIdentityReceiptAuthority } from "./evaluation-identity-receipt.js";
+import type { CapabilityEvaluatorAdapter } from "./capability-evaluator-execution.js";
+import { invocationJournalPathFromEnvironment } from "../../mister-clean-invocation-journal.js";
 
 export interface LocalControlPlaneRuntimeOptions {
   readonly repository_database_path: string;
@@ -22,6 +27,19 @@ export interface LocalControlPlaneRuntimeOptions {
   };
   readonly live_route_probes?: LiveRouteAdmissionProbes;
   readonly evidence_verifier?: AuthorityEvidenceVerifier;
+  /** Trusted startup authority for logical-project alias registration. */
+  readonly logical_project_registration_authority?: LogicalProjectRegistrationAuthority;
+  /** Optional explicit state-root journal. Absent uses the standard local
+   * XDG/HOME journal, never a client-provided request field. */
+  readonly invocation_journal_path?: string;
+  /** Trusted startup receipt custody; no request payload can configure it. */
+  readonly evaluation_identity_receipt_authority?: EvaluationIdentityReceiptAuthority;
+  /** Startup-only route-specific observation source. Without it, active
+   * identity remains explicitly unknown and cannot receive quality credit. */
+  readonly evaluation_identity_observation_adapter?: EvaluationIdentityObservationAdapter;
+  /** Trusted startup evaluator authority; request payloads cannot provide
+   * evaluator verdicts or replace this adapter. */
+  readonly capability_evaluator_adapter?: CapabilityEvaluatorAdapter;
   readonly clock?: () => IsoTimestamp;
 }
 
@@ -60,6 +78,21 @@ export async function startLocalControlPlaneRuntime(
   const evidenceVerifier = Object.hasOwn(options, "evidence_verifier")
     ? options.evidence_verifier
     : undefined;
+  const registrationAuthority = Object.hasOwn(options, "logical_project_registration_authority")
+    ? options.logical_project_registration_authority
+    : undefined;
+  const invocationJournalPath = Object.hasOwn(options, "invocation_journal_path")
+    ? options.invocation_journal_path
+    : undefined;
+  const identityReceiptAuthority = Object.hasOwn(options, "evaluation_identity_receipt_authority")
+    ? options.evaluation_identity_receipt_authority
+    : undefined;
+  const identityObservationAdapter = Object.hasOwn(options, "evaluation_identity_observation_adapter")
+    ? options.evaluation_identity_observation_adapter
+    : undefined;
+  const capabilityEvaluatorAdapter = Object.hasOwn(options, "capability_evaluator_adapter")
+    ? options.capability_evaluator_adapter
+    : undefined;
   const clock = Object.hasOwn(options, "clock") ? options.clock : undefined;
   const httpHost = httpOptions !== undefined && Object.hasOwn(httpOptions, "host")
     ? httpOptions.host
@@ -82,12 +115,22 @@ export async function startLocalControlPlaneRuntime(
     if (globalDatabasePath !== undefined) {
       global = await openControlPlaneDatabase("global", globalDatabasePath);
     }
+    const evaluationIntake = global === null ? null : new SqliteMachineLocalEvaluationIntake(
+      global,
+      registrationAuthority,
+      invocationJournalPath ?? invocationJournalPathFromEnvironment(process.env),
+      identityReceiptAuthority,
+      capabilityEvaluatorAdapter ?? null,
+      identityObservationAdapter ?? null,
+    );
+    evaluationIntake?.reconcileInvocations(clock === undefined ? new Date().toISOString() : clock());
     const service = new ControlPlaneService(nullPrototypeRecord({
       store: new SqliteControlPlaneStore(repository, global),
       ...(liveRouteProbes === undefined
         ? {}
         : { route_admission: new ProbedRouteAdmission(liveRouteProbes) }),
       ...(evidenceVerifier === undefined ? {} : { evidence_verifier: evidenceVerifier }),
+      ...(evaluationIntake === null ? {} : { evaluation_intake: evaluationIntake }),
       ...(clock === undefined ? {} : { clock }),
     }));
     const authenticator = new StaticBearerAuthenticator(bearerToken);

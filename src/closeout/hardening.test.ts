@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { validateBundle } from "./bundle.js";
+import type { ActionHygieneProcessPort } from "./action-hygiene.js";
 import {
   prepareCloseout as prepareCloseoutBound,
   type PrepareCloseoutOptions,
@@ -26,8 +27,18 @@ const SOURCE_RUNTIME = mintServerAttestationBinding({
   reason: "hardening test source execution",
 });
 
+const TEST_PROCESS_PORT: ActionHygieneProcessPort = {
+  processTable: () => [{
+    pid: process.pid,
+    ppid: 0,
+    start_identity: "hardening-test-process",
+    executable: process.execPath,
+  }],
+  pathTable: () => new Map([[process.pid, { cwd: "/", open_paths: [] }]]),
+};
+
 function prepareCloseout(options: Omit<PrepareCloseoutOptions, "runtimeAttestation">) {
-  return prepareCloseoutBound({ ...options, runtimeAttestation: SOURCE_RUNTIME });
+  return prepareCloseoutBound({ ...options, processPort: options.processPort ?? TEST_PROCESS_PORT, runtimeAttestation: SOURCE_RUNTIME });
 }
 
 function sha(value: string): string {

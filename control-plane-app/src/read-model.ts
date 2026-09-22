@@ -16,6 +16,7 @@ export type InventorySort = "model" | "harness" | "reasoning_level" | "qualifica
 export type ControlPlaneSnapshot = CanonicalControlPlaneSnapshot;
 export type SnapshotSource = ControlPlaneSnapshot["source"];
 export type SnapshotSubject = ControlPlaneSnapshot["current_subject"];
+export type CurrentObservation = ControlPlaneSnapshot["current_observation"];
 export type SnapshotIssue = ControlPlaneSnapshot["issues"][number];
 export type SnapshotCapabilityScore = ControlPlaneSnapshot["agents"][number]["capability_scores"][number];
 export type SnapshotAgent = ControlPlaneSnapshot["agents"][number];
@@ -41,12 +42,15 @@ export const validateSnapshot = (snapshot: ControlPlaneSnapshot): ControlPlaneSn
 const same = (left: SnapshotSubject, right: SnapshotSubject): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 export function terminalVerdict(x:ControlPlaneSnapshot):{verdict:TerminalVerdict;evidence_state:"VERIFIED"|"UNKNOWN";reasons:readonly string[]}{const p=x.terminal_contract,c=p.contract,r:string[]=[];if(p.declared_verdict!=="CLEAN")r.push("no explicit CLEAN terminal verdict");if(!p.subject||!same(p.subject,x.current_subject))r.push("terminal subject does not bind current repository object");if(!c)r.push("terminal contract is absent");if(!p.evidence.length)r.push("terminal evidence is absent");if(c)for(const[k,v]of Object.entries(c))if(!v)r.push(`terminal contract failed: ${k}`);if(x.current_flow.ending_real_issues!==0)r.push("payable issues remain");if(x.current_flow.caused_by_remediation!==0)r.push("remediation-caused debt remains");if(x.current_flow.boundary_blocked!==0)r.push("boundary-blocked debt remains");return r.length?{verdict:"NOT_CLEAN",evidence_state:p.declared_verdict===null?"UNKNOWN":"VERIFIED",reasons:r}:{verdict:"CLEAN",evidence_state:"VERIFIED",reasons:[]}}
-export function dependencyClosure(issues:readonly SnapshotIssue[],selected:readonly string[]):readonly string[]{const map=new Map(issues.map(i=>[i.issue_id,i])),out=new Set(selected);const visit=(id:string):void=>{for(const p of map.get(id)?.prerequisite_issue_ids??[])if(!out.has(p)){out.add(p);visit(p)}};for(const id of[...out])visit(id);return[...out]}
+export function dependencyClosure(issues:readonly SnapshotIssue[],selected:readonly string[]):readonly string[]{const map=new Map(issues.map(i=>[i.issue_id,i])),out=new Set(selected);const visit=(id:string):void=>{for(const p of map.get(id)?.prerequisite_issue_ids??[])if(map.get(p)?.state!=="paid"&&!out.has(p)){out.add(p);visit(p)}};for(const id of[...out])visit(id);return[...out]}
 export function manifestBinding(x:ControlPlaneSnapshot,selected:readonly string[]):{bound:boolean;reasons:readonly string[]}{const m=x.manifest,r:string[]=[];if(!m)r.push("manifest is absent");else{if(!same(m.subject,x.current_subject))r.push("manifest subject does not exactly match current subject");const c=dependencyClosure(x.issues,selected),s=new Set(m.selected_issue_ids);if(s.size!==c.length||c.some(id=>!s.has(id)))r.push("selected dependency closure does not match manifest selected_issue_ids")}return{bound:!r.length,reasons:r}}
-export const cycleCapabilityWeight=(n:number):0|1|2|3=>((n+1)%4)as 0|1|2|3; export const currentNoHarm=(x:ControlPlaneSnapshot)=>noHarmPassed(x.current_flow);
+export const cycleCapabilityWeight=(n:number):0|1|2|3=>((n+1)%4)as 0|1|2|3;
+export const hasCurrentMeasurement=(x:ControlPlaneSnapshot, field:"current_debt_flow"|"remediation_no_harm"|"live_topology"|"current_complexity")=>x.current_observation[field]==="MEASURED";
+export const currentNoHarm=(x:ControlPlaneSnapshot):boolean|null=>hasCurrentMeasurement(x,"remediation_no_harm")?noHarmPassed(x.current_flow):null;
+export const currentBindingLabel=(x:ControlPlaneSnapshot)=>x.current_observation.evidence_binding.kind==="REPOSITORY_OBJECT"?"Repository object":"Observation receipt digest — not repository object hash";
 const asIssue=(x:string)=>x as IssueId,asCap=(x:CapabilityId)=>x,asAgent=(x:string)=>x as AgentTupleId,asKey=(x:string)=>x as CoordinationDomainKey,asSha=(x:string)=>x as Sha256;
 function policy(o:Objective):PlannerPolicy{return o==="severity"?{...DEFAULT_PLANNER_POLICY,difficulty_weight:0,unlock_value_weight:0,regression_risk_weight:0}:o==="difficulty"?{...DEFAULT_PLANNER_POLICY,severity_weight:0,unlock_value_weight:0,regression_risk_weight:0}:o==="unlock"?{...DEFAULT_PLANNER_POLICY,severity_weight:0,difficulty_weight:0,regression_risk_weight:0}:o==="risk"?{...DEFAULT_PLANNER_POLICY,severity_weight:0,difficulty_weight:0,unlock_value_weight:0}:DEFAULT_PLANNER_POLICY}
-export function planSnapshotIssues(issues:readonly SnapshotIssue[],objective:Objective){const input:readonly PlannerIssue[]=issues.map(i=>({issue_id:asIssue(i.issue_id),prerequisite_issue_ids:i.prerequisite_issue_ids.map(asIssue),severity:i.severity,remediation_difficulty:i.remediation_difficulty,unlock_value:i.unlock_value,regression_risk:i.regression_risk,blocked_reasons:i.blocked_reasons,coordination_claims:i.coordination_claims.map(c=>({...c,key:asKey(c.key),commutativity_ref:c.commutativity_ref?{...c.commutativity_ref,sha256:asSha(c.commutativity_ref.sha256)}:null}))}));const plan=planRemediation(input,policy(objective)),by=new Map(plan.items.map(i=>[String(i.issue_id),i]));const items=issues.flatMap(i=>{const p=by.get(i.issue_id);return p?[{...i,plan:p}]:[]}).sort((left,right)=>(left.plan.order||Number.MAX_SAFE_INTEGER)-(right.plan.order||Number.MAX_SAFE_INTEGER)||left.issue_id.localeCompare(right.issue_id)) as readonly PlannedSnapshotIssue[];return{plan,items}}
+export function planSnapshotIssues(issues:readonly SnapshotIssue[],objective:Objective){const paid=new Set(issues.filter(i=>i.state==="paid").map(i=>i.issue_id)),unpaid=issues.filter(i=>i.state!=="paid"&&i.state!=="false_positive"),input:readonly PlannerIssue[]=unpaid.map(i=>({issue_id:asIssue(i.issue_id),prerequisite_issue_ids:i.prerequisite_issue_ids.filter(id=>!paid.has(id)).map(asIssue),severity:i.severity,remediation_difficulty:i.remediation_difficulty,unlock_value:i.unlock_value,regression_risk:i.regression_risk,blocked_reasons:i.blocked_reasons,coordination_claims:i.coordination_claims.map(c=>({...c,key:asKey(c.key),commutativity_ref:c.commutativity_ref?{...c.commutativity_ref,sha256:asSha(c.commutativity_ref.sha256)}:null}))}));const plan=planRemediation(input,policy(objective)),by=new Map(plan.items.map(i=>[String(i.issue_id),i]));const items=unpaid.flatMap(i=>{const p=by.get(i.issue_id);return p?[{...i,plan:p}]:[]}).sort((left,right)=>(left.plan.order||Number.MAX_SAFE_INTEGER)-(right.plan.order||Number.MAX_SAFE_INTEGER)||left.issue_id.localeCompare(right.issue_id)) as readonly PlannedSnapshotIssue[];return{plan,items}}
 export function hasBoundExecutionIdentity(agent: SnapshotAgent): boolean { return agent.execution_identity.disposition === "BOUND_FOR_EVALUATION" || agent.execution_identity.disposition === "BOUND_FOR_DISPATCH"; }
 export function hasHistoricalQualification(agent: SnapshotAgent): boolean { return agent.capability_scores.some((score) => score.qualification === "Recommended_supervised" || score.qualification === "Qualified" || score.qualification === "Production_cleared"); }
 export function rankSnapshotAgents(agents:readonly SnapshotAgent[],selections:readonly CapabilitySelection[]):RankingResult {const c=(a:SnapshotAgent):AgentCandidate=>({agent_tuple_id:asAgent(a.agent_tuple_id),active_in_repository:a.active_in_repository,available:a.available,capability_scores:a.capability_scores.map(s=>({...s,capability_id:asCap(s.capability_id)}))});const eligible=agents.filter(hasHistoricalQualification);const ranked=rankAgents(eligible.map(c),selections).map(r=>({...r,agent:agents.find(a=>a.agent_tuple_id===String(r.agent_tuple_id))!})),ids=new Set(ranked.map(r=>r.agent.agent_tuple_id));return{ranked,excluded:agents.filter(a=>!ids.has(a.agent_tuple_id)).map(agent=>({agent,reason:!hasHistoricalQualification(agent)?"qualification ledger gate: insufficient credited trials":!agent.available?`availability gate: ${agent.availability}`:"qualification/confidence gate: no selected capability meets the minimum"}))}}
@@ -54,6 +58,37 @@ export const capabilityDefinitions=()=>CAPABILITY_DEFINITIONS;
 
 export function formatAgentTuple(agent: SnapshotAgent | undefined): string {
   return agent ? `${agent.model} · ${agent.harness} · ${agent.reasoning_level} · ${agent.agent_tuple_id}` : "NOT MEASURED";
+}
+
+export interface IssueRunnerRecommendationProjection {
+  /** The manifest assignment remains the authoritative plan; this is never a dispatch command. */
+  readonly manifest_assigned_tuple_id: string;
+  readonly required_capabilities: SnapshotIssue["runner_recommendation"]["required_capabilities"];
+  readonly selection_weights: SnapshotIssue["runner_recommendation"]["selection_weights"];
+  readonly routing_evidence: SnapshotIssue["runner_recommendation"]["provenance"]["routing_evidence"];
+  readonly quality_runner: SnapshotAgent | null;
+}
+
+/**
+ * Project the distinct ledger-derived runner suggestion for an issue. It does
+ * not modify the manifest assignment, authority mode, or execution identity.
+ */
+export function issueRunnerRecommendation(snapshot: ControlPlaneSnapshot, issueId: string): IssueRunnerRecommendationProjection {
+  const issue = snapshot.issues.find((item) => item.issue_id === issueId);
+  if (issue === undefined) throw new Error(`Unknown issue ${issueId}`);
+  const recommendation = issue.runner_recommendation;
+  const card = recommendation.runner_card;
+  const qualityRunner = card === null ? null : snapshot.agents.find((agent) => agent.agent_tuple_id === card.agent_tuple_id) ?? null;
+  if (card !== null && (qualityRunner === null || qualityRunner.model !== card.model || qualityRunner.harness !== card.harness || qualityRunner.reasoning_level !== card.reasoning_level)) {
+    throw new Error(`Issue ${issueId} runner card is not bound to the admitted model, harness, and reasoning identity`);
+  }
+  return {
+    manifest_assigned_tuple_id: issue.recommended_tuple,
+    required_capabilities: recommendation.required_capabilities,
+    selection_weights: recommendation.selection_weights,
+    routing_evidence: recommendation.provenance.routing_evidence,
+    quality_runner: qualityRunner,
+  };
 }
 
 const qualificationRank: Readonly<Record<SnapshotCapabilityScore["qualification"], number>> = {

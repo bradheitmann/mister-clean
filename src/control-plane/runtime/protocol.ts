@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import type {
   AgentTupleId,
   CapabilityId,
@@ -30,10 +31,11 @@ export const QUERY_NAMES = [
   "manifest.get",
   "issues.list",
   "agents.list",
+  "evaluation.invocations.pending.list",
   "directive.events",
 ] as const;
 
-export const COMMAND_NAMES = ["directive.transition"] as const;
+export const COMMAND_NAMES = ["directive.transition", "evaluation.project.register", "evaluation.run.start", "evaluation.run.outcome"] as const;
 
 export type QueryName = (typeof QUERY_NAMES)[number];
 export type CommandName = (typeof COMMAND_NAMES)[number];
@@ -93,6 +95,16 @@ export interface AgentsListQuery {
   };
 }
 
+/** Imported CLI receipts without a strict evaluation-run binding. They never
+ * identify an agent, execution route, capability, trial, or qualification. */
+export interface EvaluationInvocationsPendingListQuery {
+  readonly version: typeof CONTROL_PLANE_PROTOCOL_VERSION;
+  readonly request_id: string;
+  readonly kind: "query";
+  readonly name: "evaluation.invocations.pending.list";
+  readonly input: { readonly limit: number };
+}
+
 export interface DirectiveEventsQuery {
   readonly version: typeof CONTROL_PLANE_PROTOCOL_VERSION;
   readonly request_id: string;
@@ -120,14 +132,54 @@ export interface DirectiveTransitionCommand {
   };
 }
 
+export interface RetainedEvidenceBytesInput {
+  readonly sha256: Sha256;
+  readonly media_type: string;
+  readonly bytes: Uint8Array;
+}
+
+export interface EvaluationProjectRegisterCommand {
+  readonly version: typeof CONTROL_PLANE_PROTOCOL_VERSION;
+  readonly request_id: string;
+  readonly kind: "command";
+  readonly name: "evaluation.project.register";
+  readonly input: {
+    readonly logical_project_id: string;
+    readonly registration_evidence_sha256: Sha256;
+    readonly aliases: readonly { readonly repository_id: string; readonly attestation_evidence_sha256: Sha256 }[];
+    readonly registered_at: IsoTimestamp;
+    readonly retained_evidence: readonly RetainedEvidenceBytesInput[];
+  };
+}
+
+export interface EvaluationRunStartCommand {
+  readonly version: typeof CONTROL_PLANE_PROTOCOL_VERSION;
+  readonly request_id: string;
+  readonly kind: "command";
+  readonly name: "evaluation.run.start";
+  readonly input: { readonly start: Record<string, unknown>; readonly invocation_ids: readonly string[]; readonly retained_evidence: readonly RetainedEvidenceBytesInput[] };
+}
+
+export interface EvaluationRunOutcomeCommand {
+  readonly version: typeof CONTROL_PLANE_PROTOCOL_VERSION;
+  readonly request_id: string;
+  readonly kind: "command";
+  readonly name: "evaluation.run.outcome";
+  readonly input: { readonly outcome: Record<string, unknown>; readonly retained_evidence: readonly RetainedEvidenceBytesInput[] };
+}
+
 export type ControlPlaneRequest =
   | HealthQuery
   | RunGetQuery
   | ManifestGetQuery
   | IssuesListQuery
   | AgentsListQuery
+  | EvaluationInvocationsPendingListQuery
   | DirectiveEventsQuery
-  | DirectiveTransitionCommand;
+  | DirectiveTransitionCommand
+  | EvaluationProjectRegisterCommand
+  | EvaluationRunStartCommand
+  | EvaluationRunOutcomeCommand;
 
 export interface RunView {
   readonly run_id: RunId;
@@ -203,6 +255,22 @@ export interface AgentView {
   readonly capabilities: readonly CapabilityTrialSummary[];
 }
 
+export interface PendingEvaluationInvocationView {
+  readonly invocation_id: string;
+  readonly command: string;
+  readonly argv_sha256: Sha256;
+  readonly observed_at: IsoTimestamp;
+  readonly receipt_sha256: Sha256;
+  readonly identity_provenance: "UNOBSERVED";
+  readonly quality_credit: false;
+}
+
+export interface PendingEvaluationInvocationsView {
+  /** Exact total before this request's bounded projection is applied. */
+  readonly pending_count: number;
+  readonly invocations: readonly PendingEvaluationInvocationView[];
+}
+
 export interface DirectiveEventView {
   readonly sequence: number;
   readonly directive_id: DirectiveId;
@@ -239,8 +307,12 @@ export type ControlPlaneResult =
   | ManifestView
   | readonly IssueView[]
   | readonly AgentView[]
+  | PendingEvaluationInvocationsView
   | readonly DirectiveEventView[]
-  | DirectiveTransitionView;
+  | DirectiveTransitionView
+  | { readonly logical_project_id: string; readonly alias_count: number; readonly provenance: "OPERATOR_ATTESTED" }
+  | { readonly run_event_id: string; readonly repository_id: string; readonly evaluation_required: boolean; readonly qualification_at_dispatch: QualificationLevel }
+  | { readonly run_event_id: string; readonly contributes_quality_credit: boolean; readonly qualification_after_outcome: QualificationLevel };
 
 export const CONTROL_PLANE_ERROR_CODES = [
   "INVALID_REQUEST",
@@ -333,7 +405,10 @@ export function assertPayloadContainsNoSecretFields(value: unknown): void {
     }
     if (!isRecord(current.value)) throw new ControlPlaneFault("INVALID_REQUEST", "Request is not JSON-compatible");
     for (const [key, entry] of Object.entries(current.value)) {
-      if (FORBIDDEN_PAYLOAD_KEYS.has(normalizeKey(key))) {
+      // A required provenance field with a null value is an explicit absence,
+      // not a transportable secret. Any non-null value remains forbidden.
+      const explicitNullableAbsence = isRecord(entry) && entry.value === null && isRecord(entry.provenance);
+      if (FORBIDDEN_PAYLOAD_KEYS.has(normalizeKey(key)) && entry !== null && !explicitNullableAbsence) {
         throw new ControlPlaneFault("INVALID_REQUEST", "Secret values are not accepted in control-plane payloads");
       }
       pending.push({ value: entry, depth: current.depth + 1 });
@@ -423,6 +498,19 @@ function parseReceiptIds(value: unknown): readonly ReceiptId[] {
   return ids;
 }
 
+function parseRetainedEvidenceBytes(value: unknown): readonly RetainedEvidenceBytesInput[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 100) throw new ControlPlaneFault("INVALID_REQUEST", "retained_evidence must contain one to 100 entries");
+  return value.map((entry, index) => {
+    const record = requireRecord(entry, `retained_evidence[${index}]`);
+    requireExactKeys(record, ["sha256", "media_type", "bytes_base64"]);
+    const encoded = requireString(record.bytes_base64, `retained_evidence[${index}].bytes_base64`, 349_528);
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(encoded)) throw new ControlPlaneFault("INVALID_REQUEST", "retained evidence must use canonical base64");
+    const bytes = Buffer.from(encoded, "base64");
+    if (bytes.byteLength === 0 || bytes.byteLength > 262_144 || bytes.toString("base64") !== encoded) throw new ControlPlaneFault("INVALID_REQUEST", "retained evidence bytes are invalid or exceed the local bound");
+    return { sha256: requireSha256(record.sha256, `retained_evidence[${index}].sha256`), media_type: requireString(record.media_type, `retained_evidence[${index}].media_type`, 256), bytes };
+  });
+}
+
 function baseRequest(value: Record<string, unknown>): {
   readonly request_id: string;
   readonly kind: "query" | "command";
@@ -503,6 +591,15 @@ export function parseControlPlaneRequest(value: unknown): ControlPlaneRequest {
           },
         };
       }
+      case "evaluation.invocations.pending.list":
+        requireExactKeys(base.input, ["limit"]);
+        return {
+          version: CONTROL_PLANE_PROTOCOL_VERSION,
+          request_id: base.request_id,
+          kind: "query",
+          name: "evaluation.invocations.pending.list",
+          input: { limit: requireInteger(base.input.limit, "limit", 1, 500) },
+        };
       case "directive.events":
         requireExactKeys(base.input, ["directive_id"]);
         return {
@@ -517,6 +614,34 @@ export function parseControlPlaneRequest(value: unknown): ControlPlaneRequest {
     }
   }
 
+  if (base.name === "evaluation.project.register") {
+    requireExactKeys(base.input, ["logical_project_id", "registration_evidence_sha256", "aliases", "registered_at", "retained_evidence"]);
+    if (!Array.isArray(base.input.aliases) || base.input.aliases.length === 0 || base.input.aliases.length > 100) throw new ControlPlaneFault("INVALID_REQUEST", "aliases must contain one to 100 entries");
+    const aliases = base.input.aliases.map((entry, index) => {
+      const alias = requireRecord(entry, `aliases[${index}]`);
+      requireExactKeys(alias, ["repository_id", "attestation_evidence_sha256"]);
+      return { repository_id: requireString(alias.repository_id, `aliases[${index}].repository_id`), attestation_evidence_sha256: requireSha256(alias.attestation_evidence_sha256, `aliases[${index}].attestation_evidence_sha256`) };
+    });
+    if (new Set(aliases.map((alias) => alias.repository_id)).size !== aliases.length) throw new ControlPlaneFault("INVALID_REQUEST", "aliases must not repeat a repository_id");
+    return { version: CONTROL_PLANE_PROTOCOL_VERSION, request_id: base.request_id, kind: "command", name: "evaluation.project.register", input: {
+      logical_project_id: requireString(base.input.logical_project_id, "logical_project_id"), registration_evidence_sha256: requireSha256(base.input.registration_evidence_sha256, "registration_evidence_sha256"), aliases,
+      registered_at: requireString(base.input.registered_at, "registered_at") as IsoTimestamp, retained_evidence: parseRetainedEvidenceBytes(base.input.retained_evidence),
+    } };
+  }
+  if (base.name === "evaluation.run.start" || base.name === "evaluation.run.outcome") {
+    requireExactKeys(base.input, base.name === "evaluation.run.start" ? ["start", "invocation_ids", "retained_evidence"] : ["outcome", "retained_evidence"]);
+    const key = base.name === "evaluation.run.start" ? "start" : "outcome";
+    const invocationIds = base.name === "evaluation.run.start"
+      ? (() => {
+        if (!Array.isArray(base.input.invocation_ids) || base.input.invocation_ids.length === 0 || base.input.invocation_ids.length > 100) throw new ControlPlaneFault("INVALID_REQUEST", "invocation_ids must contain one to 100 imported CLI invocation IDs");
+        const ids = base.input.invocation_ids.map((value, index) => requireString(value, `invocation_ids[${index}]`));
+        if (new Set(ids).size !== ids.length) throw new ControlPlaneFault("INVALID_REQUEST", "invocation_ids must not repeat");
+        return ids;
+      })()
+      : undefined;
+    const parsed = { version: CONTROL_PLANE_PROTOCOL_VERSION, request_id: base.request_id, kind: "command" as const, name: base.name, input: { [key]: requireRecord(base.input[key], key), ...(invocationIds === undefined ? {} : { invocation_ids: invocationIds }), retained_evidence: parseRetainedEvidenceBytes(base.input.retained_evidence) } };
+    return parsed as EvaluationRunStartCommand | EvaluationRunOutcomeCommand;
+  }
   if (base.name !== "directive.transition") throw new ControlPlaneFault("INVALID_REQUEST", "Unknown command name");
   requireExactKeys(base.input, [
     "directive_id",

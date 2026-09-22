@@ -12,6 +12,16 @@ ledger with per-debt state and disposition, validations run with conclusions,
 and the exact next action. A checkpoint is a resume point, not a report — it
 exists so the NEXT context starts by rebinding, not rediscovering.
 
+An open debt ID alone is not a checkpoint. Each open item must retain a short
+definition, affected subject, origin/evidence reference, owner or explicit
+unassigned state, and the observable condition that pays it. Reuse the existing
+ledger; do not create a parallel document system. Before handoff, verify that
+every residual ID resolves to those fields without requiring terminal history.
+If a definition was lost, preserve that uncertainty, recover the original
+evidence or perform a bounded fresh audit, and link any replacement finding to
+the unresolved historical ID. Never invent its meaning or count a phantom ID
+as a verified product defect.
+
 ## Resume
 
 On continuation (same agent, a successor agent, or the orchestrator):

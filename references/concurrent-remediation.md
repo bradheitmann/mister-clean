@@ -204,6 +204,26 @@ or `unestablished`, not candidate failure, until the exact gate reruns
 quiescently. Do not raise the timeout as the first remedy, and do not use the
 queue as permission to skip payment.
 
+Route full-repository verification through Mister Clean's canonical native-gate
+or clean-CI runner. Both acquire the same SQLite exclusive transaction, keyed
+to the repository's Git common directory, before creating evidence. Every
+command starts under a registered process supervisor. A per-lease atomic
+supervisor lock serializes registration before the target starts; a second
+supervisor may not race a read-modify-write or start another target. Owner,
+supervisor, and escaped-process PIDs are paired with process-birth identities,
+so PID reuse neither steals custody nor strands it. Parent death terminates the
+owned tree. A unique inherited custody marker detects a target that daemonizes
+outside its process group; the runner terminates the escape and rejects the
+gate. If birth identity or the custody census cannot be established, the lease
+remains explicitly blocked and the run is NOT CLEAN rather than guessing.
+Deliberately clearing the marker or escaping OS-visible process containment is
+unsupported and must be routed to a stronger sandbox or recorded as a hard
+boundary. The runner never steals ownership by elapsed time. A second run emits a typed no-start receipt as
+`resource_contention` with `model_attribution=excluded`; wait for terminal
+ownership, then rerun. Focused worker checks remain allowed in their declared
+task boundary, but a raw duplicate root suite is a procedure breach rather than
+useful corroboration.
+
 ## Versioned coordination domains — serialize the plan, not only the write
 
 A lock can serialize two writes while still admitting a stale plan: lane B may

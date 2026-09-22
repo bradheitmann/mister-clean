@@ -16,9 +16,9 @@ const expected = {
     "plan_items", "plan_snapshots", "receipts", "repositories", "run_components", "run_events", "run_interpretations", "runs", "schema_migrations",
   ],
   global: [
-    "agent_evaluation_evidence", "agent_execution_profiles", "agent_identity_lease_events", "agent_identity_observations", "agent_run_events", "agent_tuples", "availability_observations", "capabilities",
-    "capability_evaluators", "deployments", "execution_routes", "execution_treatments", "harnesses", "inference_sources",
-    "models", "price_schedules", "qualification_events", "schema_migrations", "telemetry_imports",
+    "agent_evaluation_evidence", "agent_execution_profiles", "agent_identity_lease_events", "agent_identity_observation_targets", "agent_identity_observations", "agent_run_events", "agent_tuples", "availability_observations", "capabilities",
+    "capability_evaluators", "deployments", "evaluation_dispatch_subjects", "evaluation_evaluated_candidates", "evaluation_identity_receipt_verifications", "evaluation_run_invocations", "execution_routes", "execution_treatments", "harnesses", "inference_sources",
+    "local_mister_clean_invocations", "local_repository_identities", "logical_project_repository_aliases", "logical_projects", "models", "price_schedules", "qualification_events", "schema_migrations", "telemetry_imports",
     "trial_evaluations", "trials",
   ],
 } as const;
@@ -93,7 +93,7 @@ try {
       const migrations = opened.database.query<{ version: number }>(
         "SELECT version FROM schema_migrations WHERE store_kind = ? ORDER BY version",
       ).all(kind).map((migration) => migration.version);
-      const expectedMigrations = kind === "repository" ? [1, 2, 3] : [1, 2, 3, 4, 5];
+      const expectedMigrations = kind === "repository" ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
       if (JSON.stringify(migrations) !== JSON.stringify(expectedMigrations)) {
         throw new Error(`${kind} migrations were not recorded exactly once and in order`);
       }
@@ -140,12 +140,21 @@ try {
           { table_name: "trials", column_name: "author_actor_id" },
           { table_name: "trials", column_name: "worker_actor_id" },
         ])) throw new Error(`global actor binding columns are incomplete: ${JSON.stringify(actorColumns)}`);
-        const privateColumns = opened.database.query<{ table_name: string; column_name: string }>(
+        const repositoryIdentityColumns = opened.database.query<{ table_name: string; column_name: string }>(
           `SELECT m.name AS table_name, p.name AS column_name
            FROM sqlite_schema AS m, pragma_table_info(m.name) AS p
-           WHERE m.type = 'table' AND p.name IN ('repository_id', 'repository_root', 'repository_path')`,
+           WHERE m.type = 'table' AND p.name IN ('repository_id', 'repository_root', 'repository_path')
+           ORDER BY table_name, column_name`,
         ).all();
-        if (privateColumns.length !== 0) throw new Error("global schema contains repository-identifying columns");
+        const allowedMachineLocalIdentityColumns = [
+          { table_name: "agent_run_events", column_name: "repository_id" },
+          { table_name: "local_repository_identities", column_name: "repository_id" },
+          { table_name: "logical_project_repository_aliases", column_name: "repository_id" },
+          { table_name: "trials", column_name: "repository_id" },
+        ];
+        if (JSON.stringify(repositoryIdentityColumns) !== JSON.stringify(allowedMachineLocalIdentityColumns)) {
+          throw new Error(`global schema repository identity boundary mismatch: ${JSON.stringify(repositoryIdentityColumns)}`);
+        }
         opened.database.query(
           "INSERT INTO telemetry_imports(import_id, source_kind, payload_sha256, schema_version, accepted_rows, rejected_rows, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         ).run("import", "repository_export", "b".repeat(64), "1", 1, 0, "2026-08-26T00:00:00.000Z");

@@ -129,7 +129,7 @@ function validateBundle(data: unknown, path: string, options: BundleValidationOp
 }
 
 function prepareCloseout(options: Omit<PrepareCloseoutOptions, "runtimeAttestation">) {
-  return prepareCloseoutBound({ ...options, runtimeAttestation: TEST_RUNTIME_ATTESTATION });
+  return prepareCloseoutBound({ ...options, processPort: options.processPort ?? TEST_PROCESS_PORT, runtimeAttestation: TEST_RUNTIME_ATTESTATION });
 }
 
 async function git(repo: string, ...args: string[]): Promise<string> {
@@ -1526,11 +1526,22 @@ describe("validateBundle", { timeout: 30_000 }, () => {
     };
     const coverageRecord = {
       record_type: "mister-clean.native-gate-coverage",
-      schema_version: "1.2",
+      schema_version: "1.3",
       discovery_sha256: fakeDiscovery.catalog_sha256,
       closing_repository_object: value.repositoryObject,
       required_gate_ids: [],
       executions: [],
+      execution_lease: {
+        record_type: "mister-clean.execution-lease-receipt",
+        schema_version: "1.0",
+        resource: "repository-wide-verification",
+        coordination_key_sha256: String((fakeDiscovery as RecordValue).execution_coordination_key_sha256),
+        lease_id: "11111111-1111-4111-8111-111111111111",
+        mechanism: "sqlite_exclusive_transaction",
+        acquired_at: NOW,
+        released_at: NOW,
+        state: "released",
+      },
     };
     const fakeCoverage = {
       ...coverageRecord,

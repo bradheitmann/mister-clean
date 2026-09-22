@@ -63,8 +63,21 @@ export interface SemanticProbeCandidate {
   readonly evidence: readonly string[];
   readonly id: string;
   readonly kind: SemanticProbeKind;
+  readonly mechanical_proof?: SemanticExecutableSurfaceProof;
   readonly path: string;
   readonly refs: readonly string[];
+}
+
+export interface SemanticExecutableSurfaceRole {
+  readonly package_path: string;
+  readonly role: "declared_runtime_entrypoint" | "release_critical_input";
+  readonly source_path: string;
+}
+
+export interface SemanticExecutableSurfaceProof {
+  readonly checker: "mister-clean/executable-required-role-reachability";
+  readonly schema_version: "1.0";
+  readonly uncovered_required_roles: readonly SemanticExecutableSurfaceRole[];
 }
 
 export interface SemanticProbeFinding {
@@ -158,7 +171,7 @@ interface ProbeReceipt {
 }
 
 const TEXT_EXTENSIONS = new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
-const SOURCE_EXTENSIONS = new Set([".cjs", ".go", ".js", ".jsx", ".mjs", ".rs", ".ts", ".tsx"]);
+const SOURCE_EXTENSIONS = new Set([".cjs", ".cts", ".go", ".js", ".jsx", ".mjs", ".mts", ".rs", ".svelte", ".ts", ".tsx"]);
 const CONSTRUCTION_ASSERTION = /\b(choke point|construction[- ]enforced|(?:safe|closed|enforced) by construction)\b/i;
 const CRITICAL_BOUNDARY = /\b(auth(?:entication|orization)?|credential|privacy|policy|redact|secret|security|telemetry|token)\b/i;
 const COMPOSITION_ROOT = /\b(app(?:lication)? factory|composition root|production (?:bootstrap|root)|server factory)\b/i;
@@ -177,9 +190,11 @@ const STATE_FIELD_ALLOCATION = /(?:^|[;{}]\s*|\s)(?:(?:public|private|protected|
 const MODULE_STATE_ALLOCATION = /(?:^|[;}])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*(?:new\s+(?:Map|Set|Array)\b|\[\s*\])/i;
 const STATE_APPEND = /\b(?:appendFileSync?|createWriteStream)\b/i;
 const APPEND_STATE_BOUND = /\b(?:compact(?:ion)?|evict(?:ion)?|expir(?:e|y)|max(?:imum)?(?:[_ -]?(?:age|entries|size))|prun(?:e|ing)|retention|rotat(?:e|ion)|ttl)\b/i;
-const QUALITY_SCRIPT_NAME = /(?:^|:)(?:build|check|lint|test|typecheck|validate|verify)(?::|$)/i;
-const NON_PRODUCT_PATH = /(?:^|\/)(?:__fixtures__|__tests__|dist|fixtures?|generated|node_modules|test|tests|vendor)(?:\/|$)/i;
-const TOOL_CONFIG_SOURCE = /(?:^|\/)(?:eslint|jest|rollup|tsup|vite|vitest|webpack)\.config\.[^.]+$/i;
+const QUALITY_SCRIPT_NAME = /(?:^|[:_-])(?:build|check|lint|test|typecheck|validate|verify)(?:$|[:_-])/i;
+const RELEASE_CRITICAL_SCRIPT_NAME = /(?:^|[:_-])(?:build|deploy|pack|prepack|release)(?:$|[:_-])/i;
+const NON_PRODUCT_PATH = /(?:^|\/)(?:__fixtures__|__tests__|build|coverage|dist|examples?|fixtures?|generated|node_modules|samples?|test|test-data|testdata|tests|vendor)(?:\/|$)/i;
+const NON_AUTHORITATIVE_CONTRACT_PATH = /(?:^|\/)(?:__fixtures__|__tests__|evals?|evaluation-fixtures?|examples?|fixtures?|samples?|test|test-data|testdata|tests)(?:\/|$)/i;
+const DECLARATION_SOURCE_SUFFIX = /\.d\.(?:cts|mts|ts)$/i;
 const IDENTITY_REFERENCE_FIELDS = ["agent_identity_ref", "execution_identity_ref", "identity_lease_id"] as const;
 const EXECUTION_IDENTITY_FIELDS = [
   "control_surface",
@@ -359,99 +374,231 @@ function unboundedStateFields(path: string, content: string): Array<{ readonly l
   return results;
 }
 
-function executableSurfaceGaps(root: string, paths: readonly string[]): Array<{
-  readonly evidence: string;
-  readonly refs: readonly string[];
-}> {
-  const packagePaths = paths.filter((path) => basename(path) === "package.json" && !NON_PRODUCT_PATH.test(path));
-  const packageDirectories = packagePaths
-    .map((path) => dirname(path) === "." ? "." : dirname(path).split(sep).join("/"))
-    .sort((left, right) => right.length - left.length || left.localeCompare(right));
-  const parsed = new Map<string, Record<string, unknown>>();
-  for (const packagePath of packagePaths) {
-    try {
-      const value: unknown = JSON.parse(readFileSync(resolve(root, packagePath), "utf8"));
-      if (value && typeof value === "object" && !Array.isArray(value)) parsed.set(packagePath, value as Record<string, unknown>);
-    } catch {
-      // Invalid manifests are handled by native-gate discovery.
-    }
+interface PackageSurface {
+  readonly directory: string;
+  readonly manifest: Record<string, unknown>;
+  readonly packagePath: string;
+  readonly scripts: ReadonlyMap<string, string>;
+}
+
+function insidePortablePath(root: string, cwd: string, token: string): string | undefined {
+  if (!token || token === "." || token === ".." || token.includes("://") || token.includes("\0")) return undefined;
+  const absolute = resolve(root, cwd === "." ? "" : cwd, token);
+  const relation = relative(root, absolute);
+  if (relation === ".." || relation.startsWith(`..${sep}`) || isAbsolute(relation)) return undefined;
+  return relation.split(sep).join("/") || ".";
+}
+
+function globPattern(pattern: string): RegExp {
+  let result = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index] ?? "";
+    if (character === "*" && pattern[index + 1] === "*") {
+      index += 1;
+      if (pattern[index + 1] === "/") {
+        index += 1;
+        result += "(?:.*/)?";
+      } else result += ".*";
+    } else if (character === "*") result += "[^/]*";
+    else if (character === "?") result += "[^/]";
+    else result += regexLiteral(character);
   }
-  const nearestPackage = (sourcePath: string): string | undefined => packageDirectories.find((directory) => (
-    directory === "." || sourcePath.startsWith(`${directory}/`)
-  ));
-  const qualityScripts: Array<{ command: string; directory: string; name: string }> = [];
-  for (const [packagePath, manifest] of parsed) {
-    const value = manifest.scripts;
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const directory = dirname(packagePath) === "." ? "." : dirname(packagePath).split(sep).join("/");
-    for (const [name, command] of Object.entries(value)) {
-      if (typeof command !== "string" || !QUALITY_SCRIPT_NAME.test(name)) continue;
-      const normalized = command.trim().replace(/\s+/gu, " ").toLocaleLowerCase("und");
-      if (!normalized || /^(?:true|:|exit 0|echo(?:\s+.*)?)$/u.test(normalized)) continue;
-      qualityScripts.push({ command, directory, name });
-    }
+  return new RegExp(`${result}$`, "u");
+}
+
+function tokenPaths(root: string, cwd: string, rawToken: string, paths: readonly string[]): string[] {
+  const token = rawToken.trim().replace(/^["']|["',]$/gu, "");
+  if (!token || /^[A-Za-z_][A-Za-z0-9_]*=/u.test(token) || token.startsWith("-")) return [];
+  const portable = insidePortablePath(root, cwd, token);
+  if (!portable) return [];
+  if (/[*!?{\[]/u.test(portable)) {
+    const matcher = globPattern(portable);
+    return paths.filter((path) => matcher.test(path));
   }
-  const reachable = new Set<string>();
-  for (const script of qualityScripts) {
-    const origin = script.directory === "." ? "" : `${script.directory}/`;
-    for (const path of paths) {
-      const local = origin && path.startsWith(origin) ? path.slice(origin.length) : path;
-      if (script.command.includes(path) || (origin && script.command.includes(local))) reachable.add(path);
-    }
-    for (const match of script.command.matchAll(/(?:^|\s)(?:\.\/)?((?:tests?|src|packages?)\/[^\s'";&|]*)/gu)) {
-      const token = String(match[1] ?? "");
-      const wildcard = token.search(/[*!?{\[]/u);
-      const prefix = (wildcard >= 0 ? token.slice(0, wildcard) : token).replace(/\/+$/u, "");
-      const rooted = `${origin}${prefix}`.replace(/^\.\//u, "");
-      for (const path of paths) if (path === rooted || path.startsWith(`${rooted}/`)) reachable.add(path);
-    }
+  if (paths.includes(portable)) return [portable];
+  return paths.filter((path) => path.startsWith(`${portable.replace(/\/+$/u, "")}/`));
+}
+
+interface StaticGateRoute {
+  readonly inputs: Set<string>;
+  readonly unknown: Set<string>;
+}
+
+// This recognizer describes input selection only. It never proves that a gate
+// executed or that a missing static route is a product defect.
+function staticGateRoute(
+  root: string,
+  command: string,
+  directory: string,
+  paths: readonly string[],
+  packages: readonly PackageSurface[],
+  visited = new Set<string>(),
+): StaticGateRoute {
+  const inputs = new Set<string>();
+  const unknown = new Set<string>();
+  // Do not erase shell control flow, expansion, redirection, or quoting.
+  // Only literal tokens and success-dependent sequencing are supported.
+  if (/[\n\r;|<>$`\\"'(){}\[\]*?!#]/u.test(command) || command.replaceAll("&&", "").includes("&")) {
+    return { inputs, unknown: new Set(["unsupported shell syntax"]) };
   }
-  const sourcePathSet = new Set(paths);
-  const queue = [...reachable];
-  while (queue.length > 0) {
-    const importer = queue.shift()!;
-    if (!SOURCE_EXTENSIONS.has(extname(importer).toLocaleLowerCase("und"))) continue;
-    let content = "";
-    try {
-      content = readFileSync(resolve(root, importer), "utf8");
-    } catch {
+  let cwd = directory;
+  for (const part of command.split("&&")) {
+    const tokens = part.trim().split(/\s+/u);
+    if (!part.trim()) {
+      unknown.add("empty command segment");
       continue;
     }
+    if (tokens[0] === "cd" && tokens.length === 2) {
+      const next = insidePortablePath(root, cwd, tokens[1]!);
+      if (!next || !existsSync(resolve(root, next)) || !lstatSync(resolve(root, next)).isDirectory()) {
+        unknown.add("unresolved working directory");
+      } else cwd = next;
+      continue;
+    }
+    if (["npm", "pnpm", "yarn", "bun"].includes(tokens[0] ?? "") && tokens[1] === "run" && tokens.length === 3) {
+      const owner = [...packages].sort((a, b) => b.directory.length - a.directory.length)
+        .find((item) => item.directory === "." || cwd === item.directory || cwd.startsWith(item.directory + "/"));
+      const key = owner && owner.packagePath + "\0" + tokens[2];
+      const nested = owner?.scripts.get(tokens[2]!);
+      const lifecycleHook = owner && (owner.scripts.has(`pre${tokens[2]}`) || owner.scripts.has(`post${tokens[2]}`));
+      if (!key || !nested || visited.has(key)) {
+        unknown.add("unresolved or recursive package script");
+      } else if (lifecycleHook) {
+        // Package-manager pre/post hooks are execution semantics, not a
+        // portable static route. Their presence requires native evidence;
+        // do not claim a universal hook order across managers.
+        unknown.add("package script lifecycle hooks require native evidence");
+      } else {
+        const route = staticGateRoute(root, nested, owner!.directory, paths, packages, new Set(visited).add(key));
+        route.inputs.forEach((path) => inputs.add(path));
+        route.unknown.forEach((reason) => unknown.add(reason));
+      }
+      continue;
+    }
+    if (tokens[0] === "node" && tokens[1] === "--check" && tokens.length === 3) {
+      const path = insidePortablePath(root, cwd, tokens[2]!);
+      if (!tokens[2]!.startsWith("-") && path && paths.includes(path) && /\.(?:cjs|mjs|js)$/u.test(path)
+        && !lstatSync(resolve(root, path)).isSymbolicLink()) inputs.add(path);
+      else unknown.add("unresolved node syntax-check input");
+      continue;
+    }
+    if (tokens.length === 1 && (tokens[0] === "true" || tokens[0] === ":")) continue;
+    // Compiler, linter, test runner and build configurations need native input
+    // evidence. No strings from their arguments or configs count as coverage.
+    unknown.add("unsupported command: " + (tokens[0] ?? "<empty>"));
+  }
+  // An unknown segment may change cwd, environment, or files used later.
+  if (unknown.size > 0) inputs.clear();
+  return { inputs, unknown };
+}
+
+function runtimeSourceClosure(root: string, seeds: Iterable<string>, paths: readonly string[]): Set<string> {
+  const found = new Set(seeds);
+  const queue = [...found];
+  while (queue.length > 0) {
+    const path = queue.shift()!;
+    let content = "";
+    try { content = readFileSync(resolve(root, path), "utf8"); } catch { continue; }
+    // These are possible runtime dependencies for adjudication, never gate
+    // inputs or a complete module-resolution proof. Unsupported syntax remains
+    // part of the explicit dependency-closure debt below.
     for (const match of content.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)["']([^"']+)["']/gu)) {
-      const specifier = String(match[1] ?? "");
+      const specifier = match[1] ?? "";
       if (!specifier.startsWith(".")) continue;
-      const base = relative(root, resolve(root, dirname(importer), specifier)).split(sep).join("/");
-      const resolvedCandidates = [
+      const base = insidePortablePath(root, dirname(path), specifier);
+      if (!base) continue;
+      const candidates = [
         base,
-        ...[...SOURCE_EXTENSIONS].map((extension) => `${base}${extension}`),
-        ...[...SOURCE_EXTENSIONS].map((extension) => `${base}/index${extension}`),
+        ...[...SOURCE_EXTENSIONS].map((extension) => base + extension),
+        ...[...SOURCE_EXTENSIONS].map((extension) => base + "/index" + extension),
+        ...(/\.[cm]?js$/u.test(base) ? [base.replace(/js$/u, "ts")] : []),
       ];
-      for (const candidate of resolvedCandidates) {
-        if (!sourcePathSet.has(candidate) || reachable.has(candidate)) continue;
-        reachable.add(candidate);
+      for (const candidate of candidates) {
+        if (!paths.includes(candidate) || found.has(candidate)) continue;
+        found.add(candidate);
         queue.push(candidate);
       }
     }
   }
+  return found;
+}
+
+function nestedStrings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(nestedStrings);
+  const record = object(value);
+  return record ? Object.values(record).flatMap(nestedStrings) : [];
+}
+
+function executableSurfaceGaps(root: string, paths: readonly string[]): Array<{
+  readonly evidence: string;
+  readonly refs: readonly string[];
+}> {
+  const packages: PackageSurface[] = [];
+  for (const packagePath of paths.filter((path) => basename(path) === "package.json" && !NON_PRODUCT_PATH.test(path))) {
+    try {
+      const manifest = object(JSON.parse(readFileSync(resolve(root, packagePath), "utf8")));
+      if (!manifest) continue;
+      const rawScripts = object(manifest.scripts) ?? {};
+      packages.push({
+        directory: dirname(packagePath) === "." ? "." : dirname(packagePath).split(sep).join("/"),
+        manifest,
+        packagePath,
+        scripts: new Map(Object.entries(rawScripts).filter((entry): entry is [string, string] => typeof entry[1] === "string")),
+      });
+    } catch {
+      // Invalid manifests are handled by native-gate discovery.
+    }
+  }
+  const routes = new Set<string>();
+  const routeUnknown = new Set<string>();
+  for (const item of packages) {
+    for (const [name, command] of item.scripts) {
+      if (!QUALITY_SCRIPT_NAME.test(name)) continue;
+      const lifecycleHook = item.scripts.has(`pre${name}`) || item.scripts.has(`post${name}`);
+      const route = lifecycleHook
+        ? { inputs: new Set<string>(), unknown: new Set(["package script lifecycle hooks require native evidence"]) }
+        : staticGateRoute(root, command, item.directory, paths, packages);
+      route.inputs.forEach((path) => routes.add(path));
+      route.unknown.forEach((reason) => routeUnknown.add(item.packagePath + ":" + name + ": " + reason));
+    }
+  }
   const gaps: Array<{ evidence: string; refs: readonly string[] }> = [];
-  for (const packagePath of packagePaths) {
-    const manifest = parsed.get(packagePath);
-    if (!manifest) continue;
-    const directory = dirname(packagePath) === "." ? "." : dirname(packagePath).split(sep).join("/");
-    const sources = paths.filter((sourcePath) => (
-      SOURCE_EXTENSIONS.has(extname(sourcePath).toLocaleLowerCase("und"))
-      && !NON_PRODUCT_PATH.test(sourcePath)
-      && !TOOL_CONFIG_SOURCE.test(sourcePath)
-      && nearestPackage(sourcePath) === directory
-    ));
-    const declaredEntrypoint = [manifest.bin, manifest.exports, manifest.main, manifest.module]
-      .some((value) => value !== undefined && value !== null);
-    if (!declaredEntrypoint && sources.length === 0) continue;
-    const uncovered = sources.filter((source) => !reachable.has(source));
-    if (uncovered.length === 0) continue;
+  for (const item of packages) {
+    const seeds = new Set<string>();
+    const reasons = new Set<string>();
+    const entries = [item.manifest.bin, item.manifest.exports, item.manifest.main, item.manifest.module].flatMap(nestedStrings);
+    for (const entry of entries) {
+      if (DECLARATION_SOURCE_SUFFIX.test(entry)) continue;
+      const matches = tokenPaths(root, item.directory, entry, paths);
+      if (matches.length === 0) reasons.add("unresolved declared runtime target: " + entry);
+      matches.forEach((path) => seeds.add(path));
+    }
+    if (entries.length === 0) {
+      const implicit = insidePortablePath(root, item.directory, "index.js");
+      if (implicit && paths.includes(implicit)) seeds.add(implicit);
+    }
+    for (const [name, command] of item.scripts) {
+      if (!RELEASE_CRITICAL_SCRIPT_NAME.test(name)) continue;
+      // A release command is an obligation, not evidence that it checks itself.
+      reasons.add("release input closure requires native evidence: " + name);
+      const runner = /^(?:node|bun)\s+([A-Za-z0-9_./-]+)(?:\s|$)/u.exec(command.trim());
+      if (runner?.[1]) tokenPaths(root, item.directory, runner[1], paths).forEach((path) => seeds.add(path));
+    }
+    const required = runtimeSourceClosure(root, seeds, paths);
+    for (const path of required) {
+      if (!routes.has(path)) reasons.add("validation route unestablished: " + path);
+      let content = "";
+      try { content = readFileSync(resolve(root, path), "utf8"); } catch { /* Native evidence is required. */ }
+      if (/\b(?:import|require|from|eval|Function)\b/u.test(content)) {
+        reasons.add("runtime dependency closure requires native evidence: " + path);
+      }
+    }
+    if (reasons.size === 0) continue;
+    routeUnknown.forEach((reason) => reasons.add(reason));
     gaps.push({
-      evidence: `${directory}: ${uncovered.length}/${sources.length} production executable source files have no proven reachable quality gate`,
-      refs: [packagePath, ...uncovered].sort(),
+      evidence: item.directory + ": coverage-unestablished; " + [...reasons].sort().join("; "),
+      refs: [item.packagePath, ...required].sort(),
     });
   }
   return gaps;
@@ -484,6 +631,7 @@ export function semanticCandidateSetSha256(candidates: readonly SemanticProbeCan
     evidence: candidate.evidence.map(normalizeClaim).sort(),
     id: candidate.id,
     kind: candidate.kind,
+    ...(candidate.mechanical_proof ? { mechanical_proof: candidate.mechanical_proof } : {}),
     path: candidate.path,
     refs: [...candidate.refs].sort(),
   }))));
@@ -617,6 +765,29 @@ function nestedObjects(value: unknown): Record<string, unknown>[] {
   return result;
 }
 
+function structuredProductContract(record: Record<string, unknown> | undefined): boolean {
+  if (!record) return false;
+  const type = [record.artifact_type, record.contract_type, record.record_type]
+    .find((value) => typeof value === "string");
+  return typeof type === "string"
+    && /^(?:acceptance_contract|epic|plan|product_contract|requirement|slice|story)$/iu.test(type.trim());
+}
+
+function operativeProductContract(path: string, record: Record<string, unknown> | undefined): boolean {
+  if (NON_AUTHORITATIVE_CONTRACT_PATH.test(path)) return false;
+  const status = typeof record?.status === "string" ? record.status.trim() : "";
+  // Completion preserves the contract's obligations. Only explicit retirement
+  // removes it from current applicability; a folder name cannot grant that.
+  if (/^(?:archived|historical|rejected|retired|superseded)$/iu.test(status)) return false;
+  return structuredProductContract(record) || currentPlanningLifecycle(path);
+}
+
+function structuredMirrorContract(record: Record<string, unknown> | undefined): boolean {
+  return !!record && nestedEntries(record).some(({ key, value }) => (
+    /(?:^|\.)mirror_contract_ref$/iu.test(key) && nonemptyIdentityValue(value)
+  ));
+}
+
 function terminalStructuredRecord(record: Record<string, unknown>): boolean {
   return nestedEntries(record).some(({ key, value }) => (
     /(?:^|\.)(?:result|status|verdict)$/iu.test(key)
@@ -678,7 +849,14 @@ export function discoverSemanticProbeCandidates(
   assertDirectory(root);
   const repositoryPaths = boundRepositoryPaths ? [...boundRepositoryPaths].sort() : repositoryObjectPaths(root);
   const repositoryPathSet = new Set(repositoryPaths);
-  const groups = new Map<string, { claim: string; evidence: string[]; kind: SemanticProbeKind; path: string; refs: string[] }>();
+  const groups = new Map<string, {
+    claim: string;
+    evidence: string[];
+    kind: SemanticProbeKind;
+    mechanicalProof?: SemanticExecutableSurfaceProof;
+    path: string;
+    refs: string[];
+  }>();
   const authorityClaims = new Map<string, {
     proposed: Array<{ readonly path: string; readonly line: number; readonly text: string }>;
     ratified: Array<{ readonly path: string; readonly line: number; readonly text: string }>;
@@ -695,6 +873,33 @@ export function discoverSemanticProbeCandidates(
     group.refs.push(`${path}#line-${line}`);
     group.evidence.push(text.slice(0, 240));
     groups.set(key, group);
+  };
+  const addContractClaims = (path: string, content: string, structured?: Record<string, unknown>): void => {
+    for (const item of visibleLines(content)) {
+      if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
+        add("construction_boundary", path, item.line, item.text);
+      }
+      if (COMPOSITION_ROOT.test(item.text) && ROOT_BINDING.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
+        add("composition_root_reachability", path, item.line, item.text);
+      }
+      if (DECLARED_ROUTING_DIMENSION.test(item.text)) {
+        const key = "behavioral_dimension\0behavioral-dimension/task-routing\0task routing declares class-specific fitness or cost behavior";
+        const group = groups.get(key) ?? {
+          claim: "task routing declares class-specific fitness or cost behavior",
+          evidence: [],
+          kind: "behavioral_dimension" as const,
+          path: "behavioral-dimension/task-routing",
+          refs: [],
+        };
+        group.refs.push(`${path}#line-${item.line}`);
+        group.evidence.push(item.text.slice(0, 240));
+        groups.set(key, group);
+      }
+      if (GATE_BITE_CLAIM.test(item.text)) add("gate_semantic_bite", path, item.line, item.text);
+      if (REPRESENTATION_EQUIVALENCE_CLAIM.test(item.text) && !structuredMirrorContract(structured)) {
+        add("representation_equivalence", path, item.line, item.text);
+      }
+    }
   };
   const planningRoots = discoverPlanningRoots(root);
   const planningPaths = repositoryPaths.filter((path) => (
@@ -716,6 +921,7 @@ export function discoverSemanticProbeCandidates(
       const missing = missingExecutionIdentityFields(root, path, content);
       if (missing && missing.length > 0) missingExecutionIdentity.push({ fields: missing, path });
       const structured = planningRecord(path, content);
+      if (operativeProductContract(path, structured)) addContractClaims(path, content, structured);
       const definition = object(structured?.authority_definition);
       if (definition && nonemptyIdentityValue(definition.namespace) && nonemptyIdentityValue(definition.id)) {
         const shortId = String(definition.id).trim();
@@ -727,25 +933,6 @@ export function discoverSemanticProbeCandidates(
         authorityDefinitions.set(shortId, definitions);
       }
       for (const item of visibleLines(content)) {
-        if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
-          add("construction_boundary", path, item.line, item.text);
-        }
-        if (COMPOSITION_ROOT.test(item.text) && ROOT_BINDING.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
-          add("composition_root_reachability", path, item.line, item.text);
-        }
-        if (DECLARED_ROUTING_DIMENSION.test(item.text)) {
-          const key = "behavioral_dimension\0behavioral-dimension/task-routing\0task routing declares class-specific fitness or cost behavior";
-          const group = groups.get(key) ?? {
-            claim: "task routing declares class-specific fitness or cost behavior",
-            evidence: [],
-            kind: "behavioral_dimension" as const,
-            path: "behavioral-dimension/task-routing",
-            refs: [],
-          };
-          group.refs.push(`${path}#line-${item.line}`);
-          group.evidence.push(item.text.slice(0, 240));
-          groups.set(key, group);
-        }
         if (!historicalPlanningLifecycle(path)) {
           for (const { identifier, status } of authorityStatuses(item.text)) {
             const record = authorityClaims.get(identifier) ?? { proposed: [], ratified: [] };
@@ -777,19 +964,10 @@ export function discoverSemanticProbeCandidates(
       continue;
     }
     if (content.includes("\0")) continue;
-    const lines = visibleLines(content);
-    for (const item of lines) {
-      if (GATE_BITE_CLAIM.test(item.text)) add("gate_semantic_bite", path, item.line, item.text);
-      if (planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`))) {
-        if (CONSTRUCTION_ASSERTION.test(item.text) && CRITICAL_BOUNDARY.test(item.text)) {
-          add("construction_boundary", path, item.line, item.text);
-        }
-      }
-    }
-    if (SOURCE_EXTENSIONS.has(extension) && REPRESENTATION_EQUIVALENCE_CLAIM.test(content)
-      && !/\bmirror_contract_ref\b/u.test(content)) {
-      const line = content.split(/\r?\n/).findIndex((item) => REPRESENTATION_EQUIVALENCE_CLAIM.test(item));
-      add("representation_equivalence", path, Math.max(1, line + 1), "declared handwritten mirror/twin has no bound canonical equivalence contract");
+    const structured = planningRecord(path, content);
+    const inPlanning = planningRoots.some((planningRoot) => path === planningRoot || path.startsWith(`${planningRoot}/`));
+    if (!inPlanning && structuredProductContract(structured) && operativeProductContract(path, structured)) {
+      addContractClaims(path, content, structured);
     }
     if ((extension === ".md" || extension === ".mdx") && FORBIDDEN_INSTRUCTION.test(content)
       && DANGEROUS_RECIPE_FENCE.test(content)) {
@@ -806,7 +984,6 @@ export function discoverSemanticProbeCandidates(
       const hazards = environmentSemanticHazards(content);
       if (hazards.length > 0) add("environment_semantics", path, 1, hazards.join("; "));
     }
-    const structured = planningRecord(path, content);
     if (!structured) continue;
     const identifier = structuredRecordId(structured);
     if (identifier) {
@@ -949,6 +1126,7 @@ export function discoverSemanticProbeCandidates(
     evidence: [...new Set(group.evidence)].sort(),
     id: candidateId(group.kind, group.path, group.claim),
     kind: group.kind,
+    ...(group.mechanicalProof ? { mechanical_proof: group.mechanicalProof } : {}),
     path: group.path,
     refs: [...new Set(group.refs)].sort(),
   })).sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));

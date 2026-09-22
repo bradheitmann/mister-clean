@@ -7,6 +7,7 @@ import { openControlPlaneDatabase, type BunSqliteDatabase } from "../persistence
 import { appendCurrentRunBinding, appendRunComponent, SqliteControlPlaneSnapshotProducer } from "./snapshot-producer.js";
 import { CAPABILITY_DEFINITIONS } from "../contracts/capability-taxonomy.js";
 import { canonicalJson, sha256Bytes } from "./authority.js";
+import { ConfiguredEvaluationIdentityReceiptAuthority } from "./evaluation-intake.js";
 import { TEST_NOW, testSha, validManifestValue } from "./test-fixture.js";
 import { StaticBearerAuthenticator } from "./auth.js";
 import { startLoopbackHttpAdapter, type ControlPlaneRequestHandler } from "./http.js";
@@ -37,6 +38,46 @@ function complexityValue(objectSha: string) {
     docs_to_authored_code: { bytes: 2, lines: 2, files: 2 }, structural_coverage: "repository-object TypeScript/JavaScript", limitations: [],
     functions: { p50: 1, p95: 1, max: 1, cyclomatic_p95: 1 }, cycles: [], hotspots: [], trend: [], repository_size_history: [],
   };
+}
+
+function verifiedFixtureCustody(
+  runEventId: string,
+  lease: {
+    identity_lease_id: string;
+    requested_tuple: Record<string, string>;
+    execution_route_id: string;
+    pre_dispatch: Record<string, unknown> & { evidence: { path: string; sha256: string }[]; observer_actor_id: string };
+    pre_evaluation: Record<string, unknown> & { evidence: { path: string; sha256: string }[]; observer_actor_id: string };
+    invalidations: readonly unknown[];
+  },
+  retainBytes: (bytes: Uint8Array) => string,
+) {
+  return (["pre_dispatch", "pre_evaluation"] as const).map((phase) => {
+    const observation = lease[phase];
+    const { evidence: _receiptEvidence, ...attestedObservation } = observation;
+    const bytes = Buffer.from(canonicalJson({
+      schema_version: "1.0",
+      record_type: "mister-clean.evaluation-identity-receipt",
+      binding: {
+        phase,
+        run_event_id: runEventId,
+        identity_lease: {
+          identity_lease_id: lease.identity_lease_id,
+          requested_tuple: lease.requested_tuple,
+          execution_route_id: lease.execution_route_id,
+          observation: attestedObservation,
+        },
+        invocation_ids: [],
+      },
+    }), "utf8");
+    const receipt = { sha256: retainBytes(bytes), bytes };
+    observation.evidence.push({ path: `${phase}-receipt.json`, sha256: receipt.sha256 });
+    const verified = new ConfiguredEvaluationIdentityReceiptAuthority([
+      { receipt_sha256: receipt.sha256, observer_actor_id: observation.observer_actor_id, identity_assurance: "active_harness_selection" },
+    ]).authorize({ phase, run_event_id: runEventId, identity_lease: lease as never, invocation_ids: [], retained_evidence: [receipt] });
+    if (verified === null) throw new Error("fixture must construct verified receipt custody");
+    return verified;
+  });
 }
 
 describe("SQLite live snapshot producer", () => {
@@ -131,33 +172,66 @@ describe("SQLite live snapshot producer", () => {
       global.database.query("INSERT INTO inference_sources(inference_source_id, display_name, source_kind, machine_identity, endpoint, secret_ref, metadata_json, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("source-1", "Source", "developer_plan", null, null, null, "{}", TEST_NOW);
       global.database.query("INSERT INTO deployments(deployment_id, model_id, inference_source_id, provider_model_id, context_limit_tokens, max_concurrency, metadata_json, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("deployment-1", "model-1", "source-1", "provider-model", 200000, 1, "{}", TEST_NOW);
       global.database.query("INSERT INTO execution_routes(execution_route_id, agent_tuple_id, deployment_id, invocation_kind, invocation_adapter, headless_supported, secret_ref, route_json, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run("route-1", "agent-tuple-1", "deployment-1", "harness", "adapter", 1, null, "{}", TEST_NOW);
-      const retain = (label: string): string => {
-        const bytes = Buffer.from(`snapshot-evidence:${label}`, "utf8");
+      global.database.query("INSERT INTO availability_observations(observation_id, agent_tuple_id, execution_route_id, availability, control_surface_token, observed_at) VALUES (?, ?, ?, ?, ?, ?)").run("availability-1", "agent-tuple-1", "route-1", "available", null, TEST_NOW);
+      const retainBytes = (bytes: Uint8Array): string => {
         const digest = sha256Bytes(bytes);
         global.database.query("INSERT INTO agent_evaluation_evidence(evidence_sha256, media_type, evidence_bytes, byte_length, retained_at) VALUES (?, ?, ?, ?, ?)").run(digest, "application/json", bytes, bytes.byteLength, TEST_NOW);
         return digest;
       };
-      const dispatchDigest = retain("dispatch");
-      const evaluationDigest = retain("evaluation");
+      const retain = (label: string): string => retainBytes(Buffer.from(`snapshot-evidence:${label}`, "utf8"));
+      const firstLease = {
+        identity_lease_id: "lease-qualified",
+        requested_tuple: { agent_tuple_id: "agent-tuple-1", model_id: "model-1", harness_id: "harness-1", reasoning_level: "high" },
+        execution_route_id: "route-1",
+        pre_dispatch: { observation_id: "ob-dispatch", phase: "pre_dispatch", requested_agent_tuple_id: "agent-tuple-1", observed_model_id: "model-1", observed_harness_id: "harness-1", observed_reasoning_level: "high", execution_route_id: "route-1", control_surface_id: null, harness_session_token: "session", process_instance_token: "process", evidence_kind: "external_visual_readback", evidence: [] as { path: string; sha256: string }[], observer_actor_id: "dispatch-observer", intended_surface_label: null, worker_self_report: null, observed_at: "2026-08-26T11:00:00.000Z" },
+        pre_evaluation: { observation_id: "ob-evaluation", phase: "pre_evaluation", requested_agent_tuple_id: "agent-tuple-1", observed_model_id: "model-1", observed_harness_id: "harness-1", observed_reasoning_level: "high", execution_route_id: "route-1", control_surface_id: null, harness_session_token: "session", process_instance_token: "process", evidence_kind: "external_visual_readback", evidence: [] as { path: string; sha256: string }[], observer_actor_id: "evaluation-observer", intended_surface_label: null, worker_self_report: null, observed_at: "2026-08-26T11:01:00.000Z" },
+        invalidations: [],
+      };
+      const firstCustody = verifiedFixtureCustody("agent-run-1", firstLease, retainBytes);
+      const dispatchDigest = firstCustody[0]!.receipt_sha256;
+      const evaluationDigest = firstCustody[1]!.receipt_sha256;
       const trialDigest = retain("trial");
+      const localRepositoryId = "local-repository:snapshot-test";
+      const firstRepositoryIdentityDigest = retainBytes(Buffer.from(canonicalJson({ schema_version: "1.0", canonical_local_repository_root: "/local/snapshot-repository", canonical_git_common_directory: "/local/snapshot-repository/.git" }), "utf8"));
+      global.database.query(
+        "INSERT INTO local_repository_identities(repository_id, canonical_git_common_directory, identity_evidence_sha256, first_observed_at) VALUES (?, ?, ?, ?)",
+      ).run(localRepositoryId, "/local/snapshot-repository/.git", firstRepositoryIdentityDigest, TEST_NOW);
+      const secondLocalRepositoryId = "local-repository:snapshot-test-second";
+      const secondRepositoryIdentityDigest = retainBytes(Buffer.from(canonicalJson({ schema_version: "1.0", canonical_local_repository_root: "/local/snapshot-repository-second", canonical_git_common_directory: "/local/snapshot-repository-second/.git" }), "utf8"));
+      global.database.query(
+        "INSERT INTO local_repository_identities(repository_id, canonical_git_common_directory, identity_evidence_sha256, first_observed_at) VALUES (?, ?, ?, ?)",
+      ).run(secondLocalRepositoryId, "/local/snapshot-repository-second/.git", secondRepositoryIdentityDigest, TEST_NOW);
       const insertObservation = global.database.query(
         `INSERT INTO agent_identity_observations(observation_id, identity_lease_id, phase, requested_agent_tuple_id, execution_route_id, observed_model_id, observed_harness_id, observed_reasoning_level, evidence_kind, evidence_sha256, observer_actor_id, control_surface_token, harness_session_token, process_instance_token, intended_surface_label, worker_self_report, observed_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
+      const targetJson = canonicalJson({ kind: "headless", adapter_id: "fixture", request_or_session_id: "session", tool_target_root: "/local/snapshot-repository", command_cwd: "/local/snapshot-repository" });
+      const targetEvidence = (phase: string) => retainBytes(Buffer.from(canonicalJson({ schema_version: "1.0", phase, canonical_git_top_level: "/local/snapshot-repository", canonical_git_common_directory: "/local/snapshot-repository/.git" }), "utf8"));
+      const insertTarget = global.database.query("INSERT INTO agent_identity_observation_targets(observation_id, target_kind, target_sha256, canonical_target_json, recorded_at, local_target_binding, target_git_evidence_sha256, canonical_tool_target_root, canonical_command_cwd, canonical_git_top_level, canonical_git_common_directory) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
       insertObservation.run("ob-dispatch", "lease-qualified", "pre_dispatch", "agent-tuple-1", "route-1", "model-1", "harness-1", "high", "external_visual_readback", dispatchDigest, "dispatch-observer", null, "session", "process", null, null, "2026-08-26T11:00:00.000Z");
       insertObservation.run("ob-evaluation", "lease-qualified", "pre_evaluation", "agent-tuple-1", "route-1", "model-1", "harness-1", "high", "external_visual_readback", evaluationDigest, "evaluation-observer", null, "session", "process", null, null, "2026-08-26T11:01:00.000Z");
+      insertTarget.run("ob-dispatch", "headless", sha256Bytes(targetJson), targetJson, "2026-08-26T11:00:00.000Z", "bound_authorized_checkout", targetEvidence("pre_dispatch"), "/local/snapshot-repository", "/local/snapshot-repository", "/local/snapshot-repository", "/local/snapshot-repository/.git");
+      insertTarget.run("ob-evaluation", "headless", sha256Bytes(targetJson), targetJson, "2026-08-26T11:01:00.000Z", "bound_authorized_checkout", targetEvidence("pre_evaluation"), "/local/snapshot-repository", "/local/snapshot-repository", "/local/snapshot-repository", "/local/snapshot-repository/.git");
       const insertLeaseEvent = global.database.query("INSERT INTO agent_identity_lease_events(event_id, identity_lease_id, requested_agent_tuple_id, execution_route_id, observation_id, event_kind, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
       insertLeaseEvent.run("lease-issued", "lease-qualified", "agent-tuple-1", "route-1", null, "issued", null, "2026-08-26T10:59:00.000Z");
       insertLeaseEvent.run("lease-dispatch", "lease-qualified", "agent-tuple-1", "route-1", "ob-dispatch", "pre_dispatch_bound", null, "2026-08-26T11:00:00.000Z");
       insertLeaseEvent.run("lease-evaluation", "lease-qualified", "agent-tuple-1", "route-1", "ob-evaluation", "pre_evaluation_bound", null, "2026-08-26T11:01:00.000Z");
       global.database.query(
-        `INSERT INTO agent_run_events(run_event_id, source_run_token, repository_cohort_token, agent_tuple_id, execution_route_id, identity_lease_id, capability_id, qualification_at_dispatch, post_clearance_run_ordinal, evaluation_required, evaluation_reason, operational_telemetry_json, occurred_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run("agent-run-1", "source-run-1", "cohort-1", "agent-tuple-1", "route-1", "lease-qualified", "independent_qa_holdout", "EVALUATING", null, 1, "pre_clearance_every_run", "{}", "2026-08-26T11:00:00.000Z");
-      global.database.query(
-        `INSERT INTO trials(trial_id, run_event_id, agent_tuple_id, capability_id, repository_cohort_token, verified_success, independent_evaluation, no_harm_violation, authority_violation, identity_disposition, contributes_quality_credit, evaluation_json, evidence_sha256, completed_at, worker_actor_id, author_actor_id)
+        `INSERT INTO agent_run_events(run_event_id, source_run_token, repository_cohort_token, agent_tuple_id, execution_route_id, identity_lease_id, capability_id, qualification_at_dispatch, post_clearance_run_ordinal, evaluation_required, evaluation_reason, operational_telemetry_json, occurred_at, repository_id, repository_identity_evidence_sha256, identity_receipt_trusted)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run("trial-1", "agent-run-1", "agent-tuple-1", "independent_qa_holdout", "cohort-1", 1, 1, 0, 0, "BOUND_FOR_EVALUATION", 1, "{}", trialDigest, "2026-08-26T11:02:00.000Z", "worker", "author");
+      ).run("agent-run-1", "source-run-1", "cohort-1", "agent-tuple-1", "route-1", "lease-qualified", "independent_qa_holdout", "EVALUATING", null, 1, "pre_clearance_every_run", "{}", "2026-08-26T11:00:00.000Z", localRepositoryId, firstRepositoryIdentityDigest, 1);
+      const insertReceiptVerification = global.database.query(
+        "INSERT INTO evaluation_identity_receipt_verifications(run_event_id, phase, receipt_sha256, observer_actor_id, verified_at, identity_assurance) VALUES (?, ?, ?, ?, ?, ?)",
+      );
+      for (const [phase, verified] of [["pre_dispatch", firstCustody[0]!], ["pre_evaluation", firstCustody[1]!] as const] as const) {
+        insertReceiptVerification.run("agent-run-1", phase, verified.receipt_sha256, verified.observer_actor_id, TEST_NOW, verified.identity_assurance);
+      }
+      global.database.query("INSERT INTO evaluation_dispatch_subjects(run_event_id, dispatch_scope_evidence_sha256, subject_repository_object_sha256, recorded_at) VALUES (?, ?, ?, ?)").run("agent-run-1", dispatchDigest, "a".repeat(64), TEST_NOW);
+      global.database.query("INSERT INTO evaluation_evaluated_candidates(run_event_id, transition_scope_evidence_sha256, evaluated_repository_object_sha256, recorded_at) VALUES (?, ?, ?, ?)").run("agent-run-1", evaluationDigest, "b".repeat(64), TEST_NOW);
+      global.database.query(
+        `INSERT INTO trials(trial_id, run_event_id, agent_tuple_id, capability_id, repository_cohort_token, verified_success, independent_evaluation, no_harm_violation, authority_violation, identity_disposition, contributes_quality_credit, evaluation_json, evidence_sha256, completed_at, worker_actor_id, author_actor_id, repository_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run("trial-1", "agent-run-1", "agent-tuple-1", "independent_qa_holdout", "cohort-1", 1, 1, 0, 0, "BOUND_FOR_EVALUATION", 1, "{}", trialDigest, "2026-08-26T11:01:00.000Z", "worker", "author", localRepositoryId);
       const insertEvaluator = global.database.query(
         "INSERT INTO capability_evaluators(evaluator_id, capability_id, question, evaluator_version, active, evaluation_dimension, independent_evaluator) VALUES (?, ?, ?, ?, ?, ?, ?)",
       );
@@ -171,6 +245,73 @@ describe("SQLite live snapshot producer", () => {
         insertEvaluator.run(id, "independent_qa_holdout", `${dimension} question`, "1", 1, dimension, independent);
         insertEvaluation.run("trial-1", id, 1, retain(id), "independent-evaluator");
       }
+      // Synthetic test-only evidence: 25 independently verified trials across
+      // two operator-attested logical projects. This is not production telemetry.
+      const insertRunEvent = global.database.query(
+        `INSERT INTO agent_run_events(run_event_id, source_run_token, repository_cohort_token, agent_tuple_id, execution_route_id, identity_lease_id, capability_id, qualification_at_dispatch, post_clearance_run_ordinal, evaluation_required, evaluation_reason, operational_telemetry_json, occurred_at, repository_id, repository_identity_evidence_sha256, identity_receipt_trusted)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      const insertTrial = global.database.query(
+        `INSERT INTO trials(trial_id, run_event_id, agent_tuple_id, capability_id, repository_cohort_token, verified_success, independent_evaluation, no_harm_violation, authority_violation, identity_disposition, contributes_quality_credit, evaluation_json, evidence_sha256, completed_at, worker_actor_id, author_actor_id, repository_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const index of Array.from({ length: 24 }, (_, offset) => offset + 2)) {
+        const repositoryId = index % 2 === 0 ? localRepositoryId : secondLocalRepositoryId;
+        const repositoryRoot = index % 2 === 0 ? "/local/snapshot-repository" : "/local/snapshot-repository-second";
+        const repositoryCommonDirectory = `${repositoryRoot}/.git`;
+        const repositoryIdentityDigest = index % 2 === 0 ? firstRepositoryIdentityDigest : secondRepositoryIdentityDigest;
+        const leaseId = `lease-qualified-${index}`;
+        const minute = String(index).padStart(2, "0");
+        const fixtureLease = {
+          identity_lease_id: leaseId,
+          requested_tuple: { agent_tuple_id: "agent-tuple-1", model_id: "model-1", harness_id: "harness-1", reasoning_level: "high" },
+          execution_route_id: "route-1",
+          pre_dispatch: { observation_id: `ob-dispatch-${index}`, phase: "pre_dispatch", requested_agent_tuple_id: "agent-tuple-1", observed_model_id: "model-1", observed_harness_id: "harness-1", observed_reasoning_level: "high", execution_route_id: "route-1", control_surface_id: null, harness_session_token: `session-${index}`, process_instance_token: `process-${index}`, evidence_kind: "external_visual_readback", evidence: [] as { path: string; sha256: string }[], observer_actor_id: `dispatch-observer-${index}`, intended_surface_label: null, worker_self_report: null, observed_at: `2026-08-26T11:${minute}:00.000Z` },
+          pre_evaluation: { observation_id: `ob-evaluation-${index}`, phase: "pre_evaluation", requested_agent_tuple_id: "agent-tuple-1", observed_model_id: "model-1", observed_harness_id: "harness-1", observed_reasoning_level: "high", execution_route_id: "route-1", control_surface_id: null, harness_session_token: `session-${index}`, process_instance_token: `process-${index}`, evidence_kind: "external_visual_readback", evidence: [] as { path: string; sha256: string }[], observer_actor_id: `evaluation-observer-${index}`, intended_surface_label: null, worker_self_report: null, observed_at: `2026-08-26T12:${minute}:00.000Z` },
+          invalidations: [],
+        };
+        const custody = verifiedFixtureCustody(`agent-run-${index}`, fixtureLease, retainBytes);
+        const dispatchEvidence = custody[0]!.receipt_sha256;
+        const evaluationEvidence = custody[1]!.receipt_sha256;
+        const trialEvidence = retain(`trial-${index}`);
+        insertObservation.run(`ob-dispatch-${index}`, leaseId, "pre_dispatch", "agent-tuple-1", "route-1", "model-1", "harness-1", "high", "external_visual_readback", dispatchEvidence, `dispatch-observer-${index}`, null, `session-${index}`, `process-${index}`, null, null, `2026-08-26T11:${minute}:00.000Z`);
+        insertObservation.run(`ob-evaluation-${index}`, leaseId, "pre_evaluation", "agent-tuple-1", "route-1", "model-1", "harness-1", "high", "external_visual_readback", evaluationEvidence, `evaluation-observer-${index}`, null, `session-${index}`, `process-${index}`, null, null, `2026-08-26T12:${minute}:00.000Z`);
+        const loopTarget = canonicalJson({ kind: "headless", adapter_id: "fixture", request_or_session_id: `session-${index}`, tool_target_root: repositoryRoot, command_cwd: repositoryRoot });
+        const loopTargetEvidence = (phase: string) => retainBytes(Buffer.from(canonicalJson({ schema_version: "1.0", phase, run_event_id: `agent-run-${index}`, canonical_git_top_level: repositoryRoot, canonical_git_common_directory: repositoryCommonDirectory }), "utf8"));
+        insertTarget.run(`ob-dispatch-${index}`, "headless", sha256Bytes(loopTarget), loopTarget, `2026-08-26T11:${minute}:00.000Z`, "bound_authorized_checkout", loopTargetEvidence("pre_dispatch"), repositoryRoot, repositoryRoot, repositoryRoot, repositoryCommonDirectory);
+        insertTarget.run(`ob-evaluation-${index}`, "headless", sha256Bytes(loopTarget), loopTarget, `2026-08-26T12:${minute}:00.000Z`, "bound_authorized_checkout", loopTargetEvidence("pre_evaluation"), repositoryRoot, repositoryRoot, repositoryRoot, repositoryCommonDirectory);
+        insertLeaseEvent.run(`lease-issued-${index}`, leaseId, "agent-tuple-1", "route-1", null, "issued", null, "2026-08-26T10:59:00.000Z");
+        insertLeaseEvent.run(`lease-dispatch-${index}`, leaseId, "agent-tuple-1", "route-1", `ob-dispatch-${index}`, "pre_dispatch_bound", null, "2026-08-26T11:00:00.000Z");
+        insertLeaseEvent.run(`lease-evaluation-${index}`, leaseId, "agent-tuple-1", "route-1", `ob-evaluation-${index}`, "pre_evaluation_bound", null, "2026-08-26T11:01:00.000Z");
+        insertRunEvent.run(`agent-run-${index}`, `source-run-${index}`, "untrusted-cohort", "agent-tuple-1", "route-1", leaseId, "independent_qa_holdout", "EVALUATING", null, 1, "pre_clearance_every_run", "{}", `2026-08-26T11:${minute}:00.000Z`, repositoryId, repositoryIdentityDigest, 1);
+        for (const [phase, verified] of [["pre_dispatch", custody[0]!], ["pre_evaluation", custody[1]!] as const] as const) {
+          insertReceiptVerification.run(`agent-run-${index}`, phase, verified.receipt_sha256, verified.observer_actor_id, TEST_NOW, verified.identity_assurance);
+        }
+        global.database.query("INSERT INTO evaluation_dispatch_subjects(run_event_id, dispatch_scope_evidence_sha256, subject_repository_object_sha256, recorded_at) VALUES (?, ?, ?, ?)").run(`agent-run-${index}`, dispatchEvidence, "a".repeat(64), TEST_NOW);
+        global.database.query("INSERT INTO evaluation_evaluated_candidates(run_event_id, transition_scope_evidence_sha256, evaluated_repository_object_sha256, recorded_at) VALUES (?, ?, ?, ?)").run(`agent-run-${index}`, evaluationEvidence, "b".repeat(64), TEST_NOW);
+        insertTrial.run(`trial-${index}`, `agent-run-${index}`, "agent-tuple-1", "independent_qa_holdout", "untrusted-cohort", 1, 1, 0, 0, "BOUND_FOR_EVALUATION", 1, "{}", trialEvidence, `2026-08-26T11:${minute}:30.000Z`, `worker-${index}`, `author-${index}`, repositoryId);
+        for (const [id] of [["eval-success"], ["eval-independent"], ["eval-no-harm"], ["eval-authority"]] as const) insertEvaluation.run(`trial-${index}`, id, 1, retain(`${id}-${index}`), `independent-evaluator-${index}`);
+      }
+      const registrationA = retain("registration-a"), registrationB = retain("registration-b"), aliasA = retain("alias-a"), aliasB = retain("alias-b");
+      global.database.query("INSERT INTO logical_projects(logical_project_id, operator_actor_id, registration_evidence_sha256, registered_at) VALUES (?, ?, ?, ?)").run("logical-project:snapshot-a", "trusted-operator", registrationA, TEST_NOW);
+      global.database.query("INSERT INTO logical_projects(logical_project_id, operator_actor_id, registration_evidence_sha256, registered_at) VALUES (?, ?, ?, ?)").run("logical-project:snapshot-b", "trusted-operator", registrationB, TEST_NOW);
+      global.database.query("INSERT INTO logical_project_repository_aliases(repository_id, logical_project_id, operator_actor_id, attestation_evidence_sha256, attested_at) VALUES (?, ?, ?, ?, ?)").run(localRepositoryId, "logical-project:snapshot-a", "trusted-operator", aliasA, TEST_NOW);
+      global.database.query("INSERT INTO logical_project_repository_aliases(repository_id, logical_project_id, operator_actor_id, attestation_evidence_sha256, attested_at) VALUES (?, ?, ?, ?, ?)").run(secondLocalRepositoryId, "logical-project:snapshot-b", "trusted-operator", aliasB, TEST_NOW);
+
+      const profileField = (value: unknown) => ({ value, provenance: { status: "reported", evidence: [], note: "snapshot projection fixture" } });
+      const profileWithoutFingerprint = {
+        schema_version: "1.0", profile_id: "profile-agent-tuple-1", revision: 1, captured_at: TEST_NOW, agent_tuple_id: "agent-tuple-1",
+        harness: { id: profileField("harness-1"), version: profileField("1") },
+        model: { id: profileField("model-1"), version: profileField("2026.08"), release_date: profileField("2026-08-01"), family: profileField("family") },
+        reasoning_level: profileField("high"), settings: [{ name: "temperature", value: profileField(0.2) }],
+        inference: { deployment_mode: profileField("cloud"), provider: profileField("fixture-provider"), gateway: profileField(null), server: profileField(null), server_version: profileField(null), endpoint_ref: profileField(null), secret_ref: profileField(null) },
+        capability_environment: { tools: profileField(["git"]), plugins: profileField([]), mcp_servers: profileField([]), skills: profileField(["mister-clean"]) },
+        context: { starting_context_tokens: profileField(128), context_window_tokens: profileField(200000) },
+        performance: { time_to_first_token_ms: profileField(null), tokens_per_second: profileField(null), input_tokens: profileField(null), output_tokens: profileField(null), cost_usd: profileField(null), reliability: profileField(null) },
+        a2a_agent_card_extension: { enabled: false, public_card_url: null, extension_uri: null }, evidence: [],
+      };
+      const profile = { ...profileWithoutFingerprint, fingerprint_sha256: sha256Bytes(canonicalJson(profileWithoutFingerprint)) };
+      global.database.query("INSERT INTO agent_execution_profiles(profile_id, revision, agent_tuple_id, profile_sha256, canonical_profile_json, captured_at) VALUES (?, ?, ?, ?, ?, ?)").run(profile.profile_id, profile.revision, profile.agent_tuple_id, profile.fingerprint_sha256, canonicalJson(profile), TEST_NOW);
 
       repositoryWriter = await openWriter(repositoryPath);
       globalWriter = await openWriter(globalPath);
@@ -187,10 +328,18 @@ describe("SQLite live snapshot producer", () => {
       expect(snapshot.agents).toHaveLength(1);
       const agent = snapshot.agents[0]!;
       expect(agent.model).toBe("Model after retry");
+      expect(agent.execution_profile).toMatchObject({ profile_id: "profile-agent-tuple-1", revision: 1, model: { version: { value: "2026.08" } }, context: { context_window_tokens: { value: 200000 } } });
       expect(agent.execution_identity.disposition).toBe("IDENTITY_UNBOUND");
       const score = agent.capability_scores.find((value) => value.capability_id === "independent_qa_holdout")!;
-      expect(score.verified_trials).toBe(1);
+      expect(score.verified_trials).toBe(25);
+      expect(score.qualification).toBe("Qualified");
       expect(score.qualification_provenance.explicitly_disqualified).toBe(false);
+      expect(snapshot.issues[0]!.recommended_tuple).toBe("agent-tuple-1");
+      expect(snapshot.issues[0]!.runner_recommendation).toMatchObject({
+        required_capabilities: ["independent_qa_holdout"],
+        provenance: { manifest_assignment_agent_tuple_id: "agent-tuple-1", routing_evidence: [{ path: "routing.json", sha256: testSha("e") }] },
+        runner_card: { agent_tuple_id: "agent-tuple-1", model: "Model after retry", harness: "Harness", reasoning_level: "high", profile_id: profile.profile_id, profile_revision: profile.revision, profile_fingerprint_sha256: profile.fingerprint_sha256, category_scores: [{ capability_id: "independent_qa_holdout" }] },
+      });
 
       const appRoot = join(directory, "app");
       await mkdir(appRoot);

@@ -38,6 +38,7 @@ function observation(phase: AgentIdentityObservation["phase"]): AgentIdentityObs
     observed_reasoning_level: tuple.reasoning_level,
     execution_route_id: route,
     control_surface_id: "surface-1" as ControlSurfaceId,
+    control_target: { kind: "desktop", application_id: "codex", thread_id: "thread-1", turn_id: phase === "pre_dispatch" ? "turn-1" : "turn-2", session_id: "session-1", settings_record_sha256: "c".repeat(64), tool_target_root: null, command_cwd: null },
     harness_session_token: "session-1",
     process_instance_token: "process-1",
     evidence_kind: "external_visual_readback",
@@ -65,12 +66,12 @@ describe("external agent identity lease", () => {
   it("requires an external readback before dispatch and a second readback before quality credit", () => {
     expect(evaluateAgentIdentityLease(lease({ pre_evaluation: null }), "dispatch")).toMatchObject({
       disposition: "BOUND_FOR_DISPATCH",
-      dispatch_allowed: true,
+      dispatch_allowed: false,
       contributes_quality_credit: false,
     });
     expect(evaluateAgentIdentityLease(lease(), "evaluation")).toMatchObject({
       disposition: "BOUND_FOR_EVALUATION",
-      dispatch_allowed: true,
+      dispatch_allowed: false,
       contributes_quality_credit: true,
     });
   });
@@ -125,5 +126,38 @@ describe("external agent identity lease", () => {
       pre_evaluation: { ...observation("pre_evaluation"), harness_session_token: "", process_instance_token: "" },
     }), "evaluation");
     expect(result).toMatchObject({ disposition: "IDENTITY_UNBOUND", contributes_quality_credit: false });
+  });
+
+  it("allows a sequential desktop turn but rejects a cross-thread target", () => {
+    expect(evaluateAgentIdentityLease(lease(), "evaluation").disposition).toBe("BOUND_FOR_EVALUATION");
+    const crossThread = { ...observation("pre_evaluation"), control_target: { ...observation("pre_evaluation").control_target, thread_id: "thread-other" } };
+    expect(evaluateAgentIdentityLease(lease({ pre_evaluation: crossThread }), "evaluation")).toMatchObject({ disposition: "IDENTITY_UNBOUND", contributes_quality_credit: false });
+  });
+
+  it("rejects a sequential desktop turn when its applicable settings record changes", () => {
+    const changedSettings = {
+      ...observation("pre_evaluation"),
+      control_target: {
+        ...observation("pre_evaluation").control_target,
+        settings_record_sha256: "d".repeat(64),
+      },
+    };
+    expect(evaluateAgentIdentityLease(lease({ pre_evaluation: changedSettings }), "evaluation")).toMatchObject({
+      disposition: "IDENTITY_UNBOUND",
+      contributes_quality_credit: false,
+    });
+  });
+
+  it("rejects a same short cmux surface reference in a different window", () => {
+    const cmux = { kind: "cmux" as const, host_socket_namespace: "cmux://host/socket", workspace_id: "workspace-1", window_id: "window-1", surface_id: "surface-1", tool_target_root: "/tmp/repo", command_cwd: "/tmp/repo" };
+    const dispatch = { ...observation("pre_dispatch"), control_target: cmux };
+    const evaluation = { ...observation("pre_evaluation"), control_target: { ...cmux, window_id: "window-other" } };
+    expect(evaluateAgentIdentityLease(lease({ pre_dispatch: dispatch, pre_evaluation: evaluation }), "evaluation")).toMatchObject({ disposition: "IDENTITY_UNBOUND", contributes_quality_credit: false });
+  });
+
+  it("permits an API/headless receipt without inventing a local provider process", () => {
+    const dispatch = { ...observation("pre_dispatch"), control_target: { kind: "headless" as const, adapter_id: "api", request_or_session_id: "request-1", tool_target_root: null, command_cwd: null }, process_instance_token: null };
+    const evaluation = { ...observation("pre_evaluation"), control_target: { kind: "headless" as const, adapter_id: "api", request_or_session_id: "request-1", tool_target_root: null, command_cwd: null }, process_instance_token: null };
+    expect(evaluateAgentIdentityLease(lease({ pre_dispatch: dispatch, pre_evaluation: evaluation }), "evaluation")).toMatchObject({ disposition: "BOUND_FOR_EVALUATION", contributes_quality_credit: true });
   });
 });

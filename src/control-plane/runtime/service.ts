@@ -32,6 +32,7 @@ import {
   type EvidenceInput,
   type IssueView,
   type ManifestView,
+  type PendingEvaluationInvocationsView,
   type RunView,
   parseControlPlaneRequest,
   requestIdFromUnknown,
@@ -40,6 +41,7 @@ import {
   sealDirectiveAppend,
   type AuthorizedDirectiveAppendRequest,
 } from "./transition-seal.js";
+import { denyEvaluationIntake, type EvaluationIntakePort } from "./evaluation-intake.js";
 
 export interface DirectiveAppendResult {
   readonly sequence: number;
@@ -53,6 +55,7 @@ export interface RepositoryControlPlaneStore {
   getManifestHead(manifestId: ManifestId): Promise<ManifestRevision | null>;
   listIssues(runId: RunId, limit: number): Promise<readonly IssueView[]>;
   listAgents(capabilityId: string | null, limit: number): Promise<readonly AgentView[]>;
+  listPendingEvaluationInvocations(limit: number): Promise<PendingEvaluationInvocationsView>;
   listDirectiveEvents(directiveId: DirectiveId): Promise<readonly DirectiveEventView[]>;
   getReceipt(receiptId: ReceiptId): Promise<RuntimeBoundReceipt | null>;
   getClosingRepositoryObject(runId: RunId): Promise<ClosingRepositoryObject | null>;
@@ -93,6 +96,7 @@ export interface ControlPlaneServiceOptions {
   readonly route_admission?: RouteAdmissionPort;
   readonly evidence_verifier?: AuthorityEvidenceVerifier;
   readonly clock?: () => IsoTimestamp;
+  readonly evaluation_intake?: EvaluationIntakePort;
 }
 
 export interface ClosingRepositoryObject {
@@ -251,12 +255,14 @@ export class ControlPlaneService {
   readonly #routeAdmission: RouteAdmissionPort;
   readonly #evidenceVerifier: AuthorityEvidenceVerifier;
   readonly #clock: () => IsoTimestamp;
+  readonly #evaluationIntake: EvaluationIntakePort;
 
   constructor(options: ControlPlaneServiceOptions) {
     this.#store = options.store;
     this.#routeAdmission = options.route_admission ?? denyRouteAdmission;
     this.#evidenceVerifier = options.evidence_verifier ?? denyAuthorityEvidence;
     this.#clock = options.clock ?? defaultClock;
+    this.#evaluationIntake = options.evaluation_intake ?? denyEvaluationIntake;
   }
 
   /** Parse an untrusted local payload and return a non-throwing RPC response. */
@@ -324,11 +330,22 @@ export class ControlPlaneService {
         this.#assertNotAborted(signal);
         return agents;
       }
+      case "evaluation.invocations.pending.list": {
+        const pending = await this.#store.listPendingEvaluationInvocations(request.input.limit);
+        this.#assertNotAborted(signal);
+        return pending;
+      }
       case "directive.events": {
         const events = await this.#store.listDirectiveEvents(request.input.directive_id);
         this.#assertNotAborted(signal);
         return events;
       }
+      case "evaluation.project.register":
+        return this.#evaluationIntake.register(request.input);
+      case "evaluation.run.start":
+        return this.#evaluationIntake.start(request.input);
+      case "evaluation.run.outcome":
+        return this.#evaluationIntake.outcome(request.input);
       case "directive.transition":
         return this.#transitionDirective(request, signal);
     }

@@ -20,6 +20,7 @@ const zeroSnapshot = parseCanonicalLiveSnapshot({
   ...demoSnapshot,
   source: "live",
   source_label: "VALID EMPTY LIVE SNAPSHOT",
+  current_observation: { kind: "FULL_MISTER_CLEAN_RUN", evidence_binding: { kind: "REPOSITORY_OBJECT", sha256: demoSnapshot.current_subject.repository_object_sha256 }, current_debt_flow: "MEASURED", remediation_no_harm: "MEASURED", live_topology: "MEASURED", current_complexity: "UNKNOWN" },
   current_flow: zeroFlow,
   previous_flow: null,
   first_flow: null,
@@ -69,6 +70,21 @@ const zeroSnapshot = parseCanonicalLiveSnapshot({
   evidence_freshness: "UNKNOWN",
 });
 
+const partialSnapshot = parseCanonicalLiveSnapshot({
+  ...demoSnapshot,
+  source: "live",
+  source_label: "PARTIAL OBSERVATION — NOT A FRESH MISTER CLEAN RUN",
+  current_subject: { ...demoSnapshot.current_subject, repository_object_sha256: null },
+  current_observation: { kind: "PARTIAL", evidence_binding: { kind: "OBSERVATION_RECEIPT", sha256: "a".repeat(64) }, current_debt_flow: "UNKNOWN", remediation_no_harm: "UNKNOWN", live_topology: "UNKNOWN", current_complexity: "UNKNOWN" },
+  issues: demoSnapshot.issues.map((issue) => ({ ...issue, state: issue.issue_id === "MC-101" ? "paid" as const : issue.state, runner_recommendation: { ...issue.runner_recommendation, runner_card: null } })),
+  agents: demoSnapshot.agents.map((agent) => ({ ...agent, available: false, availability: "unknown" as const, active_in_repository: false, role: `HISTORICAL INVENTORY ONLY — ${agent.role}` })),
+  runs: demoSnapshot.runs.map((run) => run.run_id === demoSnapshot.current_run_id ? { ...run, subject: { ...run.subject, repository_object_sha256: null }, real_issue_ids: [], known_now_issue_ids: [], false_positive_issue_ids: [] } : run),
+  complexity: { ...demoSnapshot.complexity, availability: "UNKNOWN", object_sha256: null },
+  manifest: null,
+  terminal_contract: { declared_verdict: null, subject: null, contract: null, evidence: [] },
+  evidence_freshness: "Partial receipt only; no current census.",
+}, { allow_demo: true });
+
 const views = [
   ["Progress / Command", "Are we moving closer?", "UNKNOWN"],
   ["Issues / Remediation", "Remediation workbench", "No issue roots are recorded"],
@@ -100,5 +116,21 @@ describe("valid zero-data control-plane snapshot", () => {
     expect(body).toContain("<strong>UNKNOWN</strong><span>Tracked object bytes</span>");
     expect(body).toContain("Ignored-live classes · UNKNOWN");
     expect(body).toContain("Longitudinal complexity is NOT MEASURED");
+  });
+
+  it("renders a partial receipt observation without green no-harm, live-zero topology, or debt bars", () => {
+    const { body } = render(App, { props: { initialSnapshot: partialSnapshot, initialView: "Progress / Command" } });
+    expect(body).toContain("Partial current observation");
+    expect(body).toContain("No-harm: NOT ESTABLISHED");
+    expect(body).toContain("NOT OBSERVED");
+    expect(body).toContain("Debt-flow magnitudes are withheld");
+    expect(body).not.toContain("debt-track");
+    expect(body).not.toContain("No-harm: holding");
+  });
+
+  it("labels receipt evidence and retains historical roster records without a live claim", () => {
+    const { body } = render(App, { props: { initialSnapshot: partialSnapshot, initialView: "System / Method" } });
+    expect(body).toContain("Observation receipt digest — not repository object hash");
+    expect(body).toContain("Historical inventory retained; current availability and identity NOT REVERIFIED");
   });
 });

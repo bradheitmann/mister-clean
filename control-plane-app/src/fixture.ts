@@ -5,6 +5,7 @@ import type { ControlPlaneSnapshot, SnapshotAgent, SnapshotIssue } from "./read-
 const sha = (_value: string): Sha256 => "d".repeat(64) as Sha256;
 const evidence = (path: string): EvidenceRef => ({ path, sha256: sha("demo") });
 const ledgerDigest = (index: number): Sha256 => index.toString(16).padStart(64, "0") as Sha256;
+const profileField = <Value>(value: Value) => ({ value, provenance: { status: "reported" as const, evidence: [], note: "Demonstration profile; not active execution proof." } });
 
 function capabilityScores(base: number, overrides: Partial<Record<CapabilityId, number>> = {}, qualification: SnapshotAgent["capability_scores"][number]["qualification"] = "Recommended_supervised"): SnapshotAgent["capability_scores"] {
   const verifiedTrials = qualification === "UNTESTED" ? 0 : qualification === "EVALUATING" ? 1 : qualification === "Qualified" ? 28 : qualification === "Production_cleared" ? 50 : 12;
@@ -60,15 +61,22 @@ const flow = {
   boundary_blocked: 1,
 };
 
-const issue = (value: Omit<SnapshotIssue, "evidence" | "confidence" | "observation_ids" | "first_detected_run_id">): SnapshotIssue => ({
+const issue = (value: Omit<SnapshotIssue, "evidence" | "confidence" | "observation_ids" | "first_detected_run_id" | "runner_recommendation">): SnapshotIssue => ({
   ...value,
   confidence: 0.92,
   observation_ids: [`${value.issue_id}-observation`],
   first_detected_run_id: "MC-RUN-0039",
   evidence: [evidence(`evidence/${value.issue_id}.json`)],
+  runner_recommendation: {
+    required_capabilities: [CAPABILITY_DEFINITIONS[0]!.id],
+    selection_weights: [{ capability_id: CAPABILITY_DEFINITIONS[0]!.id, weight: 1 }],
+    minimum_qualification: "Recommended_supervised",
+    runner_card: null,
+    provenance: { manifest_assignment_agent_tuple_id: value.recommended_tuple, routing_evidence: [] },
+  },
 });
 
-const issues: readonly SnapshotIssue[] = [
+const issuesWithoutRunner: readonly SnapshotIssue[] = [
   issue({ issue_id: "MC-101", stable_cause_key: "complexity.full-object", title: "Measure complexity on the full repository object", description: "Bind complexity and documentation balance to the tracked plus nonignored repository object.", debt_domain: "complexity", technical_or_agentic: "technical", state: "open", origin: "baseline", severity: 5, remediation_difficulty: 4, affected_invariants: ["exact repository object", "no unexplained complexity regression"], affected_paths: ["src/", "control-plane-app/"], acceptance_boundary: ["same object digest", "p50/p95/max and cycle report bound"], prerequisite_issue_ids: [], dependent_issue_ids: ["MC-102"], unlock_value: 8, regression_risk: 4, coordination_claims: [{ key: "detectors/complexity", access: "write", operation_class: "measure-complexity", commutes_with: [], commutativity_ref: null }], blocked_reasons: [], owner: "architecture lane", worktree: null, recommended_tuple: "GPT-5.6 Sol · Codex Desktop · high", rationale: "Architecture and detector-boundary work." }),
   issue({ issue_id: "MC-102", stable_cause_key: "planning.current-state", title: "Make successor state a canonical, current surface", description: "Publish one current-state entrypoint that an unfamiliar successor can navigate.", debt_domain: "planning", technical_or_agentic: "agentic_operational", state: "open", origin: "baseline", severity: 5, remediation_difficulty: 3, affected_invariants: ["successor readiness", "one current-state surface"], affected_paths: ["CURRENT.md", "references/"], acceptance_boundary: ["blind successor probe passes", "digest-bound current-state evidence"], prerequisite_issue_ids: ["MC-101"], dependent_issue_ids: [], unlock_value: 6, regression_risk: 3, coordination_claims: [{ key: "planning/current-state", access: "write", operation_class: "update-current-state", commutes_with: [], commutativity_ref: null }], blocked_reasons: [], owner: "planning lane", worktree: null, recommended_tuple: "GLM-5.3 · Pi · high", rationale: "Exact-format and projection reconciliation evidence." }),
   issue({ issue_id: "MC-103", stable_cause_key: "release.published-runtime", title: "Separate published runtime from source-only scripts", description: "Prove the package surface and fresh-install runtime independently from source development.", debt_domain: "release", technical_or_agentic: "technical", state: "verification_pending", origin: "baseline", severity: 4, remediation_difficulty: 3, affected_invariants: ["package/runtime parity"], affected_paths: ["package.json", "bin/", "dist/"], acceptance_boundary: ["isolated package smoke test", "runtime identity receipt"], prerequisite_issue_ids: [], dependent_issue_ids: [], unlock_value: 4, regression_risk: 4, coordination_claims: [{ key: "package/release", access: "write", operation_class: "package-verify", commutes_with: [], commutativity_ref: null }], blocked_reasons: [], owner: "release lane", worktree: null, recommended_tuple: "GPT-5.6 Terra · Codex CLI · medium", rationale: "Release-surface and fresh-install verification." }),
@@ -76,12 +84,42 @@ const issues: readonly SnapshotIssue[] = [
   issue({ issue_id: "MC-105", stable_cause_key: "contracts.unowned-suppression", title: "Replace the unowned TypeScript suppression", description: "Remove the suppression or bind a documented, tested exception owner.", debt_domain: "code hygiene", technical_or_agentic: "technical", state: "open", origin: "baseline", severity: 3, remediation_difficulty: 1, affected_invariants: ["typed contracts", "successor clarity"], affected_paths: ["src/control-plane/contracts/"], acceptance_boundary: ["type gate passes", "owner/evidence recorded"], prerequisite_issue_ids: [], dependent_issue_ids: [], unlock_value: 1, regression_risk: 2, coordination_claims: [{ key: "src/contracts", access: "write", operation_class: "contract-cleanup", commutes_with: [], commutativity_ref: null }], blocked_reasons: [], owner: "contracts lane", worktree: null, recommended_tuple: "GPT-5.6 Luna · Droid · medium", rationale: "Narrow code-hygiene repair with focused holdout." }),
 ];
 
-const agents: readonly SnapshotAgent[] = [
-  { agent_tuple_id: "tuple-sol-codex-high", model: "GPT-5.6 Sol", family: "GPT-5", harness: "Codex Desktop", reasoning_level: "high", deployment: "openai-dev", inference_source: "OpenAI developer plan", route: "route-sol-codex", invocation_adapter: "codex-desktop", headless: false, available: true, availability: "available", active_in_repository: true, role: "architecture owner", control_surface: "cmux:control-plane", familiarity_runs: 12, capability_scores: capabilityScores(0.78, { architecture_coherence_complexity_reduction: 0.96, root_cause_analysis: 0.94 }), champion_for: ["Architecture and coherence", "Root-cause analysis"], evidence: [evidence("trials/sol.json")], execution_identity: { intended_surface_label: "Codex Desktop control-plane lane", disposition: "IDENTITY_UNBOUND", last_external_verification_at: null, evidence: [] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
-  { agent_tuple_id: "tuple-terra-codex-medium", model: "GPT-5.6 Terra", family: "GPT-5", harness: "Codex CLI", reasoning_level: "medium", deployment: "openai-dev", inference_source: "OpenAI developer plan", route: "route-terra-codex", invocation_adapter: "codex-cli", headless: true, available: false, availability: "busy", active_in_repository: false, role: "release verifier", control_surface: null, familiarity_runs: 4, capability_scores: capabilityScores(0.8, { independent_qa_holdout: 0.94, ci_cd_release_deployment_remediation: 0.93 }, "Qualified"), champion_for: ["Release verification", "Git integration"], evidence: [evidence("trials/terra.json")], execution_identity: { intended_surface_label: "Codex CLI release route", disposition: "MISMATCH", last_external_verification_at: "2026-08-25T10:30:00.000Z", evidence: [evidence("identity/terra-mismatch.json")] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
-  { agent_tuple_id: "tuple-glm-pi-high", model: "GLM-5.3", family: "GLM", harness: "Pi", reasoning_level: "high", deployment: "glm-zai", inference_source: "z.ai API", route: "route-glm-pi", invocation_adapter: "pi", headless: true, available: true, availability: "available", active_in_repository: true, role: "planning reconciler", control_surface: "cmux:planning", familiarity_runs: 15, capability_scores: capabilityScores(0.77, { planning_projection_reconciliation: 0.95, canonical_conformance_exact_format: 0.94 }), champion_for: ["Canonical conformance", "Planning reconciliation"], evidence: [evidence("trials/glm.json")], execution_identity: { intended_surface_label: "Pi planning lane", disposition: "BOUND_FOR_DISPATCH", last_external_verification_at: "2026-08-26T10:30:00.000Z", evidence: [evidence("identity/glm.json")] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
-  { agent_tuple_id: "tuple-luna-droid-medium", model: "GPT-5.6 Luna", family: "GPT-5", harness: "Droid", reasoning_level: "medium", deployment: "openai-dev", inference_source: "OpenAI developer plan", route: "route-luna-droid", invocation_adapter: "droid", headless: null, available: false, availability: "paused", active_in_repository: false, role: "UNTESTED", control_surface: null, familiarity_runs: 0, capability_scores: capabilityScores(0.55, {}, "UNTESTED"), champion_for: [], evidence: [], execution_identity: { intended_surface_label: "Droid route", disposition: "UNTESTED", last_external_verification_at: null, evidence: [] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
+const agentsWithoutProfiles: readonly SnapshotAgent[] = [
+  { agent_tuple_id: "tuple-sol-codex-high", model: "GPT-5.6 Sol", family: "GPT-5", harness: "Codex Desktop", reasoning_level: "high", deployment: "openai-dev", inference_source: "OpenAI developer plan", route: "route-sol-codex", invocation_adapter: "codex-desktop", headless: false, available: true, availability: "available", active_in_repository: true, role: "architecture owner", control_surface: "cmux:control-plane", familiarity_runs: 12, capability_scores: capabilityScores(0.78, { architecture_coherence_complexity_reduction: 0.96, root_cause_analysis: 0.94 }), champion_for: ["Architecture and coherence", "Root-cause analysis"], evidence: [evidence("trials/sol.json")], execution_profile: null, execution_identity: { intended_surface_label: "Codex Desktop control-plane lane", disposition: "IDENTITY_UNBOUND", assurance: null, automatic_routing_eligible: false, last_external_verification_at: null, evidence: [] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
+  { agent_tuple_id: "tuple-terra-codex-medium", model: "GPT-5.6 Terra", family: "GPT-5", harness: "Codex CLI", reasoning_level: "medium", deployment: "openai-dev", inference_source: "OpenAI developer plan", route: "route-terra-codex", invocation_adapter: "codex-cli", headless: true, available: false, availability: "busy", active_in_repository: false, role: "release verifier", control_surface: null, familiarity_runs: 4, capability_scores: capabilityScores(0.8, { independent_qa_holdout: 0.94, ci_cd_release_deployment_remediation: 0.93 }, "Qualified"), champion_for: ["Release verification", "Git integration"], evidence: [evidence("trials/terra.json")], execution_profile: null, execution_identity: { intended_surface_label: "Codex CLI release route", disposition: "MISMATCH", assurance: null, automatic_routing_eligible: false, last_external_verification_at: "2026-08-25T10:30:00.000Z", evidence: [evidence("identity/terra-mismatch.json")] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
+  { agent_tuple_id: "tuple-glm-pi-high", model: "GLM-5.3", family: "GLM", harness: "Pi", reasoning_level: "high", deployment: "glm-zai", inference_source: "z.ai API", route: "route-glm-pi", invocation_adapter: "pi", headless: true, available: true, availability: "available", active_in_repository: true, role: "planning reconciler", control_surface: "cmux:planning", familiarity_runs: 15, capability_scores: capabilityScores(0.77, { planning_projection_reconciliation: 0.95, canonical_conformance_exact_format: 0.94 }), champion_for: ["Canonical conformance", "Planning reconciliation"], evidence: [evidence("trials/glm.json")], execution_profile: null, execution_identity: { intended_surface_label: "Pi planning lane", disposition: "BOUND_FOR_DISPATCH", assurance: "requested_configuration", automatic_routing_eligible: false, last_external_verification_at: "2026-08-26T10:30:00.000Z", evidence: [evidence("identity/glm.json")] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
+  { agent_tuple_id: "tuple-luna-droid-medium", model: "GPT-5.6 Luna", family: "GPT-5", harness: "Droid", reasoning_level: "medium", deployment: "openai-dev", inference_source: "OpenAI developer plan", route: "route-luna-droid", invocation_adapter: "droid", headless: null, available: false, availability: "paused", active_in_repository: false, role: "UNTESTED", control_surface: null, familiarity_runs: 0, capability_scores: capabilityScores(0.55, {}, "UNTESTED"), champion_for: [], evidence: [], execution_profile: null, execution_identity: { intended_surface_label: "Droid route", disposition: "UNTESTED", assurance: null, automatic_routing_eligible: false, last_external_verification_at: null, evidence: [] }, metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null } },
 ];
+
+const agents: readonly SnapshotAgent[] = agentsWithoutProfiles.map((agent, index) => ({
+  ...agent,
+  execution_profile: {
+    schema_version: "1.0",
+    profile_id: `demo-profile-${agent.agent_tuple_id}`,
+    revision: 1,
+    captured_at: "2026-08-26T10:30:00.000Z",
+    fingerprint_sha256: ledgerDigest(700 + index),
+    agent_tuple_id: agent.agent_tuple_id,
+    harness: { id: profileField(agent.harness), version: profileField("demo") },
+    model: { id: profileField(agent.model), version: profileField("demo"), release_date: profileField(null), family: profileField(agent.family) },
+    reasoning_level: profileField(agent.reasoning_level),
+    settings: [{ name: "temperature", value: profileField(0.2) }],
+    inference: { deployment_mode: profileField("cloud" as const), provider: profileField(agent.inference_source), gateway: profileField(null), server: profileField(null), server_version: profileField(null), endpoint_ref: profileField(null), secret_ref: profileField(null) },
+    capability_environment: { tools: profileField(["git", "bun"]), plugins: profileField([]), mcp_servers: profileField([]), skills: profileField(["mister-clean"]) },
+    context: { starting_context_tokens: profileField(null), context_window_tokens: profileField(null) },
+    performance: { time_to_first_token_ms: profileField(null), tokens_per_second: profileField(null), input_tokens: profileField(null), output_tokens: profileField(null), cost_usd: profileField(null), reliability: profileField(null) },
+    a2a_agent_card_extension: { enabled: false, public_card_url: null, extension_uri: null },
+    evidence: [],
+  },
+}));
+
+const issues: readonly SnapshotIssue[] = issuesWithoutRunner.map((item) => {
+  const runner = agents[0]!;
+  const capabilityId = item.runner_recommendation.required_capabilities[0]!;
+  const score = runner.capability_scores.find((candidate) => candidate.capability_id === capabilityId)!;
+  const profile = runner.execution_profile!;
+  return { ...item, runner_recommendation: { ...item.runner_recommendation, runner_card: { agent_tuple_id: runner.agent_tuple_id, model: runner.model, harness: runner.harness, reasoning_level: runner.reasoning_level, profile_id: profile.profile_id, profile_revision: profile.revision, profile_fingerprint_sha256: profile.fingerprint_sha256, category_scores: [{ capability_id: capabilityId, weighted_score: score.score * score.confidence }] } } };
+});
 
 export const demoSnapshot: ControlPlaneSnapshot = {
   source: "demo",
@@ -89,6 +127,7 @@ export const demoSnapshot: ControlPlaneSnapshot = {
   repository: "mister-clean",
   current_run_id: "MC-RUN-0042",
   current_subject: subject,
+  current_observation: { kind: "FULL_MISTER_CLEAN_RUN", evidence_binding: { kind: "REPOSITORY_OBJECT", sha256: subject.repository_object_sha256 }, current_debt_flow: "MEASURED", remediation_no_harm: "MEASURED", live_topology: "MEASURED", current_complexity: "MEASURED" },
   current_flow: flow,
   previous_flow: { ...flow, starting_real_issues: 846, paid: 671, caused_by_remediation: 2, ending_real_issues: 177, boundary_blocked: 0 },
   first_flow: { ...flow, starting_real_issues: 1132, paid: 0, ending_real_issues: 1132, boundary_blocked: 0 },

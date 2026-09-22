@@ -15,6 +15,7 @@ import {
   type SemanticProbeFinding,
   type SemanticProbeResolution,
   type SemanticProbeKind,
+  type SemanticExecutableSurfaceProof,
 } from "./semantic.js";
 
 export type SemanticCandidateVerdictV2 =
@@ -40,6 +41,7 @@ export type RuntimeSemanticKindV2 =
   | "composition_root_reachability"
   | "construction_boundary"
   | "environment_semantics"
+  | "executable_surface_coverage"
   | "failure_domain_independence"
   | "gate_semantic_bite"
   | "representation_equivalence";
@@ -77,6 +79,7 @@ interface SemanticCandidateBaseV2 {
   contract_sha256: string;
   kind: SemanticProbeKind;
   legacy_candidate_ids: string[];
+  mechanical_proof?: SemanticExecutableSurfaceProof;
   refs: SemanticSourceRefV2[];
   subject_key: string;
 }
@@ -239,7 +242,10 @@ const DIRECT_CHECKERS: Record<DirectSemanticKindV2, { readonly id: string; reado
   supersession_lineage: { id: "mister-clean/supersession-lineage", version: "2.0.0" },
 };
 
-const DIRECT_KINDS = new Set<SemanticProbeKind>(Object.keys(DIRECT_CHECKERS) as DirectSemanticKindV2[]);
+const DIRECT_KINDS = new Set<SemanticProbeKind>(
+  (Object.keys(DIRECT_CHECKERS) as DirectSemanticKindV2[])
+    .filter((kind) => kind !== "bounded_state_lifecycle"),
+);
 
 function isInside(root: string, path: string): boolean {
   const relation = relative(root, path);
@@ -446,6 +452,7 @@ export function createSemanticPlanV2(input: {
       evidence: [...candidate.evidence].sort(),
       kind: candidate.kind,
       legacy_candidate_id: candidate.id,
+      ...(candidate.mechanical_proof ? { mechanical_proof: candidate.mechanical_proof } : {}),
       path: candidate.path,
       refs,
     }));
@@ -455,10 +462,12 @@ export function createSemanticPlanV2(input: {
       contract_sha256: contractSha256,
       kind: candidate.kind,
       legacy_candidate_ids: [candidate.id],
+      ...(candidate.mechanical_proof ? { mechanical_proof: candidate.mechanical_proof } : {}),
       refs,
       subject_key: candidate.path,
     };
-    if (DIRECT_KINDS.has(candidate.kind)) {
+    if (DIRECT_KINDS.has(candidate.kind)
+      && (candidate.kind !== "executable_surface_coverage" || candidate.mechanical_proof)) {
       const kind = candidate.kind as DirectSemanticKindV2;
       return { ...base, checker: directChecker(kind), kind, resolution_mode: "direct_check" };
     }
@@ -548,12 +557,23 @@ export function verifyDirectSemanticCandidateV2(input: {
   if (errors.length > 0 || !candidate || candidate.resolution_mode !== "direct_check") {
     return { errors, verdict: "verification_debt" };
   }
-  // These candidates exist only when the compiled census has mechanically
-  // observed a missing identity binding or a source-to-gate reachability gap.
-  // Other direct-class discoveries remain verification debt until their
-  // authority is represented structurally rather than inferred from prose.
+  const executableProof = candidate.kind === "executable_surface_coverage"
+    ? candidate.mechanical_proof
+    : undefined;
+  const mechanicallyProvenExecutableGap = executableProof?.checker === "mister-clean/executable-required-role-reachability"
+    && executableProof.schema_version === "1.0"
+    && executableProof.uncovered_required_roles.length > 0
+    && executableProof.uncovered_required_roles.every((role) => (
+      (role.role === "declared_runtime_entrypoint" || role.role === "release_critical_input")
+      && role.package_path.trim().length > 0
+      && role.source_path.trim().length > 0
+      && candidate.refs.some((ref) => ref.path === role.package_path)
+      && candidate.refs.some((ref) => ref.path === role.source_path)
+    ));
+  // Direct failure is reserved for typed inputs reproduced by the compiled
+  // census. A broad file-extension heuristic is evidence debt, not a verdict.
   const verdict: SemanticCandidateVerdictV2 = candidate.kind === "execution_identity_coverage"
-    || candidate.kind === "executable_surface_coverage"
+    || mechanicallyProvenExecutableGap
     || candidate.kind === "historical_evidence_portability"
     || candidate.kind === "supersession_lineage"
     ? "confirmed_failure"
@@ -626,7 +646,18 @@ export function verifyRuntimeSemanticCandidateV2(input: {
   if (observations.observations_sha256 !== observationDigest(observations)) {
     errors.push("semantic observations self-digest is invalid");
   }
-  if (observations.supervisor.actor_id !== "mister-clean") errors.push("semantic observations were not supervised by Mister Clean");
+  const runnerActorId = observations.runner?.actor_id;
+  if (typeof runnerActorId !== "string" || runnerActorId.length === 0 || runnerActorId.trim() !== runnerActorId) {
+    errors.push("semantic runner actor_id must be a canonical nonempty string");
+  }
+  if (typeof observations.runner?.argv_sha256 !== "string" || !HEX_64.test(observations.runner.argv_sha256)) {
+    errors.push("semantic runner argv_sha256 must be a SHA-256 hex string");
+  }
+  if (typeof observations.runner?.executable_sha256 !== "string" || !HEX_64.test(observations.runner.executable_sha256)) {
+    errors.push("semantic runner executable_sha256 must be a SHA-256 hex string");
+  }
+  if (observations.runner?.cwd !== "subject_root") errors.push("semantic runner cwd must be subject_root");
+  if (observations.supervisor?.actor_id !== "mister-clean") errors.push("semantic observations were not supervised by Mister Clean");
   if (observations.tree_before_sha256 !== plan.binding.repository_object_sha256
     || observations.tree_after_sha256 !== plan.binding.repository_object_sha256) {
     errors.push("semantic probe subject changed before or during observation capture");
@@ -670,8 +701,8 @@ export function verifyRuntimeSemanticCandidateV2(input: {
     errors.push("semantic attestation evidence-root digest does not match the supplied evidence bundle");
   }
   errors.push(...verifyBoundEvidence(evidenceRefsIn(attestation)));
-  if (attestation.attester.actor_id === observations.runner.actor_id
-    || attestation.attester.actor_id === observations.supervisor.actor_id) {
+  if (attestation.attester.actor_id === runnerActorId
+    || attestation.attester.actor_id === observations.supervisor?.actor_id) {
     errors.push("semantic attester must be independent of the runner and supervisor");
   }
   const policySha256 = sha256Bytes(policyBytes);

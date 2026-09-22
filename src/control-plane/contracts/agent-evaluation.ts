@@ -45,6 +45,57 @@ export const AGENT_IDENTITY_EVIDENCE_KINDS = [
 
 export type AgentIdentityEvidenceKind = (typeof AGENT_IDENTITY_EVIDENCE_KINDS)[number];
 
+/**
+ * This is assigned by the configured custody authority, never by the intake
+ * caller. Requested configuration is useful history, but is not an automatic
+ * routing or quality-credit identity binding.
+ */
+export const AGENT_IDENTITY_ASSURANCE_LEVELS = [
+  "requested_configuration",
+  "active_harness_selection",
+  "provider_execution_attested",
+] as const;
+
+export type AgentIdentityAssurance = (typeof AGENT_IDENTITY_ASSURANCE_LEVELS)[number];
+
+export interface CmuxIdentityControlTarget {
+  readonly kind: "cmux";
+  readonly host_socket_namespace: string;
+  readonly workspace_id: string;
+  readonly window_id: string;
+  readonly surface_id: string;
+  readonly tool_target_root: string | null;
+  readonly command_cwd: string | null;
+}
+
+export interface DesktopIdentityControlTarget {
+  readonly kind: "desktop";
+  readonly application_id: string;
+  readonly thread_id: string;
+  /** The current turn is phase-specific: it may change after dispatch. */
+  readonly turn_id: string;
+  readonly session_id: string;
+  readonly settings_record_sha256: string;
+  /** Effective command target when Desktop observes one; it is distinct from
+   * the Desktop application's own launch CWD. */
+  readonly tool_target_root: string | null;
+  readonly command_cwd: string | null;
+}
+
+export interface HeadlessIdentityControlTarget {
+  readonly kind: "headless";
+  readonly adapter_id: string;
+  readonly request_or_session_id: string;
+  /** A headless/API adapter can have no observable local provider PID. */
+  readonly tool_target_root: string | null;
+  readonly command_cwd: string | null;
+}
+
+export type AgentIdentityControlTarget =
+  | CmuxIdentityControlTarget
+  | DesktopIdentityControlTarget
+  | HeadlessIdentityControlTarget;
+
 export const AGENT_IDENTITY_PHASES = ["pre_dispatch", "pre_evaluation"] as const;
 export type AgentIdentityPhase = (typeof AGENT_IDENTITY_PHASES)[number];
 
@@ -84,8 +135,11 @@ export interface AgentIdentityObservation {
   readonly observed_reasoning_level: string;
   readonly execution_route_id: ExecutionRouteId;
   readonly control_surface_id: ControlSurfaceId | null;
+  /** Route-specific stable target, not a globally ambiguous short pane/tab id. */
+  readonly control_target: AgentIdentityControlTarget;
   readonly harness_session_token: string;
-  readonly process_instance_token: string;
+  /** Null only for a route whose trusted adapter has no local process view. */
+  readonly process_instance_token: string | null;
   readonly evidence_kind: AgentIdentityEvidenceKind;
   readonly evidence: readonly EvidenceRef[];
   readonly observer_actor_id: string;

@@ -7,6 +7,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { captureRepositoryObject } from "./repository-object.js";
 import {
+  ExecutionResourceBusyError,
+  acquireRepositoryVerificationLease,
+} from "./execution-lease.js";
+import {
   auditVerificationRunnerSafety,
   discoverNativeGates,
   nativeGateFailureObservations,
@@ -286,6 +290,21 @@ it("runs broad verification", { timeout: 120_000 }, () => {
 });
 
 describe("native gate execution and validation", () => {
+  it("refuses an overlapping repository-wide verification before creating evidence", async () => {
+    const { evidence, repo } = fixture("resource-contention");
+    writePackage(repo, "bun", { test: "node --test" });
+    commit(repo);
+    const object = captureRepositoryObject(repo);
+    const discovery = discoverNativeGates(repo, object);
+    const lease = acquireRepositoryVerificationLease(repo);
+    try {
+      await expect(runNativeGates(repo, discovery, evidence)).rejects.toBeInstanceOf(ExecutionResourceBusyError);
+      expect(existsSync(evidence)).toBe(false);
+    } finally {
+      lease.release();
+    }
+  });
+
   it("captures a passing gate with exact output digests and repository objects", async () => {
     const { evidence, repo } = fixture("pass");
     writePackage(repo, "bun", { test: "node gate.mjs" });
@@ -297,6 +316,11 @@ describe("native gate execution and validation", () => {
     const coverage = await runNativeGates(repo, discovery, evidence, { timeout_ms: 5_000 });
     const execution = coverage.executions[0]!;
 
+    expect(coverage.execution_lease).toEqual(expect.objectContaining({
+      resource: "repository-wide-verification",
+      mechanism: "sqlite_exclusive_transaction",
+      state: "released",
+    }));
     expect(execution.state).toBe("passed");
     expect(execution.exit_code).toBe(0);
     expect(execution.start_repository_object).toEqual(object);
@@ -623,6 +647,10 @@ describe("native gate execution and validation", () => {
     (execution.command as Record<string, unknown>).unexpected = "field";
     (execution.stdout_ref as Record<string, unknown>).unexpected = "field";
     (execution.subject_start_state as Record<string, unknown>).unexpected = "field";
+    const executionLease = forged.execution_lease as Record<string, unknown>;
+    executionLease.unexpected = "field";
+    executionLease.state = "active";
+    executionLease.coordination_key_sha256 = "1".repeat(64);
     const errors = await validateNativeGateCoverage(
       forged as unknown as typeof coverage,
       discovery,
@@ -638,6 +666,9 @@ describe("native gate execution and validation", () => {
       expect.stringContaining("command has unexpected keys"),
       expect.stringContaining("stdout_ref has unexpected keys"),
       expect.stringContaining("subject_start_state has unexpected keys"),
+      expect.stringContaining("coverage.execution_lease: unexpected key unexpected"),
+      expect.stringContaining("coverage.execution_lease.state: expected released"),
+      expect.stringContaining("coverage.execution_lease.coordination_key_sha256 does not match discovery"),
     ]));
   });
 
@@ -683,8 +714,16 @@ describe("native gate execution and validation", () => {
       secondDiscovery,
       secondObject,
       first.evidence,
-      { validation_time: new Date(Date.now() + 1_000) },
+      { validation_time: new Date(Date.now() + 1_000), repository: second.repo },
     );
     expect(reuseErrors.some((error) => error.includes("discovery"))).toBe(true);
+    const repositoryBindingErrors = await validateNativeGateCoverage(
+      coverage,
+      firstDiscovery,
+      firstObject,
+      first.evidence,
+      { validation_time: new Date(Date.now() + 1_000), repository: second.repo },
+    );
+    expect(repositoryBindingErrors.some((error) => error.includes("requested repository"))).toBe(true);
   });
 });

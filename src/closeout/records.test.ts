@@ -444,6 +444,11 @@ describe("validateManifest", () => {
     expect(validateManifest(manifest())).toEqual([]);
   });
 
+  it("rejects duplicate action identifiers in a manifest DAG", () => {
+    const action = { id: "A1", status: "planned" };
+    expect(validateManifest(manifest({ actions: [action, structuredClone(action)] }))).toContain("$.actions[1].id: duplicate A1");
+  });
+
   it("requires GUARD to use schema 1.2 exact-tree enforcement", () => {
     expect(validateManifest(manifest({ mode: "GUARD" }))).toContain(
       "$.schema_version: GUARD requires schema 1.2 or closeout_guard schema 1.3 exact-tree enforcement",

@@ -1,6 +1,8 @@
 import * as z from "zod";
 
 import { CAPABILITY_DEFINITIONS, parseRepositoryCapabilityId } from "../contracts/capability-taxonomy.js";
+import { agentExecutionProfileSchema, type AgentExecutionProfile } from "../contracts/agent-profile.js";
+import { rankAgents, type AgentCandidate, type CapabilitySelection } from "../domain/ranking.js";
 import { repositorySubjectSchema } from "../contracts/import-provenance.js";
 import { ISSUE_EDGE_KINDS, ISSUE_EVENT_KINDS, ISSUE_STATES, issueRootSchema } from "../contracts/run-issue.js";
 import { parseCanonicalLiveSnapshot, type CanonicalControlPlaneSnapshot } from "../contracts/snapshot.js";
@@ -187,6 +189,10 @@ function rowComponent(row: { component_sha256: string; canonical_json: string; c
   return value;
 }
 function sameSubject(left: object, right: object): boolean { return canonicalJson(left) === canonicalJson(right); }
+function profileFingerprint(profile: AgentExecutionProfile): string {
+  const { fingerprint_sha256: _fingerprint, ...content } = profile;
+  return sha256Bytes(canonicalJson(content));
+}
 const emptyQualificationProvenance = {
   credited_trial_ids: [], pre_dispatch_observation_ids: [], pre_evaluation_observation_ids: [],
   pre_dispatch_observed_at: [], pre_evaluation_observed_at: [], pre_dispatch_evidence_digests: [], pre_evaluation_evidence_digests: [],
@@ -367,6 +373,7 @@ export class SqliteControlPlaneSnapshotProducer {
     if (edgeRows.some((row) => !issueIds.has(row.from_issue_id) || !issueIds.has(row.to_issue_id) || row.from_issue_id === row.to_issue_id || !ISSUE_EDGE_KINDS.includes(row.edge_kind as typeof ISSUE_EDGE_KINDS[number]))) fail("issue edge orientation or kind is invalid");
     const edges = new Map<string, { prerequisites: string[]; dependents: string[] }>();
     for (const row of edgeRows) { const from = edges.get(row.from_issue_id) ?? { prerequisites: [], dependents: [] }; const to = edges.get(row.to_issue_id) ?? { prerequisites: [], dependents: [] }; if (row.edge_kind === "requires" || row.edge_kind === "blocks") { from.dependents.push(row.to_issue_id); to.prerequisites.push(row.from_issue_id); } edges.set(row.from_issue_id, from); edges.set(row.to_issue_id, to); }
+    const issuePlans = new Map<string, typeof manifest.lanes[number]>();
     const issues = issueRows.map((row) => {
       const value = parseJson(row.immutable_identity_json, `issue ${row.issue_id}`);
       const parsed = issueRootSchema.safeParse(value);
@@ -397,6 +404,7 @@ export class SqliteControlPlaneSnapshotProducer {
       const relation = edges.get(row.issue_id) ?? { prerequisites: [], dependents: [] };
       const plan = manifest.lanes.find((lane) => lane.issue_ids.some((issueId) => String(issueId) === row.issue_id));
       if (plan === undefined) fail(`issue ${row.issue_id} has no admitted planning lane`);
+      issuePlans.set(row.issue_id, plan);
       const { normalizer: _normalizer, disposition: _disposition, state: _declaredState, ...publicIdentity } = item;
       return { ...publicIdentity, issue_id: row.issue_id, state: state.to_state, prerequisite_issue_ids: relation.prerequisites.sort(), dependent_issue_ids: relation.dependents.sort(), unlock_value: 0, regression_risk: 0, coordination_claims: plan.coordination_claims.map((claim) => ({ key: claim.key, access: claim.access, operation_class: claim.operation_class, commutes_with: claim.commutes_with, commutativity_ref: claim.commutativity_ref === null ? null : { path: "manifest", sha256: claim.commutativity_ref } })), blocked_reasons: [], owner: plan.owner, worktree: plan.worktree, recommended_tuple: plan.assignment.agent_tuple_id, rationale: "Canonical issue identity is admitted; lane assignment is the current planning rationale." };
     });
@@ -434,11 +442,64 @@ export class SqliteControlPlaneSnapshotProducer {
       const availability = availabilityRow?.availability;
       if (availability !== undefined && !new Set(["available", "busy", "paused", "offline", "unknown"]).has(availability)) fail(`agent ${row.agent_tuple_id} availability is not canonical`);
       const normalizedAvailability = (availability ?? "unknown") as "available" | "busy" | "paused" | "offline" | "unknown";
+      const profileRow = this.#global.database.query<{ profile_id: string; revision: number; agent_tuple_id: string; profile_sha256: string; canonical_profile_json: string }>(
+        `SELECT profile_id, revision, agent_tuple_id, profile_sha256, canonical_profile_json
+         FROM agent_execution_profiles WHERE agent_tuple_id = ? ORDER BY revision DESC, captured_at DESC, profile_id DESC LIMIT 1`,
+      ).get(row.agent_tuple_id);
+      let executionProfile: AgentExecutionProfile | null = null;
+      if (profileRow !== null) {
+        const parsedProfile = agentExecutionProfileSchema.safeParse(parseJson(profileRow.canonical_profile_json, `agent profile ${profileRow.profile_id}`));
+        if (!parsedProfile.success || parsedProfile.data.agent_tuple_id !== row.agent_tuple_id
+          || parsedProfile.data.profile_id !== profileRow.profile_id || parsedProfile.data.revision !== profileRow.revision
+          || parsedProfile.data.fingerprint_sha256 !== profileRow.profile_sha256
+          || profileFingerprint(parsedProfile.data) !== profileRow.profile_sha256
+          || sha256Bytes(canonicalJson(parsedProfile.data)) !== sha256Bytes(profileRow.canonical_profile_json)) {
+          fail(`agent profile ${profileRow.profile_id} is not canonical or tuple-bound`);
+        }
+        executionProfile = parsedProfile.data;
+      }
       return { agent_tuple_id: row.agent_tuple_id, model: row.model_name, family: row.model_family, harness: row.harness_name, reasoning_level: row.reasoning_level,
       deployment: row.deployment!, inference_source: row.inference_source!, route: row.execution_route_id!, invocation_adapter: row.invocation_adapter!, headless: row.headless_supported === null ? null : row.headless_supported === 1,
       available: normalizedAvailability === "available", availability: normalizedAvailability, active_in_repository: false, role: "unassigned", control_surface: null, familiarity_runs: 0, capability_scores: capabilityScores, champion_for: [], evidence: [],
-      execution_identity: { intended_surface_label: row.agent_tuple_id, disposition: "IDENTITY_UNBOUND" as const, last_external_verification_at: null, evidence: [] },
+      execution_profile: executionProfile,
+      execution_identity: { intended_surface_label: row.agent_tuple_id, disposition: "IDENTITY_UNBOUND" as const, assurance: null, automatic_routing_eligible: false, last_external_verification_at: null, evidence: [] },
       metrics: { verified_success_rate: null, reliability: null, cost_per_success_usd: null, tokens_per_success: null, tokens_per_second: null, local: null },
+      };
+    });
+    // This is a read-only quality-derived suggestion. The manifest assignment
+    // remains `recommended_tuple`; it is never replaced by this projection.
+    const candidates: readonly AgentCandidate[] = agents.map((agent) => ({
+      agent_tuple_id: agent.agent_tuple_id as never,
+      active_in_repository: agent.active_in_repository,
+      available: agent.available,
+      capability_scores: agent.capability_scores.map((score) => ({ capability_id: score.capability_id as never, score: score.score, confidence: score.confidence, verified_trials: score.verified_trials, qualification: score.qualification })),
+    }));
+    const agentByTupleId = new Map(agents.map((agent) => [agent.agent_tuple_id, agent]));
+    // Quality rankings intentionally retain profile-unknown tuples. Runner
+    // cards do not: they must identify an immutable, admitted recipe.
+    const runnableCandidates = candidates.filter((candidate) => agentByTupleId.get(String(candidate.agent_tuple_id))?.execution_profile !== null);
+    const issuesWithRunnerRecommendations = issues.map((issue) => {
+      const plan = issuePlans.get(issue.issue_id);
+      if (plan === undefined) fail(`issue ${issue.issue_id} planning lane disappeared`);
+      const requiredCapabilities = [...plan.assignment.required_capabilities];
+      const selections: readonly CapabilitySelection[] = requiredCapabilities.map((capability_id) => ({ capability_id, weight: 1 }));
+      const selected = rankAgents(runnableCandidates, selections).at(0) ?? null;
+      const selectedAgent = selected === null ? null : agentByTupleId.get(String(selected.agent_tuple_id));
+      if (selected !== null && selectedAgent === undefined) fail(`ranked runner ${String(selected.agent_tuple_id)} is absent from admitted roster`);
+      return {
+        ...issue,
+        runner_recommendation: {
+          required_capabilities: requiredCapabilities,
+          selection_weights: selections,
+          minimum_qualification: "Recommended_supervised" as const,
+          runner_card: selected === null ? null : {
+            agent_tuple_id: String(selected.agent_tuple_id), model: selectedAgent!.model, harness: selectedAgent!.harness, reasoning_level: selectedAgent!.reasoning_level,
+            profile_id: selectedAgent!.execution_profile!.profile_id, profile_revision: selectedAgent!.execution_profile!.revision,
+            profile_fingerprint_sha256: selectedAgent!.execution_profile!.fingerprint_sha256,
+            category_scores: selected.category_scores.map((score) => ({ capability_id: String(score.capability_id), weighted_score: score.weighted_score })),
+          },
+          provenance: { manifest_assignment_agent_tuple_id: String(plan.assignment.agent_tuple_id), routing_evidence: plan.assignment.routing_evidence.map(({ path, sha256 }) => ({ path, sha256 })) },
+        },
       };
     });
     const historicalRows = this.#repository.database.query<{ run_id: string; repository_id: string; mister_clean_version: string; detector_set_id: string; detector_set_sha256: string; observed_then_json: string; observed_then_sha256: string | null; created_at: string }>(
@@ -467,7 +528,7 @@ export class SqliteControlPlaneSnapshotProducer {
     if (canonicalJson(currentHistory.observation.debt_flow) !== canonicalJson(observed.debt_flow)) fail("current run flow does not match current snapshot flow");
     const complexityValueParsed = complexity.parse(complexityValue.value);
     const terminalValueParsed = terminal.parse(terminalValue.value);
-    const snapshot = { source: "live", source_label: "Live SQLite authority projection", repository: run.repository_id, current_run_id: run.run_id, current_subject: observed.subject, current_flow: observed.debt_flow, previous_flow: historical.length > 1 ? historical[historical.length - 2]!.observation.debt_flow : null, first_flow: historical[0]!.observation.debt_flow, issues, agents, runs: runViews, capabilities, complexity: complexityValueParsed, manifest: { manifest_id: manifest.manifest_id, revision: manifest.revision, digest: manifestRow.manifest_sha256, projection_digest: sha256Bytes(canonicalJson(manifest.projections)), subject: manifest.repository, authority_mode: manifest.authority_mode, target_ref: manifest.target_ref, expected_target_commit: manifest.expected_target_commit, issue_graph: { issue_graph_id: manifest.issue_graph.issue_graph_id, version: manifest.issue_graph.version, digest: manifest.issue_graph.sha256 }, selected_issue_ids: manifest.selected_issue_ids, lanes: manifest.lanes.map((lane) => ({ owner: lane.owner, role: lane.role, worktree: lane.worktree, route: lane.assignment.execution_route_id })), directive_id: lastDirective.directive_id, directive_state: lastDirective.to_state, receipt_boundary: receipts.map((value) => value.output_repository.repository_object_sha256).join(",") }, terminal_contract: terminalValueParsed, current_authority: manifest.authority_mode, detector_coverage: String(detector.value), evidence_freshness: String(freshness.value) };
+    const snapshot = { source: "live", source_label: "Live SQLite authority projection", repository: run.repository_id, current_run_id: run.run_id, current_subject: observed.subject, current_observation: { kind: "FULL_MISTER_CLEAN_RUN", evidence_binding: { kind: "REPOSITORY_OBJECT", sha256: observed.subject.repository_object_sha256 }, current_debt_flow: "MEASURED", remediation_no_harm: "MEASURED", live_topology: "MEASURED", current_complexity: complexityValueParsed.availability }, current_flow: observed.debt_flow, previous_flow: historical.length > 1 ? historical[historical.length - 2]!.observation.debt_flow : null, first_flow: historical[0]!.observation.debt_flow, issues: issuesWithRunnerRecommendations, agents, runs: runViews, capabilities, complexity: complexityValueParsed, manifest: { manifest_id: manifest.manifest_id, revision: manifestRow.revision, digest: manifestRow.manifest_sha256, projection_digest: sha256Bytes(canonicalJson(manifest.projections)), subject: manifest.repository, authority_mode: manifest.authority_mode, target_ref: manifest.target_ref, expected_target_commit: manifest.expected_target_commit, issue_graph: { issue_graph_id: manifest.issue_graph.issue_graph_id, version: manifest.issue_graph.version, digest: manifest.issue_graph.sha256 }, selected_issue_ids: manifest.selected_issue_ids, lanes: manifest.lanes.map((lane) => ({ owner: lane.owner, role: lane.role, worktree: lane.worktree, route: lane.assignment.execution_route_id })), directive_id: lastDirective.directive_id, directive_state: lastDirective.to_state, receipt_boundary: receipts.map((value) => value.output_repository.repository_object_sha256).join(",") }, terminal_contract: terminalValueParsed, current_authority: manifest.authority_mode, detector_coverage: String(detector.value), evidence_freshness: String(freshness.value) };
     return snapshot;
   }
 }

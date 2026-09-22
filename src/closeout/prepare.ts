@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-
 import {
   discoverPlanningRoots,
   git,
@@ -40,6 +39,7 @@ import {
 } from "./native-gates.js";
 import { runNativeGates } from "./native-gate-runner.js";
 import { validateNativeGateCoverage } from "./native-gate-validation.js";
+import { acquireRepositoryVerificationLease } from "./execution-lease.js";
 import {
   canonicalObservationId,
   canonicalRootDebtKey,
@@ -50,9 +50,7 @@ import {
 import type { FileRuntimeAttestationBinding } from "../runtime-binding.js";
 import { captureFileCensus } from "../census.js";
 import { auditGitHubActionsRepository } from "./github-actions.js";
-
 type JsonObject = Record<string, unknown>;
-
 export interface PrepareCloseoutOptions {
   readonly repo: string;
   readonly evidenceHome: string;
@@ -75,64 +73,51 @@ export interface PrepareCloseoutOptions {
   readonly now?: () => Date;
   readonly templateRoot?: string;
 }
-
 export interface PreparedCloseout {
   readonly bundleDirectory: string;
   readonly bundlePath: string;
 }
-
 function asObject(value: unknown, path: string): JsonObject {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
   return value as JsonObject;
 }
-
 function asArray(value: unknown, path: string): unknown[] {
   if (!Array.isArray(value)) throw new Error(`${path}: expected array`);
   return value;
 }
-
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
-
 function isoTimestamp(date: Date): string {
   return date.toISOString();
 }
-
 function planningClass(path: string): string {
   const parts = path.split("/").map((part) => part.toLocaleLowerCase());
   for (const part of parts) if (PLANNING_LANE_NAMES.has(part)) return part;
   return "planning";
 }
-
 function loadTemplate(root: string, name: string): JsonObject {
   return structuredClone(readJson(join(root, "assets", name)));
 }
-
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
-
 function splitLines(value: string): string[] {
   return value ? value.split(/\r?\n/) : [];
 }
-
 function evidenceLabel(value: string): string {
   return value.replaceAll("<", "‹").replaceAll(">", "›");
 }
-
 function nativeGateCommand(executable: string, argv: readonly string[], cwd: string): string {
   const args = argv.map((value) => JSON.stringify(value)).join(" ");
   return `${executable}${args ? ` ${args}` : ""} (cwd ${cwd})`;
 }
-
 function observationId(sourceId: string, nativeFingerprint: string): string {
   return canonicalObservationId({
     source_id: sourceId,
     source_native_fingerprint: nativeFingerprint,
   });
 }
-
 function baselineDebt<T extends JsonObject & Pick<RootDebtAccountingRow, "state" | "disposition">>(
   repoId: string,
   row: T,
@@ -149,7 +134,6 @@ function baselineDebt<T extends JsonObject & Pick<RootDebtAccountingRow, "state"
     origin: { class: "baseline" },
   } as T & RootDebtAccountingRow;
 }
-
 export async function prepareCloseout(options: PrepareCloseoutOptions): Promise<PreparedCloseout> {
   const mode = validatePrepareMode(options);
   const evidence = await collectPrepareEvidence(options, mode);
@@ -157,7 +141,6 @@ export async function prepareCloseout(options: PrepareCloseoutOptions): Promise<
   const report = assemblePrepareReport(topology);
   return assemblePrepareBundle(report);
 }
-
 function validatePrepareMode(options: PrepareCloseoutOptions): "CLOSE" | "GUARD" {
   if (options.requestSource !== undefined && options.requestText !== undefined) {
     throw new Error("requestSource and requestText are mutually exclusive");
@@ -178,7 +161,6 @@ function validatePrepareMode(options: PrepareCloseoutOptions): "CLOSE" | "GUARD"
   if (mode !== "CLOSE" && mode !== "GUARD") throw new Error(`unsupported prepare mode: ${mode}`);
   return mode;
 }
-
 async function collectPrepareEvidence(
   options: PrepareCloseoutOptions,
   mode: "CLOSE" | "GUARD",
@@ -186,313 +168,323 @@ async function collectPrepareEvidence(
   const requestedRepository = resolve(options.repo);
   const repository = resolve(git(requestedRepository, "rev-parse", "--show-toplevel"));
   const baselineRepositoryObject = captureRepositoryObject(repository);
-  const bundleDirectory = join(resolve(options.evidenceHome), "mister-clean", options.runId);
-  if (existsSync(bundleDirectory)) {
-    throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
-  }
-  mkdirSync(bundleDirectory, { recursive: true });
-
-  const templates = options.templateRoot ?? packageRoot();
   const clock = options.now ?? (() => new Date());
   const now = isoTimestamp(clock());
-  const head = baselineRepositoryObject.head_commit;
-  const branch = git(repository, "branch", "--show-current") || "detached";
-  const repoId = repositoryIdentity(repository);
-  const upstream = runGit(
-    repository,
-    ["rev-parse", "--symbolic-full-name", "@{upstream}"],
-    [0, 128],
-  ).stdout;
-  const targetRef = upstream || (branch === "detached" ? head : `refs/heads/${branch}`);
-  const targetCommit = git(repository, "rev-parse", targetRef);
-  const mergeBase = git(repository, "merge-base", targetCommit, head);
-  const divergence = git(
-    repository,
-    "rev-list",
-    "--left-right",
-    "--count",
-    `${targetCommit}...${head}`,
-  ).split(/\s+/);
-  const left = Number(divergence[0] ?? 0);
-  const right = Number(divergence[1] ?? 0);
-
-  let requestBytes: Buffer;
-  if (options.requestSource !== undefined) requestBytes = readFileSync(options.requestSource);
-  else if (options.requestText !== undefined) requestBytes = Buffer.from(options.requestText, "utf8");
-  else requestBytes = Buffer.from(options.requestRef, "utf8");
-  const requestSha256 = sha256(requestBytes);
-  let requestSource: JsonObject | null = null;
-  let sourceKind = "reference_only";
-  if (options.requestSource !== undefined || options.requestText !== undefined) {
-    const path = join(bundleDirectory, "operative-request.txt");
-    writeFileSync(path, requestBytes);
-    requestSource = { path: "operative-request.txt", sha256: sha256File(path) };
-    sourceKind = "exact_bytes";
-  }
-
-  const criteriaIds = unique(options.criteria ?? []);
-  writeJson(join(bundleDirectory, "criteria-source.json"), {
-    record_type: "mister-clean.criteria-source",
-    request_ref: options.requestRef,
-    request_sha256: requestSha256,
-    criteria_ids: criteriaIds,
-  });
-
-  const planningRoots = discoverPlanningRoots(repository);
-  const planningAudit = {
-    ...auditPlanningRepository(repository),
-    object: baselineRepositoryObject.sha256,
-    repository_object: baselineRepositoryObject,
-  };
-  const unclassifiedPlanningPaths = new Set(
-    planningAudit.findings
-      .filter((finding) => finding.code === "planning_input_unparsed")
-      .map((finding) => finding.path),
-  );
-  writeJson(join(bundleDirectory, "planning-audit.json"), planningAudit);
-  const planningAuditRef = {
-    path: "planning-audit.json",
-    sha256: sha256File(join(bundleDirectory, "planning-audit.json")),
-  };
-  let publicSafetyInputRef: { kind: "public_safety_denylist"; path: string; sha256: string } | undefined;
-  let publicSafetyDenylistPath: string | undefined;
-  if (options.publicSafetyDenylistPath !== undefined) {
-    const inputPath = join(bundleDirectory, "public-safety-denylist.txt");
-    writeFileSync(inputPath, readFileSync(resolve(options.publicSafetyDenylistPath)));
-    publicSafetyDenylistPath = inputPath;
-    publicSafetyInputRef = {
-      kind: "public_safety_denylist",
-      path: "public-safety-denylist.txt",
-      sha256: sha256File(inputPath),
-    };
-  }
-  const trackedPaths = trackedShippablePaths(repository);
-  const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths.length });
-  const publicSafetyAudit = detectorRunPolicy.public_safety.disposition === "required"
-    ? {
-      ...scanTrackedPublicSafetySync(repository, trackedPaths, loadDenylistSync(publicSafetyDenylistPath)),
+  const executionLease = acquireRepositoryVerificationLease(repository, clock);
+  let leaseTransferred = false;
+  try {
+    const bundleDirectory = join(resolve(options.evidenceHome), "mister-clean", options.runId);
+    if (existsSync(bundleDirectory)) {
+      throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
+    }
+    mkdirSync(bundleDirectory, { recursive: true });
+    const templates = options.templateRoot ?? packageRoot();
+    const head = baselineRepositoryObject.head_commit;
+    const branch = git(repository, "branch", "--show-current") || "detached";
+    const repoId = repositoryIdentity(repository);
+    const upstream = runGit(
+      repository,
+      ["rev-parse", "--symbolic-full-name", "@{upstream}"],
+      [0, 128],
+    ).stdout;
+    const targetRef = upstream || (branch === "detached" ? head : `refs/heads/${branch}`);
+    const targetCommit = git(repository, "rev-parse", targetRef);
+    const mergeBase = git(repository, "merge-base", targetCommit, head);
+    const divergence = git(
+      repository,
+      "rev-list",
+      "--left-right",
+      "--count",
+      `${targetCommit}...${head}`,
+    ).split(/\s+/);
+    const left = Number(divergence[0] ?? 0);
+    const right = Number(divergence[1] ?? 0);
+    let requestBytes: Buffer;
+    if (options.requestSource !== undefined) requestBytes = readFileSync(options.requestSource);
+    else if (options.requestText !== undefined) requestBytes = Buffer.from(options.requestText, "utf8");
+    else requestBytes = Buffer.from(options.requestRef, "utf8");
+    const requestSha256 = sha256(requestBytes);
+    let requestSource: JsonObject | null = null;
+    let sourceKind = "reference_only";
+    if (options.requestSource !== undefined || options.requestText !== undefined) {
+      const path = join(bundleDirectory, "operative-request.txt");
+      writeFileSync(path, requestBytes);
+      requestSource = { path: "operative-request.txt", sha256: sha256File(path) };
+      sourceKind = "exact_bytes";
+    }
+    const criteriaIds = unique(options.criteria ?? []);
+    writeJson(join(bundleDirectory, "criteria-source.json"), {
+      record_type: "mister-clean.criteria-source",
+      request_ref: options.requestRef,
+      request_sha256: requestSha256,
+      criteria_ids: criteriaIds,
+    });
+    const planningRoots = discoverPlanningRoots(repository);
+    const planningAudit = {
+      ...auditPlanningRepository(repository),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject,
-      ...(publicSafetyInputRef === undefined ? {} : { input_sha256: publicSafetyInputRef.sha256 }),
+    };
+    const unclassifiedPlanningPaths = new Set(
+      planningAudit.findings
+        .filter((finding) => finding.code === "planning_input_unparsed")
+        .map((finding) => finding.path),
+    );
+    writeJson(join(bundleDirectory, "planning-audit.json"), planningAudit);
+    const planningAuditRef = {
+      path: "planning-audit.json",
+      sha256: sha256File(join(bundleDirectory, "planning-audit.json")),
+    };
+    let publicSafetyInputRef: { kind: "public_safety_denylist"; path: string; sha256: string } | undefined;
+    let publicSafetyDenylistPath: string | undefined;
+    if (options.publicSafetyDenylistPath !== undefined) {
+      const inputPath = join(bundleDirectory, "public-safety-denylist.txt");
+      writeFileSync(inputPath, readFileSync(resolve(options.publicSafetyDenylistPath)));
+      publicSafetyDenylistPath = inputPath;
+      publicSafetyInputRef = {
+        kind: "public_safety_denylist",
+        path: "public-safety-denylist.txt",
+        sha256: sha256File(inputPath),
+      };
     }
-    : undefined;
-  if (publicSafetyAudit) writeJson(join(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
-  const publicSafetyAuditRef = publicSafetyAudit === undefined
-    ? undefined
-    : {
-      path: "public-safety-audit.json",
-      sha256: sha256File(join(bundleDirectory, "public-safety-audit.json")),
+    const trackedPaths = trackedShippablePaths(repository);
+    const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths.length });
+    const publicSafetyAudit = detectorRunPolicy.public_safety.disposition === "required"
+      ? {
+        ...scanTrackedPublicSafetySync(repository, trackedPaths, loadDenylistSync(publicSafetyDenylistPath)),
+        object: baselineRepositoryObject.sha256,
+        repository_object: baselineRepositoryObject,
+        ...(publicSafetyInputRef === undefined ? {} : { input_sha256: publicSafetyInputRef.sha256 }),
+      }
+      : undefined;
+    if (publicSafetyAudit) writeJson(join(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
+    const publicSafetyAuditRef = publicSafetyAudit === undefined
+      ? undefined
+      : {
+        path: "public-safety-audit.json",
+        sha256: sha256File(join(bundleDirectory, "public-safety-audit.json")),
+      };
+    const githubActionsAudit = {
+      ...auditGitHubActionsRepository(repository),
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject,
     };
-  const githubActionsAudit = {
-    ...auditGitHubActionsRepository(repository),
-    object: baselineRepositoryObject.sha256,
-    repository_object: baselineRepositoryObject,
-  };
-  writeJson(join(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
-  const githubActionsAuditRef = {
-    path: "github-actions-audit.json",
-    sha256: sha256File(join(bundleDirectory, "github-actions-audit.json")),
-  };
-  const semanticInputRefs: Array<{
-    kind: "semantic_evidence_package" | "semantic_probe_manifest" | "semantic_trust_policy";
-    path: string;
-    sha256: string;
-  }> = [];
-  let semanticManifestPath: string | undefined;
-  let semanticEvidencePackagePath: string | undefined;
-  let semanticTrustPolicyPath: string | undefined;
-  if (options.semanticManifestPath !== undefined) {
-    const inputPath = join(bundleDirectory, "semantic-probe-manifest.json");
-    writeFileSync(inputPath, readFileSync(resolve(options.semanticManifestPath)));
-    semanticManifestPath = inputPath;
-    semanticInputRefs.push({
-      kind: "semantic_probe_manifest",
-      path: "semantic-probe-manifest.json",
-      sha256: sha256File(inputPath),
-    });
-  }
-  if (options.semanticEvidencePackagePath !== undefined && options.semanticTrustPolicyPath !== undefined) {
-    const packageInputPath = join(bundleDirectory, "semantic-evidence-package.json");
-    const policyInputPath = join(bundleDirectory, "semantic-trust-policy.json");
-    writeFileSync(packageInputPath, readFileSync(resolve(options.semanticEvidencePackagePath)));
-    writeFileSync(policyInputPath, readFileSync(resolve(options.semanticTrustPolicyPath)));
-    semanticEvidencePackagePath = packageInputPath;
-    semanticTrustPolicyPath = policyInputPath;
-    semanticInputRefs.push({
-      kind: "semantic_evidence_package",
-      path: "semantic-evidence-package.json",
-      sha256: sha256File(packageInputPath),
-    }, {
-      kind: "semantic_trust_policy",
-      path: "semantic-trust-policy.json",
-      sha256: sha256File(policyInputPath),
-    });
-  }
-  const semanticAuditResult = semanticEvidencePackagePath !== undefined && semanticTrustPolicyPath !== undefined
-    ? auditSemanticEvidencePackageV2(repository, semanticEvidencePackagePath, semanticTrustPolicyPath)
-    : auditSemanticRepository(repository, {
-      execute: options.executeSemanticProbes ?? false,
-      ...(semanticManifestPath === undefined ? {} : { manifestPath: semanticManifestPath }),
-    });
-  const semanticAudit = {
-    ...semanticAuditResult,
-    object: baselineRepositoryObject.sha256,
-    repository_object: baselineRepositoryObject,
-  };
-  writeJson(join(bundleDirectory, "semantic-audit.json"), semanticAudit);
-  const semanticAuditRef = {
-    path: "semantic-audit.json",
-    sha256: sha256File(join(bundleDirectory, "semantic-audit.json")),
-  };
-  const detectorCoverage = createDetectorCoverage({
-    baselineRepositoryObject,
-    observedAt: now,
-    runPolicy: detectorRunPolicy,
-    runtimeAttestation: options.runtimeAttestation,
-    planningAudit,
-    planningRef: planningAuditRef,
-    ...(publicSafetyAudit === undefined ? {} : { publicSafetyAudit }),
-    ...(publicSafetyAuditRef === undefined ? {} : { publicSafetyRef: publicSafetyAuditRef }),
-    githubActionsAudit,
-    githubActionsRef: githubActionsAuditRef,
-    semanticAudit,
-    semanticRef: semanticAuditRef,
-    inputRefs: {
-      ...(publicSafetyInputRef === undefined ? {} : { public_safety: [publicSafetyInputRef] }),
-      ...(semanticInputRefs.length === 0 ? {} : { semantic_boundary: semanticInputRefs }),
-    },
-  });
-  const nativeGateDiscovery = discoverNativeGates(repository, baselineRepositoryObject);
-  const nativeGateOutputDirectory = join(bundleDirectory, "native-gate-output");
-  const nativeGateCoverage = await runNativeGates(
-    repository,
-    nativeGateDiscovery,
-    nativeGateOutputDirectory,
-    {
-      ...(options.nativeGateTimeoutMs === undefined ? {} : { timeout_ms: options.nativeGateTimeoutMs }),
-      now: clock,
-    },
-  );
-  writeJson(join(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
-  writeJson(join(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
-  const nativeGateValidationTime = clock();
-  const nativeGateIntegrityErrors = await validateNativeGateCoverage(
-    nativeGateCoverage,
-    nativeGateDiscovery,
-    nativeGateCoverage.closing_repository_object,
-    nativeGateOutputDirectory,
-    { validation_time: nativeGateValidationTime, require_passing: false },
-  );
-  const nativeGateValidationErrors = await validateNativeGateCoverage(
-    nativeGateCoverage,
-    nativeGateDiscovery,
-    nativeGateCoverage.closing_repository_object,
-    nativeGateOutputDirectory,
-    { validation_time: nativeGateValidationTime },
-  );
-  writeJson(join(bundleDirectory, "native-gate-validation.json"), {
-    record_type: "mister-clean.native-gate-validation",
-    schema_version: "1.0",
-    discovery_sha256: nativeGateDiscovery.catalog_sha256,
-    coverage_sha256: nativeGateCoverage.coverage_sha256,
-    status: nativeGateValidationErrors.length === 0 ? "pass" : "fail",
-    errors: nativeGateValidationErrors,
-    observed_at: isoTimestamp(clock()),
-  });
-  if (nativeGateIntegrityErrors.length > 0) {
-    throw new Error(
-      `repository-native gate evidence is structurally invalid; closeout preparation stopped: ${nativeGateIntegrityErrors.join("; ")}`,
-    );
-  }
-  const nativeGateRows = nativeGateCoverage.executions.map((execution) => {
-    const definition = nativeGateDiscovery.gates.find((gate) => gate.id === execution.gate_id);
-    if (!definition) throw new Error(`native gate execution has no discovery definition: ${execution.gate_id}`);
-    const path = `native-gate-${sha256(Buffer.from(execution.gate_id, "utf8")).slice(0, 16)}.json`;
-    const command = nativeGateCommand(
-      execution.command.executable,
-      execution.command.argv,
-      execution.command.cwd,
-    );
-    const passed = execution.state === "passed";
-    const record = {
-      record_type: "mister-clean.gate-result",
-      gate_id: execution.gate_id,
-      object: nativeGateCoverage.closing_repository_object.sha256,
-      command,
-      observed_status: execution.exit_code ?? -1,
-      semantic_status: passed ? "pass" : "fail",
-      verified: passed ? 1 : 0,
-      total: 1,
-      warnings: 0,
-      debt: passed ? 0 : 1,
-      skipped: execution.state === "skipped" ? 1 : 0,
-      observed_at: execution.finished_at,
-      native_definition_sha256: definition.definition_sha256,
-      native_coverage_sha256: nativeGateCoverage.coverage_sha256,
-      stdout_ref: { ...execution.stdout_ref, path: `native-gate-output/${execution.stdout_ref.path}` },
-      stderr_ref: { ...execution.stderr_ref, path: `native-gate-output/${execution.stderr_ref.path}` },
+    writeJson(join(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
+    const githubActionsAuditRef = {
+      path: "github-actions-audit.json",
+      sha256: sha256File(join(bundleDirectory, "github-actions-audit.json")),
     };
-    writeJson(join(bundleDirectory, path), record);
+    const semanticInputRefs: Array<{
+      kind: "semantic_evidence_package" | "semantic_probe_manifest" | "semantic_trust_policy";
+      path: string;
+      sha256: string;
+    }> = [];
+    let semanticManifestPath: string | undefined;
+    let semanticEvidencePackagePath: string | undefined;
+    let semanticTrustPolicyPath: string | undefined;
+    if (options.semanticManifestPath !== undefined) {
+      const inputPath = join(bundleDirectory, "semantic-probe-manifest.json");
+      writeFileSync(inputPath, readFileSync(resolve(options.semanticManifestPath)));
+      semanticManifestPath = inputPath;
+      semanticInputRefs.push({
+        kind: "semantic_probe_manifest",
+        path: "semantic-probe-manifest.json",
+        sha256: sha256File(inputPath),
+      });
+    }
+    if (options.semanticEvidencePackagePath !== undefined && options.semanticTrustPolicyPath !== undefined) {
+      const packageInputPath = join(bundleDirectory, "semantic-evidence-package.json");
+      const policyInputPath = join(bundleDirectory, "semantic-trust-policy.json");
+      writeFileSync(packageInputPath, readFileSync(resolve(options.semanticEvidencePackagePath)));
+      writeFileSync(policyInputPath, readFileSync(resolve(options.semanticTrustPolicyPath)));
+      semanticEvidencePackagePath = packageInputPath;
+      semanticTrustPolicyPath = policyInputPath;
+      semanticInputRefs.push({
+        kind: "semantic_evidence_package",
+        path: "semantic-evidence-package.json",
+        sha256: sha256File(packageInputPath),
+      }, {
+        kind: "semantic_trust_policy",
+        path: "semantic-trust-policy.json",
+        sha256: sha256File(policyInputPath),
+      });
+    }
+    const semanticAuditResult = semanticEvidencePackagePath !== undefined && semanticTrustPolicyPath !== undefined
+      ? auditSemanticEvidencePackageV2(repository, semanticEvidencePackagePath, semanticTrustPolicyPath)
+      : auditSemanticRepository(repository, {
+        execute: options.executeSemanticProbes ?? false,
+        ...(semanticManifestPath === undefined ? {} : { manifestPath: semanticManifestPath }),
+      });
+    const semanticAudit = {
+      ...semanticAuditResult,
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject,
+    };
+    writeJson(join(bundleDirectory, "semantic-audit.json"), semanticAudit);
+    const semanticAuditRef = {
+      path: "semantic-audit.json",
+      sha256: sha256File(join(bundleDirectory, "semantic-audit.json")),
+    };
+    const detectorCoverage = createDetectorCoverage({
+      baselineRepositoryObject,
+      observedAt: now,
+      runPolicy: detectorRunPolicy,
+      runtimeAttestation: options.runtimeAttestation,
+      planningAudit,
+      planningRef: planningAuditRef,
+      ...(publicSafetyAudit === undefined ? {} : { publicSafetyAudit }),
+      ...(publicSafetyAuditRef === undefined ? {} : { publicSafetyRef: publicSafetyAuditRef }),
+      githubActionsAudit,
+      githubActionsRef: githubActionsAuditRef,
+      semanticAudit,
+      semanticRef: semanticAuditRef,
+      inputRefs: {
+        ...(publicSafetyInputRef === undefined ? {} : { public_safety: [publicSafetyInputRef] }),
+        ...(semanticInputRefs.length === 0 ? {} : { semantic_boundary: semanticInputRefs }),
+      },
+    });
+    const nativeGateDiscovery = discoverNativeGates(repository, baselineRepositoryObject);
+    const nativeGateOutputDirectory = join(bundleDirectory, "native-gate-output");
+    leaseTransferred = true;
+    const nativeGateCoverage = await runNativeGates(
+      repository,
+      nativeGateDiscovery,
+      nativeGateOutputDirectory,
+      {
+        ...(options.nativeGateTimeoutMs === undefined ? {} : { timeout_ms: options.nativeGateTimeoutMs }),
+        now: clock,
+        execution_lease: executionLease,
+      },
+    );
+    writeJson(join(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
+    writeJson(join(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
+    const nativeGateValidationTime = clock();
+    const nativeGateIntegrityErrors = await validateNativeGateCoverage(
+      nativeGateCoverage,
+      nativeGateDiscovery,
+      nativeGateCoverage.closing_repository_object,
+      nativeGateOutputDirectory,
+      { validation_time: nativeGateValidationTime, require_passing: false, repository },
+    );
+    const nativeGateValidationErrors = await validateNativeGateCoverage(
+      nativeGateCoverage,
+      nativeGateDiscovery,
+      nativeGateCoverage.closing_repository_object,
+      nativeGateOutputDirectory,
+      { validation_time: nativeGateValidationTime, repository },
+    );
+    writeJson(join(bundleDirectory, "native-gate-validation.json"), {
+      record_type: "mister-clean.native-gate-validation",
+      schema_version: "1.0",
+      discovery_sha256: nativeGateDiscovery.catalog_sha256,
+      coverage_sha256: nativeGateCoverage.coverage_sha256,
+      status: nativeGateValidationErrors.length === 0 ? "pass" : "fail",
+      errors: nativeGateValidationErrors,
+      observed_at: isoTimestamp(clock()),
+    });
+    if (nativeGateIntegrityErrors.length > 0) {
+      throw new Error(
+        `repository-native gate evidence is structurally invalid; closeout preparation stopped: ${nativeGateIntegrityErrors.join("; ")}`,
+      );
+    }
+    const nativeGateRows = nativeGateCoverage.executions.map((execution) => {
+      const definition = nativeGateDiscovery.gates.find((gate) => gate.id === execution.gate_id);
+      if (!definition) throw new Error(`native gate execution has no discovery definition: ${execution.gate_id}`);
+      const path = `native-gate-${sha256(Buffer.from(execution.gate_id, "utf8")).slice(0, 16)}.json`;
+      const command = nativeGateCommand(
+        execution.command.executable,
+        execution.command.argv,
+        execution.command.cwd,
+      );
+      const passed = execution.state === "passed";
+      const record = {
+        record_type: "mister-clean.gate-result",
+        gate_id: execution.gate_id,
+        object: nativeGateCoverage.closing_repository_object.sha256,
+        command,
+        observed_status: execution.exit_code ?? -1,
+        semantic_status: passed ? "pass" : "fail",
+        verified: passed ? 1 : 0,
+        total: 1,
+        warnings: 0,
+        debt: passed ? 0 : 1,
+        skipped: execution.state === "skipped" ? 1 : 0,
+        observed_at: execution.finished_at,
+        native_definition_sha256: definition.definition_sha256,
+        native_coverage_sha256: nativeGateCoverage.coverage_sha256,
+        stdout_ref: { ...execution.stdout_ref, path: `native-gate-output/${execution.stdout_ref.path}` },
+        stderr_ref: { ...execution.stderr_ref, path: `native-gate-output/${execution.stderr_ref.path}` },
+      };
+      writeJson(join(bundleDirectory, path), record);
+      return {
+        id: execution.gate_id,
+        kind: execution.kind,
+        object: nativeGateCoverage.closing_repository_object.sha256,
+        command,
+        expected_status: 0,
+        observed_status: execution.exit_code ?? -1,
+        semantic_status: passed ? "pass" : "fail",
+        verified: passed ? 1 : 0,
+        total: 1,
+        warnings: 0,
+        debt: passed ? 0 : 1,
+        skipped: execution.state === "skipped" ? 1 : 0,
+        evidence_ref: { path, sha256: sha256File(join(bundleDirectory, path)) },
+      };
+    });
+    if (nativeGateCoverage.closing_repository_object.sha256 !== baselineRepositoryObject.sha256) {
+      throw new Error("repository-native gate execution changed the bound repository object; evidence was preserved and closeout stopped");
+    }
     return {
-      id: execution.gate_id,
-      kind: execution.kind,
-      object: nativeGateCoverage.closing_repository_object.sha256,
-      command,
-      expected_status: 0,
-      observed_status: execution.exit_code ?? -1,
-      semantic_status: passed ? "pass" : "fail",
-      verified: passed ? 1 : 0,
-      total: 1,
-      warnings: 0,
-      debt: passed ? 0 : 1,
-      skipped: execution.state === "skipped" ? 1 : 0,
-      evidence_ref: { path, sha256: sha256File(join(bundleDirectory, path)) },
+      options,
+      mode,
+      repository,
+      baselineRepositoryObject,
+      bundleDirectory,
+      templates,
+      clock,
+      now,
+      head,
+      branch,
+      repoId,
+      upstream,
+      targetRef,
+      targetCommit,
+      mergeBase,
+      left,
+      right,
+      requestSha256,
+      requestSource,
+      sourceKind,
+      criteriaIds,
+      planningRoots,
+      planningAudit,
+      unclassifiedPlanningPaths,
+      planningAuditRef,
+      publicSafetyInputRef,
+      publicSafetyAudit,
+      publicSafetyAuditRef,
+      githubActionsAudit,
+      githubActionsAuditRef,
+      semanticAudit,
+      semanticAuditRef,
+      detectorCoverage,
+      nativeGateDiscovery,
+      nativeGateCoverage,
+      nativeGateValidationErrors,
+      nativeGateRows,
     };
-  });
-  if (nativeGateCoverage.closing_repository_object.sha256 !== baselineRepositoryObject.sha256) {
-    throw new Error("repository-native gate execution changed the bound repository object; evidence was preserved and closeout stopped");
+  } catch (error) {
+    if (!leaseTransferred) {
+      try {
+        executionLease.release();
+      } catch (releaseError) {
+        throw new AggregateError([error, releaseError], "closeout preparation and execution-lease release both failed");
+      }
+    }
+    throw error;
   }
-  return {
-    options,
-    mode,
-    repository,
-    baselineRepositoryObject,
-    bundleDirectory,
-    templates,
-    clock,
-    now,
-    head,
-    branch,
-    repoId,
-    upstream,
-    targetRef,
-    targetCommit,
-    mergeBase,
-    left,
-    right,
-    requestSha256,
-    requestSource,
-    sourceKind,
-    criteriaIds,
-    planningRoots,
-    planningAudit,
-    unclassifiedPlanningPaths,
-    planningAuditRef,
-    publicSafetyInputRef,
-    publicSafetyAudit,
-    publicSafetyAuditRef,
-    githubActionsAudit,
-    githubActionsAuditRef,
-    semanticAudit,
-    semanticAuditRef,
-    detectorCoverage,
-    nativeGateDiscovery,
-    nativeGateCoverage,
-    nativeGateValidationErrors,
-    nativeGateRows,
-  };
 }
-
 async function collectPrepareTopology(
   context: Readonly<Awaited<ReturnType<typeof collectPrepareEvidence>>>,
 ) {
@@ -561,7 +553,6 @@ async function collectPrepareTopology(
       },
     ];
   }
-
   const worktrees = parseWorktrees(repository).map((row) => {
     const path = resolve(row.worktree);
     const dirtyCount = splitLines(git(path, "status", "--porcelain=v1", "--untracked-files=all")).length;
@@ -575,7 +566,6 @@ async function collectPrepareTopology(
       disposition: "requires reconciliation",
     };
   });
-
   const branches = splitLines(
     git(repository, "for-each-ref", "--format=%(refname:short)%09%(objectname)", "refs/heads"),
   ).map((line) => {
@@ -589,7 +579,6 @@ async function collectPrepareTopology(
       disposition: "requires reconciliation",
     };
   });
-
   const remoteRefs = splitLines(
     git(repository, "for-each-ref", "--format=%(refname)%09%(objectname)", "refs/remotes"),
   )
@@ -614,10 +603,8 @@ async function collectPrepareTopology(
     path: "process-census.json",
     sha256: sha256File(join(bundleDirectory, "process-census.json")),
   };
-
   const currentCandidates = ["CURRENT-STATE.md", "docs/CURRENT-STATE.md", "_STATUS.md", "README.md"];
   const currentPath = currentCandidates.find((candidate) => existsSync(join(repository, candidate)));
-
   let policyRef: JsonObject | null = null;
   let targetObservation: JsonObject;
   if (upstream) {
@@ -662,7 +649,6 @@ async function collectPrepareTopology(
     targetObservation,
   };
 }
-
 function assemblePrepareReport(
   context: Readonly<Awaited<ReturnType<typeof collectPrepareTopology>>>,
 ) {
@@ -1072,7 +1058,6 @@ function assemblePrepareReport(
     measured_at: now,
     evidence: [`git merge-base + rev-list --left-right --count => ${left}/${right}`],
   };
-
   const closingRepositoryObject = captureRepositoryObject(repository);
   if (closingRepositoryObject.sha256 !== baselineRepositoryObject.sha256) {
     throw new Error("repository changed while closeout preparation was collecting baseline evidence");
@@ -1106,7 +1091,6 @@ function assemblePrepareReport(
     closingRepositoryObject,
   };
 }
-
 function assemblePrepareBundle(
   context: Readonly<ReturnType<typeof assemblePrepareReport>>,
 ): PreparedCloseout {
@@ -1181,7 +1165,6 @@ function assemblePrepareBundle(
   coordination.dispatcher = `mister-clean:${options.runId}`;
   coordination.integrator = `mister-clean:${options.runId}`;
   coordination.target = { ref: targetRef, expected_commit: targetCommit, observed_at: now };
-
   writeJson(join(bundleDirectory, "debris-census.json"), {
     record_type: "mister-clean.debris-census",
     removed: 0,
@@ -1204,7 +1187,6 @@ function assemblePrepareBundle(
     findings_paid: 0,
     unresolved: 0,
   });
-
   const bundle = loadTemplate(templates, "closure-bundle.json");
   Object.assign(bundle, {
     run_id: options.runId,
@@ -1326,7 +1308,6 @@ function assemblePrepareBundle(
       },
     },
   };
-
   writeJson(join(bundleDirectory, "action-manifest.json"), manifest);
   writeJson(join(bundleDirectory, "closeout-report.json"), report);
   bundle.manifest = {

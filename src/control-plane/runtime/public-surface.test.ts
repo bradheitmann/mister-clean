@@ -56,6 +56,7 @@ describe("public control-plane source surface", () => {
     "adapters",
     "route_admission",
     "authority",
+    "logical_project_registration_authority",
     "snapshot_producer",
     "execute",
   ])("rejects unsupported top-level option %s before filesystem mutation", async (key) => {
@@ -87,6 +88,7 @@ describe("public control-plane source surface", () => {
     "adapters",
     "route_admission",
     "authority",
+    "logical_project_registration_authority",
     "snapshot_producer",
     "execute",
   ])("rejects unsupported HTTP option %s before filesystem mutation", async (key) => {
