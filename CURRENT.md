@@ -269,7 +269,8 @@ by both evaluators; every file placed there carries `artifact_type: reference`
 plus a classification rationale, verified with `audit planning` under both
 6.3.0 and 7.0 before commit (a frontmatter-less copy reports
 `planning_input_unparsed`). The root copy is left in place on `main` until
-this branch is reviewed; it is not deleted.
+this branch is reviewed; it is not deleted (it was moved out of the
+repository on 2026-09-22 after the merge, see the outcomes section).
 
 ## Sprint 2026-09-22 (dev lead: Claude Fable 5.1) — acceptance and ship lane
 
@@ -288,7 +289,8 @@ files to exact-file planning roots), regression test in
 `MANIFEST.sha256`. Fixture reproduction before/after, focused tests (3 files /
 165 tests), and `build:raw` receipts are machine-local under
 `/tmp/sprint-20260922/mister-clean/`. Ledger LE-003 is closed; LE-001 and
-LE-002 remain open.
+LE-002 remained open at that point (LE-004 and LE-005 were opened later the
+same day, see the outcomes table).
 
 ### Pinned evaluator custody check (2026-09-22)
 
@@ -340,7 +342,7 @@ for the same commit.
 | Merge | 0248c95 (`--merge`) | `0248c95^{tree}` = 312c9d0; CI on main push run 35784595910 PASS |
 | Tag v7.0.0 CI | 0248c95 | run 35784649561: `ci:check` PASS, release-archive step FAIL (`MANIFEST.sha256: stale or not generated from attested package surface`; the job never built the checkout in place) |
 | Local release archive from the tagged checkout (`build:raw`, `manifest:package:check` PASS 79 entries, `prepare_release_archive.mjs`) | 0248c95 / v7.0.0 | `release-archive-receipt.json` status `verified_not_published`, archive sha256 `9e90a98f551e2c800494d084b7fc98dfd82625b46342a285c1dac7be1c049479` |
-| Publication attempt | same archive | FAIL before publish: pnpm rejects `--@bradheitmann:registry=` on `view` (LE-005); token check `/-/whoami` HTTP 401 (LE-004) |
+| Publication attempt | same archive | FAIL before publish: pnpm rejects `--@bradheitmann:registry=` on `view` (LE-005); token check `/-/whoami` HTTP 401 (`npm-whoami-401.log`, LE-004) |
 
 Machine-local receipts live under `/tmp/sprint-20260922/mister-clean/` (CI
 poll logs, QA verdict files, GUARD bundles, release directory, publish

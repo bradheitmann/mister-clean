@@ -43,12 +43,16 @@ table; this file carries the narrative and the next commands.
   (`publish-attempt.log`). Fixed here in `scripts/publish_release_archive.mjs`,
   `scripts/prepare_release_archive.mjs`, `scripts/release_path.test.mjs`
   (`--config.@bradheitmann:registry=`, verified to parse on 11.0.3 and
-  12.5.1 with `pnpm view` and `pnpm publish --dry-run`). Because the receipt
+  12.5.1 with `pnpm view` and `pnpm publish --dry-run`). The helper's
+  absent-version classifier also accepted only the pnpm-10 `E404` text; it
+  now recognises pnpm 11+'s `ERR_PNPM_PACKAGE_NOT_FOUND` JSON (found by the
+  independent QA seat on PR 2), and the test's fake pnpm models pnpm 11.
+  Because the receipt
   binds the helper bytes and the attestation binds `git_tag == v<version>`,
   7.0.0 can never be published from `v7.0.0`; the version is bumped to
   **7.0.1** here (LE-005). Tags are never moved.
 - **No valid npmjs token.** Doppler `dev-env`/`dev` `NPM_TOKEN` gets HTTP 401
-  from `/-/whoami` (LE-004). Nothing on this machine can mint one. The
+  from `/-/whoami` (`npm-whoami-401.log`, LE-004). Nothing on this machine can mint one. The
   publish therefore stops at the helper's registry observation, and the
   global install and skill bundle stay at 6.3.0 / 6.3.1.
 
@@ -64,7 +68,7 @@ node scripts/prepare_release_archive.mjs --destination /tmp/mister-clean-release
 # publication needs a valid npmjs token for @bradheitmann in Doppler (LE-004):
 doppler run -p dev-env -c dev -- node /tmp/mister-clean-release-7.0.1/publish_release_archive.mjs \
   --receipt /tmp/mister-clean-release-7.0.1/release-archive-receipt.json
-pnpm add -g @bradheitmann/mister-clean@7.0.1 && mister-clean --version
+pnpm add -g @bradheitmann/mister-clean@7.0.1 && pnpm ls -g --depth 0 | grep mister-clean   # the CLI has no --version output
 # skill bundle: replace ~/.claude/skills/mister-clean with the published package contents
 ```
 
@@ -79,8 +83,9 @@ pnpm add -g @bradheitmann/mister-clean@7.0.1 && mister-clean --version
 
 ## Not done, honestly
 
-- 7.0.x is not on the registry; `mister-clean --version` is still 6.3.0;
-  the skill bundle is 6.3.1.
+- 7.0.x is not on the registry; the global install (`pnpm ls -g --depth 0`)
+  is still `@bradheitmann/mister-clean@6.3.0`; the skill bundle
+  `~/.claude/skills/mister-clean/SKILL.md` is 6.3.1.
 - No live schema-1.3 crossed GUARD barrier was produced (see the GUARD scope
   decision in `CURRENT.md`).
 - `THIRD_PARTY_NOTICES.md:8` email-address remains a 6.3.0-only finding,
