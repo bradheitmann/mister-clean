@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
 
 const NPMJS_REGISTRY = "https://registry.npmjs.org/";
-const SCOPED_REGISTRY_OVERRIDE = `--@bradheitmann:registry=${NPMJS_REGISTRY}`;
+const SCOPED_REGISTRY_OVERRIDE = `--config.@bradheitmann:registry=${NPMJS_REGISTRY}`;
 
 function usage() {
   console.error("usage: node publish_release_archive.mjs --receipt <release-archive-receipt.json>");
