@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -35,6 +35,18 @@ describe("discoverPlanningRoots", () => {
     writeFileSync(join(repository, "docs", "architecture.md"), "# Architecture\n");
 
     expect(discoverPlanningRoots(repository)).toEqual(["docs/ROADMAP.md", "docs/STATUS.md"]);
+  });
+
+  it("does not promote a symbolic link with a canonical planning stem to a planning root (LE-003)", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-symlink-planning-"));
+    roots.push(repository);
+    mkdirSync(join(repository, ".claude", "commands"), { recursive: true });
+    mkdirSync(join(repository, "skills"));
+    writeFileSync(join(repository, "skills", "plan-skill.md"), "# skill\n");
+    symlinkSync(join("..", "..", "skills", "plan-skill.md"), join(repository, ".claude", "commands", "plan.md"));
+    writeFileSync(join(repository, "README.md"), "# fixture\n");
+
+    expect(discoverPlanningRoots(repository)).toEqual([]);
   });
 
   it("does not mistake source files with planning-like stems for planning documents", () => {

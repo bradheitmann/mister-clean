@@ -266,7 +266,13 @@ export function discoverPlanningRoots(repository: string): string[] {
     const entries = childEntries(directory)
       .filter((entry) => !PLANNING_IGNORED_NAMES.has(entry.name));
     for (const entry of entries) {
-      if ((entry.isFile() || entry.isSymbolicLink()) && isCanonicalPlanningFileName(entry.name)) {
+      // Only a regular file can become an exact canonical-file root. A symbolic
+      // link (for example a gitignored `.claude/commands/plan.md` pointing at a
+      // skill file) is not a census-bindable planning input: the census rejects
+      // symbolic-link roots and `prepare` would abort on it while `audit
+      // planning` merely reported it. Skipping it keeps both entry points in
+      // agreement (LE-003).
+      if (entry.isFile() && isCanonicalPlanningFileName(entry.name)) {
         candidates.add(join(directory, entry.name));
       }
     }

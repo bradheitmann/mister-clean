@@ -10381,7 +10381,7 @@ function discoverPlanningRoots(repository) {
     }
     const entries2 = childEntries(directory).filter((entry) => !PLANNING_IGNORED_NAMES.has(entry.name));
     for (const entry of entries2) {
-      if ((entry.isFile() || entry.isSymbolicLink()) && isCanonicalPlanningFileName(entry.name)) {
+      if (entry.isFile() && isCanonicalPlanningFileName(entry.name)) {
         candidates.add(join2(directory, entry.name));
       }
     }
