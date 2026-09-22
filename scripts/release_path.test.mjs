@@ -49,7 +49,7 @@ const publisher = join(root, "scripts", "publish_release_archive.mjs");
 const archiveContract = join(root, "scripts", "release_archive_contract.mjs");
 const attestationGenerator = join(root, "scripts", "generate_release_attestation.mjs");
 const npmjsRegistry = "https://registry.npmjs.org/";
-const scopedRegistryOverride = `--@bradheitmann:registry=${npmjsRegistry}`;
+const scopedRegistryOverride = `--config.@bradheitmann:registry=${npmjsRegistry}`;
 const temporaryRoots = [];
 
 function temporaryRoot() {
@@ -525,7 +525,8 @@ describe("release archive boundary", () => {
     mkdirSync(unpacked);
     execFileSync("tar", ["-xzf", archive, "-C", unpacked], { stdio: "pipe" });
     const packageRoot = join(unpacked, "package");
-    expect(JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")).version).toBe("7.0.0");
+    const sourceVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+    expect(JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")).version).toBe(sourceVersion);
     const manifest = readFileSync(join(packageRoot, "MANIFEST.sha256"), "utf8");
     expect(manifest).toContain("./bin/mister-clean.js");
     expect(existsSync(join(packageRoot, "bin", "mister-clean.js"))).toBe(true);

@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 7.0.0
+  version: 7.0.1
 description: >-
   Pay in-scope completion debt and leave a verified, successor-ready repository, or guard an active candidate from known debt. Invocation authorizes the documented work; AUDIT is explicit read-only analysis.
 ---
