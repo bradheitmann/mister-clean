@@ -15,7 +15,21 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+type SqliteModule = typeof import("node:sqlite");
+type DatabaseSync = import("node:sqlite").DatabaseSync;
+
+let sqliteModule: SqliteModule | undefined;
+
+/**
+ * Load `node:sqlite` on first use only. Node 22 emits an ExperimentalWarning
+ * on stderr when the module loads; a static load would attach that warning
+ * to every standalone CLI invocation, including commands that never take an
+ * execution lease, and break source/standalone output parity.
+ */
+function sqlite(): SqliteModule {
+  sqliteModule ??= createRequire(import.meta.url)("node:sqlite") as SqliteModule;
+  return sqliteModule;
+}
 
 export const REPOSITORY_VERIFICATION_RESOURCE = "repository-wide-verification" as const;
 export const EXECUTION_LEASE_RECORD_TYPE = "mister-clean.execution-lease-receipt" as const;
@@ -392,7 +406,7 @@ function writeLeaseState(path: string, state: ExecutionLeaseState): void {
   }
 }
 
-function releaseDatabase(database: InstanceType<typeof DatabaseSync>): void {
+function releaseDatabase(database: DatabaseSync): void {
   try {
     database.exec("ROLLBACK");
   } finally {
@@ -429,7 +443,7 @@ export function acquireRepositoryVerificationLease(
   if (ownerProcessIdentity === undefined) {
     throw new Error("cannot establish the execution lease owner's process birth identity");
   }
-  const database = new DatabaseSync(paths.database);
+  const database = new (sqlite().DatabaseSync)(paths.database);
   try {
     database.exec([
       "PRAGMA busy_timeout = 0",

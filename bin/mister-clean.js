@@ -17323,7 +17323,11 @@ import {
   writeFileSync as writeFileSync2
 } from "fs";
 import { dirname as dirname6, isAbsolute as isAbsolute8, join as join4, resolve as resolve10 } from "path";
-var { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+var sqliteModule;
+function sqlite() {
+  sqliteModule ??= createRequire(import.meta.url)("node:sqlite");
+  return sqliteModule;
+}
 var REPOSITORY_VERIFICATION_RESOURCE = "repository-wide-verification";
 var EXECUTION_LEASE_RECORD_TYPE = "mister-clean.execution-lease-receipt";
 var EXECUTION_LEASE_SCHEMA_VERSION = "1.0";
@@ -17601,7 +17605,7 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
   if (ownerProcessIdentity === void 0) {
     throw new Error("cannot establish the execution lease owner's process birth identity");
   }
-  const database = new DatabaseSync(paths.database);
+  const database = new (sqlite()).DatabaseSync(paths.database);
   try {
     database.exec([
       "PRAGMA busy_timeout = 0",
