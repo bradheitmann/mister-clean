@@ -225,9 +225,12 @@ export const DEFAULT_OUTPUT_BYTES = 1024 * 1024;
 export const DEFAULT_TERMINATION_GRACE_MS = 1_000;
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const MAX_GIT_OUTPUT_BYTES = 128 * 1024 * 1024;
+/** Upper bound for any single Git child used by a native-gate snapshot. */
+export const SNAPSHOT_GIT_TIMEOUT_MS = 5 * 60 * 1_000;
 export const HEX64 = /^[0-9a-f]{64}$/;
 const GIT_OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
+const UTF8_LENIENT = new TextDecoder("utf-8");
 export const NATIVE_GATE_KINDS = new Set<NativeGateKind>([
   "established_ci", "repository_tests", "lint", "typecheck", "build",
 ]);
@@ -401,28 +404,60 @@ export function validatePortablePath(path: string, source: string): void {
   }
 }
 
-function gitBytes(repository: string, args: readonly string[], input?: Buffer): Buffer {
+/**
+ * Thrown when a Git child used to build or inspect a native-gate snapshot does
+ * not finish within its bound. The child is killed first; the snapshot then
+ * fails closed and the gate is recorded as blocked instead of hanging prepare.
+ */
+export class NativeGateGitTimeoutError extends Error {
+  override readonly name = "NativeGateGitTimeoutError";
+  readonly args: readonly string[];
+  readonly timeout_ms: number;
+
+  constructor(args: readonly string[], timeoutMs: number) {
+    super(`NativeGateGitTimeoutError: git ${args.join(" ")} did not finish within ${String(timeoutMs)} ms and was killed`);
+    this.args = [...args];
+    this.timeout_ms = timeoutMs;
+  }
+}
+
+function gitEnvironment(): NodeJS.ProcessEnv {
+  return { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
+}
+
+function gitFailure(args: readonly string[], status: number | null, signal: string | null, stderr: Buffer): Error {
+  const detail = UTF8_LENIENT.decode(stderr).trim();
+  return new Error(detail || `git ${args.join(" ")} exited ${String(status)}${signal ? ` (${signal})` : ""}`);
+}
+
+// Synchronous Git is used only for commands that read no stdin. Streaming stdin
+// through spawnSync can stall with the child blocked on read() and the parent
+// idle in spawnSync's private event loop, so input-bearing commands must use
+// gitBytesWithInput below.
+function gitBytes(repository: string, args: readonly string[], timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS): Buffer {
   const result = spawnSync(
     "git",
     ["--no-optional-locks", "-C", repository, ...args],
     {
       encoding: null,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
-      input,
+      env: gitEnvironment(),
+      killSignal: "SIGKILL",
       maxBuffer: MAX_GIT_OUTPUT_BYTES,
-      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs,
     },
   );
+  if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") {
+    throw new NativeGateGitTimeoutError(args, timeoutMs);
+  }
   if (result.error) throw new Error(`git ${args.join(" ")} failed: ${errorMessage(result.error)}`);
   if (result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
-    const stderr = Buffer.isBuffer(result.stderr) ? new TextDecoder().decode(result.stderr).trim() : "";
-    throw new Error(stderr || `git ${args.join(" ")} exited ${String(result.status)}`);
+    throw gitFailure(args, result.status, result.signal, Buffer.isBuffer(result.stderr) ? result.stderr : Buffer.alloc(0));
   }
   return result.stdout;
 }
 
-function gitLine(repository: string, args: readonly string[], input?: Buffer): string {
-  const bytes = gitBytes(repository, args, input);
+function singleLine(args: readonly string[], bytes: Buffer): string {
   const end = bytes.at(-1) === 0x0a ? bytes.length - 1 : bytes.length;
   const line = UTF8.decode(bytes.subarray(0, end));
   if (!line || line.includes("\n") || line.includes("\r")) {
@@ -431,8 +466,83 @@ function gitLine(repository: string, args: readonly string[], input?: Buffer): s
   return line;
 }
 
-function trackedIndexEntries(repository: string): readonly NativeGateIndexEntry[] {
-  const bytes = gitBytes(repository, ["ls-files", "--cached", "--stage", "--full-name", "-z"]);
+function gitLine(repository: string, args: readonly string[], timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS): string {
+  return singleLine(args, gitBytes(repository, args, timeoutMs));
+}
+
+/**
+ * Runs Git with `input` on stdin. stdin is ended as soon as the bytes are
+ * handed over, stdout and stderr are drained while the input is still being
+ * written (so a full pipe in either direction cannot deadlock), and the child
+ * is killed and the promise rejected with NativeGateGitTimeoutError when it
+ * does not close within `timeoutMs`.
+ */
+async function gitBytesWithInput(
+  repository: string,
+  args: readonly string[],
+  input: Uint8Array,
+  timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS,
+): Promise<Buffer> {
+  assertPositiveInteger("git timeout", timeoutMs);
+  return await new Promise<Buffer>((resolveBytes, rejectBytes) => {
+    const child = spawn("git", ["--no-optional-locks", "-C", repository, ...args], {
+      env: gitEnvironment(),
+      shell: false,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let failure: Error | undefined;
+    let settled = false;
+    const kill = (): void => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The close event remains authoritative.
+      }
+    };
+    const timer = setTimeout(() => {
+      failure ??= new NativeGateGitTimeoutError(args, timeoutMs);
+      kill();
+    }, timeoutMs);
+    const collect = (chunks: Buffer[], used: number, chunk: Buffer, stream: string): number => {
+      if (used + chunk.length > MAX_GIT_OUTPUT_BYTES) {
+        failure ??= new Error(`git ${args.join(" ")} ${stream} exceeded ${String(MAX_GIT_OUTPUT_BYTES)} bytes`);
+        kill();
+        return used;
+      }
+      chunks.push(chunk);
+      return used + chunk.length;
+    };
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBytes = collect(stdout, stdoutBytes, chunk, "stdout");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBytes = collect(stderr, stderrBytes, chunk, "stderr");
+    });
+    // A child that exits before reading all input produces EPIPE here; its exit
+    // status, reported on close, is the authoritative result.
+    child.stdin.on("error", () => undefined);
+    child.once("error", (error) => {
+      failure ??= new Error(`git ${args.join(" ")} failed: ${errorMessage(error)}`);
+    });
+    child.once("close", (status, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (failure) rejectBytes(failure);
+      else if (status !== 0) rejectBytes(gitFailure(args, status, signal, Buffer.concat(stderr)));
+      else resolveBytes(Buffer.concat(stdout));
+    });
+    child.stdin.end(input);
+  });
+}
+
+function trackedIndexEntries(repository: string, timeoutMs: number): readonly NativeGateIndexEntry[] {
+  const bytes = gitBytes(repository, ["ls-files", "--cached", "--stage", "--full-name", "-z"], timeoutMs);
   if (bytes.length === 0) return [];
   if (bytes.at(-1) !== 0) throw new Error("git ls-files --stage returned a truncated NUL record");
   const entries: NativeGateIndexEntry[] = [];
@@ -464,14 +574,14 @@ function trackedIndexEntries(repository: string): readonly NativeGateIndexEntry[
   return entries.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
 }
 
-function reachabilityRefs(repository: string): readonly NativeGateReachabilityRef[] {
+function reachabilityRefs(repository: string, timeoutMs: number): readonly NativeGateReachabilityRef[] {
   const bytes = gitBytes(repository, [
     "for-each-ref",
     "--sort=refname",
     "--format=%(refname)%09%(objectname)%09%(objecttype)",
     "refs/heads",
     "refs/remotes",
-  ]);
+  ], timeoutMs);
   if (bytes.length === 0) return [];
   const refs: NativeGateReachabilityRef[] = [];
   const text = UTF8.decode(bytes).replace(/\n$/u, "");
@@ -489,11 +599,11 @@ function reachabilityRefs(repository: string): readonly NativeGateReachabilityRe
   return refs;
 }
 
-function restoreReachabilityRefs(subject: string, repository: string): void {
-  for (const ref of reachabilityRefs(subject)) {
+function restoreReachabilityRefs(subject: string, repository: string, timeoutMs: number): void {
+  for (const ref of reachabilityRefs(subject, timeoutMs)) {
     if (ref.objecttype !== "commit") continue;
-    gitBytes(repository, ["fetch", "--quiet", "--no-tags", subject, ref.oid]);
-    gitBytes(repository, ["update-ref", ref.refname, ref.oid]);
+    gitBytes(repository, ["fetch", "--quiet", "--no-tags", subject, ref.oid], timeoutMs);
+    gitBytes(repository, ["update-ref", ref.refname, ref.oid], timeoutMs);
   }
 }
 
@@ -559,33 +669,45 @@ async function copySubjectWorktree(subject: string, snapshot: string): Promise<v
   }
 }
 
+export interface NativeGateExecutionSnapshotOptions {
+  /** Upper bound for each Git child the snapshot starts. */
+  readonly git_timeout_ms?: number;
+}
+
 export async function createExecutionSnapshot(
   subject: string,
   expected: RepositoryObject,
+  options: NativeGateExecutionSnapshotOptions = {},
 ): Promise<NativeGateExecutionSnapshot> {
+  const gitTimeoutMs = options.git_timeout_ms ?? SNAPSHOT_GIT_TIMEOUT_MS;
+  assertPositiveInteger("git_timeout_ms", gitTimeoutMs);
   const container = await mkdtemp(join(tmpdir(), "mister-clean-native-gate-snapshot-"));
   const repository = join(container, "repository");
   const home = join(container, "home");
   try {
     await mkdir(repository, { mode: 0o700 });
     await mkdir(home, { mode: 0o700 });
-    const objectFormat = gitLine(subject, ["rev-parse", "--show-object-format"]);
+    const objectFormat = gitLine(subject, ["rev-parse", "--show-object-format"], gitTimeoutMs);
     if (objectFormat !== "sha1" && objectFormat !== "sha256") {
       throw new Error(`unsupported Git object format ${JSON.stringify(objectFormat)}`);
     }
-    gitBytes(repository, ["init", "--quiet", `--object-format=${objectFormat}`]);
-    gitBytes(repository, ["fetch", "--quiet", "--no-tags", subject, expected.head_commit]);
-    gitBytes(repository, ["checkout", "--quiet", "--detach", expected.head_commit]);
-    restoreReachabilityRefs(subject, repository);
-    gitBytes(repository, ["read-tree", "--empty"]);
-    for (const entry of trackedIndexEntries(subject)) {
+    gitBytes(repository, ["init", "--quiet", `--object-format=${objectFormat}`], gitTimeoutMs);
+    gitBytes(repository, ["fetch", "--quiet", "--no-tags", subject, expected.head_commit], gitTimeoutMs);
+    gitBytes(repository, ["checkout", "--quiet", "--detach", expected.head_commit], gitTimeoutMs);
+    restoreReachabilityRefs(subject, repository, gitTimeoutMs);
+    gitBytes(repository, ["read-tree", "--empty"], gitTimeoutMs);
+    for (const entry of trackedIndexEntries(subject, gitTimeoutMs)) {
       if (entry.mode === "160000") {
         throw new Error(`exact native-gate snapshots do not yet support gitlink ${JSON.stringify(entry.path)}`);
       }
-      const sourceBlob = gitBytes(subject, ["cat-file", "blob", entry.oid]);
-      const importedOid = gitLine(repository, ["hash-object", "-w", "--stdin"], sourceBlob);
+      const sourceBlob = gitBytes(subject, ["cat-file", "blob", entry.oid], gitTimeoutMs);
+      const hashArgs = ["hash-object", "-w", "--stdin"] as const;
+      const importedOid = singleLine(
+        hashArgs,
+        await gitBytesWithInput(repository, hashArgs, sourceBlob, gitTimeoutMs),
+      );
       if (importedOid !== entry.oid) throw new Error(`index object format mismatch at ${JSON.stringify(entry.path)}`);
-      gitBytes(repository, ["update-index", "--add", "--cacheinfo", entry.mode, entry.oid, entry.path]);
+      gitBytes(repository, ["update-index", "--add", "--cacheinfo", entry.mode, entry.oid, entry.path], gitTimeoutMs);
     }
     await copySubjectWorktree(subject, repository);
     const repositoryObject = captureRepositoryObject(repository);
