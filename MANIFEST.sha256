@@ -1,7 +1,7 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
 e22a4f674fbf47ad35cea4c19191c905aeb3b53c109f94a873790ae1e6f20052  ./README.md
 1c4bdca67124f577bebe87528e852a44f48d772a71255b68e9780c52b153b803  ./SECURITY.md
-cf8c293f730b1a314022603fce8cf7ff8e9c693d411e078f53ce361e2df9d13c  ./SKILL.md
+4b4bd7966cb1ed5462bd74c5628303c788f44c3a1aaef3039d2b46affa82f20f  ./SKILL.md
 5e575cbe7a53b8b85aa0b0924eabf338e88669aaf368ae2cbff48a7c6eccf80e  ./THIRD_PARTY_NOTICES.md
 4e66270c944ed7b89ba2c391dec4be7d7a8c18a0fc43fde3128ccea0df68db71  ./agents/openai.yaml
 1335d4e7226703a3060ada7a75f279aa07eefa0d25e6c1118eeb19cfc647b0b9  ./assets/action-manifest.json
@@ -28,7 +28,7 @@ b97a3d54909032f9f5dccba9a3b36dfc08fc065a0abd7af7a41ea4dd887180d9  ./assets/codeb
 b32333bbd5e144d2e2c736df9ce0cd977f73ed50d53c57bcee7051e9ad8c7ce6  ./assets/codebase-state-dashboard/product-mark.svg
 2b280962cfe5fdaf4513877c3d65184c8f71ddadb75f000f8b52b7a40bf57ada  ./assets/codebase-state-dashboard/tsconfig.scorecard.json
 ad4137f8e86b7ff051d650ee37a6c33757154a5698c798526ce0fa47b9d91e46  ./assets/regression-delta.json
-a9db5ecd3d7aa677147f84b122ef726c162d55c220a49a5d3aa2ceb7805c2a05  ./bin/mister-clean.js
+e98772663248625c530b49fd4022d5e0276fefe085097c16e8b15b10ca3a7ca1  ./bin/mister-clean.js
 a512a7f3940e1d875ebe4485a8e676e557c6279305b9d55c3529c6ddcd5752cf  ./dist/control-plane.d.ts
 0e07567cdd3e7d0f44331ebfdbedbf9bc72337c3b112762a17d8a595e9d6c863  ./dist/control-plane.js
 20afd4527ea2b6486b48ff858e84a93c847f7fbfb5ea3022e79585657272c2f8  ./dist/control-plane/assets/CormorantGaramond-Medium-B9HO_40Y.ttf
@@ -45,15 +45,15 @@ a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f  ./dist/control
 4aba9409dac257355c56a81dba4d7249fcb25079f9a48b194eec7956362434ec  ./dist/control-plane/assets/index-DmC-s3mW.css
 60f291518cdf5114fa0bae067c28ffec85a088fa876f962d5b310752ba3a0362  ./dist/control-plane/index.html
 3ae6b5a0a37ccefb99acb0e1413da1780ba64e1b52792e7ab36328eaf83b77ce  ./dist/public.d.ts
-a1baef5886b871f023cfddf253c94c63947d698bde700b1f9522bfb9939ac6dd  ./dist/public.js
+37a5655d2f70e5a677a84eabffe560805007b433b89063b040c84a1b4db6159e  ./dist/public.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
-7e4a47af2c7aa14fc6ed36935c165d87a37f399ecce7e56d86eb85e90cac9596  ./dist/stdio.js
+6a9a9d68d0f49e141f8d20727a2b60ba07573ee645e58702d1b23b8f48c2a133  ./dist/stdio.js
 e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md
 e77aa854e06035c0a51b8e95779e8121689e493b3536564e8fa2ad9f79927834  ./evals/rotation-campaign.md
 34fcc94c1a7a86f9746a7bb93e1380768f13485260b78af76d0c86eabb656214  ./examples/example-report.md
-0d49a4df21219a49df3d62fa2996904318feb1298aad931992cdedbd70f6dcf6  ./package.json
+4b8ecffafeff3b02a247fc3cfe62e46cc703c1b7e8275e31c9d832693b5c18a7  ./package.json
 42cc071449e75dbe46fac9938ef67d3a44b08c02d452441b7ab6f46f4b0d4bd4  ./references/authorization-and-modes.md
 84ff460cfeac5ab4f2becaf31520bbeb2403b4ab0c876cab20cca166e9671ad1  ./references/behavioral-evals.md
 1a909f73a498cf151dc88ad4d8aff2bd24ac20b803023ff1b41ae39fc6b85243  ./references/code-hygiene-rubric.md

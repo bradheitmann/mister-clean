@@ -1,15 +1,20 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
+  closeSync,
   existsSync,
   lstatSync,
+  mkdtempSync,
+  openSync,
   readFileSync,
   readlinkSync,
   readdirSync,
   realpathSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
-import { platform } from "node:os";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { platform, tmpdir } from "node:os";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { TextDecoder } from "node:util";
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
@@ -244,19 +249,39 @@ function decode(bytes: Uint8Array, source: string): string {
   }
 }
 
+const GIT_TIMEOUT_MS = 5 * 60 * 1_000;
+
+// Input is handed to Git as a private regular file, never streamed through a
+// spawnSync stdin pipe: that path can stall with the child blocked on read()
+// and the parent idle inside spawnSync. The timeout kills a child that still
+// makes no progress, so the caller fails instead of hanging.
 function gitBytes(repository: string, args: readonly string[], input?: Uint8Array, allowed = [0]): Buffer {
+  const inputDirectory = input === undefined ? undefined : mkdtempSync(join(tmpdir(), "mister-clean-git-input-"));
+  let inputDescriptor: number | undefined;
   try {
+    if (inputDirectory !== undefined && input !== undefined) {
+      const inputPath = join(inputDirectory, "stdin");
+      writeFileSync(inputPath, input, { mode: 0o600, flag: "wx" });
+      inputDescriptor = openSync(inputPath, "r");
+    }
     return execFileSync("git", ["--no-optional-locks", "-C", repository, ...args], {
       encoding: "buffer",
       env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
-      input,
+      killSignal: "SIGKILL",
       maxBuffer: 128 * 1024 * 1024,
-      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+      stdio: [inputDescriptor ?? "ignore", "pipe", "pipe"],
+      timeout: GIT_TIMEOUT_MS,
     });
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ETIMEDOUT") {
+      throw new Error(`git ${args.join(" ")} did not finish within ${String(GIT_TIMEOUT_MS)} ms and was killed`, { cause: error });
+    }
     const code = Number((error as { status?: unknown }).status);
     if (allowed.includes(code)) return Buffer.from((error as { stdout?: Uint8Array }).stdout ?? []);
     throw error;
+  } finally {
+    if (inputDescriptor !== undefined) closeSync(inputDescriptor);
+    if (inputDirectory !== undefined) rmSync(inputDirectory, { recursive: true, force: true });
   }
 }
 

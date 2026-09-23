@@ -1,5 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,7 +20,9 @@ import {
   acquireRepositoryVerificationLease,
 } from "./execution-lease.js";
 import {
+  NativeGateGitTimeoutError,
   auditVerificationRunnerSafety,
+  createExecutionSnapshot,
   discoverNativeGates,
   nativeGateFailureObservations,
 } from "./native-gates.js";
@@ -467,6 +478,73 @@ describe("native gate execution and validation", () => {
       { validation_time: new Date(Date.now() + 1_000) },
     )).resolves.toEqual([]);
     expect(subjectGitState(repo)).toEqual(before);
+  });
+
+  it("imports large and many blobs into the snapshot without stalling on stdin or output backpressure", async () => {
+    const { repo } = fixture("snapshot-backpressure");
+    // Every blob is larger than one socket or pipe buffer, so each hash-object
+    // child needs several partial stdin writes before it can see EOF.
+    for (let index = 0; index < 64; index += 1) {
+      writeFileSync(join(repo, `blob-${String(index).padStart(2, "0")}.bin`), Buffer.alloc(100 * 1024 + index, index));
+    }
+    writeFileSync(join(repo, "large.bin"), Buffer.alloc(8 * 1024 * 1024, 0x5a));
+    commit(repo);
+    writeFileSync(join(repo, "staged.bin"), Buffer.alloc(256 * 1024, 0x33));
+    command(repo, "git", "add", "staged.bin");
+    const object = captureRepositoryObject(repo);
+
+    const snapshot = await createExecutionSnapshot(repo, object, { git_timeout_ms: 60_000 });
+    try {
+      expect(snapshot.repository_object).toEqual(object);
+      expect(Buffer.compare(readFileSync(join(snapshot.repository, "large.bin")), readFileSync(join(repo, "large.bin")))).toBe(0);
+      expect(command(snapshot.repository, "git", "diff", "--cached", "--name-only")).toBe("staged.bin");
+    } finally {
+      rmSync(snapshot.container, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed with NativeGateGitTimeoutError when a snapshot Git child makes no progress", async () => {
+    const { repo, root } = fixture("snapshot-git-timeout");
+    writeFileSync(join(repo, "tracked.txt"), "committed\n");
+    commit(repo);
+    const object = captureRepositoryObject(repo);
+    const realGit = command(root, "sh", "-c", "command -v git");
+    const shim = join(root, "git-shim");
+    mkdirSync(shim);
+    // Models the observed stall: hash-object never reads its input and never exits.
+    writeFileSync(join(shim, "git"), [
+      "#!/bin/sh",
+      "for argument in \"$@\"; do",
+      "  if [ \"$argument\" = hash-object ]; then exec sleep 600; fi",
+      "done",
+      `exec ${JSON.stringify(realGit)} "$@"`,
+      "",
+    ].join("\n"));
+    chmodSync(join(shim, "git"), 0o755);
+    const snapshotPrefix = "mister-clean-native-gate-snapshot-";
+    const containersBefore = new Set(readdirSync(tmpdir()).filter((name) => name.startsWith(snapshotPrefix)));
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${shim}:${originalPath ?? ""}`;
+    const started = Date.now();
+    let failure: unknown;
+    try {
+      await createExecutionSnapshot(repo, object, { git_timeout_ms: 1_500 });
+    } catch (error) {
+      failure = error;
+    } finally {
+      process.env.PATH = originalPath;
+    }
+
+    expect(failure).toBeInstanceOf(NativeGateGitTimeoutError);
+    expect(failure).toMatchObject({
+      name: "NativeGateGitTimeoutError",
+      args: ["hash-object", "-w", "--stdin"],
+      timeout_ms: 1_500,
+    });
+    expect(Date.now() - started).toBeLessThan(30_000);
+    const leftovers = readdirSync(tmpdir()).filter((name) => name.startsWith(snapshotPrefix) && !containersBefore.has(name));
+    expect(leftovers).toEqual([]);
+    expect(captureRepositoryObject(repo)).toEqual(object);
   });
 
   it("kills the whole process group on timeout", async () => {
