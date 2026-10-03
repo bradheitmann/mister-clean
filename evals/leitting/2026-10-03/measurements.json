@@ -1,0 +1,92 @@
+{
+  "record_type": "leitting.naturalistic-field-observation-summary",
+  "schema_version": "1.0",
+  "verdict": "NOT CLEAN",
+  "accepted_main": "53d2f57ba0450eb5671373b2c939ce330ac97129",
+  "qa370": {
+    "slice": "WP-27/S06",
+    "candidate": "fcfbb5ccd677102d7c2dda76a2a192053a2aea3f",
+    "observed_model": "claude-sonnet-5-5",
+    "observed_reasoning": "high",
+    "assurance": "active_harness_selection_only",
+    "backend": null,
+    "cost": null,
+    "tokens": null,
+    "custody": {
+      "verified_rows": 102,
+      "failed_rows": 0,
+      "result_sha256": "f42c592b8341aadea9217a912701d7bf54f6fc2dbc73e0db9ab7a6d046a2b0f5"
+    },
+    "probes": 12,
+    "compiled_mutants": 43,
+    "killed_mutants": 40,
+    "survivors": 3,
+    "setup_failures": 1,
+    "low_findings": 5,
+    "accepted": false
+  },
+  "dev243": {
+    "slice": "WP-13/S02",
+    "candidate": "1f59c701b31794d97a46e5a85ec70be1b9e5b898",
+    "route_to_pr_seconds": 598,
+    "route_to_claim_seconds": 184,
+    "claim_target_seconds": 120,
+    "model": null,
+    "reasoning": null,
+    "accepted": false
+  },
+  "audit": {
+    "artifact_count": 224,
+    "raw_findings": 4,
+    "root_debts": 4,
+    "findings": [
+      {
+        "code": "preexecution_parent_has_started_children",
+        "detail": "parent is preexecution while 1/4 direct children have started",
+        "path": "planning/stories/WP-04/01-build-contract.json",
+        "related": [
+          "planning/stories/WP-04/slices/S01.yaml"
+        ],
+        "subject": "WP-04"
+      },
+      {
+        "code": "preexecution_parent_has_started_children",
+        "detail": "parent is preexecution while 4/15 direct children have started",
+        "path": "planning/stories/WP-12/01-build-contract.json",
+        "related": [
+          "planning/stories/WP-12/slices/S01.yaml",
+          "planning/stories/WP-12/slices/S02.yaml",
+          "planning/stories/WP-12/slices/S03.yaml",
+          "planning/stories/WP-12/slices/S04.yaml"
+        ],
+        "subject": "WP-12"
+      },
+      {
+        "code": "preexecution_parent_has_started_children",
+        "detail": "parent is preexecution while 1/12 direct children have started",
+        "path": "planning/stories/WP-13/01-build-contract.json",
+        "related": [
+          "planning/stories/WP-13/slices/S01.yaml"
+        ],
+        "subject": "WP-13"
+      },
+      {
+        "code": "preexecution_parent_has_started_children",
+        "detail": "parent is preexecution while 1/13 direct children have started",
+        "path": "planning/stories/WP-14/01-build-contract.json",
+        "related": [
+          "planning/stories/WP-14/slices/S01.yaml"
+        ],
+        "subject": "WP-14"
+      }
+    ]
+  },
+  "intake": {
+    "observations": 2,
+    "trials": 0,
+    "qualification_events": 0,
+    "agent_run_events": 0
+  },
+  "qualification_credit": false,
+  "controlled_comparison": false
+}
