@@ -4,6 +4,8 @@ import { closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, open
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 import { startLocalControlPlaneRuntime } from "../src/control-plane.js";
+import { openControlPlaneDatabase } from "../src/control-plane/persistence/sqlite.js";
+import { importCampaignExecutionObservations } from "../src/control-plane/runtime/campaign-observation-intake.js";
 
 const stateDir = process.argv[2];
 if (!stateDir || !isAbsolute(stateDir) || !basename(stateDir).startsWith("campaign-")) {
@@ -29,7 +31,7 @@ if (!state.isDirectory() || state.isSymbolicLink() || (state.mode & 0o077) !== 0
   throw new Error("campaign state directory must be an owned, private, non-symlink directory");
 }
 const stateFiles = [
-  "repository.sqlite", "global.sqlite", "invocations.jsonl",
+  "repository.sqlite", "global.sqlite", "invocations.jsonl", "campaign-observations.jsonl",
   "repository.sqlite-wal", "repository.sqlite-shm", "repository.sqlite-journal",
   "global.sqlite-wal", "global.sqlite-shm", "global.sqlite-journal",
 ] as const;
@@ -75,6 +77,7 @@ try {
     http: { host: "127.0.0.1", port: 0 },
   });
 
+  let result: Record<string, unknown>;
   try {
     if (!runtime.http) throw new Error("loopback query endpoint unavailable");
     const response = await fetch(runtime.http.url, {
@@ -88,15 +91,24 @@ try {
         input: { limit: 10 },
       }),
     });
-    const result: unknown = await response.json();
-    if (!response.ok || typeof result !== "object" || result === null || !("ok" in result) || result.ok !== true) {
+    const responseBody: unknown = await response.json();
+    if (!response.ok || typeof responseBody !== "object" || responseBody === null || !("ok" in responseBody) || responseBody.ok !== true) {
       throw new Error("control-plane query failed");
     }
-    console.log(JSON.stringify(result));
+    result = responseBody as Record<string, unknown>;
   } finally {
     await runtime.close();
     verifyStateFiles();
   }
+  const global = await openControlPlaneDatabase("global", join(stateDir, "global.sqlite"));
+  let observationImport;
+  try {
+    observationImport = await importCampaignExecutionObservations(global, join(stateDir, "campaign-observations.jsonl"));
+  } finally {
+    global.close();
+    verifyStateFiles();
+  }
+  console.log(JSON.stringify({ ...result, campaign_observations: observationImport }));
 } finally {
   process.umask(previousUmask);
 }
