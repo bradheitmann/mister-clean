@@ -29,3 +29,11 @@ Neither set is duplicated here, changed or counted as newly imported data.
 This main-based tracking branch changes only these two new data/docs files.
 Leitting source, evidence originals, PR8 branch, skill, schema, gates, policy,
 account/provider/fleet/settings and productive DEV129 work were untouched.
+
+The exact record file remains `evals/leitting/2026-10-03/observations-1130.ndjson`.
+This tracking provenance README moved outside served material roots under the
+separate layout route published 2026-10-03T12:28:16Z:
+https://github.com/bradheitmann/leitting/issues/173#issuecomment-5969162031
+The original hosted RepositoryObject failure, local `node:sqlite` refusal, and
+pinned-runtime full-validator evaluation-list failure remain preserved. This
+layout correction changes no test, generator, skill, gate, schema or policy.
