@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants, closeSync, createReadStream, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
+import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
 import type { OpenControlPlaneDatabase } from "../persistence/sqlite.js";
@@ -178,8 +178,17 @@ async function verifySourceDigests(rows: readonly CampaignExecutionObservation[]
         lineHasBytes = false;
       };
       if (opened.size > 0) {
-        for await (const chunk of createReadStream(path, { fd: descriptor, autoClose: false, end: opened.size - 1 })) {
-          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        // Own the descriptor exclusively. Some Bun versions destroy a stream's
+        // supplied fd on early iteration exit despite autoClose:false, masking
+        // a digest failure with EBADF in finally. Bounded positioned reads also
+        // exclude bytes appended after this source snapshot.
+        const buffer = Buffer.alloc(64 * 1024);
+        let offset = 0;
+        while (offset < opened.size) {
+          const count = readSync(descriptor, buffer, 0, Math.min(buffer.length, opened.size - offset), offset);
+          if (count === 0) throw new Error(`campaign observation source changed during verification: ${path}`);
+          offset += count;
+          const bytes = buffer.subarray(0, count);
           whole?.update(bytes);
           let start = 0;
           for (let index = 0; index < bytes.length; index += 1) {

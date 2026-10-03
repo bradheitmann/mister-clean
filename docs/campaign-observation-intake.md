@@ -27,7 +27,8 @@ database, and retained forge receipts still require private `0600` custody.
 Compute `observation_id` as `"obs:"` followed by SHA-256 of canonical JSON of
 the full observation with only `observation_id` omitted. Canonical JSON sorts
 object keys recursively and uses compact UTF-8 encoding. The importer checks
-that ID and streams each retained source file once to verify the source digest.
+that ID and reads each retained source file once in bounded 64 KiB chunks to
+verify the source digest.
 It rejects an incomplete journal line, a changed source, or a conflicting
 replay before committing any row in the batch.
 
