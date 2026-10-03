@@ -13,7 +13,7 @@ const OBSERVATION_KEYS = [
 ] as const;
 const SOURCE_KEYS = ["path", "line", "record_sha256"] as const;
 const SHA256 = /^[0-9a-f]{64}$/u;
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u;
 const MAX_JOURNAL_BYTES = 16 * 1024 * 1024;
 
 export interface CampaignExecutionObservation {
