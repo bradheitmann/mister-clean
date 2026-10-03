@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["scripts/reconcile_campaign_invocations.ts", "env.d.ts"],
+  "compilerOptions": {
+    "noEmit": true
+  }
+}
