@@ -20,10 +20,15 @@ function run(stateDir: string) {
 it("refuses a broad caller-owned directory without changing its permissions", () => {
   const directory = mkdtempSync(join(tmpdir(), "mc-campaign-helper-"));
   directories.push(directory);
-  chmodSync(directory, 0o755);
-  const before = lstatSync(directory).mode & 0o777;
-  expect(run(directory).status).not.toBe(0);
-  expect(lstatSync(directory).mode & 0o777).toBe(before);
+  const leaf = join(directory, "campaign-broad");
+  mkdirSync(leaf, { mode: 0o755 });
+  chmodSync(leaf, 0o755);
+  const before = lstatSync(leaf).mode & 0o777;
+  expect(before).toBe(0o755);
+  const result = run(leaf);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("campaign state directory must be an owned, private, non-symlink directory");
+  expect(lstatSync(leaf).mode & 0o777).toBe(before);
 });
 
 it("creates only a private dedicated leaf and replays it idempotently", () => {
