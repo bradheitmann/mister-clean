@@ -16,9 +16,13 @@ Set `schema_version` to `"1.0"`. All nullable fields must be present as strings
 or `null`; `metrics` is a flat object of snake_case keys and nonnegative safe
 integers. Do not put raw tool arguments, output, secrets, or reasoning text in
 the observation. `source` has exactly `path` (absolute), `line` (1-based or
-`null`), and `record_sha256` (lowercase hex). The source file must be an owned,
-private, regular file. For a line number, hash the original line bytes excluding
-the newline; for `null`, hash the complete retained receipt file bytes.
+`null`), and `record_sha256` (lowercase hex). The original source file must be
+an owned regular file without group or other write permission; existing `0644`
+Codex logs are accepted and `0664` is rejected. The importer reads them in
+place without changing permissions or copying raw bytes into campaign state.
+For a line number, hash the original line bytes excluding the newline; for
+`null`, hash the complete retained receipt file bytes. The campaign journal,
+database, and retained forge receipts still require private `0600` custody.
 
 Compute `observation_id` as `"obs:"` followed by SHA-256 of canonical JSON of
 the full observation with only `observation_id` omitted. Canonical JSON sorts

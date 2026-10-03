@@ -74,7 +74,9 @@ it("imports private campaign observations once and rolls back a conflicting repl
   mkdirSync(leaf, { mode: 0o700 });
   const sourcePath = join(leaf, "source.jsonl");
   const sourceLine = '{"fixture":"retained private source"}';
-  writeFileSync(sourcePath, `${sourceLine}\n`, { mode: 0o600 });
+  writeFileSync(sourcePath, `${sourceLine}\n`, { mode: 0o644 });
+  chmodSync(sourcePath, 0o644);
+  expect(lstatSync(sourcePath).mode & 0o777).toBe(0o644);
   const base = {
     schema_version: "1.0", campaign_id: "dogfood-2026", project: "mister-clean", slice: "intake",
     activity: "test", event_kind: "tool_result", tool_name: "fixture_tool", timestamp: "2026-10-03T00:00:00.000Z",
@@ -94,6 +96,14 @@ it("imports private campaign observations once and rolls back a conflicting repl
   const replayed = run(leaf);
   expect(replayed.status, replayed.stderr).toBe(0);
   expect(JSON.parse(replayed.stdout)).toMatchObject({ campaign_observations: { imported: 0, replayed: 1 } });
+  expect(lstatSync(sourcePath).mode & 0o777).toBe(0o644);
+
+  chmodSync(sourcePath, 0o664);
+  const writableSource = run(leaf);
+  expect(writableSource.status).not.toBe(0);
+  expect(writableSource.stderr).toContain("source must be an owned regular file not writable by others");
+  expect(lstatSync(sourcePath).mode & 0o777).toBe(0o664);
+  chmodSync(sourcePath, 0o644);
 
   writeFileSync(sourcePath, '{"fixture":"tampered"}\n');
   const sourceMismatch = run(leaf);

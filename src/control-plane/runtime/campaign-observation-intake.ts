@@ -141,14 +141,14 @@ async function verifySourceDigests(rows: readonly CampaignExecutionObservation[]
   for (const [path, observations] of byPath) {
     const metadata = lstatSync(path);
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.nlink !== 1
-      || metadata.uid !== process.getuid?.() || (metadata.mode & 0o077) !== 0) {
-      throw new Error(`campaign observation source is not an owned private regular file: ${path}`);
+      || metadata.uid !== process.getuid?.() || (metadata.mode & 0o022) !== 0) {
+      throw new Error(`campaign observation source must be an owned regular file not writable by others: ${path}`);
     }
     const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const opened = fstatSync(descriptor);
       if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== metadata.uid
-        || opened.dev !== metadata.dev || opened.ino !== metadata.ino) {
+        || opened.dev !== metadata.dev || opened.ino !== metadata.ino || (opened.mode & 0o022) !== 0) {
         throw new Error(`campaign observation source changed during verification: ${path}`);
       }
       const requestedLines = new Map<number, Set<string>>();
@@ -196,6 +196,10 @@ async function verifySourceDigests(rows: readonly CampaignExecutionObservation[]
       if (whole !== null) {
         const actual = whole.digest("hex");
         if (wholeDigests.size !== 1 || !wholeDigests.has(actual)) throw new Error(`campaign observation source digest mismatch: ${path}`);
+      }
+      const final = fstatSync(descriptor);
+      if (final.dev !== opened.dev || final.ino !== opened.ino || (final.mode & 0o022) !== 0) {
+        throw new Error(`campaign observation source changed during verification: ${path}`);
       }
     } finally { closeSync(descriptor); }
   }
