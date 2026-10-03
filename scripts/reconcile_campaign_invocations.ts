@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { existsSync, lstatSync, mkdirSync } from "node:fs";
+import { lstatSync, mkdirSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 import { startLocalControlPlaneRuntime } from "../src/control-plane.js";
@@ -14,16 +14,29 @@ const parent = lstatSync(dirname(stateDir));
 if (!parent.isDirectory() || parent.isSymbolicLink() || (parent.mode & 0o022) !== 0 || parent.uid !== process.getuid?.()) {
   throw new Error("campaign parent must be an owned, non-writable-by-others directory");
 }
-if (!existsSync(stateDir)) mkdirSync(stateDir, { mode: 0o700 });
+function lstatIfPresent(path: string) {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+if (!lstatIfPresent(stateDir)) mkdirSync(stateDir, { mode: 0o700 });
 const state = lstatSync(stateDir);
 if (!state.isDirectory() || state.isSymbolicLink() || (state.mode & 0o077) !== 0 || state.uid !== process.getuid?.()) {
   throw new Error("campaign state directory must be an owned, private, non-symlink directory");
 }
-for (const filename of ["repository.sqlite", "global.sqlite", "invocations.jsonl"]) {
+for (const filename of [
+  "repository.sqlite", "global.sqlite", "invocations.jsonl",
+  "repository.sqlite-wal", "repository.sqlite-shm", "repository.sqlite-journal",
+  "global.sqlite-wal", "global.sqlite-shm", "global.sqlite-journal",
+]) {
   const file = join(stateDir, filename);
-  if (!existsSync(file)) continue;
-  const metadata = lstatSync(file);
-  if (!metadata.isFile() || metadata.isSymbolicLink() || (metadata.mode & 0o077) !== 0 || metadata.uid !== process.getuid?.()) {
+  const metadata = lstatIfPresent(file);
+  if (!metadata) continue;
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.nlink !== 1 || (metadata.mode & 0o077) !== 0 || metadata.uid !== process.getuid?.()) {
     throw new Error(`campaign state file is not owned and private: ${filename}`);
   }
 }

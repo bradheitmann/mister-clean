@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, lstatSync, mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -38,3 +38,20 @@ it("creates only a private dedicated leaf and replays it idempotently", () => {
   expect(second.status, second.stderr).toBe(0);
   expect(JSON.parse(second.stdout)).toMatchObject({ ok: true, result: { pending_count: 0 } });
 });
+
+it.each(["global.sqlite", "repository.sqlite", "global.sqlite-wal"])(
+  "rejects a dangling %s symlink without creating its outside target",
+  (filename) => {
+    const directory = mkdtempSync(join(tmpdir(), "mc-campaign-helper-"));
+    directories.push(directory);
+    const leaf = join(directory, "campaign-test");
+    const escape = join(directory, "escape");
+    mkdirSync(leaf, { mode: 0o700 });
+    mkdirSync(escape, { mode: 0o700 });
+    const outside = join(escape, filename);
+    symlinkSync(outside, join(leaf, filename));
+
+    expect(run(leaf).status).not.toBe(0);
+    expect(existsSync(outside)).toBe(false);
+  },
+);
