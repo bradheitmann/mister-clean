@@ -838,6 +838,36 @@ const globalV10Statements = [
     END`,
 ] as const;
 
+/** Retrospective execution telemetry is deliberately separate from strict
+ * evaluation runs and trials. Importing it cannot mint quality credit. */
+const globalV11Statements = [
+  `CREATE TABLE campaign_execution_observations (
+    observation_id TEXT PRIMARY KEY CHECK(observation_id GLOB 'obs:*'),
+    campaign_id TEXT NOT NULL,
+    project TEXT NOT NULL,
+    slice TEXT,
+    activity TEXT NOT NULL,
+    event_kind TEXT NOT NULL,
+    tool_name TEXT,
+    observed_at TEXT NOT NULL,
+    session_id TEXT,
+    model_id TEXT,
+    reasoning TEXT,
+    requested_model_id TEXT,
+    requested_reasoning TEXT,
+    candidate_revision TEXT,
+    integrated_revision TEXT,
+    metrics_json TEXT NOT NULL CHECK(json_valid(metrics_json) AND json_type(metrics_json) = 'object'),
+    source_path TEXT NOT NULL,
+    source_line INTEGER CHECK(source_line IS NULL OR source_line >= 1),
+    source_record_sha256 TEXT NOT NULL CHECK(length(source_record_sha256) = 64 AND source_record_sha256 NOT GLOB '*[^0-9a-f]*'),
+    canonical_record_json TEXT NOT NULL CHECK(json_valid(canonical_record_json)),
+    imported_at TEXT NOT NULL
+  ) STRICT`,
+  `CREATE INDEX campaign_execution_observations_campaign_idx ON campaign_execution_observations(campaign_id, observed_at)`,
+  ...appendOnly("campaign_execution_observations"),
+] as const;
+
 export const REPOSITORY_MIGRATIONS: readonly SqliteMigration[] = Object.freeze([{
   version: 1,
   description: "immutable repository runs, issues, plans, manifests, directives, receipts, and metrics",
@@ -892,6 +922,10 @@ export const GLOBAL_MIGRATIONS: readonly SqliteMigration[] = Object.freeze([{
   version: 10,
   description: "route-declared target Git checkout binding for credited identity receipts",
   statements: globalV10Statements,
+}, {
+  version: 11,
+  description: "append-only retrospective campaign execution observations without trial credit",
+  statements: globalV11Statements,
 }]);
 
 export function migrationsFor(kind: ControlPlaneStoreKind): readonly SqliteMigration[] {

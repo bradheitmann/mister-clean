@@ -16,7 +16,7 @@ const expected = {
     "plan_items", "plan_snapshots", "receipts", "repositories", "run_components", "run_events", "run_interpretations", "runs", "schema_migrations",
   ],
   global: [
-    "agent_evaluation_evidence", "agent_execution_profiles", "agent_identity_lease_events", "agent_identity_observation_targets", "agent_identity_observations", "agent_run_events", "agent_tuples", "availability_observations", "capabilities",
+    "agent_evaluation_evidence", "agent_execution_profiles", "agent_identity_lease_events", "agent_identity_observation_targets", "agent_identity_observations", "agent_run_events", "agent_tuples", "availability_observations", "campaign_execution_observations", "capabilities",
     "capability_evaluators", "deployments", "evaluation_dispatch_subjects", "evaluation_evaluated_candidates", "evaluation_identity_receipt_verifications", "evaluation_run_invocations", "execution_routes", "execution_treatments", "harnesses", "inference_sources",
     "local_mister_clean_invocations", "local_repository_identities", "logical_project_repository_aliases", "logical_projects", "models", "price_schedules", "qualification_events", "schema_migrations", "telemetry_imports",
     "trial_evaluations", "trials",
@@ -93,7 +93,7 @@ try {
       const migrations = opened.database.query<{ version: number }>(
         "SELECT version FROM schema_migrations WHERE store_kind = ? ORDER BY version",
       ).all(kind).map((migration) => migration.version);
-      const expectedMigrations = kind === "repository" ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const expectedMigrations = kind === "repository" ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
       if (JSON.stringify(migrations) !== JSON.stringify(expectedMigrations)) {
         throw new Error(`${kind} migrations were not recorded exactly once and in order`);
       }
