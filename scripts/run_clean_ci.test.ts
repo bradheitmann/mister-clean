@@ -228,9 +228,11 @@ describe("clean exact-object CI capsule", () => {
     // The command timeout applies to one supervised command, not the test's
     // whole cold-clone lifecycle. The test body deliberately ends while this
     // invocation is active; async afterEach must settle it before rmSync.
+    // Allow this failure-path command more time under a concurrent test load,
+    // while the separate timeout test retains the short 10-second bound.
     void trackCleanCiRun(
       root,
-      runCleanCi(root, fixtureCleanCiOptions),
+      runCleanCi(root, { ...fixtureCleanCiOptions, command_timeout_ms: 60_000 }),
       "reject",
       /supervised command exited 1: pnpm/,
       () => expect(existsSync(marker)).toBe(true),

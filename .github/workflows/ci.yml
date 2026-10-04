@@ -29,6 +29,13 @@ jobs:
           node-version: 22
       - name: Reconstruct and verify the exact candidate in one clean capsule
         run: pnpm run ci:check
+      - name: Verify campaign SQLite reader and strict TypeScript intake helper
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm exec tsc --project tsconfig.campaign.json --noEmit
+          cargo test --manifest-path tools/campaign-query/Cargo.toml --locked
+          cargo test --manifest-path tools/campaign-observer/Cargo.toml --locked
+          cargo clippy --manifest-path tools/campaign-observer/Cargo.toml --all-targets --locked -- -D warnings
       # The release-archive source check (generate_release_attestation.mjs
       # --source-check) regenerates MANIFEST.sha256 from the attested package
       # surface of THIS checkout, which includes the built dist/ outputs.
