@@ -8,8 +8,12 @@ import { openControlPlaneDatabase } from "../src/control-plane/persistence/sqlit
 import { importCampaignExecutionObservations } from "../src/control-plane/runtime/campaign-observation-intake.js";
 
 const stateDir = process.argv[2];
-if (!stateDir || !isAbsolute(stateDir) || !basename(stateDir).startsWith("campaign-")) {
-  throw new Error("usage: bun scripts/reconcile_campaign_invocations.ts <absolute-campaign-leaf-dir>");
+const campaignId = process.argv[3];
+const batchPath = process.argv[4];
+if (!stateDir || !isAbsolute(stateDir) || !basename(stateDir).startsWith("campaign-")
+  || !campaignId || campaignId.length > 1024 || /[\u0000-\u001f\u007f]/u.test(campaignId)
+  || process.argv.length > 5) {
+  throw new Error("usage: bun scripts/reconcile_campaign_invocations.ts <absolute-campaign-leaf-dir> <expected-campaign-id> [absolute-private-import-batch]");
 }
 
 const parent = lstatSync(dirname(stateDir));
@@ -65,6 +69,16 @@ function verifyStateFiles() {
   }
 }
 verifyStateFiles();
+if (batchPath !== undefined) {
+  const batchDir = join(stateDir, "import-batches");
+  if (dirname(batchPath) !== batchDir || !/^[a-f0-9]{64}\.jsonl$/u.test(basename(batchPath))) {
+    throw new Error("import batch must be a digest-named file in the campaign import-batches directory");
+  }
+  const metadata = lstatSync(batchDir);
+  if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== process.getuid?.()
+    || (metadata.mode & 0o077) !== 0) throw new Error("import batch directory must be owned and private");
+  lstatSync(batchPath); // A named batch is required, unlike an absent default journal.
+}
 
 const token = Buffer.from(randomBytes(32)).toString("hex");
 const previousUmask = process.umask(0o077);
@@ -103,7 +117,7 @@ try {
   const global = await openControlPlaneDatabase("global", join(stateDir, "global.sqlite"));
   let observationImport;
   try {
-    observationImport = await importCampaignExecutionObservations(global, join(stateDir, "campaign-observations.jsonl"));
+    observationImport = await importCampaignExecutionObservations(global, batchPath ?? join(stateDir, "campaign-observations.jsonl"), campaignId);
   } finally {
     global.close();
     verifyStateFiles();

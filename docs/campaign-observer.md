@@ -21,6 +21,21 @@ The observer and intake schema ship together; no separate untracked importer
 is required. Empty stores report zero observed counts and an unavailable cache
 percentage, not a fabricated cache rate or evaluation credit.
 
+Campaign identity is mandatory at capture, intake and query. Existing receipts
+from another campaign are rejected before journal export. Every observation
+summary filters its aggregates by the supplied campaign ID, including tools,
+payload measurements and merges. Use `summary GLOBAL.sqlite CAMPAIGN_ID`.
+The separate campaign-query utility reports a labeled global-store census of
+invocations and trials, whose tables have no campaign key; those are never
+campaign-attributed counts.
+
+The complete journal may grow beyond 16 MiB without raising the intake cap:
+the observer submits private, immutable SHA-256-named batches of at most 8 MiB
+through the authoritative importer. Batches are individually atomic, not an
+all-or-nothing checkpoint. A rejection stops collection; earlier admitted
+batches remain and are idempotently replayed on recovery. Retained batches
+consume additional disk space; their hashes bind the exact admitted bytes.
+
 Source-line hashes exclude LF only: CR bytes in CRLF files remain part of the
 original-byte evidence. Offset timestamps are normalized to UTC for admission,
 without changing already-canonical Z timestamps or rewriting source bytes.
@@ -40,6 +55,24 @@ Do not commit operator paths, transcripts, config, or databases. Watch is finite
 checkpoints and every second while waiting. Import failure stops the watch;
 the complete journal and immutable receipts survive for replay. No inference
 service is started.
+
+Forge reads are independent from local observation capture. A failed command,
+invalid JSON or malformed PR snapshot produces a `forge_collection_failure`
+observation and a private receipt containing exit status, byte counts and output
+hashes, never provider output text. The collection result explicitly says
+`forge_status: degraded` and lists failed sources; other PRs and local session
+observations continue through authoritative admission. This is partial forge
+coverage, not a successful fresh observation of the unavailable PR. Subsequent
+checkpoints retry it on the normal finite-watch cadence; there is no tight retry
+loop. Source-integrity errors, receipt-write errors and importer rejection remain
+hard failures, with original evidence preserved.
+
+An absent merge-state field is not evidence that a PR is unmerged: `mergedAt`
+must be explicitly present (null or a valid timestamp). File addition/deletion
+counts must be nonnegative integers with safe totals, and consumed comment
+bodies must be strings and comment IDs must be nonempty bounded strings for
+replay deduplication. Incomplete or malformed snapshots are degraded forge
+coverage, never silently complete snapshots or fabricated zero-count metrics.
 
 ## Measurement definitions, version 1
 

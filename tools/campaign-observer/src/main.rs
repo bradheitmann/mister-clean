@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -255,6 +255,36 @@ impl Ledger {
         fs::rename(tmp, self.state.join("campaign-observations.jsonl"))?;
         Ok(())
     }
+    fn import_batches(&self, limit: usize) -> Result<Vec<PathBuf>> {
+        if !(131_073..=8 * 1024 * 1024).contains(&limit) {
+            return Err("invalid bounded import batch limit".into());
+        }
+        let dir = self.state.join("import-batches");
+        private_dir(&dir)?;
+        let mut batches = Vec::new();
+        let mut bytes = Vec::new();
+        for event in self.records.values() {
+            let mut line = serde_json::to_vec(event)?;
+            if line.len() > 131_072 {
+                return Err("observation receipt exceeds intake line limit".into());
+            }
+            line.push(b'\n');
+            if !bytes.is_empty() && bytes.len() + line.len() > limit {
+                let path = dir.join(format!("{}.jsonl", hash(&bytes)));
+                retain(&path, &bytes)?;
+                batches.push(path);
+                bytes.clear();
+            }
+            bytes.extend(line);
+        }
+        // Empty batches still run intake's single-campaign store check.
+        if !bytes.is_empty() || batches.is_empty() {
+            let path = dir.join(format!("{}.jsonl", hash(&bytes)));
+            retain(&path, &bytes)?;
+            batches.push(path);
+        }
+        Ok(batches)
+    }
 }
 fn forge_role(kind: &str) -> &str {
     if kind.starts_with("qa_") {
@@ -266,6 +296,85 @@ fn forge_role(kind: &str) -> &str {
     } else {
         "integration"
     }
+}
+fn record_forge_failure(
+    ledger: &mut Ledger,
+    pr: &Value,
+    reason: &str,
+    output: Option<&std::process::Output>,
+) -> Result<Value> {
+    let elapsed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+    let timestamp =
+        chrono::DateTime::from_timestamp(i64::try_from(elapsed.as_secs())?, elapsed.subsec_nanos())
+            .ok_or("failure observation clock out of range")?
+            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    // Deliberately retain hashes and counts only. Provider output and spawn
+    // error strings can contain credentials, private paths or free-form text.
+    let receipt = json!({
+        "schema":"mister-clean.forge-collection-failure/1",
+        "forge_repo":pr["repo"], "forge_pr_number":pr["number"],
+        "timestamp":timestamp, "reason":reason,
+        "exit_status":output.and_then(|v|v.status.code()),
+        "stdout_sha256":output.map(|v|hash(&v.stdout)),
+        "stderr_sha256":output.map(|v|hash(&v.stderr)),
+        "stdout_bytes":output.map(|v|v.stdout.len()),
+        "stderr_bytes":output.map(|v|v.stderr.len()),
+        "quality_credit":false
+    });
+    let bytes = serde_json::to_vec(&receipt)?;
+    let digest = hash(&bytes);
+    let path = ledger
+        .state
+        .join("source-receipts")
+        .join(format!("forge-failure-{digest}.json"));
+    retain(&path, &bytes)?;
+    let event = ledger.event(
+        text(pr, "project"),
+        pr["slice"].as_str(),
+        "collection",
+        "forge_collection_failure",
+        &timestamp,
+        None,
+        None,
+        None,
+        json!({"forge_collection_failures":1}),
+        json!({"path":path,"line":null,"record_sha256":digest}),
+    );
+    ledger.add(event)?;
+    Ok(json!({"repo":pr["repo"],"number":pr["number"],"reason":reason,"receipt":path}))
+}
+fn valid_forge_snapshot(receipt: &Value) -> bool {
+    receipt.is_object()
+        && receipt.get("mergedAt").is_some()
+        && instant(text(receipt, "createdAt")).is_some()
+        && (receipt["mergedAt"].is_null() || instant(text(receipt, "mergedAt")).is_some())
+        && text(receipt, "headRefOid").len() == 40
+        && text(receipt, "headRefOid")
+            .bytes()
+            .all(|v| v.is_ascii_hexdigit())
+        && receipt["files"].as_array().is_some_and(|files| {
+            ["additions", "deletions"].iter().all(|field| {
+                files
+                    .iter()
+                    .try_fold(0_u64, |sum, file| sum.checked_add(file[*field].as_u64()?))
+                    .is_some_and(|sum| sum <= 9_007_199_254_740_991)
+            })
+        })
+        && receipt["comments"].is_array()
+        && receipt["comments"].as_array().is_some_and(|comments| {
+            comments.iter().all(|comment| {
+                instant(text(comment, "createdAt")).is_some()
+                    && comment["body"].is_string()
+                    && !text(comment, "id").is_empty()
+                    && text(comment, "id").len() <= 1024
+                    && !text(comment, "id").chars().any(char::is_control)
+            })
+        })
+        && (receipt["mergedAt"].is_null()
+            || (text(&receipt["mergeCommit"], "oid").len() == 40
+                && text(&receipt["mergeCommit"], "oid")
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit())))
 }
 fn role(path: &str) -> &str {
     if path.contains("session_report_") {
@@ -285,6 +394,10 @@ fn role(path: &str) -> &str {
     }
 }
 fn capture(config: &Value) -> Result<Value> {
+    let campaign = text(config, "campaign_id");
+    if campaign.is_empty() || campaign.len() > 1024 || campaign.chars().any(char::is_control) {
+        return Err("expected bounded nonempty campaign_id".into());
+    }
     let cutoff = text(config, "cutoff");
     let cutoff_time = instant(cutoff)
         .filter(|_| cutoff.ends_with('Z') || cutoff.ends_with("+00:00"))
@@ -333,7 +446,25 @@ fn capture(config: &Value) -> Result<Value> {
     for entry in fs::read_dir(state.join("observation-receipts"))? {
         let entry = entry?;
         if entry.path().extension().is_some_and(|v| v == "json") {
-            let event: Value = serde_json::from_slice(&fs::read(entry.path())?)?;
+            let opened = open_session(&state.join("observation-receipts"), &entry.path())?;
+            if opened.metadata()?.mode() & 0o077 != 0 || opened.metadata()?.len() > 131_072 {
+                return Err("observation receipt must be private and bounded".into());
+            }
+            let event: Value = serde_json::from_reader(opened.take(131_073))?;
+            if text(&event, "campaign_id") != ledger.campaign {
+                return Err("existing observation receipt belongs to a different campaign".into());
+            }
+            let mut identity = event.clone();
+            identity
+                .as_object_mut()
+                .ok_or("observation receipt must be an object")?
+                .remove("observation_id");
+            let digest = hash(&serde_json::to_vec(&identity)?);
+            if text(&event, "observation_id") != format!("obs:{digest}")
+                || entry.file_name() != std::ffi::OsString::from(format!("{digest}.json"))
+            {
+                return Err("existing observation receipt identity mismatch".into());
+            }
             ledger
                 .records
                 .insert(text(&event, "observation_id").to_owned(), event);
@@ -544,6 +675,7 @@ fn capture(config: &Value) -> Result<Value> {
         retain(&bindings_path, &serde_json::to_vec(&config["forge_prs"])?)?;
     }
     let original_bindings: Value = serde_json::from_slice(&fs::read(&bindings_path)?)?;
+    let mut forge_failures = Vec::new();
     for pr in config["forge_prs"].as_array().unwrap_or(&Vec::new()) {
         let repo = text(pr, "repo");
         let number = pr["number"].as_u64().ok_or("missing PR number")?;
@@ -557,11 +689,49 @@ fn capture(config: &Value) -> Result<Value> {
                 "--json",
                 "createdAt,mergedAt,headRefOid,mergeCommit,commits,comments,files",
             ])
-            .output()?;
+            .output();
+        let output = match output {
+            Ok(output) => output,
+            Err(_) => {
+                forge_failures.push(record_forge_failure(
+                    &mut ledger,
+                    pr,
+                    "command_unavailable",
+                    None,
+                )?);
+                continue;
+            }
+        };
         if !output.status.success() {
-            return Err(format!("forge read failed: {repo}#{number}").into());
+            forge_failures.push(record_forge_failure(
+                &mut ledger,
+                pr,
+                "command_failed",
+                Some(&output),
+            )?);
+            continue;
         }
-        let receipt: Value = serde_json::from_slice(&output.stdout)?;
+        let receipt: Value = match serde_json::from_slice(&output.stdout) {
+            Ok(receipt) => receipt,
+            Err(_) => {
+                forge_failures.push(record_forge_failure(
+                    &mut ledger,
+                    pr,
+                    "invalid_json",
+                    Some(&output),
+                )?);
+                continue;
+            }
+        };
+        if !valid_forge_snapshot(&receipt) {
+            forge_failures.push(record_forge_failure(
+                &mut ledger,
+                pr,
+                "invalid_snapshot",
+                Some(&output),
+            )?);
+            continue;
+        }
         let project = text(pr, "project");
         let slice = pr["slice"].as_str();
         let safe_snapshot = json!({"createdAt":receipt["createdAt"],"mergedAt":receipt["mergedAt"],"headRefOid":receipt["headRefOid"],"mergeCommit":receipt["mergeCommit"],"files":receipt["files"],"response_sha256":hash(&output.stdout)});
@@ -687,59 +857,81 @@ fn capture(config: &Value) -> Result<Value> {
         }
     }
     ledger.export()?;
+    let import_batches = ledger.import_batches(8 * 1024 * 1024)?;
     Ok(
-        json!({"observations":ledger.records.len(),"observed_sessions":observed_sessions,"journal":state.join("campaign-observations.jsonl"),"quality_credit":false}),
+        json!({"observations":ledger.records.len(),"observed_sessions":observed_sessions,"journal":state.join("campaign-observations.jsonl"),"import_batches":import_batches,"forge_status":if forge_failures.is_empty(){"complete"}else{"degraded"},"forge_failures":forge_failures,"quality_credit":false}),
     )
 }
-fn summary(path: &Path) -> Result<Value> {
+fn summary(path: &Path, campaign: &str) -> Result<Value> {
+    if campaign.is_empty() || campaign.len() > 1024 || campaign.chars().any(char::is_control) {
+        return Err("expected bounded nonempty campaign_id".into());
+    }
     let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let mut query=db.prepare("SELECT event_kind,CASE WHEN event_kind LIKE 'guard_%' THEN 'guard' WHEN event_kind='forge_comment' THEN 'unclassified' ELSE activity END AS normalized_activity,model_id,COUNT(*),SUM(COALESCE(json_extract(metrics_json,'$.delta_input_tokens'),0)),SUM(COALESCE(json_extract(metrics_json,'$.delta_cached_input_tokens'),0)),SUM(COALESCE(json_extract(metrics_json,'$.delta_output_tokens'),0)) FROM campaign_execution_observations GROUP BY event_kind,normalized_activity,model_id ORDER BY event_kind,normalized_activity,model_id")?;
-    let rows=query.query_map([],|r|Ok(json!({"event_kind":r.get::<_,String>(0)?,"activity":r.get::<_,String>(1)?,"model":r.get::<_,Option<String>>(2)?,"events":r.get::<_,i64>(3)?,"input_tokens":r.get::<_,i64>(4)?,"cached_input_tokens":r.get::<_,i64>(5)?,"output_tokens":r.get::<_,i64>(6)?})))?.collect::<std::result::Result<Vec<_>,_>>()?;
-    let totals:Value=db.query_row("SELECT COUNT(*),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.delta_input_tokens'),0)),0),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.delta_cached_input_tokens'),0)),0),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.delta_output_tokens'),0)),0),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.counter_resets'),0)),0),COUNT(DISTINCT session_id) FROM campaign_execution_observations",[],|r|Ok(json!({"observations":r.get::<_,i64>(0)?,"input_tokens":r.get::<_,i64>(1)?,"cached_input_tokens":r.get::<_,i64>(2)?,"output_tokens":r.get::<_,i64>(3)?,"counter_resets":r.get::<_,i64>(4)?,"sessions":r.get::<_,i64>(5)?})))?;
+    let mut query=db.prepare("SELECT event_kind,CASE WHEN event_kind LIKE 'guard_%' THEN 'guard' WHEN event_kind='forge_comment' THEN 'unclassified' ELSE activity END AS normalized_activity,model_id,COUNT(*),SUM(COALESCE(json_extract(metrics_json,'$.delta_input_tokens'),0)),SUM(COALESCE(json_extract(metrics_json,'$.delta_cached_input_tokens'),0)),SUM(COALESCE(json_extract(metrics_json,'$.delta_output_tokens'),0)) FROM campaign_execution_observations WHERE campaign_id=? GROUP BY event_kind,normalized_activity,model_id ORDER BY event_kind,normalized_activity,model_id")?;
+    let rows=query.query_map([campaign],|r|Ok(json!({"event_kind":r.get::<_,String>(0)?,"activity":r.get::<_,String>(1)?,"model":r.get::<_,Option<String>>(2)?,"events":r.get::<_,i64>(3)?,"input_tokens":r.get::<_,i64>(4)?,"cached_input_tokens":r.get::<_,i64>(5)?,"output_tokens":r.get::<_,i64>(6)?})))?.collect::<std::result::Result<Vec<_>,_>>()?;
+    let totals:Value=db.query_row("SELECT COUNT(*),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.delta_input_tokens'),0)),0),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.delta_cached_input_tokens'),0)),0),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.delta_output_tokens'),0)),0),COALESCE(SUM(COALESCE(json_extract(metrics_json,'$.counter_resets'),0)),0),COUNT(DISTINCT session_id) FROM campaign_execution_observations WHERE campaign_id=?",[campaign],|r|Ok(json!({"observations":r.get::<_,i64>(0)?,"input_tokens":r.get::<_,i64>(1)?,"cached_input_tokens":r.get::<_,i64>(2)?,"output_tokens":r.get::<_,i64>(3)?,"counter_resets":r.get::<_,i64>(4)?,"sessions":r.get::<_,i64>(5)?})))?;
     let input = totals["input_tokens"].as_f64().unwrap_or(0.0);
     let cache = totals["cached_input_tokens"].as_f64().unwrap_or(0.0);
-    let mut tool_query=db.prepare("SELECT tool_name,COUNT(*),SUM(COALESCE(json_extract(metrics_json,'$.tool_envelope_latency_ms'),0)),SUM(COALESCE(json_extract(metrics_json,'$.result_bytes'),0)),COUNT(json_extract(metrics_json,'$.tool_envelope_latency_ms')) FROM campaign_execution_observations WHERE event_kind='tool_result' GROUP BY tool_name ORDER BY COUNT(*) DESC")?;
-    let tools=tool_query.query_map([],|r|Ok(json!({"tool_name":r.get::<_,Option<String>>(0)?,"results":r.get::<_,i64>(1)?,"total_envelope_latency_ms":r.get::<_,i64>(2)?,"legacy_result_bytes_incomplete":r.get::<_,i64>(3)?,"latency_observations":r.get::<_,i64>(4)?})))?.collect::<std::result::Result<Vec<_>,_>>()?;
-    let payloads:Value=db.query_row("SELECT SUM(COALESCE(json_extract(metrics_json,'$.result_text_bytes'),0)),SUM(COALESCE(json_extract(metrics_json,'$.reported_exit_statuses'),0)),SUM(COALESCE(json_extract(metrics_json,'$.reported_failed_exits'),0)),SUM(COALESCE(json_extract(metrics_json,'$.unmeasured_payloads'),0)) FROM campaign_execution_observations WHERE event_kind='tool_payload_measurement'",[],|r|Ok(json!({"result_text_bytes":r.get::<_,Option<i64>>(0)?,"reported_exit_statuses":r.get::<_,Option<i64>>(1)?,"reported_failed_exits":r.get::<_,Option<i64>>(2)?,"unmeasured_payloads":r.get::<_,Option<i64>>(3)?})))?;
-    let mut merge_query=db.prepare("SELECT project,slice,candidate_revision,integrated_revision,metrics_json FROM campaign_execution_observations WHERE event_kind='merge' ORDER BY observed_at")?;
-    let merges=merge_query.query_map([],|r|Ok(json!({"project":r.get::<_,String>(0)?,"slice":r.get::<_,Option<String>>(1)?,"candidate":r.get::<_,Option<String>>(2)?,"integrated":r.get::<_,Option<String>>(3)?,"metrics":serde_json::from_str::<Value>(&r.get::<_,String>(4)?).unwrap_or(Value::Null)})))?.collect::<std::result::Result<Vec<_>,_>>()?;
+    let mut tool_query=db.prepare("SELECT tool_name,COUNT(*),SUM(COALESCE(json_extract(metrics_json,'$.tool_envelope_latency_ms'),0)),SUM(COALESCE(json_extract(metrics_json,'$.result_bytes'),0)),COUNT(json_extract(metrics_json,'$.tool_envelope_latency_ms')) FROM campaign_execution_observations WHERE campaign_id=? AND event_kind='tool_result' GROUP BY tool_name ORDER BY COUNT(*) DESC")?;
+    let tools=tool_query.query_map([campaign],|r|Ok(json!({"tool_name":r.get::<_,Option<String>>(0)?,"results":r.get::<_,i64>(1)?,"total_envelope_latency_ms":r.get::<_,i64>(2)?,"legacy_result_bytes_incomplete":r.get::<_,i64>(3)?,"latency_observations":r.get::<_,i64>(4)?})))?.collect::<std::result::Result<Vec<_>,_>>()?;
+    let payloads:Value=db.query_row("SELECT SUM(COALESCE(json_extract(metrics_json,'$.result_text_bytes'),0)),SUM(COALESCE(json_extract(metrics_json,'$.reported_exit_statuses'),0)),SUM(COALESCE(json_extract(metrics_json,'$.reported_failed_exits'),0)),SUM(COALESCE(json_extract(metrics_json,'$.unmeasured_payloads'),0)) FROM campaign_execution_observations WHERE campaign_id=? AND event_kind='tool_payload_measurement'",[campaign],|r|Ok(json!({"result_text_bytes":r.get::<_,Option<i64>>(0)?,"reported_exit_statuses":r.get::<_,Option<i64>>(1)?,"reported_failed_exits":r.get::<_,Option<i64>>(2)?,"unmeasured_payloads":r.get::<_,Option<i64>>(3)?})))?;
+    let mut merge_query=db.prepare("SELECT project,slice,candidate_revision,integrated_revision,metrics_json FROM campaign_execution_observations WHERE campaign_id=? AND event_kind='merge' ORDER BY observed_at")?;
+    let merges=merge_query.query_map([campaign],|r|Ok(json!({"project":r.get::<_,String>(0)?,"slice":r.get::<_,Option<String>>(1)?,"candidate":r.get::<_,Option<String>>(2)?,"integrated":r.get::<_,Option<String>>(3)?,"metrics":serde_json::from_str::<Value>(&r.get::<_,String>(4)?).unwrap_or(Value::Null)})))?.collect::<std::result::Result<Vec<_>,_>>()?;
     Ok(
-        json!({"schema":"mister-clean.campaign-observation-summary/1","rows":rows,"totals":totals,"cache_percentage":if input>0.0 {Some(100.0*cache/input)} else {None},"tools":tools,"payload_measurements":payloads,"merges":merges,"unavailable":["actual_billing","priced_usage","ttft","generation_tokens_per_second","nested_tool_invocations","exact_skill_mcp_context_overhead","controlled_model_ranking"],"quality_credit":false}),
+        json!({"schema":"mister-clean.campaign-observation-summary/1","campaign_id":campaign,"rows":rows,"totals":totals,"cache_percentage":if input>0.0 {Some(100.0*cache/input)} else {None},"tools":tools,"payload_measurements":payloads,"merges":merges,"unavailable":["actual_billing","priced_usage","ttft","generation_tokens_per_second","nested_tool_invocations","exact_skill_mcp_context_overhead","controlled_model_ranking"],"quality_credit":false}),
     )
 }
 fn checkpoint(config: &Value) -> Result<Value> {
     let started = std::time::Instant::now();
     let collection = capture(config)?;
-    let output = Command::new("bun")
-        .arg("scripts/reconcile_campaign_invocations.ts")
-        .arg(text(config, "state_dir"))
-        .current_dir(text(config, "intake_worktree"))
-        .output()?;
-    if !output.status.success() {
-        // Retain bounded diagnostics privately, never in observations or console
-        // output. The receipt lets operators inspect the actual rejection without
-        // rerunning an importer or exposing its stderr (which may contain paths).
-        let failure = serde_json::to_vec(&json!({
-            "schema":"mister-clean.campaign-import-failure/1",
-            "status":output.status.code(),
-            "stderr_sha256":hash(&output.stderr),
-            "stderr":String::from_utf8_lossy(&output.stderr[..output.stderr.len().min(65536)]),
-            "stderr_truncated":output.stderr.len()>65536,
-            "quality_credit":false
-        }))?;
-        let receipt_path = PathBuf::from(text(config, "state_dir"))
-            .join("source-receipts")
-            .join(format!("import-failure-{}.json", hash(&failure)));
-        retain(&receipt_path, &failure)?;
-        return Err(format!(
+    let mut imported_total = 0_u64;
+    let mut replayed_total = 0_u64;
+    let batches = collection["import_batches"]
+        .as_array()
+        .ok_or("missing import batches")?;
+    for batch in batches {
+        let output = Command::new("bun")
+            .arg("scripts/reconcile_campaign_invocations.ts")
+            .arg(text(config, "state_dir"))
+            .arg(text(config, "campaign_id"))
+            .arg(batch.as_str().ok_or("invalid import batch path")?)
+            .current_dir(text(config, "intake_worktree"))
+            .output()?;
+        if !output.status.success() {
+            // Retain bounded diagnostics privately, never in observations or console
+            // output. The receipt lets operators inspect the actual rejection without
+            // rerunning an importer or exposing its stderr (which may contain paths).
+            let failure = serde_json::to_vec(&json!({
+                "schema":"mister-clean.campaign-import-failure/1",
+                "status":output.status.code(),
+                "stderr_sha256":hash(&output.stderr),
+                "stderr":String::from_utf8_lossy(&output.stderr[..output.stderr.len().min(65536)]),
+                "stderr_truncated":output.stderr.len()>65536,
+                "quality_credit":false
+            }))?;
+            let receipt_path = PathBuf::from(text(config, "state_dir"))
+                .join("source-receipts")
+                .join(format!("import-failure-{}.json", hash(&failure)));
+            retain(&receipt_path, &failure)?;
+            return Err(format!(
             "authoritative importer failed (status {:?}); original journal preserved; private diagnostic receipt: {}",
             output.status.code(), receipt_path.display()
         )
         .into());
+        }
+        let imported: Value = serde_json::from_slice(&output.stdout)?;
+        imported_total += imported["campaign_observations"]["imported"]
+            .as_u64()
+            .ok_or("invalid import count")?;
+        replayed_total += imported["campaign_observations"]["replayed"]
+            .as_u64()
+            .ok_or("invalid replay count")?;
     }
-    let imported: Value = serde_json::from_slice(&output.stdout)?;
-    let summary = summary(&PathBuf::from(text(config, "state_dir")).join("global.sqlite"))?;
-    let result = json!({"collection":collection,"import":imported["campaign_observations"],"summary":summary,"collector_elapsed_ms":started.elapsed().as_millis()});
+    let summary = summary(
+        &PathBuf::from(text(config, "state_dir")).join("global.sqlite"),
+        text(config, "campaign_id"),
+    )?;
+    let result = json!({"collection":collection,"import":{"imported":imported_total,"replayed":replayed_total},"summary":summary,"collector_elapsed_ms":started.elapsed().as_millis()});
     let receipt = serde_json::to_vec(&result)?;
     let digest = hash(&receipt);
     retain(
@@ -753,9 +945,12 @@ fn checkpoint(config: &Value) -> Result<Value> {
 fn main() {
     let args: Vec<_> = std::env::args().collect();
     let result = (|| -> Result<Value> {
-        if args.len() != 3 {
+        if args.len() == 4 && args[1] == "summary" {
+            return summary(Path::new(&args[2]), &args[3]);
+        }
+        if args.len() != 3 || args[1] == "summary" {
             return Err(
-                "usage: campaign-observer collect|checkpoint|watch CONFIG | summary GLOBAL.sqlite"
+                "usage: campaign-observer collect|checkpoint|watch CONFIG | summary GLOBAL.sqlite CAMPAIGN_ID"
                     .into(),
             );
         }
@@ -791,7 +986,6 @@ fn main() {
                 }
                 Ok(json!({"completed_cycles":cycles,"stopped":false}))
             }
-            "summary" => summary(Path::new(&args[2])),
             _ => Err("unknown command".into()),
         }
     })();
@@ -807,6 +1001,38 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn forge_snapshot_requires_explicit_merge_state_and_valid_consumed_fields() {
+        let valid = json!({"createdAt":"2026-10-03T06:00:00Z","mergedAt":null,
+            "headRefOid":"1111111111111111111111111111111111111111",
+            "files":[{"additions":2,"deletions":0}],"comments":[]});
+        assert!(valid_forge_snapshot(&valid));
+        let mut missing = valid.clone();
+        missing.as_object_mut().unwrap().remove("mergedAt");
+        assert!(!valid_forge_snapshot(&missing));
+        let mut unknown_count = valid.clone();
+        unknown_count["files"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("additions");
+        assert!(!valid_forge_snapshot(&unknown_count));
+        let mut unsafe_total = valid.clone();
+        unsafe_total["files"] = json!([{"additions":9_007_199_254_740_991_u64,"deletions":0},{"additions":1,"deletions":0}]);
+        assert!(!valid_forge_snapshot(&unsafe_total));
+        let mut missing_body = valid.clone();
+        missing_body["comments"] = json!([{"createdAt":"2026-10-03T06:01:00Z"}]);
+        assert!(!valid_forge_snapshot(&missing_body));
+        let mut missing_id = valid.clone();
+        missing_id["comments"] = json!([{"createdAt":"2026-10-03T06:01:00Z","body":"comment"}]);
+        assert!(!valid_forge_snapshot(&missing_id));
+        missing_id["comments"][0]["id"] = json!("comment-id");
+        assert!(valid_forge_snapshot(&missing_id));
+        let mut merged = valid;
+        merged["mergedAt"] = json!("2026-10-03T06:02:00Z");
+        assert!(!valid_forge_snapshot(&merged));
+        merged["mergeCommit"] = json!({"oid":"2222222222222222222222222222222222222222"});
+        assert!(valid_forge_snapshot(&merged));
+    }
     #[test]
     fn forge_guard_and_unclassified_comments_are_not_integration() {
         assert_eq!(forge_role("guard_merge"), "guard");

@@ -43,7 +43,7 @@ fn reads_existing_store_without_changing_it() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("UTF-8 output"),
-        "global_schema_version=10\nobserved_cli_invocations=2\ntrials=2\ncredited_trials=1\n"
+        "global_schema_version=10\nscope=global_store_census_not_campaign_attribution\nobserved_cli_invocations=2\ntrials=2\ncredited_trials=1\n"
     );
     assert_eq!(fs::read(&path).expect("post-query bytes"), before);
     assert_eq!(

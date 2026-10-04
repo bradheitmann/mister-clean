@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync, readSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { basename, dirname, isAbsolute } from "node:path";
 
 import type { OpenControlPlaneDatabase } from "../persistence/sqlite.js";
 import { canonicalJson, sha256Bytes } from "../../canonical-json.js";
@@ -219,19 +219,38 @@ async function verifySourceDigests(rows: readonly CampaignExecutionObservation[]
 export async function importCampaignExecutionObservations(
   global: OpenControlPlaneDatabase,
   journalPath: string,
+  expectedCampaignId: string,
   importedAt = new Date().toISOString(),
 ): Promise<CampaignObservationImportReceipt> {
   if (global.kind !== "global") throw new Error("campaign observations require the global store");
+  boundedText(expectedCampaignId, "expected campaign_id");
+  // A campaign leaf is a single-campaign store, even when the journal is empty.
+  // Never quietly adopt a reused leaf containing another campaign's evidence.
+  const foreign = global.database.query<{ campaign_id: string }>(
+    "SELECT campaign_id FROM campaign_execution_observations WHERE campaign_id <> ? LIMIT 1",
+  ).get(expectedCampaignId);
+  if (foreign !== null) throw new Error("campaign store contains observations for a different campaign");
   const content = readPrivateJournal(journalPath);
-  if (content === null || content.length === 0) return { imported: 0, replayed: 0 };
+  if (content === null) return { imported: 0, replayed: 0 };
+  if (basename(dirname(journalPath)) === "import-batches"
+    && basename(journalPath) !== `${sha256Bytes(content)}.jsonl`) {
+    throw new Error("campaign import batch filename does not match its content digest");
+  }
+  if (content.length === 0) return { imported: 0, replayed: 0 };
   if (!content.endsWith("\n")) throw new Error("campaign observation journal has an incomplete final line");
   const rows = content.slice(0, -1).split("\n").map((line, index) => {
     if (line.length === 0 || Buffer.byteLength(line) > 131_072) throw new Error(`campaign observation line ${index + 1} is empty or too large`);
     try { return parseObservation(JSON.parse(line) as unknown); }
     catch (error) { throw new Error(`campaign observation line ${index + 1}: ${String(error)}`); }
   });
+  if (rows.some((row) => row.campaign_id !== expectedCampaignId)) {
+    throw new Error("campaign observation does not match expected campaign_id");
+  }
   await verifySourceDigests(rows);
   return global.database.transaction(() => {
+    // Repeat inside the writer transaction to cover concurrent admission.
+    if (global.database.query("SELECT campaign_id FROM campaign_execution_observations WHERE campaign_id <> ? LIMIT 1")
+      .get(expectedCampaignId) !== null) throw new Error("campaign store contains observations for a different campaign");
     let imported = 0;
     let replayed = 0;
     for (const row of rows) {

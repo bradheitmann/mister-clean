@@ -32,7 +32,16 @@ verify the source digest.
 It rejects an incomplete journal line, a changed source, or a conflicting
 replay before committing any row in the batch.
 
-Run `bun scripts/reconcile_campaign_invocations.ts /absolute/path/to/campaign-<id>`.
+Run `bun scripts/reconcile_campaign_invocations.ts /absolute/path/to/campaign-<id> EXPECTED_CAMPAIGN_ID`.
+The expected ID is mandatory. A journal with foreign rows, or a reused global
+store containing any other campaign's observations, is rejected, including for
+an empty journal. A batch is atomic; a multi-batch checkpoint is not one global
+transaction. Earlier successful batches remain accepted if a later batch fails;
+idempotent replay resumes without double-counting.
+An optional third argument admits a digest-named private file under the state's
+owned `0700` `import-batches/` directory. Its filename must match its SHA-256.
+Each file retains the existing 16 MiB intake cap; the observer emits at most
+8 MiB per immutable batch. The complete journal and original receipts survive.
 The reconciler returns its existing pending-invocation result plus
 `campaign_observations: { imported, replayed }`. Identical records replay
 without mutation. New records go only to the global store's append-only

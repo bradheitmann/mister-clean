@@ -36,6 +36,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
 
     println!("global_schema_version={migration}");
+    // These tables have no campaign key. This is a global-store census, not
+    // campaign attribution; campaign telemetry is queried by the observer.
+    println!("scope=global_store_census_not_campaign_attribution");
     println!("observed_cli_invocations={invocations}");
     println!("trials={trials}");
     println!("credited_trials={credited_trials}");

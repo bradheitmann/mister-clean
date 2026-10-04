@@ -11,8 +11,8 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-function run(stateDir: string) {
-  return spawnSync(process.execPath, [join(process.cwd(), "scripts/reconcile_campaign_invocations.ts"), stateDir], {
+function run(stateDir: string, campaignId = "dogfood-2026", batch?: string) {
+  return spawnSync(process.execPath, [join(process.cwd(), "scripts/reconcile_campaign_invocations.ts"), stateDir, campaignId, ...(batch ? [batch] : [])], {
     cwd: process.cwd(),
     encoding: "utf8",
     timeout: 30_000,
@@ -31,6 +31,62 @@ it("refuses a broad caller-owned directory without changing its permissions", ()
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("campaign state directory must be an owned, private, non-symlink directory");
   expect(lstatSync(leaf).mode & 0o777).toBe(before);
+});
+
+it("rejects mixed campaign journals atomically and refuses a foreign reused store even with no journal", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "mc-campaign-helper-"));
+  directories.push(directory);
+  const leaf = join(directory, "campaign-mixed");
+  mkdirSync(leaf, { mode: 0o700 });
+  const source = join(leaf, "source.jsonl");
+  writeFileSync(source, "fixture\n", { mode: 0o600 });
+  const observation = (campaign_id: string) => {
+    const base = {
+      schema_version: "1.0", campaign_id, project: "fixture", slice: null,
+      activity: "test", event_kind: "token_usage", tool_name: null,
+      timestamp: "2026-10-03T00:00:00Z", session_id: "fixture", model_id: null, reasoning: null,
+      requested_model_id: null, requested_reasoning: null, candidate_revision: null, integrated_revision: null,
+      metrics: { delta_input_tokens: 100 }, source: { path: source, line: 1, record_sha256: sha256Bytes("fixture") },
+    };
+    return { ...base, observation_id: `obs:${sha256Bytes(canonicalJson(base))}` };
+  };
+  const journal = join(leaf, "campaign-observations.jsonl");
+  writeFileSync(journal, `${JSON.stringify(observation("dogfood-2026"))}\n${JSON.stringify(observation("foreign"))}\n`, { mode: 0o600 });
+  const rejected = run(leaf);
+  expect(rejected.status).not.toBe(0);
+  expect(rejected.stderr).toContain("does not match expected campaign_id");
+  const global = await openControlPlaneDatabase("global", join(leaf, "global.sqlite"));
+  try {
+    expect(global.database.query<{ count: number }>("SELECT COUNT(*) AS count FROM campaign_execution_observations").get()?.count).toBe(0);
+  } finally { global.close(); }
+  writeFileSync(journal, `${JSON.stringify(observation("dogfood-2026"))}\n`);
+  expect(run(leaf).status).toBe(0);
+  writeFileSync(journal, "");
+  const foreign = run(leaf, "foreign");
+  expect(foreign.status).not.toBe(0);
+  expect(foreign.stderr).toContain("store contains observations for a different campaign");
+});
+
+it("binds digest-named import batches and retains the journal size ceiling", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mc-campaign-helper-"));
+  directories.push(directory);
+  const leaf = join(directory, "campaign-batches");
+  mkdirSync(leaf, { mode: 0o700 });
+  const batches = join(leaf, "import-batches");
+  mkdirSync(batches, { mode: 0o700 });
+  const correct = join(batches, `${sha256Bytes("")}.jsonl`);
+  writeFileSync(correct, "", { mode: 0o600 });
+  expect(run(leaf, "fixture", correct).status).toBe(0);
+  const wrong = join(batches, `${"0".repeat(64)}.jsonl`);
+  writeFileSync(wrong, "", { mode: 0o600 });
+  const mismatch = run(leaf, "fixture", wrong);
+  expect(mismatch.status).not.toBe(0);
+  expect(mismatch.stderr).toContain("batch filename does not match its content digest");
+  expect(run(leaf, "fixture", join(batches, `${"1".repeat(64)}.jsonl`)).status).not.toBe(0);
+  writeFileSync(join(leaf, "campaign-observations.jsonl"), "x".repeat(16 * 1024 * 1024 + 1), { mode: 0o600 });
+  const oversized = run(leaf, "fixture");
+  expect(oversized.status).not.toBe(0);
+  expect(oversized.stderr).toContain("owned, private, bounded regular file");
 });
 
 it("creates only a private dedicated leaf and replays it idempotently", () => {
