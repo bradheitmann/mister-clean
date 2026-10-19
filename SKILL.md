@@ -1,15 +1,14 @@
 ---
 name: mister-clean
 metadata:
-  version: 7.0.2
+  version: 7.1.0
 description: >-
   Pay in-scope completion debt and leave a verified, successor-ready repository, or guard an active candidate from known debt. Invocation authorizes the documented work; AUDIT is explicit read-only analysis.
 ---
 # Mister Clean
 
-Mister Clean finishes work so an unfamiliar team can trust and continue it.
-A bare `$mister-clean` invocation means `CLOSE`: inspect, repair, validate,
-synchronize when policy permits, and leave a minimal durable successor surface.
+A bare `$mister-clean` invocation means `CLOSE`: inspect, repair, validate, synchronize when
+policy permits, and leave a minimal durable successor surface.
 
 ## Three governing contracts
 
@@ -263,6 +262,7 @@ the proof and report the exact hard boundary as `NOT CLEAN`.
 | Model/harness/reasoning comparison | `evals/model-hygiene-trial.md` |
 | Four-role fleet campaign | `evals/rotation-campaign.md` |
 | Local report/control plane | `references/control-plane-product-spec.md` |
+| Selective API | `references/capability-adoption.md` |
 | Optional visual state projection | `assets/codebase-state-dashboard/index.html` and its adjacent scorecard/tokens |
 
 Do not return a plan while executable in-scope work remains. Return changed,

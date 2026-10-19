@@ -49,6 +49,17 @@ describe("discoverPlanningRoots", () => {
     expect(discoverPlanningRoots(repository)).toEqual([]);
   });
 
+  it("keeps planning-analysis code outside the document corpus while discovering real planning", () => {
+    const repository = mkdtempSync(join(tmpdir(), "mister-clean-planning-capability-"));
+    roots.push(repository);
+    mkdirSync(join(repository, "src", "closeout", "planning-analysis"), { recursive: true });
+    writeFileSync(join(repository, "src", "closeout", "planning-analysis", "policy.ts"), "export const policy = true;\n");
+    expect(discoverPlanningRoots(repository)).toEqual([]);
+    mkdirSync(join(repository, "planning"));
+    writeFileSync(join(repository, "planning", "TASK-1.md"), "# Real planning document\n");
+    expect(discoverPlanningRoots(repository)).toEqual(["planning"]);
+  });
+
   it("does not mistake source files with planning-like stems for planning documents", () => {
     const repository = mkdtempSync(join(tmpdir(), "mister-clean-source-stems-"));
     roots.push(repository);

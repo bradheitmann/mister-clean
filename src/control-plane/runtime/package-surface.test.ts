@@ -263,7 +263,7 @@ describe("built control-plane package surface", () => {
       scripts: Record<string, string>;
       packageManager: string;
     };
-    expect(Object.keys(packageJson.exports).sort()).toEqual([".", "./control-plane"]);
+    expect(Object.keys(packageJson.exports).sort()).toEqual([".", "./control-plane", "./planning"]);
     expect(packageJson.exports["."]).toEqual({
       types: "./dist/public.d.ts",
       import: "./dist/public.js",

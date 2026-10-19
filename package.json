@@ -1,6 +1,6 @@
 {
   "name": "@bradheitmann/mister-clean",
-  "version": "7.0.2",
+  "version": "7.1.0",
   "description": "Agent skill for paying repository debt and preventing unclean commits.",
   "type": "module",
   "license": "MIT",
@@ -16,6 +16,10 @@
     "./control-plane": {
       "types": "./dist/control-plane.d.ts",
       "import": "./dist/control-plane.js"
+    },
+    "./planning": {
+      "types": "./dist/planning.d.ts",
+      "import": "./dist/planning.js"
     }
   },
   "files": [
@@ -36,6 +40,7 @@
     "dist/public.*",
     "dist/control-plane.*",
     "dist/control-plane/**",
+    "dist/planning.*",
     "dist/stdio.*",
     "evals/*.md",
     "evals/*.xml",

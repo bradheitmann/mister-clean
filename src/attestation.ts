@@ -339,7 +339,7 @@ function rejectUnknownKeys(
   }
 }
 
-function validateAttestationShape(attestation: unknown): { errors: string[]; value?: ReleaseAttestation } {
+export function validateAttestationShape(attestation: unknown): { errors: string[]; value?: ReleaseAttestation } {
   const errors: string[] = [];
   const forbidden = collectForbiddenKeys(attestation);
   for (const path of forbidden) errors.push(`${path}: registry/publish fact is forbidden in ${RELEASE_ATTESTATION_FILE}`);

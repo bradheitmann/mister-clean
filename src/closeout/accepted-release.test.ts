@@ -79,7 +79,8 @@ async function fixture(): Promise<Fixture> {
   const value: Fixture = {
     candidate, archivePath, evidencePath, packageRoot, recordPath, files, evaluator, record,
     async sync() {
-      const archive = tgz([...files].map(([path, body]) => ({ path: `package/${path}`, bytes: Buffer.from(body) })));
+      const directories = ["package/", ...new Set([...files.keys()].filter((path) => path.includes("/")).map((path) => `package/${dirname(path)}/`))];
+      const archive = tgz([...directories.map((path): TarEntry => ({ path, bytes: Buffer.alloc(0), type: "5" })), ...[...files].map(([path, body]) => ({ path: `package/${path}`, bytes: Buffer.from(body) }))]);
       record.archive.byte_length = archive.byteLength; record.archive.sha512 = sha512(archive); record.registry_integrity = sri(archive); evaluator.registry_integrity = record.registry_integrity;
       for (const [path, body] of files) await put(join(packageRoot, path), body);
       await put(archivePath, archive);
@@ -92,12 +93,59 @@ async function fixture(): Promise<Fixture> {
   await mkdir(candidate, { recursive: true }); await put(join(candidate, "package.json"), `${JSON.stringify({ name: "candidate", version: "1.2.4" })}\n`); await value.sync();
   return value;
 }
+async function attestedFixture(): Promise<Fixture> {
+  const value = await fixture();
+  value.files.set("dist/public.js", "export const fixture = true;\n");
+  value.files.set("dist/stdio.js", "export const fixture = true;\n");
+  const entries = [...value.files].filter(([path]) => path !== "MANIFEST.sha256" && path !== "RELEASE_ATTESTATION.json");
+  value.files.set("MANIFEST.sha256", entries.map(([path, body]) => `${digest(body)}  ./${path}`).join("\n") + "\n");
+  value.record.files.manifest.sha256 = digest(value.files.get("MANIFEST.sha256")!);
+  value.evaluator.manifest_sha256 = value.record.files.manifest.sha256;
+  value.files.set("RELEASE_ATTESTATION.json", JSON.stringify({
+    record_type: "mister-clean.release-attestation", schema_version: "1.1",
+    package: { name: value.record.package_name, version: value.record.version },
+    claimed_source: { git_commit: "1".repeat(40), git_tag: `v${value.record.version}` },
+    claim_scope: { covers: "own_package_regular_file_bytes", excludes: ["registry_publication_provenance", "dependency_resolution_graph", "filesystem_mode_bits_xattrs_and_timestamps", "release_attestation_self_bytes", "claimed_source_authenticity"] },
+    manifest: { path: "./MANIFEST.sha256", format: "sha256sum-v1-lf", entry_count: entries.length, sha256: value.record.files.manifest.sha256 },
+    required_entrypoints: ["SKILL.md", "bin/mister-clean.js", "dist/public.js", "dist/stdio.js"].map((path) => ({ path: `./${path}`, sha256: digest(value.files.get(path)!) })),
+  }));
+  await value.sync();
+  return value;
+}
 async function verify(value: Fixture) { return verifyAcceptedReleaseBoundary({ acceptedEvaluatorPath: value.recordPath, candidateRepoPath: value.candidate, evaluator: value.evaluator, files: nodeFilePort }); }
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))); });
 
 describe("accepted external Mister Clean release boundary", () => {
   it("accepts a synthetic retained npm tarball whose installed tree, dist/vendor files, and MANIFEST are exact", async () => {
     const value = await fixture(); await expect(verify(value)).resolves.toEqual({ errors: [], ok: true });
+  });
+  it("accepts canonical self-excluded attestation bytes bound by retained SRI and exact installed-tree equality", async () => {
+    const value = await attestedFixture();
+    await expect(verify(value)).resolves.toEqual({ errors: [], ok: true });
+    await put(join(value.packageRoot, "RELEASE_ATTESTATION.json"), "{}\n");
+    expect((await verify(value)).errors.join("\n")).toContain("digest mismatch for RELEASE_ATTESTATION.json");
+  });
+  it.each(["manifest", "entrypoint", "package"] as const)("rejects self-excluded attestation %s identity drift despite refreshed archive custody", async (field) => {
+    const value = await attestedFixture();
+    const attestation = JSON.parse(value.files.get("RELEASE_ATTESTATION.json")!);
+    if (field === "manifest") attestation.manifest.sha256 = "0".repeat(64);
+    if (field === "entrypoint") attestation.required_entrypoints[0].sha256 = "0".repeat(64);
+    if (field === "package") attestation.package.name = "@example/wrong-package";
+    value.files.set("RELEASE_ATTESTATION.json", JSON.stringify(attestation));
+    await value.sync();
+    expect((await verify(value)).errors.join("\n")).toContain(`attestation: ${field === "entrypoint" ? "entrypoint digest mismatch" : field === "manifest" ? "manifest identity mismatch" : "package/version mismatch"}`);
+  });
+  it("rejects malformed or inconsistent self-excluded attestations and every other unlisted archive file", async () => {
+    const value = await attestedFixture();
+    const attestation = JSON.parse(value.files.get("RELEASE_ATTESTATION.json")!);
+    attestation.claimed_source.git_tag = "v9.9.9";
+    attestation.manifest.sha256 = "0".repeat(64);
+    value.files.set("RELEASE_ATTESTATION.json", JSON.stringify(attestation));
+    value.files.set("unlisted.js", "export const extra = true;\n");
+    await value.sync();
+    const errors = (await verify(value)).errors.join("\n");
+    expect(errors).toContain("claimed_source.git_tag");
+    expect(errors).toContain("manifest: missing file unlisted.js");
   });
   it("rejects installed archive drift and an extra runtime dependency", async () => {
     const value = await fixture(); await put(join(value.packageRoot, "SKILL.md"), "mutated\n"); await put(join(value.packageRoot, "node_modules", "x", "index.js"), "extra\n");

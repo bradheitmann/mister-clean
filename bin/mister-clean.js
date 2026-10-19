@@ -7815,7 +7815,7 @@ function isSourceDevelopmentEntrypoint(root, moduleUrl) {
 }
 
 // src/closeout/bundle.ts
-import { basename as basename10, dirname as dirname11, isAbsolute as isAbsolute18, resolve as resolve20 } from "path";
+import { basename as basename11, dirname as dirname11, isAbsolute as isAbsolute18, resolve as resolve20 } from "path";
 
 // src/census.ts
 import { constants } from "fs";
@@ -10173,6 +10173,37 @@ import {
 } from "fs";
 import { basename as basename3, dirname as dirname3, extname as extname2, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep3 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
+
+// src/closeout/planning-analysis/lifecycle.ts
+var PLANNING_LANE_LIFECYCLES = /* @__PURE__ */ new Map([
+  ["backlog", "preexecution"],
+  ["todo", "preexecution"],
+  ["to-do", "preexecution"],
+  ["to_do", "preexecution"],
+  ["ready", "preexecution"],
+  ["planned", "preexecution"],
+  ["active", "active"],
+  ["doing", "active"],
+  ["in-progress", "active"],
+  ["in_progress", "active"],
+  ["inprogress", "active"],
+  ["failed", "active"],
+  ["done", "done"],
+  ["complete", "done"],
+  ["completed", "done"],
+  ["closed", "done"],
+  ["history", "archived"],
+  ["historical", "archived"],
+  ["archive", "archived"],
+  ["archived", "archived"],
+  ["superseded", "archived"]
+]);
+var PLANNING_LANE_NAMES = new Set(PLANNING_LANE_LIFECYCLES.keys());
+function planningLaneLifecycle(name) {
+  return PLANNING_LANE_LIFECYCLES.get(name.toLocaleLowerCase("und"));
+}
+
+// src/closeout/repository.ts
 var PLANNING_DIRECTORY_NAMES = /* @__PURE__ */ new Set([
   "planning",
   "plans",
@@ -10215,33 +10246,6 @@ function isCanonicalPlanningFileName(path) {
   if (!PLANNING_FILE_EXTENSIONS.has(extension)) return false;
   const stem = name.slice(0, -extension.length).toLocaleLowerCase("und");
   return PLANNING_FILE_STEMS.has(stem);
-}
-var PLANNING_LANE_LIFECYCLES = /* @__PURE__ */ new Map([
-  ["backlog", "preexecution"],
-  ["todo", "preexecution"],
-  ["to-do", "preexecution"],
-  ["to_do", "preexecution"],
-  ["ready", "preexecution"],
-  ["planned", "preexecution"],
-  ["active", "active"],
-  ["doing", "active"],
-  ["in-progress", "active"],
-  ["in_progress", "active"],
-  ["inprogress", "active"],
-  ["failed", "active"],
-  ["done", "done"],
-  ["complete", "done"],
-  ["completed", "done"],
-  ["closed", "done"],
-  ["history", "archived"],
-  ["historical", "archived"],
-  ["archive", "archived"],
-  ["archived", "archived"],
-  ["superseded", "archived"]
-]);
-var PLANNING_LANE_NAMES = new Set(PLANNING_LANE_LIFECYCLES.keys());
-function planningLaneLifecycle(name) {
-  return PLANNING_LANE_LIFECYCLES.get(name.toLocaleLowerCase("und"));
 }
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
   "__fixtures__",
@@ -10446,11 +10450,10 @@ function assertDirectory(path) {
   if (!existsSync2(path) || !statSync(path).isDirectory()) throw new Error(`not a directory: ${path}`);
 }
 
-// src/closeout/planning.ts
-var import_yaml = __toESM(require_dist(), 1);
-import { createHash as createHash6 } from "crypto";
+// src/closeout/planning-analysis/repository.ts
+import { createHash as createHash7 } from "crypto";
 import { lstatSync as lstatSync3, readFileSync as readFileSync2, readdirSync as readdirSync3 } from "fs";
-import { basename as basename4, dirname as dirname4, extname as extname3, relative as relative5, resolve as resolve6, sep as sep5 } from "path";
+import { basename as basename5, relative as relative5, resolve as resolve6, sep as sep5 } from "path";
 
 // src/closeout/repository-inspection.ts
 import { resolve as resolve5 } from "path";
@@ -10949,7 +10952,10 @@ function proveCurrentProjectionCommand(command, repository) {
   }
 }
 
-// src/closeout/planning.ts
+// src/closeout/planning-analysis/policy.ts
+var import_yaml = __toESM(require_dist(), 1);
+import { createHash as createHash6 } from "crypto";
+import { basename as basename4, dirname as dirname4, extname as extname3 } from "path";
 var TEXT_EXTENSIONS = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
 var DONE = /* @__PURE__ */ new Set([
   "accept",
@@ -11525,8 +11531,8 @@ function currentProjectionSurface(artifact) {
   ]).length > 0;
   return designated || carriesBinding;
 }
-function currentProjectionErrors(artifact, repository) {
-  if (!repository || !currentProjectionSurface(artifact)) return [];
+function currentProjectionErrors(artifact, observations) {
+  if (!observations || !currentProjectionSurface(artifact)) return [];
   const source = scalarAliasValues(
     artifact.metadata,
     ["current_projection_source", "projection_source"],
@@ -11537,7 +11543,7 @@ function currentProjectionErrors(artifact, repository) {
     ["current_projection_command", "projection_command"],
     "current projection command"
   );
-  const machineDerived = source.values.length === 1 && (/* @__PURE__ */ new Set(["machine", "machine derived", "machine generated"])).has(normalize(source.values[0] ?? "")) && command.values.length === 1 && proveCurrentProjectionCommand(command.values[0] ?? "", repository).status === "pass";
+  const machineDerived = source.values.length === 1 && (/* @__PURE__ */ new Set(["machine", "machine derived", "machine generated"])).has(normalize(source.values[0] ?? "")) && command.values.length === 1 && observations.projectionCommandPasses(command.values[0] ?? "");
   if (machineDerived) return [];
   const commit = scalarAliasValues(
     artifact.metadata,
@@ -11549,14 +11555,9 @@ function currentProjectionErrors(artifact, repository) {
     ["current_tree", "repository_tree", "snapshot_tree"],
     "current projection tree"
   );
-  let expectedCommit = "";
-  let expectedTree = "";
-  try {
-    expectedCommit = git(repository, "rev-parse", "HEAD");
-    expectedTree = git(repository, "rev-parse", "HEAD^{tree}");
-  } catch {
-    return ["designated current-state surface cannot bind to a readable repository commit and tree"];
-  }
+  const identity4 = observations.currentIdentity();
+  if (!identity4) return ["designated current-state surface cannot bind to a readable repository commit and tree"];
+  const { commit: expectedCommit, tree: expectedTree } = identity4;
   if (commit.values.length === 1 && tree.values.length === 1 && commit.values[0] === expectedCommit && tree.values[0] === expectedTree) return [];
   return [
     "designated current-state surface must use a machine-derived current projection or bind the exact live commit and tree"
@@ -13519,7 +13520,7 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
       for (const detail of ownershipClaimErrors(artifact)) {
         findings.push(finding("ownership_claim_stale", artifact, detail));
       }
-      for (const detail of currentProjectionErrors(artifact, options.repository)) {
+      for (const detail of currentProjectionErrors(artifact, options.observations)) {
         findings.push(finding("current_projection_stale", artifact, detail));
       }
       if (artifact.type === "review" && artifact.state !== "archived") {
@@ -13565,9 +13566,9 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
     }
     if (artifact.structured && !artifact.nonArtifact && artifact.type === "maintenance" && artifact.declared === "active" && artifact.maintenanceTerminalEvidence) {
       let terminalEvidenceIsLive = !artifact.maintenanceCommit;
-      if (artifact.maintenanceCommit && options.repository) {
+      if (artifact.maintenanceCommit && options.observations) {
         try {
-          terminalEvidenceIsLive = isGitAncestor(options.repository, artifact.maintenanceCommit, "HEAD");
+          terminalEvidenceIsLive = options.observations.commitIsAncestor(artifact.maintenanceCommit);
         } catch {
           terminalEvidenceIsLive = false;
         }
@@ -13874,6 +13875,27 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
     suppressedByTypedNonartifactCount: artifacts.filter((artifact) => artifact.nonArtifact).length
   });
 }
+
+// src/closeout/planning-analysis/repository.ts
+function observationsFor(repository) {
+  return {
+    projectionCommandPasses: (command) => proveCurrentProjectionCommand(command, repository).status === "pass",
+    currentIdentity: () => {
+      try {
+        return { commit: git(repository, "rev-parse", "HEAD"), tree: git(repository, "rev-parse", "HEAD^{tree}") };
+      } catch {
+        return void 0;
+      }
+    },
+    commitIsAncestor: (commit) => isGitAncestor(repository, commit, "HEAD")
+  };
+}
+function auditPlanningArtifacts2(sources, planningRootCount = sources.length > 0 ? 1 : 0, options = {}) {
+  return auditPlanningArtifacts(sources, planningRootCount, {
+    ...options.repository ? { observations: observationsFor(options.repository) } : {},
+    ...options.snapshot !== void 0 ? { snapshot: options.snapshot } : {}
+  });
+}
 var PLANNING_CANDIDATE_DIRECTORIES = /* @__PURE__ */ new Set(["docs", "documentation", "references", "specs"]);
 var PLANNING_CANDIDATE_IGNORED_SEGMENTS = /* @__PURE__ */ new Set(["examples", "fixtures", "node_modules", "test-data", "testdata", "vendor"]);
 var ACTIVE_IMPLEMENTATION_STATUS = /^status\s*:\s*[^\n]*(?:implementation\s+)?(?:active|in[ -]progress|pending|underway)\b/imu;
@@ -13918,7 +13940,7 @@ function discoverUnprojectedPlanningCandidates(root, planningRoots, planningSour
     detail: "live implementation status and sequence are outside planning discovery and are not projected by a canonical planning artifact",
     path: candidate.path,
     related: [...planningRoots],
-    subject: stablePlanningId("PLANNING-CANDIDATE", [candidate.path])
+    subject: `PLANNING-CANDIDATE-${createHash7("sha256").update(candidate.path.trim()).digest("hex").slice(0, 20).toUpperCase()}`
   }));
   return { candidates, findings };
 }
@@ -13929,7 +13951,7 @@ function auditPlanningRepository(repository) {
   const sources = [];
   const appendEntry = (entry) => {
     const relativePath = relative5(root, entry.path).split(sep5).join("/");
-    if (entry.kind === "file" && basename4(entry.path) === ".gitkeep" && lstatSync3(entry.path).size === 0) return;
+    if (entry.kind === "file" && basename5(entry.path) === ".gitkeep" && lstatSync3(entry.path).size === 0) return;
     if (entry.kind !== "file" || !isPlanningTextPath(entry.path)) {
       sources.push({ content: "", path: relativePath });
       return;
@@ -13958,7 +13980,7 @@ function auditPlanningRepository(repository) {
   } catch {
     snapshot = "unbound";
   }
-  const base = auditPlanningArtifacts(sources, planningRoots.length, { repository: root, snapshot });
+  const base = auditPlanningArtifacts2(sources, planningRoots.length, { repository: root, snapshot });
   const probes = discoverUnprojectedPlanningCandidates(root, planningRoots, sources);
   return finalizePlanningAudit([...base.findings, ...probes.findings], snapshot, {
     artifactCount: base.artifactCount,
@@ -13970,15 +13992,15 @@ function auditPlanningRepository(repository) {
 }
 
 // src/closeout/detector-coverage.ts
-import { createHash as createHash8 } from "crypto";
+import { createHash as createHash9 } from "crypto";
 import { isDeepStrictEqual } from "util";
 
 // src/closeout/semantic.ts
 var import_yaml2 = __toESM(require_dist(), 1);
-import { createHash as createHash7 } from "crypto";
+import { createHash as createHash8 } from "crypto";
 import { spawnSync as spawnSync3 } from "child_process";
 import { existsSync as existsSync3, lstatSync as lstatSync4, readFileSync as readFileSync3, readlinkSync as readlinkSync2 } from "fs";
-import { basename as basename5, dirname as dirname5, extname as extname4, isAbsolute as isAbsolute5, relative as relative6, resolve as resolve7, sep as sep6 } from "path";
+import { basename as basename6, dirname as dirname5, extname as extname4, isAbsolute as isAbsolute5, relative as relative6, resolve as resolve7, sep as sep6 } from "path";
 var TEXT_EXTENSIONS2 = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
 var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".cjs", ".cts", ".go", ".js", ".jsx", ".mjs", ".mts", ".rs", ".svelte", ".ts", ".tsx"]);
 var CONSTRUCTION_ASSERTION = /\b(choke point|construction[- ]enforced|(?:safe|closed|enforced) by construction)\b/i;
@@ -14041,7 +14063,7 @@ function isoTimestamp2(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value) && !Number.isNaN(Date.parse(value));
 }
 function sha2564(value) {
-  return createHash7("sha256").update(value).digest("hex");
+  return createHash8("sha256").update(value).digest("hex");
 }
 function normalizeClaim(value) {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("und");
@@ -14082,7 +14104,7 @@ function validIdentityReference(root, value) {
   const target = resolve7(root, ref.path);
   const relation = relative6(root, target);
   if (relation === ".." || relation.startsWith(`..${sep6}`) || isAbsolute5(relation) || !existsSync3(target) || !lstatSync4(target).isFile() || lstatSync4(target).isSymbolicLink()) return false;
-  return createHash7("sha256").update(readFileSync3(target)).digest("hex") === ref.sha256;
+  return createHash8("sha256").update(readFileSync3(target)).digest("hex") === ref.sha256;
 }
 function recordRole(record4) {
   for (const field2 of ["artifact_type", "role", "slice_type", "task_type", "work_type"]) {
@@ -14273,7 +14295,7 @@ function nestedStrings(value) {
 }
 function executableSurfaceGaps(root, paths) {
   const packages = [];
-  for (const packagePath of paths.filter((path) => basename5(path) === "package.json" && !NON_PRODUCT_PATH.test(path))) {
+  for (const packagePath of paths.filter((path) => basename6(path) === "package.json" && !NON_PRODUCT_PATH.test(path))) {
     try {
       const manifest2 = object3(JSON.parse(readFileSync3(resolve7(root, packagePath), "utf8")));
       if (!manifest2) continue;
@@ -14385,7 +14407,7 @@ function repositoryObjectPaths(repository) {
 function semanticWorkingTreeSha256FromPaths(repository, paths, excludedPath) {
   const root = resolve7(repository);
   const excluded2 = excludedPath ? resolve7(excludedPath) : void 0;
-  const hash = createHash7("sha256");
+  const hash = createHash8("sha256");
   for (const portablePath3 of paths) {
     const absolute = resolve7(root, portablePath3);
     if (excluded2 && absolute === excluded2) continue;
@@ -14911,7 +14933,7 @@ function parseManifest(manifestPath, manifestRef, repository, expectedCommit, ex
           localErrors.push(`not_applicable_evidence path is missing or outside the repository: ${ref.path}`);
           continue;
         }
-        if (createHash7("sha256").update(readFileSync3(evidencePath)).digest("hex") !== ref.sha256) {
+        if (createHash8("sha256").update(readFileSync3(evidencePath)).digest("hex") !== ref.sha256) {
           localErrors.push(`not_applicable_evidence digest mismatch: ${ref.path}`);
         }
       }
@@ -15007,7 +15029,7 @@ function auditSemanticRepository(repository, options = {}) {
   const snapshot = git(root, "rev-parse", "HEAD");
   const manifestPath = options.manifestPath ? resolve7(root, options.manifestPath) : void 0;
   const manifestRelation = manifestPath ? relative6(root, manifestPath) : "";
-  const manifestRef = manifestPath ? manifestRelation !== ".." && !manifestRelation.startsWith(`..${sep6}`) && !isAbsolute5(manifestRelation) ? manifestRelation.split(sep6).join("/") : `external-semantic-manifest/${basename5(manifestPath)}` : void 0;
+  const manifestRef = manifestPath ? manifestRelation !== ".." && !manifestRelation.startsWith(`..${sep6}`) && !isAbsolute5(manifestRelation) ? manifestRelation.split(sep6).join("/") : `external-semantic-manifest/${basename6(manifestPath)}` : void 0;
   const boundRepositoryPaths = repositoryObjectPaths(root);
   const workingTreeSha256 = semanticWorkingTreeSha256FromPaths(root, boundRepositoryPaths, manifestPath);
   const candidates = discoverSemanticProbeCandidates(root, boundRepositoryPaths);
@@ -15188,7 +15210,7 @@ ${result.stderr ?? ""}`;
           candidate_id: candidate.id,
           command_sha256: sha2564(JSON.stringify(definition.command)),
           evidence_sha256: sha2564(evidence),
-          executable: basename5(command),
+          executable: basename6(command),
           observed_status: result.status,
           receipt_sha256: receiptResult.receiptSha256,
           result: executionResult
@@ -15345,7 +15367,7 @@ function detectorRegistry(version) {
   return version === "1" ? DETECTOR_REGISTRY_V1 : version === "2" ? DETECTOR_REGISTRY_V2 : version === "3" ? DETECTOR_REGISTRY_V3 : version === "4" ? DETECTOR_REGISTRY_V4 : CLOSEOUT_DETECTORS;
 }
 function digest(value) {
-  return createHash8("sha256").update(value, "utf8").digest("hex");
+  return createHash9("sha256").update(value, "utf8").digest("hex");
 }
 function runtimeIdentityRecord(value) {
   const claimScope = value.claim_scope.covers === "own_package_regular_file_bytes" ? {
@@ -16048,7 +16070,7 @@ function createDetectorCoverage(input) {
 }
 
 // src/closeout/accepted-release.ts
-import { createHash as createHash9 } from "crypto";
+import { createHash as createHash10 } from "crypto";
 import { isAbsolute as isAbsolute6, relative as relative7, resolve as resolve8, sep as sep7 } from "path";
 import { gunzipSync } from "zlib";
 var HEX64 = /^[0-9a-f]{64}$/;
@@ -16057,9 +16079,9 @@ var SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-
 var SRI512 = /^sha512-[A-Za-z0-9+/]+={0,2}$/;
 var utf8 = new TextDecoder("utf-8", { fatal: true });
 var FORBIDDEN_PACKAGE_ROOTS = [".git", "node_modules", ".venv", "venv", ".cache", "cache"];
-var sha2565 = (bytes2) => createHash9("sha256").update(bytes2).digest("hex");
-var sha512 = (bytes2) => createHash9("sha512").update(bytes2).digest("hex");
-var sri512 = (bytes2) => `sha512-${createHash9("sha512").update(bytes2).digest("base64")}`;
+var sha2565 = (bytes2) => createHash10("sha256").update(bytes2).digest("hex");
+var sha512 = (bytes2) => createHash10("sha512").update(bytes2).digest("hex");
+var sri512 = (bytes2) => `sha512-${createHash10("sha512").update(bytes2).digest("base64")}`;
 var obj = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 var iso = (value) => typeof value === "string" && /^\d{4}-\d\d-\d\dT/.test(value) && /(?:Z|[+-]\d\d:\d\d)$/.test(value) && !Number.isNaN(Date.parse(value));
 var safePath = (value) => typeof value === "string" && value.length > 0 && value.trim() === value && !isAbsolute6(value) && !value.includes("\\") && !value.split("/").includes("") && !value.split("/").includes("..") && value !== ".";
@@ -16202,7 +16224,7 @@ function archivePath(raw, directory, errors) {
     errors.push("$.accepted_release.archive: tar entry must be a normalized package/ path");
     return void 0;
   }
-  const result = raw.slice(8);
+  const result = raw.slice(8, directory && raw.endsWith("/") ? -1 : void 0);
   if (directory && result === "") return "";
   if (directory && !raw.endsWith("/") || !directory && raw.endsWith("/") || !safePath(result)) {
     errors.push(`$.accepted_release.archive: unsafe tar entry ${JSON.stringify(raw)}`);
@@ -16469,6 +16491,27 @@ async function verifyAcceptedReleaseBoundary(input) {
       if (entries2.has(record4.files.manifest.path)) errors.push("$.accepted_release.files.manifest: MANIFEST must not self-enumerate");
       const payload = new Map(allArchive);
       payload.delete(record4.files.manifest.path);
+      const attestationFile = archive.get(RELEASE_ATTESTATION_FILE);
+      if (attestationFile) {
+        let value;
+        try {
+          value = JSON.parse(utf8.decode(attestationFile.bytes));
+        } catch {
+          errors.push("$.accepted_release.attestation: required UTF-8 JSON");
+        }
+        const validated = validateAttestationShape(value);
+        errors.push(...validated.errors.map((error) => `$.accepted_release.attestation: ${error}`));
+        const attestation = validated.value;
+        if (attestation) {
+          if (attestation.package.name !== record4.package_name || attestation.package.version !== record4.version) errors.push("$.accepted_release.attestation: package/version mismatch");
+          if (attestation.manifest.sha256 !== record4.files.manifest.sha256 || attestation.manifest.entry_count !== entries2.size) errors.push("$.accepted_release.attestation: manifest identity mismatch");
+          for (const entry of attestation.required_entrypoints) {
+            if (allArchive.get(entry.path.slice(2)) !== entry.sha256 || entries2.get(entry.path.slice(2)) !== entry.sha256) errors.push(`$.accepted_release.attestation: entrypoint digest mismatch ${entry.path}`);
+          }
+          payload.delete(RELEASE_ATTESTATION_FILE);
+        }
+        if (entries2.has(RELEASE_ATTESTATION_FILE)) errors.push("$.accepted_release.attestation: self-referential manifest entry forbidden");
+      }
       const listed = new Map([...entries2].map(([path, digest4]) => [path, { path, bytes: new Uint8Array(), sha256: digest4 }]));
       equals(listed, payload, "$.accepted_release.files.manifest", errors);
       for (const name of ["package_json", "skill", "executable"]) if (entries2.get(record4.files[name].path) !== record4.files[name].sha256) errors.push(`$.accepted_release.files.manifest: missing or mismatched declared ${name} entry`);
@@ -16494,7 +16537,7 @@ async function verifyAcceptedReleaseBoundary(input) {
 }
 
 // src/closeout/action-hygiene.ts
-import { createHash as createHash10 } from "crypto";
+import { createHash as createHash11 } from "crypto";
 import { execFileSync as execFileSync3 } from "child_process";
 import {
   closeSync as closeSync2,
@@ -16539,7 +16582,7 @@ function canonical2(value) {
   throw new Error(`canonical action-hygiene evidence refuses ${typeof value}`);
 }
 function sha2566(value) {
-  return createHash10("sha256").update(value).digest("hex");
+  return createHash11("sha256").update(value).digest("hex");
 }
 function identity(value) {
   return sha2566(canonical2(value));
@@ -17302,7 +17345,7 @@ function assertActionHygieneDelta(delta, before, after, label = "action hygiene 
 }
 
 // src/closeout/native-gates.ts
-import { createHash as createHash12 } from "crypto";
+import { createHash as createHash13 } from "crypto";
 import { spawn, spawnSync as spawnSync4 } from "child_process";
 import { createReadStream } from "fs";
 import {
@@ -17324,10 +17367,10 @@ import {
   rm
 } from "fs/promises";
 import { tmpdir as tmpdir2 } from "os";
-import { basename as basename6, dirname as dirname7, isAbsolute as isAbsolute9, join as join6, relative as relative9, resolve as resolve11, sep as sep9 } from "path";
+import { basename as basename7, dirname as dirname7, isAbsolute as isAbsolute9, join as join6, relative as relative9, resolve as resolve11, sep as sep9 } from "path";
 
 // src/closeout/execution-lease.ts
-import { createHash as createHash11, randomUUID } from "crypto";
+import { createHash as createHash12, randomUUID } from "crypto";
 import { execFileSync as execFileSync4 } from "child_process";
 import { createRequire } from "module";
 import {
@@ -17446,7 +17489,7 @@ function gitCommonDirectory(repository) {
   return realpathSync4(output);
 }
 function repositoryVerificationCoordinationKey(repository) {
-  return createHash11("sha256").update(JSON.stringify([
+  return createHash12("sha256").update(JSON.stringify([
     "mister-clean.execution-resource.v1",
     gitCommonDirectory(repository),
     REPOSITORY_VERIFICATION_RESOURCE
@@ -17928,7 +17971,7 @@ function canonicalJson2(value) {
   throw new Error(`canonical JSON refuses ${typeof value}`);
 }
 function sha2567(value) {
-  return createHash12("sha256").update(value).digest("hex");
+  return createHash13("sha256").update(value).digest("hex");
 }
 function identity2(value) {
   return sha2567(canonicalJson2(value));
@@ -18173,7 +18216,7 @@ async function copySubjectWorktree(subject, snapshot) {
       preserveTimestamps: true,
       verbatimSymlinks: true,
       filter: async (candidate) => {
-        if (basename6(candidate) === ".git") return false;
+        if (basename7(candidate) === ".git") return false;
         const stat3 = await lstat3(candidate);
         if (stat3.isSymbolicLink()) {
           const link = await readlink(candidate);
@@ -18289,7 +18332,7 @@ function trackedFile(repository, path) {
   return cursor;
 }
 function digestFileSync(path) {
-  const hash = createHash12("sha256");
+  const hash = createHash13("sha256");
   const descriptor = openSync3(path, constants3.O_RDONLY);
   try {
     const buffer = Buffer.allocUnsafe(1024 * 1024);
@@ -18304,12 +18347,12 @@ function digestFileSync(path) {
   return hash.digest("hex");
 }
 async function digestFile(path) {
-  const hash = createHash12("sha256");
+  const hash = createHash13("sha256");
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest("hex");
 }
 function sourceRef(repository, path, forcedKind) {
-  const name = basename6(path);
+  const name = basename7(path);
   const kind = forcedKind ?? (name === "package.json" ? "package_manifest" : name === "Cargo.toml" ? "cargo_manifest" : name === "go.mod" ? "go_manifest" : "lockfile");
   return { kind, path, sha256: digestFileSync(trackedFile(repository, path)) };
 }
@@ -18503,10 +18546,10 @@ function packageSourceRefs(cwd, sourceRefs, managerRoot) {
   return sourceRefs.filter((ref) => ref.path === manifestPath || managerRoot !== void 0 && ref.kind === "lockfile" && dirname7(ref.path) === (managerRoot === "." ? "." : managerRoot));
 }
 function discoverNodeGates(repository, paths, refs) {
-  const packagePaths = paths.filter((path) => basename6(path) === "package.json");
+  const packagePaths = paths.filter((path) => basename7(path) === "package.json");
   const markerByDirectory = /* @__PURE__ */ new Map();
   for (const path of paths) {
-    const manager = LOCKFILE_MANAGERS.get(basename6(path));
+    const manager = LOCKFILE_MANAGERS.get(basename7(path));
     if (!manager) continue;
     const directory = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
     const set = markerByDirectory.get(directory) ?? /* @__PURE__ */ new Set();
@@ -18598,7 +18641,7 @@ function discoverNodeGates(repository, paths, refs) {
 }
 function discoverFixedGates(paths, refs) {
   const gates = [];
-  for (const path of paths.filter((entry) => basename6(entry) === "Cargo.toml")) {
+  for (const path of paths.filter((entry) => basename7(entry) === "Cargo.toml")) {
     const cwd = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
     gates.push(gateDefinition({
       id: fixedGateId("cargo", cwd),
@@ -18615,7 +18658,7 @@ function discoverFixedGates(paths, refs) {
       }
     }));
   }
-  for (const path of paths.filter((entry) => basename6(entry) === "go.mod")) {
+  for (const path of paths.filter((entry) => basename7(entry) === "go.mod")) {
     const cwd = dirname7(path) === "." ? "." : dirname7(path).split(sep9).join("/");
     gates.push(gateDefinition({
       id: fixedGateId("go", cwd),
@@ -18686,7 +18729,7 @@ function validateSourceRef(value, label, errors) {
     } catch (error) {
       errors.push(errorMessage2(error));
     }
-    const name = basename6(raw.path);
+    const name = basename7(raw.path);
     const expectedKind = TEST_SOURCE.test(raw.path) ? "runner_source" : name === "package.json" ? "package_manifest" : name === "Cargo.toml" ? "cargo_manifest" : name === "go.mod" ? "go_manifest" : LOCKFILE_MANAGERS.has(name) ? "lockfile" : void 0;
     if (expectedKind === void 0 || raw.kind !== expectedKind) errors.push(`${label}.kind does not match path`);
   }
@@ -18876,7 +18919,7 @@ function discoverNativeGates(repository, repositoryObject) {
   const paths = trackedPaths(root);
   const runnerFindings = verificationRunnerSafetyFindings(root, paths);
   const runnerSourcePaths = [...new Set(runnerFindings.map((finding4) => finding4.path))].sort();
-  const sourcePaths = paths.filter((path) => basename6(path) === "package.json" || basename6(path) === "Cargo.toml" || basename6(path) === "go.mod" || LOCKFILE_MANAGERS.has(basename6(path)));
+  const sourcePaths = paths.filter((path) => basename7(path) === "package.json" || basename7(path) === "Cargo.toml" || basename7(path) === "go.mod" || LOCKFILE_MANAGERS.has(basename7(path)));
   const refs = [
     ...sourcePaths.map((path) => sourceRef(root, path)),
     ...runnerSourcePaths.map((path) => sourceRef(root, path, "runner_source"))
@@ -19215,7 +19258,7 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
 }
 
 // src/closeout/regression-accounting.ts
-import { createHash as createHash13 } from "crypto";
+import { createHash as createHash14 } from "crypto";
 var OBSERVATION_IDENTITY_SCHEME = "mister-clean.observation.v1";
 var ROOT_DEBT_IDENTITY_SCHEME = "mister-clean.root-debt.v1";
 var REGRESSION_ACCOUNTING_SCHEMA_VERSION = "1.5";
@@ -19256,7 +19299,7 @@ var UNRESOLVED_STATES = /* @__PURE__ */ new Set([
   "not_assessed"
 ]);
 function sha2568(value) {
-  return createHash13("sha256").update(value, "utf8").digest("hex");
+  return createHash14("sha256").update(value, "utf8").digest("hex");
 }
 function compareCanonicalText(left, right) {
   const leftIterator = left[Symbol.iterator]();
@@ -20001,11 +20044,11 @@ function schema15LegacyNumericFieldErrors(value, path = "$") {
 }
 
 // src/closeout/bundle-runtime.ts
-import { createHash as createHash14 } from "crypto";
+import { createHash as createHash15 } from "crypto";
 import { execFile } from "child_process";
 import { access, copyFile, lstat as lstat5, mkdir as mkdir2, mkdtemp as mkdtemp2, readFile as readFile2, readdir as readdir4, realpath as realpath5, rm as rm2 } from "fs/promises";
 import { tmpdir as tmpdir3 } from "os";
-import { basename as basename7, dirname as dirname8, isAbsolute as isAbsolute11, join as join7, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
+import { basename as basename8, dirname as dirname8, isAbsolute as isAbsolute11, join as join7, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
 import { promisify } from "util";
 var HEX643 = /^[0-9a-f]{64}$/;
 var EVENT_TIMESTAMP_FIELDS = /* @__PURE__ */ new Set([
@@ -20135,7 +20178,7 @@ function compareCodePoints4(left, right) {
   return leftPoints.length - rightPoints.length;
 }
 function sha2569(bytes2) {
-  return createHash14("sha256").update(bytes2).digest("hex");
+  return createHash15("sha256").update(bytes2).digest("hex");
 }
 function stableEqual2(left, right) {
   if (Object.is(left, right)) return true;
@@ -20270,7 +20313,7 @@ async function contained(files, root, candidate) {
     let existing = lexical;
     const tail = [];
     while (!await files.exists(existing) && dirname8(existing) !== existing) {
-      tail.unshift(basename7(existing));
+      tail.unshift(basename8(existing));
       existing = dirname8(existing);
     }
     const targetReal = resolve13(await files.realpath(existing), ...tail);
@@ -22793,7 +22836,7 @@ import { dirname as dirname10, isAbsolute as isAbsolute17, join as join10, resol
 
 // src/closeout/github-actions.ts
 var import_yaml3 = __toESM(require_dist(), 1);
-import { createHash as createHash15 } from "crypto";
+import { createHash as createHash16 } from "crypto";
 import { execFileSync as execFileSync5 } from "child_process";
 import { lstatSync as lstatSync8, readFileSync as readFileSync7 } from "fs";
 import { isAbsolute as isAbsolute13, join as join8, relative as relative11, resolve as resolve14 } from "path";
@@ -22814,7 +22857,7 @@ var PRIVILEGED_ACTION_INPUT_ALLOWLISTS = /* @__PURE__ */ new Map([
   ["actions/checkout", /* @__PURE__ */ new Set(["fetch-depth", "ref"])]
 ]);
 function digest2(value) {
-  return createHash15("sha256").update(value, "utf8").digest("hex");
+  return createHash16("sha256").update(value, "utf8").digest("hex");
 }
 function map(value) {
   return value instanceof Map ? value : void 0;
@@ -23275,14 +23318,14 @@ function auditGitHubActionsRepository(root) {
 }
 
 // src/closeout/inspection.ts
-import { createHash as createHash16 } from "crypto";
+import { createHash as createHash17 } from "crypto";
 import { lstatSync as lstatSync9, readFileSync as readFileSync8, readdirSync as readdirSync6, readlinkSync as readlinkSync4 } from "fs";
 import {
   readFile as readFile3,
   readdir as readdir5,
   stat as stat2
 } from "fs/promises";
-import { basename as basename8, relative as relative12, resolve as resolve15, sep as sep11 } from "path";
+import { basename as basename9, relative as relative12, resolve as resolve15, sep as sep11 } from "path";
 var STACK_MARKERS = {
   node: ["package.json"],
   "node-bun": ["bun.lock", "bun.lockb"],
@@ -23441,16 +23484,16 @@ function printableBinaryText(bytes2) {
   return result;
 }
 function publicSafetyFingerprint(finding4) {
-  return createHash16("sha256").update(`public_safety\0${finding4.rule}\0${finding4.path}\0${finding4.line}`, "utf8").digest("hex");
+  return createHash17("sha256").update(`public_safety\0${finding4.rule}\0${finding4.path}\0${finding4.line}`, "utf8").digest("hex");
 }
 function publicSafetyUnassessedFingerprint(finding4) {
-  return createHash16("sha256").update(`public_safety_unassessed\0${finding4.reason}\0${finding4.path}`, "utf8").digest("hex");
+  return createHash17("sha256").update(`public_safety_unassessed\0${finding4.reason}\0${finding4.path}`, "utf8").digest("hex");
 }
 function publicSafetyUnassessed(path, reason) {
   return { fingerprint: publicSafetyUnassessedFingerprint({ path, reason }), path, reason };
 }
 function selectedPathSetSha256(paths) {
-  return createHash16("sha256").update(JSON.stringify([...new Set(paths)].sort(compareCodePoints5)), "utf8").digest("hex");
+  return createHash17("sha256").update(JSON.stringify([...new Set(paths)].sort(compareCodePoints5)), "utf8").digest("hex");
 }
 function publicSafetyFinding(path, line, rule) {
   return { fingerprint: publicSafetyFingerprint({ path, line, rule }), path, line, rule };
@@ -23552,13 +23595,13 @@ async function generateManifest(root) {
   const files = await walkFiles2(absoluteRoot, MANIFEST_EXCLUDED_DIRS);
   for (const file of files) {
     if (MANIFEST_EXCLUDED_FILES.has(file.relative)) continue;
-    if (basename8(file.relative).endsWith(".pyc") || basename8(file.relative).endsWith(".skill")) continue;
+    if (basename9(file.relative).endsWith(".pyc") || basename9(file.relative).endsWith(".skill")) continue;
     if (hasExcludedPart(file.relative, MANIFEST_EXCLUDED_DIRS)) continue;
     if (file.symlink && !(await stat2(file.absolute)).isFile()) continue;
     const bytes2 = await readFile3(file.absolute);
     entries2.push({
       path: `./${file.relative}`,
-      sha256: createHash16("sha256").update(bytes2).digest("hex")
+      sha256: createHash17("sha256").update(bytes2).digest("hex")
     });
   }
   entries2.sort((left, right) => compareCodePoints5(left.path, right.path));
@@ -25914,7 +25957,7 @@ async function discoverPlanningRoots2(repo, files) {
   for (const row of directories) {
     const parent = dirname11(row.relative);
     const children = childrenByDirectory.get(parent) ?? /* @__PURE__ */ new Set();
-    children.add(basename10(row.relative).toLocaleLowerCase("und"));
+    children.add(basename11(row.relative).toLocaleLowerCase("und"));
     childrenByDirectory.set(parent, children);
   }
   const candidates = /* @__PURE__ */ new Set();
@@ -26142,7 +26185,7 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
     }
   }
   if (clean && repo) {
-    const audit = auditPlanningArtifacts(planningSources, declared.size);
+    const audit = auditPlanningArtifacts2(planningSources, declared.size);
     for (const finding4 of audit.findings) {
       errors.push(`${path}.corpus: ${finding4.code} at ${finding4.path} (${finding4.subject}): ${finding4.detail}; related=${JSON.stringify(finding4.related)}`);
     }
@@ -26348,7 +26391,7 @@ async function validateBundleFile(bundlePath, options = {}) {
 }
 
 // src/closeout/prepare.ts
-import { createHash as createHash17 } from "crypto";
+import { createHash as createHash18 } from "crypto";
 import { existsSync as existsSync7, mkdirSync as mkdirSync2, readFileSync as readFileSync10, writeFileSync as writeFileSync4 } from "fs";
 import { join as join11, resolve as resolve21 } from "path";
 function asObject(value, path) {
@@ -26356,7 +26399,7 @@ function asObject(value, path) {
   return value;
 }
 function sha25610(value) {
-  return createHash17("sha256").update(value).digest("hex");
+  return createHash18("sha256").update(value).digest("hex");
 }
 function isoTimestamp3(date) {
   return date.toISOString();
@@ -27536,7 +27579,7 @@ function assemblePrepareBundle(context) {
 }
 
 // src/closeout/repository-boundaries.ts
-import { createHash as createHash18 } from "crypto";
+import { createHash as createHash19 } from "crypto";
 import { execFileSync as execFileSync6 } from "child_process";
 import { lstatSync as lstatSync12, readFileSync as readFileSync11 } from "fs";
 import { extname as extname5, join as join12, normalize as normalize2, posix as posix2, resolve as resolve22 } from "path";
@@ -27544,7 +27587,7 @@ var SOURCE_EXTENSIONS2 = /* @__PURE__ */ new Set([".bash", ".cjs", ".go", ".js",
 var FORBIDDEN_MAP_KEYS = Object.freeze(["__proto__", "constructor", "prototype"]);
 var INVENTORY_PATH = ".mister-clean/repository-boundaries.json";
 function digest3(value) {
-  return createHash18("sha256").update(value, "utf8").digest("hex");
+  return createHash19("sha256").update(value, "utf8").digest("hex");
 }
 function finding3(rule, path, detail, relatedPaths = []) {
   const related_paths = [...new Set(relatedPaths)].sort();
@@ -27843,7 +27886,7 @@ import { hostname } from "os";
 import { dirname as dirname13, join as join14, posix as pathPosix2 } from "path";
 
 // src/closeout/action-lifecycle-runtime.ts
-import { createHash as createHash19, randomUUID as randomUUID5 } from "crypto";
+import { createHash as createHash20, randomUUID as randomUUID5 } from "crypto";
 import {
   closeSync as closeSync4,
   copyFileSync,
@@ -27898,7 +27941,7 @@ function jsonBytes(value) {
 `;
 }
 function digestBytes(value) {
-  return createHash19("sha256").update(value).digest("hex");
+  return createHash20("sha256").update(value).digest("hex");
 }
 function readJson2(path) {
   return object6(JSON.parse(readFileSync12(path, "utf8")), path);
@@ -29219,7 +29262,7 @@ var nodeCloseoutEngine = {
 
 // src/mister-clean-invocation-journal.ts
 import { appendFileSync, existsSync as existsSync9, mkdirSync as mkdirSync5, readFileSync as readFileSync14 } from "fs";
-import { createHash as createHash21, randomUUID as randomUUID7 } from "crypto";
+import { createHash as createHash22, randomUUID as randomUUID7 } from "crypto";
 import { dirname as dirname14, isAbsolute as isAbsolute21 } from "path";
 function readMisterCleanInvocationJournal(path) {
   if (!isAbsolute21(path)) throw new Error("Mister Clean invocation journal path must be absolute");
@@ -29275,7 +29318,7 @@ function sameKeys(record4, expected) {
   return keys.length === expected.length && keys.every((key) => expected.includes(key));
 }
 function sha25611(value) {
-  return createHash21("sha256").update(value, "utf8").digest("hex");
+  return createHash22("sha256").update(value, "utf8").digest("hex");
 }
 var AppendOnlyLocalMisterCleanInvocationJournal = class {
   #path;
