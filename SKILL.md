@@ -1,7 +1,7 @@
 ---
 name: mister-clean
 metadata:
-  version: 7.0.2
+  version: 7.1.0
 description: >-
   Pay in-scope completion debt and leave a verified, successor-ready repository, or guard an active candidate from known debt. Invocation authorizes the documented work; AUDIT is explicit read-only analysis.
 ---
@@ -268,3 +268,13 @@ the proof and report the exact hard boundary as `NOT CLEAN`.
 Do not return a plan while executable in-scope work remains. Return changed,
 verified repository state, or a precise `NOT CLEAN` boundary report after all
 independent authorized work is complete.
+
+## Selective planning adoption
+
+The optional `@bradheitmann/mister-clean/planning` package subpath exports
+`assessPlanningSources` for supplied-document assessment. It verifies its own
+installed package bytes but does not discover or execute a target repository.
+Its `supplied_artifacts` result explicitly excludes repository discovery, live
+current-projection proof, Git ancestry, and closeout. It is never a CLEAN verdict.
+The default skill, CLI, MCP, and control plane retain their complete behavior;
+this API neither disables their checks nor accepts authority callbacks.

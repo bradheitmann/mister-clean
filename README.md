@@ -366,3 +366,16 @@ evidence do not belong in this repository or its Git history.
 ## License
 
 MIT
+
+### Adopt planning assessment independently
+
+Version 7.1 adds `@bradheitmann/mister-clean/planning` for applications that
+already hold planning document contents. `assessPlanningSources(sources)` runs
+the shared parser, graph rules, and debt accounting without activating target
+repository discovery, Git commands, SQLite, transports, or CLI execution.
+The result explicitly reports `scope: "supplied_artifacts"` and
+`repository_verification: "not_performed"`; it is never a CLEAN verdict.
+The installed subpath verifies its own package bytes before use.
+See [capability adoption](references/capability-adoption.md) for the typed example,
+exact exclusions, and private architecture seams. Full deployment remains the
+default, with all existing live repository and evidence checks enabled.

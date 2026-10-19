@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { gunzipSync } from "node:zlib";
 
+import { RELEASE_ATTESTATION_FILE, validateAttestationShape } from "../attestation.js";
+
 export interface AcceptedReleaseFileObservation {
   readonly absolute: string;
   readonly relative: string;
@@ -147,7 +149,7 @@ function checksum(header: Uint8Array): number { let value = 0; for (let i = 0; i
 function zeros(block: Uint8Array): boolean { return block.every((value) => value === 0); }
 function archivePath(raw: string, directory: boolean, errors: string[]): string | undefined {
   if (!raw.startsWith("package/") || raw.startsWith("/") || raw.includes("\\")) { errors.push("$.accepted_release.archive: tar entry must be a normalized package/ path"); return undefined; }
-  const result = raw.slice(8);
+  const result = raw.slice(8, directory && raw.endsWith("/") ? -1 : undefined);
   if (directory && result === "") return "";
   if ((directory && !raw.endsWith("/")) || (!directory && raw.endsWith("/")) || !safePath(result)) { errors.push(`$.accepted_release.archive: unsafe tar entry ${JSON.stringify(raw)}`); return undefined; }
   return result;
@@ -290,7 +292,35 @@ export async function verifyAcceptedReleaseBoundary(input: AcceptedReleaseBounda
   if (!manifestFile) errors.push("$.accepted_release.files.manifest: archive does not contain MANIFEST");
   else {
     let entries: Map<string, string> | undefined; try { entries = manifest(utf8.decode(manifestFile.bytes), errors); } catch { errors.push("$.accepted_release.files.manifest: MANIFEST must be UTF-8"); }
-    if (entries) { if (entries.has(record.files.manifest.path)) errors.push("$.accepted_release.files.manifest: MANIFEST must not self-enumerate"); const payload = new Map(allArchive); payload.delete(record.files.manifest.path); const listed = new Map([...entries].map(([path, digest]) => [path, { path, bytes: new Uint8Array(), sha256: digest }])); equals(listed, payload, "$.accepted_release.files.manifest", errors); for (const name of ["package_json", "skill", "executable"] as const) if (entries.get(record.files[name].path) !== record.files[name].sha256) errors.push(`$.accepted_release.files.manifest: missing or mismatched declared ${name} entry`); }
+    if (entries) {
+      if (entries.has(record.files.manifest.path)) errors.push("$.accepted_release.files.manifest: MANIFEST must not self-enumerate");
+      const payload = new Map(allArchive);
+      payload.delete(record.files.manifest.path);
+      const attestationFile = archive.get(RELEASE_ATTESTATION_FILE);
+      if (attestationFile) {
+        // Its bytes are already bound by retained archive SRI, registry evidence,
+        // and exact installed-tree equality. The self-reference exclusion is
+        // permitted only for the canonical, internally consistent attestation.
+        let value: unknown;
+        try { value = JSON.parse(utf8.decode(attestationFile.bytes)); }
+        catch { errors.push("$.accepted_release.attestation: required UTF-8 JSON"); }
+        const validated = validateAttestationShape(value);
+        errors.push(...validated.errors.map((error) => `$.accepted_release.attestation: ${error}`));
+        const attestation = validated.value;
+        if (attestation) {
+          if (attestation.package.name !== record.package_name || attestation.package.version !== record.version) errors.push("$.accepted_release.attestation: package/version mismatch");
+          if (attestation.manifest.sha256 !== record.files.manifest.sha256 || attestation.manifest.entry_count !== entries.size) errors.push("$.accepted_release.attestation: manifest identity mismatch");
+          for (const entry of attestation.required_entrypoints) {
+            if (allArchive.get(entry.path.slice(2)) !== entry.sha256 || entries.get(entry.path.slice(2)) !== entry.sha256) errors.push(`$.accepted_release.attestation: entrypoint digest mismatch ${entry.path}`);
+          }
+          payload.delete(RELEASE_ATTESTATION_FILE);
+        }
+        if (entries.has(RELEASE_ATTESTATION_FILE)) errors.push("$.accepted_release.attestation: self-referential manifest entry forbidden");
+      }
+      const listed = new Map([...entries].map(([path, digest]) => [path, { path, bytes: new Uint8Array(), sha256: digest }]));
+      equals(listed, payload, "$.accepted_release.files.manifest", errors);
+      for (const name of ["package_json", "skill", "executable"] as const) if (entries.get(record.files[name].path) !== record.files[name].sha256) errors.push(`$.accepted_release.files.manifest: missing or mismatched declared ${name} entry`);
+    }
   }
   if (record.entrypoint !== record.files.executable.path) errors.push("$.accepted_release.entrypoint: must equal declared executable path");
   await installed(input.files, packageRoot, record.entrypoint, "$.accepted_release.entrypoint", errors);

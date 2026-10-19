@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdtempSync,
@@ -102,6 +103,9 @@ function assertExactDeclarationSurfaces(unpacked) {
   if (JSON.stringify(rootExports) !== JSON.stringify(["createMisterCleanServer"])) {
     throw new Error(`unexpected root declaration exports: ${JSON.stringify(rootExports)}`);
   }
+  const planningExports = declarationExports(join(unpacked, "dist", "planning.d.ts"));
+  const planningExpected = ["PlanningAssessment", "PlanningSource", "PlanningFinding", "PlanningFindingCode", "assessPlanningSources"].sort();
+  if (JSON.stringify(planningExports) !== JSON.stringify(planningExpected)) throw new Error(`unexpected planning declaration exports: ${JSON.stringify(planningExports)}`);
   const controlPlaneExports = declarationExports(join(unpacked, "dist", "control-plane.d.ts"));
   const expected = [
     "LocalControlPlaneRuntimeOptions",
@@ -257,6 +261,33 @@ function smokeInstalledPrepare(installedCli, packageTree, temporaryRoot) {
   if (!validation.includes("PASS kind=bundle")) {
     throw new Error(`installed prepared bundle did not validate under the same installed CLI: ${validation}`);
   }
+}
+
+function smokeInstalledPlanning(consumer, installed, temporaryRoot) {
+  const smoke = join(consumer, "planning-smoke.mjs");
+  writeFileSync(smoke, [
+    'import * as planning from "@bradheitmann/mister-clean/planning";',
+    'if (JSON.stringify(Object.keys(planning)) !== JSON.stringify(["assessPlanningSources"])) throw new Error("planning namespace expanded");',
+    'const result = planning.assessPlanningSources([{ path: "/must-not-read/plan.md", content: "invalid unstructured document" }]);',
+    'if (result.scope !== "supplied_artifacts" || result.repository_verification !== "not_performed" || result.analysis.status !== "fail") throw new Error("planning scope or failure changed");',
+    'if (planning.assessPlanningSources([]).analysis.status !== "not_applicable") throw new Error("empty supplied corpus claimed pass");',
+    'for (const specifier of ["@bradheitmann/mister-clean/dist/planning.js", "@bradheitmann/mister-clean/closeout/planning/policy"]) {',
+    '  try { await import(specifier); } catch (error) { if (error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED") continue; throw error; }',
+    '  throw new Error("private planning import exposed");',
+    '}',
+    'console.log("planning capability: PASS");',
+  ].join("\n"), "utf8");
+  const output = execFileSync(process.execPath, [smoke], { cwd: consumer, encoding: "utf8" });
+  if (!output.includes("planning capability: PASS")) throw new Error("planning consumer smoke did not execute");
+  const damaged = join(temporaryRoot, "planning-tamper-package");
+  cpSync(installed, damaged, { recursive: true, dereference: true });
+  const entrypoint = join(damaged, "dist", "planning.js");
+  writeFileSync(entrypoint, `${readFileSync(entrypoint, "utf8")}\n// altered package bytes\n`, "utf8");
+  const rejection = execFileSync(process.execPath, ["--input-type=module", "-e", [
+    `try { await import(${JSON.stringify(entrypoint)}); }`,
+    'catch (error) { if (String(error.message).includes("runtime attestation failed")) process.exit(0); throw error; }',
+    'throw new Error("altered planning package was accepted");',
+  ].join("\n")], { cwd: consumer, encoding: "utf8" });
 }
 
 function smokeInstalledControlPlane(consumer) {
@@ -566,6 +597,7 @@ async function main() {
     const exportOutput = execFileSync(process.execPath, [exportSmoke], { cwd: consumer, encoding: "utf8" });
     if (!exportOutput.includes("package export: PASS")) throw new Error(`unexpected package export output: ${exportOutput}`);
 
+    smokeInstalledPlanning(consumer, installed, temporaryRoot);
     smokeInstalledControlPlane(consumer);
 
     await smokeStdioMcp(installedMcp, consumer);
@@ -595,6 +627,9 @@ async function main() {
         "pnpm_installed_prepare_and_validate",
         "package_export",
         "package_declaration_exports_exact",
+        "planning_supplied_artifact_scope",
+        "planning_hidden_subpaths_blocked",
+        "planning_tampered_package_rejected",
         "control_plane_export_exact",
         "control_plane_hidden_subpaths_blocked",
         "control_plane_runtime_capability_scoped",

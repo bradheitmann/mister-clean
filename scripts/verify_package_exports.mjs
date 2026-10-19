@@ -49,4 +49,7 @@ exact(
   "control-plane declaration exports",
 );
 
+exact(javascriptExports(join(root, "dist", "planning.js")), ["assessPlanningSources"], "planning runtime exports");
+exact(declarationExports(join(root, "dist", "planning.d.ts")),
+  ["PlanningAssessment", "PlanningSource", "PlanningFinding", "PlanningFindingCode", "assessPlanningSources"], "planning declaration exports");
 process.stdout.write("package export surfaces: PASS\n");
