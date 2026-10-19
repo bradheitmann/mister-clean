@@ -534,7 +534,19 @@ describe("release archive boundary", () => {
       const [sha256, path] = row.split("  ");
       return { sha256, path };
     }).filter((row) => row.path?.startsWith("./dist/"));
-    expect(distRows).toHaveLength(19);
+    // Preserve the established application/assets closure and require the two
+    // new supported planning outputs explicitly, rather than accepting any
+    // two additional files with the right aggregate count.
+    const expectedEntrypoints = [
+      "./dist/control-plane.d.ts", "./dist/control-plane.js",
+      "./dist/planning.d.ts", "./dist/planning.js",
+      "./dist/public.d.ts", "./dist/public.js",
+      "./dist/stdio.d.ts", "./dist/stdio.js",
+    ];
+    expect(distRows.filter((row) => !row.path?.startsWith("./dist/control-plane/")).map((row) => row.path).sort())
+      .toEqual(expectedEntrypoints.sort());
+    expect(distRows.filter((row) => row.path?.startsWith("./dist/control-plane/"))).toHaveLength(13);
+    expect(distRows).toHaveLength(21);
     for (const row of distRows) {
       const path = row.path?.slice(2);
       expect(path).toBeTruthy();

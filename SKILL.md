@@ -7,9 +7,8 @@ description: >-
 ---
 # Mister Clean
 
-Mister Clean finishes work so an unfamiliar team can trust and continue it.
-A bare `$mister-clean` invocation means `CLOSE`: inspect, repair, validate,
-synchronize when policy permits, and leave a minimal durable successor surface.
+A bare `$mister-clean` invocation means `CLOSE`: inspect, repair, validate, synchronize when
+policy permits, and leave a minimal durable successor surface.
 
 ## Three governing contracts
 
@@ -263,18 +262,9 @@ the proof and report the exact hard boundary as `NOT CLEAN`.
 | Model/harness/reasoning comparison | `evals/model-hygiene-trial.md` |
 | Four-role fleet campaign | `evals/rotation-campaign.md` |
 | Local report/control plane | `references/control-plane-product-spec.md` |
+| Selective API | `references/capability-adoption.md` |
 | Optional visual state projection | `assets/codebase-state-dashboard/index.html` and its adjacent scorecard/tokens |
 
 Do not return a plan while executable in-scope work remains. Return changed,
 verified repository state, or a precise `NOT CLEAN` boundary report after all
 independent authorized work is complete.
-
-## Selective planning adoption
-
-The optional `@bradheitmann/mister-clean/planning` package subpath exports
-`assessPlanningSources` for supplied-document assessment. It verifies its own
-installed package bytes but does not discover or execute a target repository.
-Its `supplied_artifacts` result explicitly excludes repository discovery, live
-current-projection proof, Git ancestry, and closeout. It is never a CLEAN verdict.
-The default skill, CLI, MCP, and control plane retain their complete behavior;
-this API neither disables their checks nor accepts authority callbacks.
