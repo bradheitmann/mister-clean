@@ -41,9 +41,9 @@ d4f2b9e148059a15f014cb0f0b8fea8cd11bfa447dd483bedf1b0adc0e2ba799  ./dist/control
 991234562ac06b47aefa2ca4d4ff74360a164a5653ec05357816fc4ffe3ca8a2  ./dist/control-plane/assets/InterDisplay-SemiBold-DhOeddqg.otf
 31c92d01a8a08528b718a43addf0ad3df0af2ca4b7b3290a452f70f358e14d3d  ./dist/control-plane/assets/JetBrainsMono-Medium-pYQm08-g.ttf
 a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f  ./dist/control-plane/assets/JetBrainsMono-Regular-Dh36KTnx.ttf
-25903c0b069a9b11d4e8aea6e74317cf2af0e770ac1dd9fbd995e09d59fdf3bf  ./dist/control-plane/assets/index-D9zvWjHP.js
+913bb30bcb9adee5fcf4ba8479988caaa4aa982da716a7aa17ba4797a0dc354f  ./dist/control-plane/assets/index-D1-Wxax1.js
 4aba9409dac257355c56a81dba4d7249fcb25079f9a48b194eec7956362434ec  ./dist/control-plane/assets/index-DmC-s3mW.css
-60f291518cdf5114fa0bae067c28ffec85a088fa876f962d5b310752ba3a0362  ./dist/control-plane/index.html
+0ddf8ca2a8e9cea6ef9f56b228912c0c64e1107fca415d71e43aa922e14c4d82  ./dist/control-plane/index.html
 3ae6b5a0a37ccefb99acb0e1413da1780ba64e1b52792e7ab36328eaf83b77ce  ./dist/public.d.ts
 37a5655d2f70e5a677a84eabffe560805007b433b89063b040c84a1b4db6159e  ./dist/public.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
@@ -53,7 +53,7 @@ e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md
 e77aa854e06035c0a51b8e95779e8121689e493b3536564e8fa2ad9f79927834  ./evals/rotation-campaign.md
 34fcc94c1a7a86f9746a7bb93e1380768f13485260b78af76d0c86eabb656214  ./examples/example-report.md
-4b8ecffafeff3b02a247fc3cfe62e46cc703c1b7e8275e31c9d832693b5c18a7  ./package.json
+176e3f2e2a5d1cae3c0b4571af6f7181e13b8666f36f6dfbf9a7b0aeeb1eff57  ./package.json
 42cc071449e75dbe46fac9938ef67d3a44b08c02d452441b7ab6f46f4b0d4bd4  ./references/authorization-and-modes.md
 84ff460cfeac5ab4f2becaf31520bbeb2403b4ab0c876cab20cca166e9671ad1  ./references/behavioral-evals.md
 1a909f73a498cf151dc88ad4d8aff2bd24ac20b803023ff1b41ae39fc6b85243  ./references/code-hygiene-rubric.md
