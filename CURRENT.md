@@ -28,6 +28,16 @@ from repository discovery and live Git/current-projection observation. Existing
 internal imports and repository audit signatures remain compatible. Full audits
 retain their live verification and discovery checks.
 
+## Planning addendum — 2026-10-05 (carried forward 2026-10-31)
+
+Cross-project evaluation standardization is **planned, not implemented or
+dispatched**. See the [roadmap](project/planning/ROADMAP.md) and
+[EV-01–EV-06 execution plan](project/planning/EVAL-STANDARDIZATION-PLAN.md).
+The observed campaign telemetry does not establish admitted capability trials.
+This addendum has not reverified publication or any older receipt. Dispatch of
+new evaluation work is governed by the project charter (`charter/`, Slice Zero)
+once it lands.
+
 ## Acceptance and release obligations
 
 1. Build with the pinned Bun 1.4.0 and pnpm 11.0.3 toolchain; independently verify
