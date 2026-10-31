@@ -38,3 +38,7 @@ Run treatment C first: if a non-blocking wait removes the inbox block on its own
 Repository named only as the hygiene tool's own repository. No advisory ids, package versions, paths, branch names or seat names.
 
 failure_class: harness (primary: delivery is impossible while a pane is mid-turn, and the turn was held by 9 to 12 minute sleeps); orchestration (secondary: a duplicate full suite on an overloaded shared host, and a brief with no wait bound)
+
+## Correction (PM, 2026-10-31)
+The worker's harness queues input typed while a turn is running; the team orchestrator delivered a steer that way after about 50 minutes. So the block was in the coordinator's message sender, which refuses any busy pane by design, not in the harness. This moves the primary failure class from harness to orchestration (sender policy). The wait-discipline question about the worker stands, and treatment C (a non-blocking wait) remains useful, but a fourth treatment is now needed: D, the sender queues to harnesses that accept mid-turn input.
+failure_class (corrected): orchestration (primary: the sender refuses delivery to a harness that would have queued it); harness (secondary: long blocking waits)
