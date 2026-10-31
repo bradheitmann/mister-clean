@@ -13,10 +13,10 @@ model_registry_ref: unbound
 
 Inference sources seen (a footnote, not part of the identity): OpenRouter free route.
 
-Seats that ran this tuple in the window: HLDT-3
+Seats that ran this tuple in the window: seat-b7ad
 
 ## Work observed
-- T-09 (HLDT-3): accuracy audit of 15 claims against code delivered about 46 min after start; it reports location 9 of 15, value 7 of 15, effect 15 of 15 for the audited reports. The auditor itself is unchecked.
+- T-09 (seat-b7ad): accuracy audit of 15 claims against code delivered about 46 min after start; it reports location 9 of 15, value 7 of 15, effect 15 of 15 for the audited reports. The auditor itself is unchecked.
 
 ## Categorical data (refresh 1, through 03:09Z)
 | field | value |
@@ -31,4 +31,4 @@ The same model at max reasoning is AC-013 (advisor work). Levels are never merge
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
 
 ## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
-No new task. HLDT-3's last context change was 03:48Z. Final counts: 1 task (T-09, the audit, never itself checked); 0 stalls; 0 provider limit events over 12 h on the free route.
+No new task. seat-b7ad's last context change was 03:48Z. Final counts: 1 task (T-09, the audit, never itself checked); 0 stalls; 0 provider limit events over 12 h on the free route.

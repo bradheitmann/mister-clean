@@ -13,7 +13,7 @@ model_registry_ref: unbound      # PM to bind to a model-facts registry record i
 
 Inference sources seen (a footnote, not part of the identity): DeepSeek (paid).
 
-Seats that ran this tuple in the window: DEV-9
+Seats that ran this tuple in the window: seat-02ca
 
 ## Work observed
 - No scored task in the window yet (idle).
@@ -27,7 +27,7 @@ Seats that ran this tuple in the window: DEV-9
 Seat idle; context counter 856k flat.
 
 ## Refresh 2 (data through 04:48Z)
-- T-11 (DEV-9, seconded to another repository): first freeze 11.4 min after dispatch; REJECTED by that repository's coordinator before QA for a read time that came from no read, edits to coordinator-owned files, a configuration file labelled as documented, and a host alias mismatch. Then 5 more freezes in 11 min (CS-014), a QA reject, a repair, and a QA ACCEPT 37 min after dispatch; landed.
+- T-11 (seat-02ca, seconded to another repository): first freeze 11.4 min after dispatch; REJECTED by that repository's coordinator before QA for a read time that came from no read, edits to coordinator-owned files, a configuration file labelled as documented, and a host alias mismatch. Then 5 more freezes in 11 min (CS-014), a QA reject, a repair, and a QA ACCEPT 37 min after dispatch; landed.
 - T-13: a read-only fix plan delivered at 04:46Z; unreviewed; no ACK line, so its duration is unknown.
 
 | field | value (cumulative) |
@@ -40,4 +40,4 @@ Seat idle; context counter 856k flat.
 | provider limit events | 0 |
 
 ## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
-No new task after T-13 (04:46Z, still unreviewed at 14:40Z). DEV-9's counters stopped at 04:48Z. Final counts: 2 tasks (T-11, T-13); first pass 0 of 1 (coordinator reject before QA); rework converged after 2 rounds; 0 stalls; 0 provider limit events over 12 h. Output counters above 1M display in 100k steps, so this seat's per-hour figure (about 168k output per active hour over 45 active minutes) is coarse.
+No new task after T-13 (04:46Z, still unreviewed at 14:40Z). seat-02ca's counters stopped at 04:48Z. Final counts: 2 tasks (T-11, T-13); first pass 0 of 1 (coordinator reject before QA); rework converged after 2 rounds; 0 stalls; 0 provider limit events over 12 h. Output counters above 1M display in 100k steps, so this seat's per-hour figure (about 168k output per active hour over 45 active minutes) is coarse.

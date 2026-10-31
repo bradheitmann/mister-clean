@@ -2,8 +2,8 @@
 
 status: unreplicated (n = 1 lane)
 source: a slice zero in a sibling repository, worked by a seconded seat (T-11)
-agent: AC-006 (pi / deepseek-v4-pro / high), seat DEV-9
-verifier: AC-009 (opencode / mimo-v2.6-flash / thinking), seat QA-9
+agent: AC-006 (pi / deepseek-v4-pro / high), seat seat-02ca
+verifier: AC-009 (opencode / mimo-v2.6-flash / thinking), seat seat-baa9
 class: fabricated value (accuracy); freeze churn (pipeline cost)
 
 ## What happened

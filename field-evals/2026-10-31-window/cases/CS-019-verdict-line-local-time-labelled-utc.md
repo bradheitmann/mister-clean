@@ -2,7 +2,7 @@
 
 status: unreplicated (n = 1 line)
 source: the hygiene tool's own repository, pair lane T-35 (final refresh)
-agent: AC-014 (pi / mimo-v2.6-flash / high), seat PAIR-E-QA (the verifier wrote the line)
+agent: AC-014 (pi / mimo-v2.6-flash / high), seat seat-575a (the verifier wrote the line)
 class: timestamp accuracy (record integrity)
 
 ## What happened

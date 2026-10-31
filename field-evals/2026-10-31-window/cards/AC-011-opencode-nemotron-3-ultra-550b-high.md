@@ -13,7 +13,7 @@ model_registry_ref: unbound      # PM to bind to a model-facts registry record i
 
 Inference sources seen (a footnote, not part of the identity): NVIDIA hosted.
 
-Seats that ran this tuple in the window: ADVISOR
+Seats that ran this tuple in the window: seat-4b3c
 
 ## Work observed
 - T-07: decision advice, 6 m 41 s at 12.8 tok/s, adopted with faults (CS-003).

@@ -2,7 +2,7 @@
 
 status: unreplicated (n = 1 lane)
 source: the source project, worker lane T-36 (final refresh)
-agent: AC-001 (pi / nemotron-3.5-super / high), seat DEV-4, OpenRouter free route (title prefix "(openrouter) nvidia/nemotron-3.5-super-vl:free")
+agent: AC-001 (pi / nemotron-3.5-super / high), seat seat-0410, OpenRouter free route (title prefix "(openrouter) nvidia/nemotron-3.5-super-vl:free")
 class: lane loss on transport failure (detection and recovery)
 
 ## What happened

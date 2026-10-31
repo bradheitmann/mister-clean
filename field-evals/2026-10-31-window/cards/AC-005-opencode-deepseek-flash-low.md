@@ -13,7 +13,7 @@ model_registry_ref: unbound      # PM to bind to a model-facts registry record i
 
 Inference sources seen (a footnote, not part of the identity): DeepSeek (paid).
 
-Seats that ran this tuple in the window: QA-1
+Seats that ran this tuple in the window: seat-4de2
 
 ## Work observed
 - No scored task in the window yet.
@@ -30,4 +30,4 @@ Reasoning level differs from AC-004; never merge.
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
 
 ## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
-No task in the whole window. QA-1's context counter never changed (143 of 143 samples flat). Final counts: 0 tasks, 0 stalls, 0 provider limit events.
+No task in the whole window. seat-4de2's context counter never changed (143 of 143 samples flat). Final counts: 0 tasks, 0 stalls, 0 provider limit events.

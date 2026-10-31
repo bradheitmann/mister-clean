@@ -12,19 +12,19 @@ How the per-hour figures were made: for each Pi seat, output tokens are summed o
 
 | measure | OpenRouter free (`nvidia/nemotron-3.5-super-vl:free`) | NVIDIA hosted (`nvidia/nemotron-3.5-super-vl-120b-a12b`) |
 |---|---|---|
-| seats, harnesses | DEV-4 and DEV-5 (Pi, AC-001); DEV-6 and QA-7 (OpenCode, AC-002) | DEV-5 after about 02:45Z and QA-5 (Pi, AC-001) |
+| seats, harnesses | seat-0410 and seat-aa2c (Pi, AC-001); seat-453c and seat-cbaa (OpenCode, AC-002) | seat-aa2c after about 02:45Z and seat-bcf7 (Pi, AC-001) |
 | time window with work | about 01:35Z to 05:59Z | about 02:45Z to 05:44Z |
 | tasks (worker) | 4 deliveries: T-01, T-02, T-10, T-10 rework; T-08 began here and finished on NVIDIA; 1 lane lost (T-36) | T-08, T-01 rework, T-08 rework |
 | first pass (independent verifier) | 0 of 3 (T-01, T-02, T-10) | 0 of 1 (T-08) |
 | rework | T-10 rework never re-reviewed; T-02 rework never seen | 2 of 2 accepted in one round (T-01, T-08) |
-| as verifier | QA-7: twin review of T-03 never posted | QA-5: 1 accept (T-29); twin review of T-03 never posted |
-| output tokens per active hour (Pi only) | about 103k (DEV-4, 75 active min, 129k output) | about 62k (DEV-5, 35 min) and about 80k (QA-5, 35 min) |
-| highest output in any 60 min | 120k (DEV-4) | 47k (QA-5) |
+| as verifier | seat-cbaa: twin review of T-03 never posted | seat-bcf7: 1 accept (T-29); twin review of T-03 never posted |
+| output tokens per active hour (Pi only) | about 103k (seat-0410, 75 active min, 129k output) | about 62k (seat-aa2c, 35 min) and about 80k (seat-bcf7, 35 min) |
+| highest output in any 60 min | 120k (seat-0410) | 47k (seat-bcf7) |
 | speed, ack to done (worker, min) | 30, 26, 46.6; rework 5 | 26 (T-08, mixed route); rework about 5 |
 | latency | one operator probe: 0.35 s to first response | one operator probe: 9.2 s (same prompt) |
 | rate-limit or quota events | 0 | 0 |
 | other provider events | 1 terminal transport error ("Retry failed after 3 attempts: Upstream idle timeout exceeded", 05:59Z); the lane was lost and nobody noticed for 8.5 h (CS-020) | 0 |
-| stalls | 1 unexplained 12-hour flat seat with an open review (QA-7, CS-011 B); 1 lost lane (DEV-4) | 0 |
+| stalls | 1 unexplained 12-hour flat seat with an open review (seat-cbaa, CS-011 B); 1 lost lane (seat-0410) | 0 |
 | truncations | none seen; UNKNOWN after 04:52Z (the pair stall watcher was stopped, and the meter does not scan for truncation) | same |
 | allowance per hour | lower bound only: no limit hit. At least 120k output in 60 min on one seat | lower bound only: no limit hit. At least 47k output in 60 min on one seat |
 
@@ -40,12 +40,12 @@ All paid routes per the operator. No price was recorded, so cost per task is UNK
 
 | measure | DeepSeek flash, Pi high (AC-003) | DeepSeek flash, OpenCode max / low (AC-004 / AC-005) | DeepSeek v4 pro, Pi high (AC-006) | MiMo V2.6 flash, Pi high (AC-014) | MiMo V2.6 flash, OpenCode thinking (AC-009) | MiMo V2.6 pro, OpenCode thinking (AC-010) |
 |---|---|---|---|---|---|---|
-| seats | 12 (7 pair workers, DEV-7, QA-2, QA-3, QA-6, WATCHER) | DEV-10, QA-10 / QA-1 | DEV-9 | 7 pair verifiers | QA-9 | HLDT-1, HLDT-4 |
+| seats | 12 (7 pair workers, seat-324c, seat-eab2, seat-db12, seat-9eec, seat-2487) | seat-7c34, seat-ccbb / seat-4de2 | seat-02ca | 7 pair verifiers | seat-baa9 | seat-7801, seat-d802 |
 | time window with work | about 01:41Z to 11:47Z | 13:00Z to 14:40Z / none | 03:28Z to 04:48Z | 03:44Z to 13:47Z | 02:23Z to 04:05Z | none |
 | tasks | 17 deliveries as worker; 7 verdicts as verifier | 2 / 0 | 2 | 23 verdicts as verifier; 1 task as worker | 7 review events (3 accept, 1 reject, 3 voided) | 0 |
 | first pass | 9 of 13 accepted (worker) | n/a (1 adopted by the coordinator, 1 unreviewed) | 0 of 1 | n/a (verifier) | n/a | n/a |
 | rework | 4 of 4 converged in one round | n/a | converged after 2 rounds | 6 of 6 of its rejects later repaired and accepted | n/a | n/a |
-| output tokens per active hour | about 121k (1.57M over 13 active seat-hours); highest seat-hour 169k | context only (DEV-10 672k to 716k) | about 168k over 45 active min (coarse: 100k counter steps) | about 121k (1.44M over 11.9 active seat-hours); highest seat-hour 218k | context only | context only; flat |
+| output tokens per active hour | about 121k (1.57M over 13 active seat-hours); highest seat-hour 169k | context only (seat-7c34 672k to 716k) | about 168k over 45 active min (coarse: 100k counter steps) | about 121k (1.44M over 11.9 active seat-hours); highest seat-hour 218k | context only | context only; flat |
 | speed | worker ack to done: median about 11 min (n = 16, range 2.1 to 106) | 26 or less; 69.8 including a queue | 11.4 to first freeze | review after delivery: median about 24 min (n = 14, range 3 to 90; the long ones are queueing) | 17 min (T-04) | n/a |
 | rate-limit or quota events | 0 | 0 | 0 | 0 | 0 | 0 |
 | other provider events | 0 | 0 | 0 | 1 upstream idle timeout (04:43Z), recovered by the next sample | 0 | 0 |
@@ -73,7 +73,7 @@ Full rows are in `data/tasks.tsv`; per-card tables are in `cards/`. "First pass"
 | card | tasks as worker | first pass | rework converged | speed, ack to done (min) | reviews issued | stalls |
 |---|---|---|---|---|---|---|
 | AC-001 pi nemotron super high | 2 (+2 reworks); 1 lane lost | 0/2 | 2/2 | 30, 26; T-08 rework about 5 | 1 accept; 1 twin never posted | 1 lost lane (transport error, CS-020) |
-| AC-002 opencode nemotron super thinking | 2 (+1 rework) | 0/2 | 0 reviewed (1 never re-reviewed) | 26, 46.6; rework 5 | 0; 1 twin never posted | 1 unexplained (QA-7, 12 h flat) |
+| AC-002 opencode nemotron super thinking | 2 (+1 rework) | 0/2 | 0 reviewed (1 never re-reviewed) | 26, 46.6; rework 5 | 0; 1 twin never posted | 1 unexplained (seat-cbaa, 12 h flat) |
 | AC-003 pi deepseek-flash high | 17 | 9/13 | 4/4 | median about 11 (n = 16) | 4 reject, 3 accept | 0 |
 | AC-004 opencode deepseek-flash max | 2 | n/a | n/a | 26 or less; 69.8 | 0 | 0 |
 | AC-006 pi deepseek-v4-pro high | 2 | 0/1 | 1/1 (2 rounds) | 11.4 to first freeze | 0 | 0 |
