@@ -2,18 +2,18 @@
 artifact_type: reference
 classification_rationale: Cross-repository engineering standard; adopted per repository by its maintainer. Not a lifecycle-bearing planning artifact.
 title: Common engineering standard
-version: 0.1-draft
+version: 0.2-reviewed
 ratification: pending-owner
 ---
 
-# Common engineering standard (v0.1 draft)
+# Common engineering standard (v0.2, co-author reviewed)
 
 One standard for every repository an agent team works in: how code stays clean,
 how quality is proven, and how public code is kept apart from private data. It
 is generic on purpose. A repository adopts it by linking it from `AGENTS.md`
 and recording any exception (see §9).
 
-Status: **draft for co-author review**. Drafted by the Mister Clean maintainer
+Status: **reviewed by all three co-authors; awaiting owner ratification**. Drafted by the Mister Clean maintainer
 with the governance-contract and plan-schema maintainers as co-authors.
 
 Where this standard and a repository's `charter/` disagree, the charter governs
@@ -139,6 +139,10 @@ dependencies, and ownership and custody.
   commit it checked; if the candidate moves, verification restarts.
 - **Results are reopenable:** a claimed result can be re-run from the recorded
   inputs and compared.
+- **Each verification run uses its own build output directory.** A shared
+  build directory can reuse a stale test binary and report a false result.
+  (Field case 2026-10-31: a fail-without mutant appeared to survive because a
+  test binary built against the control tree was reused.)
 - **One heavy suite per repository at a time.** Full suites take a
   repository-wide lease; a busy lease is a typed "resource contention" result,
   not a failure and not a duplicate run.
@@ -147,14 +151,33 @@ dependencies, and ownership and custody.
   with how it was observed: runtime receipt, display title, or contract.
 - **Checks measure by default and refuse only for** safety, provenance or
   integrity, fabrication, or a contradiction with a cited source. Every other
-  check records a typed limitation and lets work proceed.
+  check records a typed limitation and a measurement, and lets work proceed.
 
 ## 7. Governance and plans
 
-- **Governance contract:** every repository carries `charter/` (intent card,
-  guarantees with owner, proof and cost, bounded loops, stop rules, done lists
-  written before dispatch, current state). Its check runs before any commit or
-  "ready" claim.
+- **Governance contract:** every repository carries `charter/`: an intent
+  card, guarantees each with an owner, a proof and a cost, loops each with a
+  finite bound, a cost per trip and a stop condition, stop rules, done lists,
+  and current state. Its check (`charter check`; `--strict` before a push or a
+  "ready" claim) runs on the exact candidate.
+  - **Done means proven:** a slice is done when every proof on its done list,
+    written before dispatch, has run, been reopened from the frozen bytes and
+    been compared. "No findings" is never done; new findings become
+    obligations on the next bounded slice unless they break a listed
+    guarantee.
+  - **Pinned and frozen:** the done list is pinned at dispatch
+    (`charter gate <slice> --dispatch`) and must still match at acceptance
+    (`--accept`). The candidate is frozen from its committed tree
+    (`charter freeze`), and the verifier's receipt is validated against those
+    bytes (`charter receipt <r> --verify-tree <checkout>`).
+  - **Verification is bounded:** one remediation per rejection. A second
+    rejection of the same slice goes to the owner, and is never an automatic
+    loop.
+  - **Rules change only by record:** a stop rule changes only through an
+    owner-decision file in `charter/owner-decisions/`, and relaxing one needs
+    two signers. No agent relaxes a stop rule.
+  - **Install:** pin the charter tool to a commit or release and build it from
+    source at that pin; CI uses the same pin.
 - **Plans and work contracts** use the shared plan and work-contract schema
   maintained by the plan-schema project, so planners, executors and verifiers
   exchange one shape. A repository does not invent a parallel format, and
@@ -188,6 +211,11 @@ dependencies, and ownership and custody.
   owner, purpose and completion condition recorded outside the tree. At
   completion: preserve work, release dependents, remove through Git (never a
   forced removal), and verify the path is gone from both Git and the filesystem.
+  The lifecycle record (owner, purpose, completion condition, branch and head)
+  lives outside the tree being removed, for example in `charter/STATE.md` or
+  the task ledger.
+- **Branch deletion is a separate action** from worktree removal and is never
+  implied by it.
 - **Merge or kill:** finished work does not sit unmerged. Before a branch is
   deleted, an `archive/<branch>` tag at its exact tip is pushed and verified.
 - **No destructive shortcuts:** no force-push, no history rewrite, no bulk
@@ -209,6 +237,11 @@ dependencies, and ownership and custody.
   specification payload root plus the validator release. Open: the first
   packaged validator release (a versioned command with a JSON interface) does
   not exist yet.
-- Governance (§7): whether the charter check should verify the `AGENTS.md`
-  link to this standard.
+- Governance (§7): answered by the governance-contract maintainer: yes, as a
+  warning, never a refusal (a missing link is not a safety, provenance,
+  fabrication or contradiction failure). When `charter.toml` has a
+  `[standard]` table (name, version, location), `charter check --strict` warns
+  if `AGENTS.md` does not link it, and `charter sync-agents` can add the link.
+  Planned after owner ratification of v1.
+- Languages (§3): confirmed aligned with the governance block's language line.
 - Public-safety (§1): whether to standardize one shared denylist format.
