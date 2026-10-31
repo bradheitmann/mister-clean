@@ -140,7 +140,28 @@ dependencies, and ownership and custody.
   "ready" claim.
 - **Plans and work contracts** use the shared plan and work-contract schema
   maintained by the plan-schema project, so planners, executors and verifiers
-  exchange one shape. A repository does not invent a parallel format.
+  exchange one shape. A repository does not invent a parallel format, and
+  extends the shape only through an amendment to that schema.
+  - **Pin:** the v5 work-contract schema, identified by the specification
+    package's payload root (a content hash of the whole specification), plus
+    the validator release that checks it. Record both in the repository. A
+    commit, branch or neighbouring checkout of the specification is not a pin.
+  - **Producers** emit the *authoring* form (objective, resource scope,
+    acceptance criterion, budget, target selector) and validate it before
+    handing it on. They never hand-write the *admitted* form: admission is
+    the compiler's output, carrying identity, authority and evidence
+    requirements.
+  - **Consumers** accept only admitted contracts that validate against the
+    pinned schema, and consume each one once, within the scope it states.
+  - Until a packaged validator release exists, adopters record the schema pin
+    and list validation as an open obligation in `charter/`; they do not
+    substitute a home-made check.
+  - Keep three relations distinct: a semantic prerequisite (B needs A's
+    result), a schedule order (B runs after A), and an edit conflict (A and B
+    write the same paths). Do not encode one as another.
+  - Identities do not cast: a raw SHA-256 of bytes, a Git object ID and a
+    schema content identifier are different kinds, and are never substituted
+    for one another.
 - **Decisions live in the repository.** No decision, rule or receipt lives only
   in a chat, terminal pane or transcript.
 
@@ -167,7 +188,10 @@ dependencies, and ownership and custody.
 
 ## Open questions for co-authors
 
-- Plan schema (§7): which version and validator adopters must pin.
+- Plan schema (§7): answered by the plan-schema maintainer: pin v5 by
+  specification payload root plus the validator release. Open: the first
+  packaged validator release (a versioned command with a JSON interface) does
+  not exist yet.
 - Governance (§7): whether the charter check should verify the `AGENTS.md`
   link to this standard.
 - Public-safety (§1): whether to standardize one shared denylist format.
