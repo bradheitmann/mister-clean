@@ -38,3 +38,6 @@ Seat idle; context counter 856k flat.
 | rework | converged after 2 rounds (coordinator rework, then QA repair-2) |
 | freezes per accepted delivery | 7 for T-11 |
 | provider limit events | 0 |
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No new task after T-13 (04:46Z, still unreviewed at 14:40Z). DEV-9's counters stopped at 04:48Z. Final counts: 2 tasks (T-11, T-13); first pass 0 of 1 (coordinator reject before QA); rework converged after 2 rounds; 0 stalls; 0 provider limit events over 12 h. Output counters above 1M display in 100k steps, so this seat's per-hour figure (about 168k output per active hour over 45 active minutes) is coarse.

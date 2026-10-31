@@ -48,3 +48,31 @@ Rows are shaped like `the registry route/1 schema`. Route ids follow the schema'
 Correction to refresh 1 row "Free-tier ceilings reached": still none, now over 131 minutes and 1,099 samples. Still a lower bound only.
 
 What this delta cannot give you: tariffs for any paid route (none recorded in the log), headers on the timeout (not visible in a pane), and whether a mimo-flash call on the Pi harness and on the OpenCode harness resolve to the same provider model (the OpenCode title shows no provider id).
+
+## Final delta (meter 2026-10-31T02:37:33Z to 14:33:26Z; event log through 14:40:25Z)
+Rows are shaped like the registry's route/1 schema, with the same conventions as the refresh 2 delta. Every model id is title_only. The window for every row is the whole meter window unless stated. Throughput figures are output tokens summed over the 5-minute intervals in which a Pi footer counter moved, divided by that active time. The counters are rounded by the harness and include tool time, so they are observations of a seat, not API rate measurements. Evidence only; nothing here is a tariff or a quota.
+
+| route id | model id (as titled) | provider | observation (n, window) | context |
+|---|---|---|---|---|
+| route.openrouter.nvidia-nemotron-3.5-super-vl-free | nvidia/nemotron-3.5-super-vl:free | openrouter (free) | limit_events: 0 rate-limit or quota events over 4 seats (2 Pi, 2 OpenCode), 6,783 samples in total, about 11 h 56 min | Pi harness level high; OpenCode level thinking |
+| route.openrouter.nvidia-nemotron-3.5-super-vl-free | nvidia/nemotron-3.5-super-vl:free | openrouter (free) | limit_events: 1 transport error, text_class "Retry failed after 3 attempts: Upstream idle timeout exceeded", at 2026-10-31T05:59:20Z; not recovered (same text for 103 samples, to 14:33Z); headers_present unknown (n = 1) | Pi harness; ended a worker's lane. Not a quota text; whether the free tier signals throttling this way is unknown |
+| route.openrouter.nvidia-nemotron-3.5-super-vl-free | nvidia/nemotron-3.5-super-vl:free | openrouter (free) | throughput: about 129k output tokens in 75 active minutes on 1 Pi seat (about 103k per active hour; at most 120k in any 60 minutes), 04:43Z to 05:54Z | n = 1 seat; input delta not measurable (counter at 22M to 23M, 1M steps) |
+| route.nvidia.nvidia-nemotron-3.5-super-vl-120b-a12b | nvidia/nemotron-3.5-super-vl-120b-a12b | nvidia | limit_events: 0 over 2 Pi seats, about 02:45Z to 14:33Z; throughput: 36k and 47k output over 35 active minutes each (about 62k and 80k per active hour) | Pi harness, level high; the same-weights question against the OpenRouter free route is still open |
+| route.deepseek.deepseek-flash | deepseek-flash | deepseek (paid, per operator) | limit_events: 0 over 12 Pi seats and 3 OpenCode seats; throughput: about 1.57M output over 13 active seat-hours on 11 Pi seats (about 121k per active hour; highest seat-hour 169k); 7 seats active in parallel 03:40Z to 04:30Z | Pi level high; OpenCode labels at levels max and low |
+| route.deepseek.deepseek-v4-pro | deepseek-v4-pro | deepseek (paid) | limit_events: 0 over 1 seat; throughput: 126k output over 45 active minutes, 03:28Z to 04:48Z (coarse: the output counter moves in 100k steps above 1M) | one seconded worker seat |
+| route.openrouter.xiaomi-mimo-v2.6-flash | xiaomi/mimo-v2.6-flash | openrouter (paid, per operator) | limit_events: 0 rate-limit events over 7 seats, 03:37Z to 14:33Z; transport errors: 1, recovered (reported in the refresh 2 delta; no further one); throughput: about 1.44M output over 11.9 active seat-hours (about 121k per active hour; highest seat-hour 218k); input about 10.3M (rounded), 6.6M of it on one seat | Pi harness, level high; verifier seats |
+| UNATTRIBUTED | MiMo-V2.6-Pro (OpenCode label) | openrouter | limit_events: 0 over 2 seats; no task in the window, and context counters were flat or nearly flat | nothing here characterises this model |
+| UNATTRIBUTED | MiMo-V2.6-Flash (OpenCode label) | openrouter | limit_events: 0 over 1 seat; no activity after 04:48Z | level thinking |
+| UNATTRIBUTED | Step 5 Preview; Nemotron 3 Ultra 550B A55B (OpenCode labels) | nvidia | limit_events: 0 over 3 seats; no new task or timed answer after refresh 2 | no new speed data; the 0.5 tok/s operator report for Step 5 Preview was never re-measured |
+| UNATTRIBUTED | Inkling (free) (OpenCode label) | openrouter (free) | limit_events: 0 over 1 seat; no new task after 03:05Z | |
+| UNATTRIBUTED | Nemotron 3.5 Super VL Free (OpenCode label, "OpenCode" as the route) | opencode free route | label seen briefly on 1 seat before 03:00Z; no work | a third route for the same model name; provider model id not visible |
+
+Correction to the refresh 1 row "Free-tier ceilings reached": still none, now over about 12 hours and 6,783 samples. Lower bound only.
+
+What this delta cannot give you:
+- time to first token or tokens per second for any route (no probes after refresh 1);
+- tariffs for the paid routes;
+- response headers on either transport error;
+- whether the Pi and OpenCode labels for the same model resolve to the same provider model.
+
+Orchestrator subagent lanes (log-named Claude models) are not route observations: no route or provider id is visible for them.

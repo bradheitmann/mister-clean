@@ -47,3 +47,14 @@ n = 1 task. Same model as AC-001 under a different harness: any difference betwe
 | rework | T-10 rework delivered, pending; T-02 none seen |
 | stalls | 1 candidate (QA-7), unconfirmed after 2 h |
 | provider limit events | 0 |
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No new task. The T-10 rework (delivered 03:53Z) was never re-reviewed: its verifier (QA-2, AC-003) did not move after 03:53Z. QA-7 never posted its T-03 review; its context counter was flat for 142 of 143 samples across the whole window (CS-011 B, still unconfirmed: no pane read). DEV-6's context counter did not change after 04:48Z.
+
+| field | value (final) |
+|---|---|
+| tasks delivered | 2 plus 1 rework (T-02, T-10, T-10 rework) |
+| first-pass accept | 0 of 2 |
+| rework | 1 delivered, never re-reviewed; T-02 rework never seen |
+| stalls | 1 candidate (QA-7), unconfirmed after 12 h |
+| provider limit events | 0 |

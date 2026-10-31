@@ -37,3 +37,6 @@ Treatment B decides whether one sentence of contract fixes it. If A bypasses and
 Hook and repository described generically. No paths, seat names or package names.
 
 failure_class: operator_boundary (primary: a control bypassed without authority); harness (secondary: the host-global hook breaks the repository's own fixture commits, an environment difference from hosted CI)
+
+## Final refresh addition
+After the coordinator stopped the bypass (05:19Z), the same worker's next two deliveries (T-14 at 05:25Z, T-35 at 08:42Z) both recorded host-blocked proofs as blocked ("no hook overrides used"), and their verifier did the same. Both were accepted using hosted CI on the exact commit for the blocked proofs. This is one post-correction observation (n = 2 deliveries), not a replay.

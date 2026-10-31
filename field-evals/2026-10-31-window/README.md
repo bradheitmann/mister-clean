@@ -22,6 +22,7 @@ Concepts (owner definitions): an agent is harness + model + reasoning level; pro
 - Nothing here ranks agents. Every identity is title_only or weaker until a runtime receipt binds model, harness, level and route (CS-009).
 - Reasoning levels are never merged on one card.
 - Task ids (T-nn) are anonymised; the private mapping from ids to project slices is kept outside this repository.
+- Seats appear as bare role-and-number labels (for example `DEV-4`, `QA-5`) or pseudonyms (`PAIR-E-DEV`, `PM-A`). Team prefixes, pane identifiers and repository names are removed. Role-number labels are kept on purpose so one seat can be followed across cards, cases and tables; they carry no person, project or machine identity.
 - The raw sampler file is not committed (pane scrollback carries project text). Derived tables are.
 - Single-rater scores are labelled as such.
 

@@ -24,3 +24,7 @@ No names.
 - Idle seats are not stall candidates: several seats had flat counters for the whole window with no assigned task in the log (see `data/meter-summary.tsv`, column max_flat_run).
 
 failure_class: harness (if confirmed: a hang or a missed poll); not yet classifiable
+
+## Final refresh (meter through 14:33:26Z)
+- Candidate B: the QA seat's context size stayed flat for 142 of 143 samples over the whole window (about 11 h 56 min). Its review (T-03) was never posted. No limit, failure or stall line appears in the log, and no one read the pane. The final status is "stall or abandoned idle, cause unknown". The window cannot classify it.
+- A new, different case is CS-020: there the pane showed a terminal transport error, so the cause is known even though no one acted on it.

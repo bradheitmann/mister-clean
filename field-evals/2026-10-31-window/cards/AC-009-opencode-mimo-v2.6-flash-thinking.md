@@ -38,3 +38,6 @@ n = 1. Its ACCEPT was independently corroborated by a second verifier (AC-003), 
 | review minutes after delivery | 17 (T-04), 3 (T-12), about 5 (T-11 reject, after the last voided freeze), about 8 (T-11 accept, after repair-2) |
 | voided partial reviews | 3 (CS-014; caused by freeze churn, not by this verifier) |
 | provider limit events | 0 |
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No new review after refresh 2; QA-9's context counter did not change after 04:48Z. Final counts unchanged: 3 accept, 1 reject, 3 partial reviews voided by freeze churn (CS-014); 0 stalls; 0 provider limit events over 12 h.

@@ -24,3 +24,8 @@ No project names.
 A pair worker in a sibling repository delivered a sender sidecar (T-23) whose stated purpose is live-line busy detection that ignores scrollback, with a bounded wait and typed refusal records. It is unreviewed. When it lands, the fixture plan above is its acceptance test. CS-012 is a different case: there the pane really was mid-turn, so a correct busy detector still refuses delivery.
 
 failure_class: harness
+
+## Final refresh additions (log through 14:40:25Z)
+- The opposite error, now evidenced: at 05:21Z the orchestrator logged that its sender refuses every mid-turn pane, while one harness (Pi) queues mid-turn input and shows it on a "Steering:" line. The refusal had blocked a STOP message for 50 minutes. A sibling repository then shipped a per-harness mid-turn policy (T-30): queue only where a captured read-back proves the queue, refuse elsewhere. Its verifier passed it with 0 defects. The sender sidecar from refresh 2 (T-23) was accepted with one medium finding, which became its own slice (T-32), also accepted.
+- A message board tried in place of pane typing fixed the busy-recipient case (13 messages, 0 resends), but it left a message unread for 80 minutes when the recipient was idle and nothing woke it (T-34's re-review waited 90 minutes). A content-free one-line pane nudge got the message read in about 2 minutes. The source team's design conclusion: a board-backed queue plus a nudge plus an idle re-check.
+- Fixture additions for the replication plan: a Pi pane mid-turn (expected: queue and read back); an idle pane with an unread board message (expected: nudge).

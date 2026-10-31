@@ -28,3 +28,6 @@ HLDT-4 context 854.6k (81%): near its window.
 
 ## Refresh 2 (data through 04:48Z)
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No task in the whole window. HLDT-1's context counter never changed; HLDT-4 moved 850.8k to 855.7k early in the window and then stayed flat. Final counts: 0 tasks, 0 verdicts, 0 provider limit events. Nothing in this window measures MiMo V2.6 Pro.

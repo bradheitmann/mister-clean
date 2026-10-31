@@ -52,3 +52,20 @@ n = 1 task. Nothing here supports a ranking. DEV-4 and DEV-5 share the card but 
 | reviews issued (as verifier) | 1 accept (T-29) |
 | stalls | 0 confirmed |
 | provider limit events | 0 in 131 min on both routes |
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+- T-08 rework (DEV-5, NVIDIA route): dispatched about 05:31Z, delivered 05:36Z, ACCEPTED by QA-6 05:38Z (proofs numbered, provenance text corrected), landed 05:42Z. The T-08 reject converged in one round.
+- T-36 (DEV-4, OpenRouter free route): took a test-file lane at about 04:41Z, produced about 129k output tokens in 75 active minutes, then hit "Retry failed after 3 attempts: Upstream idle timeout exceeded" at 05:59Z. The seat never moved again (8.5 h) and posted no DONE or limit line; nobody in the log noticed. Its worktree has no commit and an index that lost almost every tracked path (CS-020).
+- T-03 twin review (QA-5): never posted.
+- Window: DEV-5 and QA-5 counters stopped moving at 05:44Z and 03:33Z respectively; neither seat had a further task.
+
+| field | value (final, whole window) |
+|---|---|
+| tasks delivered | 2 tasks plus 2 reworks (T-01, T-01 rework, T-08, T-08 rework); 1 lane lost (T-36) |
+| first-pass accept | 0 of 2 reviewed (T-01, T-08) |
+| reject classes | process-contract 2 (doc shape, CS-001), false-claim 1 (T-08) |
+| rework | 2 of 2 accepted, each in one round |
+| reviews issued (as verifier) | 1 accept (T-29); 1 twin review never posted (T-03) |
+| output tokens per active hour (Pi counters, rounded) | OpenRouter free: about 103k (DEV-4, 75 active min); NVIDIA: about 62k (DEV-5, 35 min) and 80k (QA-5, 35 min) |
+| stalls | 1 terminal transport error (DEV-4, OpenRouter free); 0 on NVIDIA |
+| provider limit events | 0 rate-limit or quota events on either route |

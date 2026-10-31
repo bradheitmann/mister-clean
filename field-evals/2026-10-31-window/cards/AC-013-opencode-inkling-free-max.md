@@ -32,3 +32,6 @@ n = 1. The seat was re-seated on a larger model for family diversity in a vote, 
 
 ## Refresh 2 (data through 04:48Z)
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No new task. Final counts: 1 advisory answer (T-06, single-rater score); 0 provider limit events.
