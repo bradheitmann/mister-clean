@@ -30,6 +30,23 @@ Every repository must be shareable publicly at any commit.
   projects, and local databases. Each path has a documented default under the
   user's data or config directory and an environment or config override. Code
   never hard-codes a private path.
+- **One private root for every tool and repository.** The variable is
+  `AGENT_PRIVATE_ROOT`. Its default is `${XDG_DATA_HOME:-$HOME/.local/share}/agent-private`,
+  which works on a workstation and on a mounted cloud volume alike. Layout:
+  `<root>/<repo>/{evidence,handoffs,agent-state,maps,db}`, where `<repo>` is the
+  repository's name. A tool may also honor its own more specific variable
+  (for example a tool-named `*_EVIDENCE_ROOT`); resolution order is the
+  tool-specific variable, then `AGENT_PRIVATE_ROOT/<repo>/<kind>`, then the
+  default. Where a tool still hard-codes an in-repository path, a gitignored
+  symlink into the private root is the bridge until the tool honors the
+  variable.
+- **The public verification set stays committed:** content-hash manifests of
+  private evidence bundles (plus a manifest of those manifests), verdict
+  records, and the tests that prove each guarantee. These let anyone check
+  that evidence existed and was unchanged without publishing it.
+- **Moving private files out of Git** removes them from the index only
+  (`git rm --cached`) after they are copied to the private root and verified.
+  Rewriting history to scrub earlier commits is an owner decision.
 - **Secrets** come only from the environment or a secrets manager at runtime.
   Never commit them. Never print them: check presence and length, never the
   value.
