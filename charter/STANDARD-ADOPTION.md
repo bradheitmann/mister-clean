@@ -6,7 +6,7 @@ Each section maps to an existing gate or to an obligation. Obligations are bound
 | 1 | Public-safety check on the prospective published files | `bun run audit:public` (package file list plus identifier denylist) in CI | met |
 | 1 | Denylist not committed in plain form | `config/public-package-identifiers.txt` is committed in plain form | obligation O-STD-1: hashed form, then move the plain list to the private root |
 | 1 | Private data under `AGENT_PRIVATE_ROOT` | the control-plane store and eval id maps use their own paths today | obligation O-STD-2: honor `AGENT_PRIVATE_ROOT/mister-clean/<kind>` with the existing paths as overrides |
-| 1 | No machine specifics in committed text | `charter/` and planning docs rewritten without them | met for charter/; obligation O-STD-3: scan the remaining docs |
+| 1 | No machine specifics or private names in committed text | `charter/` and planning docs rewritten without them; a private case-study identifier remains in `.gitignore` and two build scripts (ignored local asset file names; 36 hits) | met for charter/; obligation O-STD-3: rename those asset paths generically and drop the identifier from code |
 | 2 | Cloud-ready; 127.0.0.1; fresh clone runs every gate | clean-capsule CI rebuilds the candidate from a fresh materialization | met |
 | 3 | Languages: strict TypeScript; no plain JavaScript source | strict TypeScript with `tsc --noEmit`; several `scripts/*.mjs` and `bin/mister-clean.js` are JavaScript (the latter is a generated, synced build output) | obligation O-STD-4: port `scripts/*.mjs` to strict TypeScript |
 | 3 | One package manager, one lockfile, pinned toolchain | pnpm with `pnpm-lock.yaml`; Bun and Node pinned in CI and `packageManager` | met |
