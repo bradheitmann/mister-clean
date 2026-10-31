@@ -6,7 +6,7 @@ reasoning_label: high
 identity_status: title_only
 evidence_class: field
 window: 2026-10-31T02:37Z/open
-model_atlas_ref: unbound
+model_registry_ref: unbound
 ---
 
 # AC-008 — opencode / inkling (free) / high

@@ -3,7 +3,7 @@
 status: INTERIM (refresh 2, data through 2026-10-31T04:48:40Z). Replaced at the final refresh.
 
 ## What this is
-A field ledger of one multi-agent session that grew from one repository to eight during the window: agent cards, failure case studies in the owner-note format (`OWNER-NOTE-2026-10-29`, section 2), derived meter tables, and a providers note for model-atlas. Roadmap input for the evals-from-failures work, not a score. Branch `evals/field-window-2026-10-31`, nothing pushed.
+A field ledger of one multi-agent session that grew from one repository to eight during the window: agent cards, failure case studies in the owner-note format (`OWNER-NOTE-2026-10-29`, section 2), derived meter tables, and a providers note for model-facts registry. Roadmap input for the evals-from-failures work, not a score. Branch `evals/field-window-2026-10-31`, nothing pushed.
 
 ## How it was gathered
 Read-only reads of the source team's sampler file (5-minute pane samples of title, footer counters and limit-scan text), its event log (acks, deliveries, verdicts, coordinator lines) and its seat contracts. No pane was typed into. Identities are pane titles and footers, never runtime receipts (CS-009). Verdicts are log verdicts, not validated receipts (CS-015). Seat names are anonymised with a private map kept outside the repository; new pair seats are `PAIR-<letter>-DEV` and `PAIR-<letter>-QA`, and pair E is the hygiene tool's own repository.

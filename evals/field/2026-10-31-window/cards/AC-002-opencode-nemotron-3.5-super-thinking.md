@@ -6,7 +6,7 @@ reasoning_label: thinking
 identity_status: title_only   # model/reasoning read from the pane title or footer; not bound to a runtime receipt
 evidence_class: field         # naturalistic; never averaged into a controlled score
 window: 2026-10-31T02:37Z/open
-model_atlas_ref: unbound      # PM to bind to a model-atlas record id; facts are not copied here
+model_registry_ref: unbound      # PM to bind to a model-facts registry record id; facts are not copied here
 ---
 
 # AC-002 — opencode / nemotron-3.5-super (VL, 120B A12B) / thinking

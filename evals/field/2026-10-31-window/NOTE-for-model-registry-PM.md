@@ -1,6 +1,6 @@
-# Note for the model-atlas PM (provider facts seen in a field window)
+# Note for the model-facts registry PM (provider facts seen in a field window)
 
-From: the eval seat, 2026-10-31, refresh 1. These are observations, not verified records. Agent cards point at model-atlas ids; they do not copy these facts. Bind or reject each line.
+From: the eval seat, 2026-10-31, refresh 1. These are observations, not verified records. Agent cards point at model-facts registry ids; they do not copy these facts. Bind or reject each line.
 
 ## Observed provider facts (all low confidence unless stated)
 | fact | value | source | n | confidence |
@@ -28,10 +28,10 @@ From: the eval seat, 2026-10-31, refresh 1. These are observations, not verified
 - A cost-per-call field for premium routes (see the cost tripwire case in the eval folder).
 
 ## Correction (refresh 2)
-The "host input cap" row is not a model-atlas fact: 1,048,576 characters is the source project's configured input budget for one host profile, enforced by its own guard (see case CS-008). Sent to model-atlas as delta 1, which recorded it as rejected-not-a-model-atlas-fact. The premium-model cost row's subject is now named in delta 1 as well.
+The "host input cap" row is not a model-facts registry fact: 1,048,576 characters is the source project's configured input budget for one host profile, enforced by its own guard (see case CS-008). Sent to model-facts registry as delta 1, which recorded it as rejected-not-a-model-facts registry-fact. The premium-model cost row's subject is now named in delta 1 as well.
 
 ## Refresh 2 delta (data through 2026-10-31T04:48:40Z)
-Rows are shaped like `model-atlas.route/1`. Route ids follow the schema's `route.<provider>.<provider-model-id>` form where the provider model id is visible in the pane title; otherwise UNATTRIBUTED. Every model id is title_only (read from a pane title, not a request receipt). Window for every row: 2026-10-31T02:37:33Z to 04:48:40Z unless stated. Only facts with evidence are listed; nothing here is a tariff.
+Rows are shaped like `the registry route/1 schema`. Route ids follow the schema's `route.<provider>.<provider-model-id>` form where the provider model id is visible in the pane title; otherwise UNATTRIBUTED. Every model id is title_only (read from a pane title, not a request receipt). Window for every row: 2026-10-31T02:37:33Z to 04:48:40Z unless stated. Only facts with evidence are listed; nothing here is a tariff.
 
 | route id | model id (as titled) | provider | observation (n, window) | context |
 |---|---|---|---|---|

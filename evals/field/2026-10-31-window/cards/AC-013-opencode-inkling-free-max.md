@@ -6,7 +6,7 @@ reasoning_label: max
 identity_status: operator_reported   # max level was stated by the operator, not read from a pane title
 evidence_class: field
 window: 2026-10-31T02:15Z/02:26Z
-model_atlas_ref: unbound
+model_registry_ref: unbound
 ---
 
 # AC-013 — opencode / inkling (free) / max

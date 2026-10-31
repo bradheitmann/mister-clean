@@ -16,7 +16,7 @@ The owner note's free-inference tripwire needs a cost-per-call trigger as well a
 input: per-seat budget plus a price table; oracle: dispatcher refuses or flags a seat whose projected per-call cost exceeds the budget; pass: flagged before first call
 
 ## Replay hint
-Pair with the provider notes: price is a model-atlas fact, the tripwire is a router rule.
+Pair with the provider notes: price is a model-facts registry fact, the tripwire is a router rule.
 
 ## Scrub notes
 Dollar figure is operator-reported, rounded.

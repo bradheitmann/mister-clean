@@ -2,7 +2,7 @@
 
 What this is: an observational record of a multi-agent team working a Rust spec-compiler project, kept as the field ledger that `evals/model-hygiene-trial.md` says must stay separate from controlled scores. The source project is not named; paths, branches, slice ids and product details are removed.
 
-Concepts (owner definitions): an agent is harness + model + reasoning level; provider is a routing footnote; failures become case studies and then replayable eval cases; agent cards carry categorical data; provider facts belong in model-atlas.
+Concepts (owner definitions): an agent is harness + model + reasoning level; provider is a routing footnote; failures become case studies and then replayable eval cases; agent cards carry categorical data; provider facts belong in model-facts registry.
 
 ## Layout
 | path | content |
@@ -15,7 +15,7 @@ Concepts (owner definitions): an agent is harness + model + reasoning level; pro
 | `data/limits.tsv` | limit events and detector false positives |
 | `data/meter-summary.tsv`, `data/meter-intervals.tsv` | derived from the 5-minute pane sampler by the scripts in `tools/` |
 | `tools/` | `derive-meter.sh`, `derive-intervals.sh`, `refresh-derived.sh` (awk, no interpreters beyond bash) |
-| `NOTE-for-model-atlas-PM.md` | provider observations to bind or reject |
+| `NOTE-for-model-registry-PM.md` | provider observations to bind or reject |
 | `NOTE-for-mister-clean-PM.md` | what this is, how it was gathered, what to replay first |
 
 ## Rules this ledger follows
