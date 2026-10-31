@@ -38,6 +38,10 @@ Records are JSON Lines, one file per record type per window, each record carryin
 
 **Pricing.** Costs are tokens multiplied by models.dev list prices (input, output and prompt-cache rates), recorded as `cost_basis: list` with `price_source` naming a dated models.dev snapshot and its sha256. This is the standard even where the owner's actual cost is lower. Free routes use `cost_basis: implied`, priced from a comparable paid provider of the same model or an average of several (listed in `implied_from`); spend actually measured in a window is `cost_basis: actual`. Reports mark them visibly as actually free. Price facts live in the model-facts registry; records cite the source they used.
 
+**Extensions.** A repository may add evals that exist only there (for a specific role or purpose) without changing the core schema. Extra fields live under a namespaced key (`ext.<namespace>.<field>`), and new record types are local types named `<namespace>/<type>` that still carry the core envelope (`schema`, `window_id`, and the card or route ids they refer to). The core validator checks the envelope and ignores extension content; a repository may register its own validator for its namespace.
+
+**Seat ids.** Public records identify seats only by stable opaque ids (`seat-` plus a short hash). The mapping to real seat names lives only under the private data root.
+
 A validator in the Mister Clean CLI refuses a record missing a required field, a probe that would take the window over its USD 1 probe budget, a card without an identity status, a numeric limit without source and date (or `UNKNOWN`), and any public file that fails the public-safety scan. The comparison tables in `FINDINGS.md` become a generated projection of the records, not hand-written prose.
 
 ## 3. One home for each kind of data
@@ -45,9 +49,9 @@ A validator in the Mister Clean CLI refuses a record missing a required field, a
 | Data | Home |
 |---|---|
 | Public ledger: records, cards, cases, generated findings | this repository, `field-evals/<window>/` (not a shipped material) |
-| Schema and validator | this repository (`field-evals/1` schema files plus the CLI validator) |
+| Schema and validator | this repository; shipped in the Mister Clean package (the standard other repositories validate against) in the release after FE-3 |
 | Raw sources (meter samples, event-log copies, receipts) and the id maps back to real names | `$AGENT_PRIVATE_ROOT/<project>/field-evals/{raw,maps}` (COMMON-STANDARD §1), never committed |
-| Private, queryable history across windows | the machine-local evaluation store (EV-03), under the same private root |
+| Private, queryable history across windows and projects | one machine-wide SQLite store per machine by default (the existing machine-local store, EV-03), installed once; a repository-local store is the user's own configuration |
 | Model and provider facts | the model-facts registry; the ledger cites its ids and sends dated route observations |
 
 ## 4. Recurring-window recipe (any project)
@@ -64,10 +68,10 @@ Prerequisites: the Mister Clean CLI; `AGENT_PRIVATE_ROOT` set; a project adapter
 ## 5. Bounded slices (each with its own done list under `charter/DONE/`)
 
 1. **Slice Zero first** (already chartered): the eval-case validator and the agent-card identity check that `field-evals/1` reuses.
-2. **FE-1 Schema and validator:** `field-evals/1` record definitions, the CLI validator, fail-without mutants for each refusal.
+2. **FE-1 Schema and validator:** `field-evals/1` record definitions, namespaced extension support, the CLI validator, fail-without mutants for each refusal. Laid out for packaging from the start.
 3. **FE-2 Refresh in the CLI:** replace the window's bash/awk helpers with a strict-TypeScript `field` subcommand (open, refresh, close), plus the first source adapter. Proof: rebuilding the 2026-10-31 window from its private sources reproduces the committed findings figures exactly.
 4. **FE-3 Second window, second project:** run the recipe end to end on a different project's session, unchanged. That run sets the slice's proof date.
-5. **FE-4 Store intake (EV-03):** windows import into the machine-local store; the community-versus-user data switch reads from it.
+5. **FE-4 Store intake (EV-03):** after FE-2, timed by the coordinating PM; windows import into the machine-wide store; the community-versus-user data switch reads from it.
 
 Out of scope here: a meter sampler for every harness (projects supply samples in the declared format; the first project's sampler is the reference), routing decisions, and any ranking.
 
@@ -77,5 +81,5 @@ Recorded in `charter/owner-decisions/2026-10-31-field-evals-pricing-and-identity
 - Probe calls are allowed, capped at USD 1 per window at models.dev list price.
 - Free routes carry an implied price and a visible "actually free" marker.
 - Agent and inference route stay separate record types; route reliability never enters an agent's quality figures.
-- The schema does not ship in the package until FE-3 has proven it on a second project.
-- Bare role-and-number seat labels stay.
+- The schema and validator ship in the Mister Clean package, in the release after FE-3 proves them on a second project (amendment).
+- Seat labels in public ledgers become stable opaque ids (for example `seat-7f3a`), with the mapping only under the private data root (amendment). The first window is converted in a follow-up change.

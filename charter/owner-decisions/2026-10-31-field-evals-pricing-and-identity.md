@@ -23,3 +23,11 @@ The field-evals plan (`project/planning/FIELD-EVALS-PLAN.md`) left three questio
 - FE-1 schema: agent quality records and route performance records stay separate; any projection that joins them must label which side each figure belongs to.
 - Price facts belong to the model-facts registry; this repository records the price basis and source it used, by reference.
 - Reports: a visible "actually free" marker on implied-price routes.
+
+## Amendment — 2026-10-31 (owner follow-up)
+
+1. **Mister Clean sets the standard for model-eval data across repositories.** The `field-evals/1` format and its validator ship in the Mister Clean package. Prepare for it now; the release that ships them follows FE-3's proof on a second project. This replaces decision 4's "do not ship the schema" default.
+2. **Extensible.** Agent cards and eval records support repository-local extensions (evals that exist in one repository only, for specific roles or purposes) through namespaced extension fields or local eval types that validate against the core schema without changing it.
+3. **One machine-wide database by default.** One local SQLite store per machine (the existing machine-local store, EV-03) tracks eval data across all projects on that machine. A repository-local database is the user's own choice and configuration.
+4. **Build order** FE-1, FE-2, FE-3, FE-4 is agreed; FE-4 (store import) comes after FE-2, timed by the coordinating PM.
+5. **Pseudonymise seat labels in public ledgers.** Seat names can reveal repository names, and bare role-number labels could carry identity later. Use stable opaque ids (for example `seat-7f3a`), with the mapping kept only under the private data root. Apply this to the existing ledger in a follow-up change; earlier history stays as is unless the owner decides otherwise. This replaces decision 4's "keep the bare role-number seat labels" default.
