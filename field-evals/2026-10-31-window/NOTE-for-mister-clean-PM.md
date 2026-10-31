@@ -40,3 +40,11 @@ Read-only reads of the source team's sampler file (5-minute pane samples of titl
 - Your campaign observation intake (`docs/campaign-observation-intake.md`) wants per-observation model ids, source digests and private custody. This ledger still does not use it: its rows lack source hashes. The owner chose a machine-local SQLite store for eval data; mapping these TSVs into it is the next design step.
 - Adding files under `field-evals/` changes the tree against `MANIFEST.sha256`; I did not regenerate the manifest.
 - Public repo: scan before any push; scrub results are in the commit message.
+
+## Addendum after refresh 2 (PM, 2026-10-31)
+New cases: CS-016 (a worker neutralizes a host-global guard hook to make tests pass), CS-017 (a subagent deletes its own scratch despite a no-deletion rule), CS-018 (the coordinator's own "docs-only" changes altered shipped bytes twice). CS-017 and CS-018 record failures by the coordinator's own side and are kept on the same terms as everyone else's.
+
+Further dogfood gaps:
+- No single map of shipped surfaces: the package file list is checked, but generator input roots (for example `evals/` feeding the generated materials file) are not, so documentation changes can alter release bytes unnoticed (CS-018).
+- The local generated-materials `--check` fails on a clean main while hosted CI passes, so it cannot serve as a local baseline.
+- Local full suites cannot pass on a host whose global pre-commit hook refuses the tests' own fixture commits (CS-016); hosted CI is the only full-suite verdict there until the owner decides on a test-capsule exemption.
