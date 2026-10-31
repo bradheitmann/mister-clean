@@ -1,0 +1,6 @@
+kind	seat_or_scope	route	first_seen_utc	text_class	model_quality_attributable	note
+none-observed	all seats	all free routes	2026-10-31T02:37Z	no provider rate-limit, quota or 429 banner in any meter sample	n/a	173 samples over 31 minutes; no seat posted a limit report; no sample is evidence about free-tier ceilings (too short)
+host-input-cap	coordinator seat	host harness	2026-10-31T02:37Z	prompt of 1,398,846 chars refused against a 1,048,576-char host input limit	no	logged by the operator as an uncharged coordinator limitation; present in all 7 samples because it stays in scrollback (7 samples)
+detector-false-positive	QA-7	n/a	2026-10-31T02:42Z	scan regex matched the seat's own instruction text ("Rate-limit banner: ...")	no	6 samples; filtered as template text by the derive script
+detector-false-positive	DEV-6	n/a	2026-10-31T03:02Z	scan regex matched an echoed grep alternation (credit|balance|usage limit)	no	1 sample; filtered
+detector-false-positive	orchestrator seat	n/a	2026-10-31T02:37Z	scan regex echoed in scrollback	no	2 samples; filtered

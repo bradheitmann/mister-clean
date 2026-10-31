@@ -1,0 +1,14 @@
+seat	card	harness	model	reasoning_label	route	identity_status	note
+DEV-4	AC-001	pi	nemotron-3.5-super (VL)	high	openrouter-free	title_only	orchestrator log says moved to deepseek-flash at 01:23Z, meter title still shows nemotron at 02:37-03:02Z; counters flat 0 for 25 min
+DEV-5	AC-001	pi	nemotron-3.5-super (VL)	high	openrouter-free then nvidia	title_only	switched route at ~02:45Z mid-task; contract text says opencode but footer is Pi style, so harness during task T-01 is unbound
+DEV-6	AC-002	opencode	nemotron-3.5-super (VL)	thinking	openrouter-free	title_only	contract and footer agree
+QA-5	AC-001	pi	nemotron-3.5-super (VL)	high	nvidia	title_only	was deepseek-flash at 02:37Z, re-seated ~02:40Z
+QA-7	AC-002	opencode	nemotron-3.5-super (VL)	thinking	openrouter-free	title_only	contract and footer agree
+DEV-7	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	
+QA-2	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	
+QA-6	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	
+DEV-8	AC-007	opencode	step-5-preview	high	nvidia	title_only	
+HLDT-2	AC-007	opencode	step-5-preview	high	nvidia	title_only	
+HLDT-3	AC-008	opencode	inkling-free	high	openrouter-free	title_only	
+QA-9	AC-009	opencode	mimo-v2.6-flash	thinking	openrouter-paid	title_only	
+ADVISOR	AC-011	opencode	nemotron-3-ultra-550b-a55b	high	nvidia	title_only	thinking-partner seat; earlier in window AC-012 then AC-013

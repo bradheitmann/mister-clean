@@ -1,0 +1,30 @@
+seat	samples	first_utc	last_utc	distinct_model_labels	counter_kind	start	end	delta_in	delta_out	max_flat_run	banner_raw	banner_candidate	model_labels
+ADVISOR	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	176500	174700	na	na	5	0	0	Build auto · Nemotron 3 Ultra 550B A55B NVIDIA · high
+WATCHER	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	pi	186000	193000	7000	10000	5	0	0	(deepseek) deepseek-flash • high
+ORCHESTRATOR	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	2	0	
+REPORTER	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	7	0	
+DEV-2	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	0	0	
+DEV-4	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	pi	22000000	22000000	0	0	7	0	0	(openrouter) nvidia/nemotron-3.5-super-vl:free • high
+DEV-5	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	2	pi	273000	924000	651000	39000	2	0	0	(openrouter) nvidia/nemotron-3.5-super-vl:free • high ;; (nvidia) nvidia/nemotron-3.5-super-vl-120b-a12b • high
+DEV-6	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	132900	192900	na	na	2	1	0	Build auto · Nemotron 3.5 Super VL (free) OpenRouter · thinking
+DEV-7	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	pi	99000	99000	0	0	7	0	0	(deepseek) deepseek-flash • high
+DEV-8	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	654300	654300	na	na	7	0	0	Build auto · Step 5 Preview NVIDIA · high
+DEV-9	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	pi	856000	856000	0	0	7	0	0	(deepseek) deepseek-v4-pro • high
+HLDT-1	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	177600	177600	na	na	7	0	0	Build auto · MiMo-V2.6-Pro OpenRouter · thinking
+HLDT-2	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	401900	401900	na	na	7	0	0	Build auto · Step 5 Preview NVIDIA · high
+HLDT-3	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	2	oc	188600	211900	na	na	1	0	0	Build · Inkling (free) [high] · OpenRouter ;; Build · Inkling (free) · 9m 43s
+QA-1	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	389200	389200	na	na	7	0	0	Build · DeepSeek / deepseek-flash [low] · DeepSeek
+QA-2	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	pi	361000	373000	12000	4000	6	0	0	(deepseek) deepseek-flash • high
+QA-3	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	pi	2600000	2600000	0	0	7	0	0	(deepseek) deepseek-flash • high
+QA-5	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	2	pi	1100000	1900000	800000	19000	3	0	0	(deepseek) deepseek-flash • high ;; (nvidia) nvidia/nemotron-3.5-super-vl-120b-a12b • high
+QA-6	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	pi	7400000	7400000	0	15000	2	0	0	(deepseek) deepseek-flash • high
+QA-7	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	75200	73500	na	na	6	6	0	Build auto · Nemotron 3.5 Super VL (free) OpenRouter · thinking
+QA-9	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	326800	340600	na	na	5	0	0	Build auto · MiMo-V2.6-Flash OpenRouter · thinking
+PM-A	1	2026-10-31T03:07:40Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	0	0	
+PM-E	1	2026-10-31T03:07:40Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	0	0	
+PM-C	1	2026-10-31T03:07:40Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	0	0	
+PM-D	1	2026-10-31T03:07:40Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	0	0	
+PM-B	1	2026-10-31T03:07:40Z	2026-10-31T03:07:40Z	0	na	na	na	na	na	1	0	0	
+DEV-10	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	672200	672200	na	na	7	0	0	Build auto · DeepSeek / deepseek-flash DeepSeek · max
+HLDT-4	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	1	oc	850800	854600	na	na	4	0	0	Build auto · MiMo-V2.6-Pro OpenRouter · thinking
+QA-10	7	2026-10-31T02:37:33Z	2026-10-31T03:07:40Z	3	oc	422000	672200	na	na	4	0	0	Build auto · Nemotron 3.5 Super VL Free OpenCode · medium ;; Build auto · Nemotron 3.5 Super VL 120B A12B NVIDIA · thinking ;; Build auto · DeepSeek / deepseek-flash DeepSeek · max
