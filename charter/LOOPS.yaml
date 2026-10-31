@@ -1,0 +1,29 @@
+# Every retry / re-verify / until-accepted / for-each / on-failure in the design.
+- id: L1
+  where: "Control replay of a failure case study (owner note 2026-10-29 section 2, step 3)"
+  trigger: "a field failure is selected for replay with the same agent at the commit before the failure"
+  bound: "at most 5 control replays per case; the case qualifies when at least 3 of them fail the same way"
+  cost_per_trip: "one agent run on the control agent's inference (free tier first)"
+  stop_condition: "repeat floor met (qualifies), or 5 replays without meeting it (recorded as non-repeatable, stays a case study)"
+  who_decides_extension: owner
+- id: L2
+  where: "Candidate agent runs against a qualified eval case"
+  trigger: "a candidate agent (harness + model + reasoning level) is run against the case under the constant verifier"
+  bound: "at most 3 runs per candidate per case per refresh"
+  cost_per_trip: "one agent run on the candidate's inference"
+  stop_condition: "3 runs recorded, or the inference source trips its limit (recorded, not retried beyond the free-inference tripwire)"
+  who_decides_extension: "mister-clean PM"
+- id: L3
+  where: "Free-inference tripwire (owner note 2026-10-29 section 5)"
+  trigger: "a run on free inference is flaky, extremely slow, or errors below its stated rate limit"
+  bound: "one more free provider for the same model, then one paid attempt; same agent throughout"
+  cost_per_trip: "one agent run per provider tried"
+  stop_condition: "a run completes, or the paid attempt fails (recorded as an inference-source failure, not an agent failure)"
+  who_decides_extension: owner
+- id: L4
+  where: "Field-window refresh"
+  trigger: "every 2 hours while a field window is open"
+  bound: "until the window's end time declared in its README, at most 12 refreshes"
+  cost_per_trip: "read-only scan of the source logs plus one local commit"
+  stop_condition: "window end reached; final notes written"
+  who_decides_extension: "A/EXEC-PM"

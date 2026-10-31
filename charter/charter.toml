@@ -1,0 +1,15 @@
+#:schema ../schemas/charter-toml.schema.json
+charter_version = "1"
+spec_version = "1"
+project = "mister-clean"
+owner = "Brad Heitmann (owner); operated by PM-MISTER-CLEAN under A/EXEC-PM"
+# The tiniest end-to-end live run that must be green before anything scales.
+[slice_zero]
+description = "One recorded field failure (case CS-001 from the 2026-10-31 field window) replayed with its control agent in an isolated worktree until it meets or misses its repeat floor, written as a durable eval case that cites two agent cards, the constant verifier and the base commit, and read back by a validator"
+command = "TBD in Slice Zero: mister-clean eval-case validate evals/field/2026-10-31-window/cases/CS-001.eval.json"
+proven_on = ""          # ISO date when it last ran green on real infrastructure, else empty
+# Verification is a loop: budget it.
+[verification_budget]
+qa_attempts_per_slice = 3
+repair_cycles_per_slice = 1
+review_families_required = 2   # author and verifier from different model families
