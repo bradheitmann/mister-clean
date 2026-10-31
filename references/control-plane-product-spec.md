@@ -873,19 +873,6 @@ mislabel a compatible release as a breaking major version.
 
 ## 19. Implementation sequence
 
-### Planned extension: cross-project evaluation standardization (2026-10-05)
-
-The [EV-01–EV-06 plan](../project/planning/EVAL-STANDARDIZATION-PLAN.md)
-defines the next extension to sections 7–10 and 14: declarative, namespaced,
-versioned category/rubric registration; canonical machine-local storage;
-evidence-bound intake; and shared report projections. It is planned, not a
-claim of shipped functionality. Explicitly submitted external-evaluation
-cohorts must remain separate from native Mister Clean invocation sampling and
-qualification; section 8.1's prohibition on unrelated ambient monitoring
-remains intact. Existing native qualification thresholds are unchanged.
-
-### Original implementation sequence
-
 1. Freeze TypeScript contracts for runs, issues, observations, debt flow,
    agents, deployments, routes, trials, graph edges, manifests, directives,
    receipts, and telemetry.
