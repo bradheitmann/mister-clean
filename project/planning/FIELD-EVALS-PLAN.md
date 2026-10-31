@@ -30,10 +30,15 @@ Records are JSON Lines, one file per record type per window, each record carryin
 | `review_verdict` | verdict_id, task_id, verifier card_id, verdict, checks run (exit codes), frozen-tip match (yes/no), hosted-CI read (yes/no) | the verifier's own record |
 | `limit_event` | route_id, card_id, UTC, kind (`rate_limit` / `quota` / `transport` / `detector_false_positive`), text_class, recovered | text classes, never raw pane text |
 | `stall_event` | card_id, start/end UTC, cause (`blocking_wait` / `lost_lane` / `unknown` …), detected_by (`watcher` / `eval_read` / `human`) | |
-| `route_observation` | route_id, model id as titled, provider, observation (n, window), context | shaped like the model-facts registry's route schema; the registry binds or rejects it |
+| `route_observation` | route_id, model id as titled, provider, observation (n, window), is_free, cost_basis (`list` / `implied` / `actual`), price_source, implied_from (paid route ids, required when implied), input/cached_input/output USD per million tokens, cost_per_call_usd by reasoning level, context | field names match the model-facts registry's route schema (v1.2) so it can ingest and bind the rows |
+| `probe` | probe_id, route_id, model id, UTC, tokens in/out/cached, time to first token, tokens per second, cost (USD), cost_basis, price_source | deliberate latency probes; the window's probe budget is USD 1 at list price |
 | `case_study` | case_id, status, n, failure_class, replay treatments, durable-eval oracle | stays Markdown with a front-matter block; replays use the Slice Zero eval-case format |
 
-A validator in the Mister Clean CLI refuses a record missing a required field, a card without an identity status, a numeric limit without source and date (or `UNKNOWN`), and any public file that fails the public-safety scan. The comparison tables in `FINDINGS.md` become a generated projection of the records, not hand-written prose.
+**Agent and route are separate** (owner decision, `charter/owner-decisions/2026-10-31-field-evals-pricing-and-identity.md`). The agent (harness + model + reasoning level) owns work quality: accept rate, rework, code quality. The inference route owns speed, reliability, limits and stalls. `agent_card`, `task_outcome` and `review_verdict` describe the agent; `route_observation`, `probe` and `limit_event` describe the route. No projection blends route reliability into an agent's quality figures, and any joined table labels which side each figure belongs to.
+
+**Pricing.** Costs are tokens multiplied by models.dev list prices (input, output and prompt-cache rates), recorded as `cost_basis: list` with `price_source` naming a dated models.dev snapshot and its sha256. This is the standard even where the owner's actual cost is lower. Free routes use `cost_basis: implied`, priced from a comparable paid provider of the same model or an average of several (listed in `implied_from`); spend actually measured in a window is `cost_basis: actual`. Reports mark them visibly as actually free. Price facts live in the model-facts registry; records cite the source they used.
+
+A validator in the Mister Clean CLI refuses a record missing a required field, a probe that would take the window over its USD 1 probe budget, a card without an identity status, a numeric limit without source and date (or `UNKNOWN`), and any public file that fails the public-safety scan. The comparison tables in `FINDINGS.md` become a generated projection of the records, not hand-written prose.
 
 ## 3. One home for each kind of data
 
@@ -66,8 +71,11 @@ Prerequisites: the Mister Clean CLI; `AGENT_PRIVATE_ROOT` set; a project adapter
 
 Out of scope here: a meter sampler for every harness (projects supply samples in the declared format; the first project's sampler is the reference), routing decisions, and any ranking.
 
-## 6. Open questions
+## 6. Decided (owner, 2026-10-31)
 
-- Should the schema files ship in the package so other projects validate without cloning this repository? Shipping them is release work and changes packaged bytes.
-- A per-route latency probe (time to first token, tokens per second) would close the largest unknown, but it spends inference. Decide whether a window may run probes, and on which routes.
-- The first window keeps bare role-and-number seat labels for readability. Confirm or replace with pseudonyms.
+Recorded in `charter/owner-decisions/2026-10-31-field-evals-pricing-and-identity.md`:
+- Probe calls are allowed, capped at USD 1 per window at models.dev list price.
+- Free routes carry an implied price and a visible "actually free" marker.
+- Agent and inference route stay separate record types; route reliability never enters an agent's quality figures.
+- The schema does not ship in the package until FE-3 has proven it on a second project.
+- Bare role-and-number seat labels stay.
