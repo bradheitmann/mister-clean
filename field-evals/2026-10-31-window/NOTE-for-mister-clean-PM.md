@@ -38,5 +38,5 @@ Read-only reads of the source team's sampler file (5-minute pane samples of titl
 
 ## Seams and cautions
 - Your campaign observation intake (`docs/campaign-observation-intake.md`) wants per-observation model ids, source digests and private custody. This ledger still does not use it: its rows lack source hashes. The owner chose a machine-local SQLite store for eval data; mapping these TSVs into it is the next design step.
-- Adding files under `evals/field/` changes the tree against `MANIFEST.sha256`; I did not regenerate the manifest.
+- Adding files under `field-evals/` changes the tree against `MANIFEST.sha256`; I did not regenerate the manifest.
 - Public repo: scan before any push; scrub results are in the commit message.
