@@ -1,0 +1,13 @@
+kind	seat_or_scope	route	first_seen_utc	text_class	model_quality_attributable	note
+none-observed	all seats	all free routes	2026-10-31T02:37Z	no provider rate-limit, quota or 429 banner in any meter sample	n/a	173 samples over 31 minutes; no seat posted a limit report; no sample is evidence about free-tier ceilings (too short)
+host-input-cap	coordinator seat	host harness	2026-10-31T02:37Z	prompt of 1,398,846 chars refused against a 1,048,576-char host input limit	no	logged by the operator as an uncharged coordinator limitation; present in all 7 samples because it stays in scrollback (7 samples)
+detector-false-positive	QA-7	n/a	2026-10-31T02:42Z	scan regex matched the seat's own instruction text ("Rate-limit banner: ...")	no	6 samples; filtered as template text by the derive script
+detector-false-positive	DEV-6	n/a	2026-10-31T03:02Z	scan regex matched an echoed grep alternation (credit|balance|usage limit)	no	1 sample; filtered
+detector-false-positive	orchestrator seat	n/a	2026-10-31T02:37Z	scan regex echoed in scrollback	no	2 samples; filtered
+none-observed	all seats	all routes (free and paid)	2026-10-31T03:09Z	refresh 2: no provider rate-limit, quota, credit or 429 banner in any sample 03:09Z-04:48:40Z; no SEAT-LIMIT or SEAT-STALL line in the event log; the stall watcher reports no truncation marker	n/a	cumulative 131 min of sampling, up to 49 seat titles; 7 new pair seats on a paid OpenRouter route and 7 on paid DeepSeek ran 60-75 min each with no limit; free routes carried fewer tasks than in refresh 1
+upstream-timeout	PAIR-B-QA	openrouter paid (mimo-v2.6-flash)	2026-10-31T04:43:37Z	"Error: Upstream idle timeout exceeded" in the pane	no	1 sample; counters moved again in the next sample (+13k output) and the seat issued a PASS verdict at 04:47Z, so the turn recovered; not a quota event; the candidate filter did not flag it (no rate-limit phrase) and the derive script has no class for transport errors
+detector-false-positive	DEV-6	n/a	2026-10-31T03:27:49Z	seat was writing and testing a banner parser; its own test strings (429, rate limit, quota) were on screen	no	16 candidate samples; all task text
+detector-false-positive	QA-2	n/a	2026-10-31T03:32:52Z	seat was verifying the same banner parser; mutant and test strings on screen	no	13 candidate samples; all task text
+detector-false-positive	WATCHER	n/a	2026-10-31T03:17:44Z	seat described its own banner-detector rules on screen	no	3 candidate samples
+detector-false-positive	ORCHESTRATOR	n/a	2026-10-31T03:27:49Z	git log subject containing "quota"; prose about paused suites	no	2 candidate samples
+detector-false-positive	QA-9	n/a	2026-10-31T04:28:28Z	the digits "429" inside a hex digest in receipt text	no	3 candidate samples; text inspected, no banner
