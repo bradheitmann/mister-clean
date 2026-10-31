@@ -46,3 +46,11 @@ If C alone fixes detection, the gap is orchestration. If B removes the drop, the
 No paths, branch names or project names. Counts are rounded.
 
 failure_class: harness (primary: a terminal transport error after a fixed retry count, with no notification); orchestration (secondary: no flat-counter rule raised the lost lane)
+
+## Resolution and second failure (team orchestrator, 2026-10-31, after the window)
+The lane's worktree was worse than an uncommitted lane. Its index was broken (it tracked only a small fraction of the repository's files), and about 10,200 tracked files were missing from the working tree. Committing there with a stage-all command would have recorded a mass deletion. The team's orchestrator rebuilt the index from HEAD, restored the tracked files, and saved the lane's real partial work as a patch. Nothing was committed and nothing was lost.
+- Detection: this ledger's read-only eval pass found it, not any watcher. The stall and delivery watchers saw a quiet pane, which is how a dead lane and an idle lane look alike. No check covered "a lane's worktree no longer matches its own HEAD".
+- So the case has three failures in sequence: (1) a free-route transport error ended the lane (not a quota message); (2) the lane's worktree was left corrupted; (3) neither was noticed for about 8.5 hours.
+- Replay addition: treatment D adds a periodic worktree-integrity probe to the watcher (index entry count versus HEAD tree count, plus tracked files missing from disk) and measures time to detection.
+- Durable eval case addition: oracle (e) is the time from the terminal error to a human-visible alert. Pass: at most 15 minutes.
+failure_class (addendum): orchestration (primary for detection: no integrity watch on lane worktrees); harness (secondary: the terminal transport error left no handoff or alert); environment (a free route's upstream timeout)
