@@ -2,7 +2,6 @@
 artifact_type: reference
 classification_rationale: Seam agreement between this project and the model-tier ladder project; planned interface, not shipped functionality.
 title: Failure escalation seam — ladder adjacency and the router's choice
-status: agreed-planned
 date: 2026-10-31
 ---
 

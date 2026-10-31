@@ -8,3 +8,6 @@
 6. Before you stop, hand off, or approach a context limit: rewrite `charter/STATE.md` (proven, not proven, exact last-green and last-red commands, next three bounded items, open owner decisions). No decision may live only in a pane or transcript.
 7. Run `charter check` (or `hooks/charter-check.sh`) before any commit or "ready" claim. Rust only; no Python.
 <!-- end charter -->
+
+# Engineering standard
+This repository follows [COMMON-STANDARD.md](COMMON-STANDARD.md). How each section maps to this repository's gates, and the open gaps, are in [charter/STANDARD-ADOPTION.md](charter/STANDARD-ADOPTION.md).
