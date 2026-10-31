@@ -2,7 +2,7 @@
 charter_version = "1"
 spec_version = "1"
 project = "mister-clean"
-owner = "Brad Heitmann (owner); operated by PM-MISTER-CLEAN under A/EXEC-PM"
+owner = "repository owner; operated by the project PM"
 # The tiniest end-to-end live run that must be green before anything scales.
 [slice_zero]
 description = "One recorded field failure (case CS-001 from the 2026-10-31 field window) replayed with its control agent in an isolated worktree until it meets or misses its repeat floor, written as a durable eval case that cites two agent cards, the constant verifier and the base commit, and read back by a validator"
