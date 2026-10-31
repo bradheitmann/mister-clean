@@ -1,4 +1,4 @@
-# State — mister-clean — 2026-10-31T04:50Z, written by PM-MISTER-CLEAN (Claude Code, Opus 5.5)
+# State — mister-clean — 2026-10-31T04:50Z, written by the project PM (Claude Code, Opus 5.5)
 Proven (with the proof names):
 - Nothing under this charter yet. Slice Zero proven_on is empty.
 - Existing release machinery (7.1.0 candidate) predates the charter; acceptance and publication of 7.1.0 are not established.

@@ -12,7 +12,7 @@
   bound: "at most 3 runs per candidate per case per refresh"
   cost_per_trip: "one agent run on the candidate's inference"
   stop_condition: "3 runs recorded, or the inference source trips its limit (recorded, not retried beyond the free-inference tripwire)"
-  who_decides_extension: "mister-clean PM"
+  who_decides_extension: "the project PM"
 - id: L3
   where: "Free-inference tripwire (owner note 2026-10-29 section 5)"
   trigger: "a run on free inference is flaky, extremely slow, or errors below its stated rate limit"
@@ -26,4 +26,4 @@
   bound: "until the window's end time declared in its README, at most 12 refreshes"
   cost_per_trip: "read-only scan of the source logs plus one local commit"
   stop_condition: "window end reached; final notes written"
-  who_decides_extension: "A/EXEC-PM"
+  who_decides_extension: "the coordinating PM"
