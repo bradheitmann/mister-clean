@@ -125,7 +125,7 @@ dependencies, and ownership and custody.
 - **One heavy suite per repository at a time.** Full suites take a
   repository-wide lease; a busy lease is a typed "resource contention" result,
   not a failure and not a duplicate run.
-- **Honest labels.** Unknowns, small samples and guesses are marked as such.
+- **Labels say what is known.** Unknowns, small samples and guesses are marked as such.
   Identity (which model, harness and reasoning level did the work) is recorded
   with how it was observed: runtime receipt, display title, or contract.
 - **Checks measure by default and refuse only for** safety, provenance or
