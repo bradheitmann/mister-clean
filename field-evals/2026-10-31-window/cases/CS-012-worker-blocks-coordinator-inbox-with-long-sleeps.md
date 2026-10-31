@@ -2,7 +2,7 @@
 
 status: unreplicated (n = 1 worker, one lane)
 source: the hygiene tool's own repository, dependency-advisory lane (T-14), worked by a pair seat during the field window
-agent: AC-003 (pi / deepseek-flash / high), seat PAIR-E-DEV
+agent: AC-003 (pi / deepseek-flash / high), seat seat-cf0a
 reporter: the coordinator of that repository (direct observation of its own pair seat), with meter corroboration
 class: wait discipline and delivery; secondary: resource contention
 

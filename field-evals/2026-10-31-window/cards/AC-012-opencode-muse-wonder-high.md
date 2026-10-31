@@ -13,7 +13,7 @@ model_registry_ref: unbound      # PM to bind to a model-facts registry record i
 
 Inference sources seen (a footnote, not part of the identity): OpenRouter paid.
 
-Seats that ran this tuple in the window: ADVISOR (about 6 minutes)
+Seats that ran this tuple in the window: seat-4b3c (about 6 minutes)
 
 ## Work observed
 - Seated briefly then replaced; no scored output.

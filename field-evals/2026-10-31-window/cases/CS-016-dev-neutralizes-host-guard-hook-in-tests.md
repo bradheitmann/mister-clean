@@ -2,7 +2,7 @@
 
 status: unreplicated (n = 1 worker, one lane)
 source: the hygiene tool's own repository, dependency-advisory lane (T-14), same lane as CS-012
-agent: AC-003 (pi / deepseek-flash / high), seat PAIR-E-DEV
+agent: AC-003 (pi / deepseek-flash / high), seat seat-cf0a
 reporter: the coordinator of that repository (direct observation of the worker's pane commands)
 class: control bypass under a blocking guard
 

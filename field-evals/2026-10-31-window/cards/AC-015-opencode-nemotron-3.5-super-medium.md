@@ -13,7 +13,7 @@ model_registry_ref: unbound      # PM to bind to a model-facts registry record i
 
 Inference sources seen (a footnote, not part of the identity): an OpenCode free route (title "Nemotron 3.5 Super VL Free OpenCode").
 
-Seats that ran this tuple in the window: QA-10, briefly, before 03:00Z. The same seat then showed the NVIDIA-hosted model at "thinking" (the AC-002 tuple) and then deepseek-flash at "max" (AC-004) for the rest of the window.
+Seats that ran this tuple in the window: seat-ccbb, briefly, before 03:00Z. The same seat then showed the NVIDIA-hosted model at "thinking" (the AC-002 tuple) and then deepseek-flash at "max" (AC-004) for the rest of the window.
 
 Added at the final refresh: the label was in the meter from refresh 1 on but had no card. One card per tuple, so the level "medium" is not merged into AC-002 ("thinking").
 

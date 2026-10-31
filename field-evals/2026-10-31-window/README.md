@@ -22,9 +22,9 @@ Concepts (owner definitions): an agent is harness + model + reasoning level; pro
 - Nothing here ranks agents. Every identity is title_only or weaker until a runtime receipt binds model, harness, level and route (CS-009).
 - Reasoning levels are never merged on one card.
 - Task ids (T-nn) are anonymised; the private mapping from ids to project slices is kept outside this repository.
-- Seats appear as bare role-and-number labels (for example `DEV-4`, `QA-5`) or pseudonyms (`PAIR-E-DEV`, `PM-A`). Team prefixes, pane identifiers and repository names are removed. Role-number labels are kept on purpose so one seat can be followed across cards, cases and tables; they carry no person, project or machine identity.
+- Seats appear only as stable opaque ids (`seat-` plus four hex characters), with a generic `role` column in `data/seat-tuples.tsv` (worker, verifier, coordinator, …). The ids are salted hashes; the salt and the id map live only under the private data root, never in this repository. Team prefixes, pane identifiers, seat names and repository names are removed. (Owner decision amendment, 2026-10-31; earlier commits keep their original labels.)
 - The raw sampler file is not committed (pane scrollback carries project text). Derived tables are.
 - Single-rater scores are labelled as such.
 
 ## Regenerating the derived tables
-`tools/refresh-derived.sh /absolute/path/to/raw-meter.tsv` (input columns: utc, surface, title, model, footer, banner).
+`SEAT_MAP_SED=<private combined seat map> tools/refresh-derived.sh /absolute/path/to/raw-meter.tsv` (input columns: utc, surface, title, model, footer, banner). The combined map is the private seat map followed by the private opaque-id map, so derived tables only ever contain opaque ids.

@@ -13,11 +13,11 @@ model_registry_ref: unbound      # PM to bind to a model-facts registry record i
 
 Inference sources seen (a footnote, not part of the identity): NVIDIA hosted.
 
-Seats that ran this tuple in the window: DEV-8, HLDT-2
+Seats that ran this tuple in the window: seat-a4a6, seat-0b69
 
 ## Work observed
-- T-04 (DEV-8): ACCEPTED first pass by an independent verifier.
-- T-05 (HLDT-2): pre-mortem document produced 2 minutes after ACK; not yet audited.
+- T-04 (seat-a4a6): ACCEPTED first pass by an independent verifier.
+- T-05 (seat-0b69): pre-mortem document produced 2 minutes after ACK; not yet audited.
 
 ## Categorical data (refresh 1, through 03:09Z)
 | field | value |
@@ -25,7 +25,7 @@ Seats that ran this tuple in the window: DEV-8, HLDT-2
 | tasks delivered | 2 (T-04, T-05) |
 | first-pass accept | 1 of 1 reviewed |
 | reject classes | none |
-| speed | operator-reported about 0.5 tok/s for DEV-8; not confirmed by the meter, and T-05 finished in 2 minutes, so the figure needs a re-measure |
+| speed | operator-reported about 0.5 tok/s for seat-a4a6; not confirmed by the meter, and T-05 finished in 2 minutes, so the figure needs a re-measure |
 | stalls | 0 observed |
 | provider limit events | 0 |
 | accuracy rating | none yet |
@@ -37,4 +37,4 @@ n = 1 reviewed task.
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
 
 ## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
-No new task after 02:23Z. DEV-8 and HLDT-2 context counters never changed in the meter window. Final counts: 2 tasks (T-04 accepted first pass, T-05 unreviewed); 0 stalls; 0 provider limit events over 12 h. The operator's 0.5 tok/s report was never re-measured.
+No new task after 02:23Z. seat-a4a6 and seat-0b69 context counters never changed in the meter window. Final counts: 2 tasks (T-04 accepted first pass, T-05 unreviewed); 0 stalls; 0 provider limit events over 12 h. The operator's 0.5 tok/s report was never re-measured.

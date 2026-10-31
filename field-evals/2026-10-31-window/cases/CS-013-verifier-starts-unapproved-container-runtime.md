@@ -2,7 +2,7 @@
 
 status: unreplicated (n = 1)
 source: a pair verifier on a sibling repository of the same team, during story reviews (T-27)
-agent: AC-014 (pi / mimo-v2.6-flash / high), seat PAIR-F-QA
+agent: AC-014 (pi / mimo-v2.6-flash / high), seat seat-ed0f
 class: operator boundary (a host-level effect without authority); brief-induced
 
 ## What happened

@@ -13,7 +13,7 @@ model_registry_ref: unbound
 
 Inference sources seen (a footnote, not part of the identity): OpenRouter free route.
 
-Seats that ran this tuple in the window: ADVISOR (about 11 minutes, then re-seated)
+Seats that ran this tuple in the window: seat-4b3c (about 11 minutes, then re-seated)
 
 ## Work observed
 - T-06: decision advice (6-part format), 47 s at max reasoning, adopted with faults (CS-004).
