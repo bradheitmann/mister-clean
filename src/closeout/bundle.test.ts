@@ -46,6 +46,7 @@ import {
   deriveRegressionAccounting,
 } from "./regression-accounting.js";
 import {
+  COVERAGE_SCHEMA_VERSION,
   discoverNativeGates,
   nativeGateFailureObservations,
 } from "./native-gates.js";
@@ -1526,7 +1527,7 @@ describe("validateBundle", { timeout: 30_000 }, () => {
     };
     const coverageRecord = {
       record_type: "mister-clean.native-gate-coverage",
-      schema_version: "1.3",
+      schema_version: COVERAGE_SCHEMA_VERSION,
       discovery_sha256: fakeDiscovery.catalog_sha256,
       closing_repository_object: value.repositoryObject,
       required_gate_ids: [],

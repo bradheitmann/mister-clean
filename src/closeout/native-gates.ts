@@ -53,6 +53,7 @@ export type NativeGateFailureReason =
   | "invalid_cwd"
   | "executable_unavailable"
   | "executable_unreadable"
+  | "executable_changed"
   | "snapshot_unavailable"
   | "subject_repository_changed"
   | "repository_mutated"
@@ -118,6 +119,7 @@ export interface NativeGateExecution {
   readonly command: NativeGateCommand;
   readonly command_sha256: string;
   readonly resolved_executable: string | null;
+  readonly invoked_executable: string | null;
   readonly executable_sha256: string | null;
   readonly started_at: string;
   readonly finished_at: string;
@@ -133,7 +135,7 @@ export interface NativeGateExecution {
 
 export interface NativeGateCoverage {
   readonly record_type: "mister-clean.native-gate-coverage";
-  readonly schema_version: "1.3";
+  readonly schema_version: "1.4";
   readonly discovery_sha256: string;
   readonly closing_repository_object: RepositoryObject;
   readonly required_gate_ids: readonly string[];
@@ -218,7 +220,7 @@ export interface VerificationRunnerSafetyFinding {
 const DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 export const COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
 export const DISCOVERY_SCHEMA_VERSION = "1.3";
-export const COVERAGE_SCHEMA_VERSION = "1.3";
+export const COVERAGE_SCHEMA_VERSION = "1.4";
 export const SCHEMA_VERSION = DISCOVERY_SCHEMA_VERSION;
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 export const DEFAULT_OUTPUT_BYTES = 1024 * 1024;
@@ -257,6 +259,7 @@ export const NATIVE_GATE_FAILURE_REASONS = new Set<NativeGateFailureReason>([
   "invalid_cwd",
   "executable_unavailable",
   "executable_unreadable",
+  "executable_changed",
   "snapshot_unavailable",
   "subject_repository_changed",
   "repository_mutated",
