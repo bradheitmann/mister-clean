@@ -5,12 +5,12 @@ Proven (with the proof names):
 Not proven / known gaps:
 - INTENT is ratification: pending-owner.
 - G1 audit-public exists (bun run audit:public); G2 eval-case-readback and G3 card-identity-check validators do not exist yet.
-- charter check --strict refuses the scaffolded charter/DONE/_template.md (no numbered proof); reported upstream to PM-CHARTER; model-atlas shows the same refusal.
+- charter check --strict initially refused the scaffolded charter/DONE/_template.md; interim fix from PM-CHARTER: renamed to charter/DONE-TEMPLATE.md until Charter adopt-1 lands.
 - Git hooks not installed yet (the hooks directory is shared with worktrees this PM does not own).
 Exact last-green command(s):
-- charter check (charter 0.1.0 built from charter repo 4e9017c), exit 0
+- charter check and charter check --strict (charter 0.1.0, charter repo 4e9017c), exit 0
 Exact last-red command(s) and why:
-- charter check --strict, exit 1: charter/DONE/_template.md lists no numbered proof (template scaffolded by charter init)
+- none current
 Next three bounded items (in order):
 1. Slice Zero: replay CS-001 with its control agent (LOOPS L1) and write the eval case plus its validator (DONE/slice-zero.md proofs 1-4).
 2. Reconcile branches and worktrees (archive tags, merge or kill), move the primary checkout's dirty work onto a branch on origin/main, then run Mister Clean CLOSE on this repo.
