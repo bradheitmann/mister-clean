@@ -17,3 +17,10 @@ Do not create one until confirmed.
 
 ## Scrub notes
 No names.
+
+## Refresh 2 (data through 04:48Z)
+- Candidate A: dropped. The worker delivered twice after the flat interval (T-01 rework at 03:09Z, T-08 re-confirmed at 03:09Z), and its counters moved later.
+- Candidate B: persists, still unconfirmed. The QA seat's context size stayed flat for 26 of 27 samples (about 2 h 10 min). No verdict for its review task appears in the log, no limit or failure line was posted, and the stall watcher reported no truncation marker. Per the rule above (flat over 30 minutes with no posted line) this now qualifies to be recorded as a stall, but the seat's own explanation has not been collected, because this ledger does not read panes. Recorded as "stall, cause unknown" for the next refresh; a pane read by the operator would decide between idle-waiting and hung.
+- Idle seats are not stall candidates: several seats had flat counters for the whole window with no assigned task in the log (see `data/meter-summary.tsv`, column max_flat_run).
+
+failure_class: harness (if confirmed: a hang or a missed poll); not yet classifiable

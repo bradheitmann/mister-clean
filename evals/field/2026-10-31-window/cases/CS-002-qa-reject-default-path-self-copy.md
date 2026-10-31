@@ -29,3 +29,8 @@ Check first whether the worker's stated proof output matches a real run. A fabri
 
 ## Scrub notes
 Names and paths removed.
+
+## Refresh 2 (data through 04:48Z)
+No rework for this task appears in the event log by 04:48Z. The same tuple's next task (T-10) was rejected with a second functional defect class (panics on multibyte text) plus the doc-shape gate; see `data/tasks.tsv`.
+
+failure_class: target_repo (primary: a product defect in the candidate, paid by rework); orchestration (secondary: the doc-shape gate shared with CS-001)

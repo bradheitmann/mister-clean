@@ -18,7 +18,7 @@ Seats that ran this tuple in the window: ADVISOR (about 6 minutes)
 ## Work observed
 - Seated briefly then replaced; no scored output.
 
-## Categorical data (current refresh)
+## Categorical data (refresh 1, through 03:09Z)
 | field | value |
 |---|---|
 | cost datum | about 0.50 USD per call (operator-reported) |
@@ -26,3 +26,6 @@ Seats that ran this tuple in the window: ADVISOR (about 6 minutes)
 
 ## Caveats
 Cost tripwire datum only (CS-010).
+
+## Refresh 2 (data through 04:48Z)
+No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).

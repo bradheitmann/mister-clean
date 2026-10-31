@@ -20,3 +20,5 @@ Pair with the provider notes: price is a model-atlas fact, the tripwire is a rou
 
 ## Scrub notes
 Dollar figure is operator-reported, rounded.
+
+failure_class: not a failure (a cost observation); routing decisions belong to orchestration

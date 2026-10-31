@@ -19,7 +19,7 @@ Seats that ran this tuple in the window: DEV-8, HLDT-2
 - T-04 (DEV-8): ACCEPTED first pass by an independent verifier.
 - T-05 (HLDT-2): pre-mortem document produced 2 minutes after ACK; not yet audited.
 
-## Categorical data (current refresh)
+## Categorical data (refresh 1, through 03:09Z)
 | field | value |
 |---|---|
 | tasks delivered | 2 (T-04, T-05) |
@@ -32,3 +32,6 @@ Seats that ran this tuple in the window: DEV-8, HLDT-2
 
 ## Caveats
 n = 1 reviewed task.
+
+## Refresh 2 (data through 04:48Z)
+No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).

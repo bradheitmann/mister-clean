@@ -18,7 +18,7 @@ Seats that ran this tuple in the window: ADVISOR (about 11 minutes, then re-seat
 ## Work observed
 - T-06: decision advice (6-part format), 47 s at max reasoning, adopted with faults (CS-004).
 
-## Categorical data (current refresh)
+## Categorical data (refresh 1, through 03:09Z)
 | field | value |
 |---|---|
 | tasks delivered | 1 (T-06) |
@@ -29,3 +29,6 @@ Seats that ran this tuple in the window: ADVISOR (about 11 minutes, then re-seat
 
 ## Caveats
 n = 1. The seat was re-seated on a larger model for family diversity in a vote, not because of a failure. The answer is one draw.
+
+## Refresh 2 (data through 04:48Z)
+No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).

@@ -18,10 +18,13 @@ Seats that ran this tuple in the window: QA-1
 ## Work observed
 - No scored task in the window yet.
 
-## Categorical data (current refresh)
+## Categorical data (refresh 1, through 03:09Z)
 | field | value |
 |---|---|
 | tasks delivered | 0 |
 
 ## Caveats
 Reasoning level differs from AC-004; never merge.
+
+## Refresh 2 (data through 04:48Z)
+No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).

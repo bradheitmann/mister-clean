@@ -12,3 +12,20 @@ HLDT-2	AC-007	opencode	step-5-preview	high	nvidia	title_only
 HLDT-3	AC-008	opencode	inkling-free	high	openrouter-free	title_only	
 QA-9	AC-009	opencode	mimo-v2.6-flash	thinking	openrouter-paid	title_only	
 ADVISOR	AC-011	opencode	nemotron-3-ultra-550b-a55b	high	nvidia	title_only	thinking-partner seat; earlier in window AC-012 then AC-013
+DEV-9	AC-006	pi	deepseek-v4-pro	high	deepseek-paid	title_only	refresh 2: seconded to another repository's slice zero 03:27Z, released back 04:28Z
+QA-9	AC-009	opencode	mimo-v2.6-flash	thinking	openrouter-paid	title_only	refresh 2: seconded as cross-family verifier for two other repositories
+PAIR-A-DEV	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	pair seat for repository A; harness from Pi-style footer; seated about 03:35Z
+PAIR-B-DEV	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	pair seat for repository B
+PAIR-C-DEV	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	pair seat for repository C
+PAIR-D-DEV	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	pair seat for repository D
+PAIR-E-DEV	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	pair seat for the hygiene tool's own repository; coordinator log names the same tuple
+PAIR-F-DEV	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	pair seat for repository F
+PAIR-G-DEV	AC-003	pi	deepseek-flash	high	deepseek-paid	title_only	pair seat for repository G
+PAIR-A-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	pair verifier, repository A
+PAIR-B-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	title read deepseek-flash at 03:37Z, mimo from 03:42Z; no work before the switch; one upstream timeout 04:43Z
+PAIR-C-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	pair verifier, repository C
+PAIR-D-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	pair verifier, repository D
+PAIR-E-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	pair verifier for the hygiene tool's own repository; no task reached it in the window
+PAIR-F-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	title read deepseek-flash at 03:37-03:42Z, mimo from 03:48Z
+PAIR-G-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	title read deepseek-flash at 03:37-03:42Z, mimo from 03:48Z
+PM-A..PM-G, ORCHESTRATOR, REPORTER	none	claude code (per contract)	not sampled	not sampled	not sampled	identity_unbound	coordinator sessions; the meter shows no model label for them; no card is made (CS-009)

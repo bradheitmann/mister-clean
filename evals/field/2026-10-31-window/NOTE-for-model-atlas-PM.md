@@ -29,3 +29,22 @@ From: the eval seat, 2026-10-31, refresh 1. These are observations, not verified
 
 ## Correction (refresh 2)
 The "host input cap" row is not a model-atlas fact: 1,048,576 characters is the source project's configured input budget for one host profile, enforced by its own guard (see case CS-008). Sent to model-atlas as delta 1, which recorded it as rejected-not-a-model-atlas-fact. The premium-model cost row's subject is now named in delta 1 as well.
+
+## Refresh 2 delta (data through 2026-10-31T04:48:40Z)
+Rows are shaped like `model-atlas.route/1`. Route ids follow the schema's `route.<provider>.<provider-model-id>` form where the provider model id is visible in the pane title; otherwise UNATTRIBUTED. Every model id is title_only (read from a pane title, not a request receipt). Window for every row: 2026-10-31T02:37:33Z to 04:48:40Z unless stated. Only facts with evidence are listed; nothing here is a tariff.
+
+| route id | model id (as titled) | provider | observation (n, window) | context |
+|---|---|---|---|---|
+| route.openrouter.xiaomi-mimo-v2.6-flash | xiaomi/mimo-v2.6-flash | openrouter (paid, per operator) | limit_events: 0 rate-limit events over 7 seats, 03:37Z to 04:48Z (12 to 13 samples each, about 70 min) | Pi harness, reasoning label high; cross-family verifier seats |
+| route.openrouter.xiaomi-mimo-v2.6-flash | xiaomi/mimo-v2.6-flash | openrouter | limit_events: 1 transport error, text_class "upstream idle timeout exceeded", at 2026-10-31T04:43:37Z, headers_present unknown; recovered by the next sample (n = 1) | one verifier seat mid-review; it issued a verdict 4 min later. Not a quota event |
+| route.deepseek.deepseek-flash | deepseek-flash | deepseek (paid, per operator) | limit_events: 0 over 12 Pi seats, 02:37Z to 04:48Z (3 more OpenCode seats carry a DeepSeek flash label at other reasoning levels) | 7 of the 12 are new pair workers from about 03:35Z |
+| route.deepseek.deepseek-v4-pro | deepseek-v4-pro | deepseek (paid) | limit_events: 0 over 1 seat, 131 min | one seconded worker seat |
+| route.openrouter.nvidia-nemotron-3.5-super-vl-free | nvidia/nemotron-3.5-super-vl:free | openrouter (free) | limit_events: 0 over 3 seats, 131 min; latency: no new probe (still n = 1 from refresh 1) | Pi and OpenCode harnesses; at least 12 task events across all free routes in the window |
+| route.nvidia.nvidia-nemotron-3.5-super-vl-120b-a12b | nvidia/nemotron-3.5-super-vl-120b-a12b | nvidia | limit_events: 0 over 2 seats, about 125 min | same-weights question against the OpenRouter free route still open |
+| UNATTRIBUTED | Step 5 Preview (OpenCode label) | nvidia | limit_events: 0 over 2 seats, 131 min; no task after 02:23Z, so no new speed data | the provider model id is not visible in the OpenCode title |
+| UNATTRIBUTED | Nemotron 3 Ultra 550B A55B (OpenCode label) | nvidia | limit_events: 0 over 1 seat, 131 min; no new answer timed | advisory seat |
+| UNATTRIBUTED | MiMo-V2.6-Pro, MiMo-V2.6-Flash, Inkling (free) (OpenCode labels) | openrouter | limit_events: 0 over 4 seats, 131 min | provider model ids not visible in OpenCode titles |
+
+Correction to refresh 1 row "Free-tier ceilings reached": still none, now over 131 minutes and 1,099 samples. Still a lower bound only.
+
+What this delta cannot give you: tariffs for any paid route (none recorded in the log), headers on the timeout (not visible in a pane), and whether a mimo-flash call on the Pi harness and on the OpenCode harness resolve to the same provider model (the OpenCode title shows no provider id).

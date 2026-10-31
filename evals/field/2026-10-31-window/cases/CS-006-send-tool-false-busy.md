@@ -19,3 +19,8 @@ Replay the screen captures offline. No model is involved, so this belongs in the
 
 ## Scrub notes
 No project names.
+
+## Refresh 2 (data through 04:48Z)
+A pair worker in a sibling repository delivered a sender sidecar (T-23) whose stated purpose is live-line busy detection that ignores scrollback, with a bounded wait and typed refusal records. It is unreviewed. When it lands, the fixture plan above is its acceptance test. CS-012 is a different case: there the pane really was mid-turn, so a correct busy detector still refuses delivery.
+
+failure_class: harness

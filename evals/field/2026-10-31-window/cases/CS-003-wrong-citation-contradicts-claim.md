@@ -29,3 +29,5 @@ The deliberately-wrong premise is the whole test: models that echo it with a cit
 
 ## Scrub notes
 Numbers kept because they are the test; names, files and the project's question text removed.
+
+failure_class: not one of the five classes (an advisory answer's accuracy; nothing escaped into a repository). If adopted advice had driven a change, the escape would be orchestration (advice accepted without a citation check).

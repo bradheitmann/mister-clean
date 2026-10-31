@@ -26,3 +26,5 @@ Score "ruling latency" separately from agent time (record both clocks).
 
 ## Scrub notes
 Counts kept; names removed.
+
+failure_class: not a failure (a correct stop); the waiting cost belongs to orchestration (ruling latency of about 23 minutes)

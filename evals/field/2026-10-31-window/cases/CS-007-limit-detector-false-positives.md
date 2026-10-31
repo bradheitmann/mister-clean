@@ -21,3 +21,12 @@ Do this before trusting any limits table from a pane sampler.
 
 ## Scrub notes
 Counts only.
+
+## Refresh 2 (data through 04:48Z)
+Over 1,099 samples (131 minutes, up to 49 titles), the derive script's candidate filter flagged 37 samples on 5 seats. All 37 were text, not banners: two seats were writing and verifying a banner parser, so their screens were full of test strings containing "429" and "rate limit" (29 samples); a watcher described its own detector rules (3); a commit subject contained "quota" (2); and a hex digest contained the digits "429" (3). True provider rate-limit events: 0.
+
+One real provider-side event was not flagged: "Upstream idle timeout exceeded" on a paid OpenRouter route (1 sample, recovered by the next sample). The filter has no class for transport errors, so it neither counts them nor separates them from limits.
+
+Detector changes this suggests for the fixture: require the phrase on a line that is not inside a code block, a diff, a test string or a hex run; add a separate `transport_error` class (idle timeout, connection reset, stream ended) that is never counted as a limit.
+
+failure_class: harness (measurement tooling: the limit detector in this ledger's derive script and the source team's sampler)

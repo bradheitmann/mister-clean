@@ -18,7 +18,7 @@ Seats that ran this tuple in the window: ADVISOR
 ## Work observed
 - T-07: decision advice, 6 m 41 s at 12.8 tok/s, adopted with faults (CS-003).
 
-## Categorical data (current refresh)
+## Categorical data (refresh 1, through 03:09Z)
 | field | value |
 |---|---|
 | tasks delivered | 1 (T-07) |
@@ -29,3 +29,6 @@ Seats that ran this tuple in the window: ADVISOR
 
 ## Caveats
 n = 1. It repaired every fault from the previous advisor answer (feedback was in context), so the second answer is not an independent draw.
+
+## Refresh 2 (data through 04:48Z)
+No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).

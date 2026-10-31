@@ -21,3 +21,5 @@ Numbers kept (they define the test); no names.
 
 ## Correction at refresh 2 (PM review, 2026-10-31)
 Reclassified: **project policy, not a platform limit.** The 1,048,576-character figure is the source project's own configured default input budget for one host profile (also used when no profile is set); the pause was that project's guard enforcing its configuration. Other profiles in the same project carry different configured budgets. No harness or provider transport cap was observed. The replay plan above tests the project's guard, not a host, so this case does not describe any agent or inference source and stays out of agent cards. The silent-truncation question remains a valid eval idea for real transport limits, but it needs a measured limit first.
+
+failure_class: target_repo (the source project's own configured budget and guard, per the refresh-2 correction)

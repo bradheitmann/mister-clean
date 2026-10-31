@@ -29,3 +29,5 @@ Cheap: the packet is one page. Run it first against every candidate before spend
 
 ## Scrub notes
 Project facts removed; only the defect structure kept.
+
+failure_class: not one of the five classes (an advisory answer's accuracy; nothing escaped into a repository). Nearest: orchestration, if the missed pending dependency had been acted on.

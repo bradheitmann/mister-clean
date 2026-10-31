@@ -24,3 +24,10 @@ Cheapest fix that unlocks everything else: record the resolved model per request
 
 ## Scrub notes
 No names.
+
+## Refresh 2 (data through 04:48Z)
+- Three of seven new pair verifier seats showed one model in the title for one or two samples and another from then on (deepseek-flash, then mimo-v2.6-flash). No counted work happened before the switch, so no row is mis-attributed, but the derive script only marks a "switch" interval when both samples carry counters; a switch on a seat with an empty footer passes unmarked.
+- Coordinator sessions (the repository PMs and the orchestrator) show no model label in the meter. Their contract names a harness and model; no runtime receipt does. Their work appears in `data/tasks.tsv` only as "repo PM (unbound)".
+- New tuples this refresh (AC-014) are title_only, like every other card.
+
+failure_class: orchestration (receipt and identity binding)
