@@ -1,0 +1,22 @@
+# One entry per guarantee. A guarantee without a proof is a wish; without a cost it is a trap.
+- id: G1
+  statement: "Clean public data: nothing committed, packaged or contributed as community eval data contains secrets, PII or proprietary project content; source projects and seats are referred to generically, and any id map back to real names lives outside every repo."
+  owner: "mister-clean PM (PM-MISTER-CLEAN)"
+  proof: "audit-public: `bun run audit:public` (scripts/verify_public_package.ts with config/public-package-identifiers.txt) on every candidate, plus a secret scan of the diff before any push"
+  cost_per_run: "seconds per candidate; local, no network"
+  if_dropped: "A key, a person's data or a client's project detail is published in an open-source repo and its community telemetry"
+  status: proposed
+- id: G2
+  statement: "Replayable evidence: every eval result names its case, the agent cards it ran, the verifier and the commit, and can be re-run from those; a failure seen once is a case study, never an eval verdict, until a controlled replay with the same agent repeats it."
+  owner: "mister-clean PM"
+  proof: "eval-case-readback: a validator that refuses an eval case missing case id, agent-card ids, verifier identity, base commit or replay count, and refuses a verdict whose control replay count is below the case's declared repeat floor"
+  cost_per_run: "seconds for the validator; each replay costs one agent run on the cheapest inference that can run the control agent"
+  if_dropped: "Routing recommendations rest on anecdotes; one flaky run bans or promotes an agent"
+  status: proposed
+- id: G3
+  statement: "Honest identity and unknowns: every agent identity carries how it was observed (runtime receipt, pane title or contract); unknown limits, small samples and guesses are labelled, and nothing implies Mister Clean routes models before the routing slice is qualified."
+  owner: "mister-clean PM"
+  proof: "card-identity-check: a validator that refuses an agent card without identity_status in {receipt, title_only, contract_only} and refuses a numeric limit without a source and date or an explicit UNKNOWN"
+  cost_per_run: "seconds; local validator"
+  if_dropped: "A pane title is taken for the real model; routing trusts identities and limits nobody measured"
+  status: proposed
