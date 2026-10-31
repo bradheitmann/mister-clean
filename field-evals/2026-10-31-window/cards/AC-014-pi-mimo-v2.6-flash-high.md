@@ -41,3 +41,21 @@ Not the same agent as AC-009 (OpenCode harness, "thinking" label). Harness and l
 
 ## Caveats
 Verdict counts mix coordinator-authored and agent-authored targets. No verdict by this card was cross-checked by a second verifier, so its false-reject and false-accept rates are unknown. Seven seats over 60-75 minutes; every figure is n = 1 to 3 per question.
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+- PAIR-B-QA: PASS on T-21, T-22, T-23 (70 to 78 min after DONE: queued behind T-20), T-30, T-31, T-32 (21 to 30 min after DONE), FAIL then PASS on T-34 (12.5 min, then 90 min while the verifier sat idle on a message board, CS-006 additions). Receipts revalidated on fresh clones. Findings included one medium (T-23 F1) that became its own slice.
+- PAIR-E-QA: ACCEPTED T-14 12 min after DONE (with a fail-without and hosted CI) and T-35 (a verdict line stamped in local time but labelled UTC, CS-019).
+- PAIR-A-QA: REJECTED T-19 (a design defect); the second QA of T-18 accepted by 04:49Z.
+- PAIR-D-QA: ACCEPTED T-16 21 min after its dispatch line.
+- PAIR-G-QA: ACCEPTED T-26 (upper bound 06:50Z).
+
+| field | value (final, whole window) |
+|---|---|
+| reviews issued | 23 verdicts: 6 reject or fail (T-15, T-17, T-18, T-19, T-20, T-34), 17 accept or pass |
+| rejects later repaired and accepted | 6 of 6 (4 by a verifier verdict line, T-18 by a coordinator line, T-19 by its landing line) |
+| review minutes after delivery | median about 24 over 14 timed reviews (range 3 to 90; the longest are queueing, not reading) |
+| output tokens per active hour (Pi counters, rounded) | about 121k across 7 seats (about 1.44M output over 11.9 active hours); input about 10.3M, mostly re-reads (PAIR-A-QA alone 6.6M) |
+| external corroboration | hosted CI on the exact commit agreed with 2 accepts (T-14, T-35); no second verifier on any AC-014 verdict |
+| stalls | 0 |
+| provider events | 1 upstream idle timeout (04:43Z), recovered; 0 rate-limit events over up to 11 h on 7 seats |
+| operator-boundary events | 1 (CS-013) |

@@ -62,3 +62,28 @@ Work as verifier:
 | provider limit events | 0 on the DeepSeek route across up to 10 seats |
 
 Caveat for refresh 2: pair workers and their verifiers came from different model families by design, so every AC-003 verdict as worker is an AC-014 verdict too; neither card's error rate is measurable from the other's.
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+Work as worker after 04:48Z:
+- T-14 (PAIR-E-DEV): DONE 05:25Z, 106 min after dispatch; ACCEPTED first pass 12 min later with a fail-without and hosted CI green on the exact commit; landed 08:29Z.
+- T-35 (PAIR-E-DEV): a tool fix in 13 min or less; ACCEPTED (verdict line mis-stamped, CS-019). Proof 4 was host-blocked and recorded, with no hook override.
+- PAIR-B-DEV: T-21, T-22, T-23 ACCEPTED (70 to 78 min after DONE, queued); then T-30 (6.8 min), T-31 (2.6), T-32 (5.7), T-33 (no dispatch line), T-34 (2.9 min, REJECTED on a ruling mismatch and missing exit codes, repaired in 2 min, PASS). Every PAIR-B lane landed.
+- T-19 (PAIR-A-DEV): REJECTED first pass (05:12Z, a design defect); remediated; landed 06:18Z.
+- T-16 (PAIR-D-DEV): independent verifier ACCEPTED 13:47Z.
+- T-37 (DEV-7): read-only inventory and unapplied patch in 8.6 min; unreviewed. The worker self-reported one `rm -rf` of its own scratch (CS-017 additions).
+
+Work as verifier: QA-6 ACCEPTED the T-08 rework (05:38Z). QA-2 never re-reviewed the T-10 rework.
+
+| field | value (final, whole window) |
+|---|---|
+| tasks delivered (as worker) | 17 (T-03, T-14, T-16, T-17, T-19, T-20, T-21, T-22, T-23, T-28, T-30, T-31, T-32, T-33, T-34, T-35, T-37) |
+| first-pass verdict by an independent verifier (as worker) | 9 accepted of 13 (accepted: T-14, T-16, T-21, T-22, T-23, T-30, T-31, T-32, T-35; rejected: T-17, T-19, T-20, T-34) |
+| not independently verified | T-03 (twin never reported), T-28 and T-33 (merged, no verdict line), T-37 (unreviewed) |
+| rework | 4 of 4 rejects converged in one round (3 by a verdict line, T-19 by its landing line) |
+| speed, ack to done (min) | median about 11 over 16 timed deliveries (range 2.1 to 106); many acks are dispatch lines, so reading time may be excluded |
+| output tokens per active hour (Pi counters, rounded) | about 121k across 11 seats (about 1.57M output over 13 active hours); highest seat-hour 169k |
+| reviews issued (as verifier, cumulative) | 4 reject, 3 accept (T-01 rework, T-04 corroboration, T-08 rework) |
+| stalls | 0; T-14's long wait was self-imposed (CS-012) |
+| provider limit events | 0 on the DeepSeek route across 11 seats over up to 12 h |
+
+Caveat (final): all PAIR verdicts on this card are AC-014 verdicts; the two cards' error rates still cannot be separated.

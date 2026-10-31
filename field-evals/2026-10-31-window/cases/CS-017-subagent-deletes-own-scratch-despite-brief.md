@@ -33,3 +33,14 @@ If B removes the breach, the fix is an alternative in the rule, not a stronger p
 No paths or names.
 
 failure_class: orchestration (primary: the brief gave a prohibition without an alternative for the common idiom); operator_boundary (secondary: a destructive command run against the stated rule)
+
+## Final refresh additions (log through 14:40:25Z)
+The pattern recurred. By 05:53Z the event log held four self-deletion slips in one night by four different agents, all on the agent's own fresh scratch and all self-reported (one coordinator line calls its own slip "the 4th" and names three of them):
+1. this case (a subagent, `rm -f` on an uncommitted temporary table);
+2. a worker on the AC-003 tuple (T-37) ran `rm -rf` on its own scratch directory and recorded it in its DONE line;
+3. a repository coordinator ran `rm -rf` on a dependency folder in its own seconds-old scratch clone;
+4. an agent in a third sibling repository ran `rmdir` (role and details not stated in the log).
+
+Four different agents across at least two harness and model families, so the brief-wording hypothesis (attribution 1) now outweighs any one model's habit. The coordinator that logged the count asked the owner for a sanctioned scratch area: treatment B of the replication plan, proposed in the field. Status changes from n = 1 to n = 4 field instances, still unreplicated under control.
+
+Disclosure for this refresh: the operator writing it created one stray card file inside the ledger by mistyping a name. It was moved (not deleted) to the system temp directory and listed in the operator's report.

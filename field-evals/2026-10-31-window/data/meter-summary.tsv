@@ -1,51 +1,51 @@
 seat	samples	first_utc	last_utc	distinct_model_labels	counter_kind	start	end	delta_in	delta_out	max_flat_run	banner_raw	banner_candidate	model_labels
 SPARE-UNTITLED	8	2026-10-31T03:17:44Z	2026-10-31T03:22:46Z	0	na	na	na	na	na	1	0	0	
-ADVISOR	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	176500	177800	na	na	11	0	0	Build auto · Nemotron 3 Ultra 550B A55B NVIDIA · high
-WATCHER	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	pi	186000	197000	11000	15000	19	19	3	(deepseek) deepseek-flash • high
-ORCHESTRATOR	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	4	2	
-REPORTER	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	27	0	
-DEV-2	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-DEV-4	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	pi	22000000	22000000	0	4000	25	0	0	(openrouter) nvidia/nemotron-3.5-super-vl:free • high
-DEV-5	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	2	pi	273000	953000	680000	42000	20	20	0	(openrouter) nvidia/nemotron-3.5-super-vl:free • high ;; (nvidia) nvidia/nemotron-3.5-super-vl-120b-a12b • high
-DEV-6	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	132900	303500	na	na	11	17	16	Build auto · Nemotron 3.5 Super VL (free) OpenRouter · thinking
-DEV-7	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	pi	99000	166000	67000	53000	25	0	0	(deepseek) deepseek-flash • high
-DEV-8	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	654300	654300	na	na	27	0	0	Build auto · Step 5 Preview NVIDIA · high
-DEV-9	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	pi	856000	931000	75000	126000	10	0	0	(deepseek) deepseek-v4-pro • high
-HLDT-1	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	177600	177600	na	na	27	0	0	Build auto · MiMo-V2.6-Pro OpenRouter · thinking
-HLDT-2	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	401900	401900	na	na	27	0	0	Build auto · Step 5 Preview NVIDIA · high
-HLDT-3	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	2	oc	188600	211900	na	na	21	0	0	Build · Inkling (free) [high] · OpenRouter ;; Build · Inkling (free) · 9m 43s
-QA-1	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	389200	389200	na	na	27	0	0	Build · DeepSeek / deepseek-flash [low] · DeepSeek
-QA-2	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	pi	361000	401000	40000	39000	12	13	13	(deepseek) deepseek-flash • high
-QA-3	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	pi	2600000	2600000	0	0	27	0	0	(deepseek) deepseek-flash • high
-QA-5	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	2	pi	1100000	2000000	900000	50000	16	0	0	(deepseek) deepseek-flash • high ;; (nvidia) nvidia/nemotron-3.5-super-vl-120b-a12b • high
-QA-6	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	pi	7400000	7400000	0	28000	10	0	0	(deepseek) deepseek-flash • high
-QA-7	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	75200	73500	na	na	26	26	0	Build auto · Nemotron 3.5 Super VL (free) OpenRouter · thinking
-QA-9	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	326800	456000	na	na	7	3	3	Build auto · MiMo-V2.6-Flash OpenRouter · thinking
-PAIR-A-DEV	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	1	pi	24000	121000	97000	146367	4	0	0	(deepseek) deepseek-flash • high
-PAIR-A-QA	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	1	pi	57000	205000	148000	85000	4	0	0	(openrouter) xiaomi/mimo-v2.6-flash • high
-PM-A	21	2026-10-31T03:07:40Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-PAIR-F-DEV	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	1	pi	27000	207000	180000	134800	9	0	0	(deepseek) deepseek-flash • high
-PAIR-F-QA	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	2	pi	60000	289000	229000	52200	7	0	0	(deepseek) deepseek-flash • high ;; (openrouter) xiaomi/mimo-v2.6-flash • high
-PM-F	20	2026-10-31T03:12:42Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	1	0	
-PAIR-C-DEV	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	1	pi	20000	128000	108000	91838	6	0	0	(deepseek) deepseek-flash • high
-PAIR-C-QA	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	1	pi	28000	267000	239000	123099	6	0	0	(openrouter) xiaomi/mimo-v2.6-flash • high
-PAIR-E-DEV	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	1	pi	35000	58000	23000	23000	5	0	0	(deepseek) deepseek-flash • high
-PAIR-E-QA	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	1	pi	23000	23000	0	0	14	0	0	(openrouter) xiaomi/mimo-v2.6-flash • high
-PM-E	21	2026-10-31T03:07:40Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	1	0	
-PM-C	21	2026-10-31T03:07:40Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-PM-D	21	2026-10-31T03:07:40Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-PAIR-D-DEV	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	1	pi	20000	162000	142000	114883	8	0	0	(deepseek) deepseek-flash • high
-PAIR-D-QA	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	1	pi	74000	260000	186000	38000	7	0	0	(openrouter) xiaomi/mimo-v2.6-flash • high
-PAIR-B-DEV	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	1	pi	22000	162000	140000	140853	5	0	0	(deepseek) deepseek-flash • high
-PAIR-B-QA	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	2	pi	32000	169000	137000	121800	1	1	0	(deepseek) deepseek-flash • high ;; (openrouter) xiaomi/mimo-v2.6-flash • high
-PM-B	21	2026-10-31T03:07:40Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-PAIR-G-DEV	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	1	pi	20000	73000	53000	55862	9	0	0	(deepseek) deepseek-flash • high
-PAIR-G-QA	16	2026-10-31T03:32:52Z	2026-10-31T04:48:40Z	2	pi	35000	225000	190000	21300	10	0	0	(deepseek) deepseek-flash • high ;; (openrouter) xiaomi/mimo-v2.6-flash • high
-PM-G	20	2026-10-31T03:12:42Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-DEV-10	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	672200	672200	na	na	27	0	0	Build auto · DeepSeek / deepseek-flash DeepSeek · max
-HLDT-4	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	1	oc	850800	855700	na	na	18	0	0	Build auto · MiMo-V2.6-Pro OpenRouter · thinking
-QA-10	27	2026-10-31T02:37:33Z	2026-10-31T04:48:40Z	3	oc	422000	672200	na	na	24	0	0	Build auto · Nemotron 3.5 Super VL Free OpenCode · medium ;; Build auto · Nemotron 3.5 Super VL 120B A12B NVIDIA · thinking ;; Build auto · DeepSeek / deepseek-flash DeepSeek · max
-SPARE-1	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-SPARE-2	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-SPARE-3	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
-SPARE-4	17	2026-10-31T03:27:49Z	2026-10-31T04:48:40Z	0	na	na	na	na	na	1	0	0	
+ADVISOR	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	176500	177800	na	na	127	0	0	Build auto · Nemotron 3 Ultra 550B A55B NVIDIA · high
+WATCHER	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	pi	186000	197000	11000	15000	135	135	3	(deepseek) deepseek-flash • high
+ORCHESTRATOR	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	13	9	
+REPORTER	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	143	0	
+DEV-2	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	
+DEV-4	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	pi	22000000	23000000	1000000	129000	104	103	0	(openrouter) nvidia/nemotron-3.5-super-vl:free • high
+DEV-5	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	2	pi	273000	1300000	1027000	48000	106	28	0	(openrouter) nvidia/nemotron-3.5-super-vl:free • high ;; (nvidia) nvidia/nemotron-3.5-super-vl-120b-a12b • high
+DEV-6	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	132900	303500	na	na	127	133	132	Build auto · Nemotron 3.5 Super VL (free) OpenRouter · thinking
+DEV-7	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	pi	99000	176000	77000	68000	116	0	0	(deepseek) deepseek-flash • high
+DEV-8	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	654300	654300	na	na	143	0	0	Build auto · Step 5 Preview NVIDIA · high
+DEV-9	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	pi	856000	931000	75000	126000	117	0	0	(deepseek) deepseek-v4-pro • high
+HLDT-1	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	177600	177600	na	na	143	0	0	Build auto · MiMo-V2.6-Pro OpenRouter · thinking
+HLDT-2	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	401900	401900	na	na	143	0	0	Build auto · Step 5 Preview NVIDIA · high
+HLDT-3	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	2	oc	188600	211900	na	na	137	0	0	Build · Inkling (free) [high] · OpenRouter ;; Build · Inkling (free) · 9m 43s
+QA-1	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	389200	389200	na	na	143	0	0	Build · DeepSeek / deepseek-flash [low] · DeepSeek
+QA-2	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	pi	361000	401000	40000	39000	128	129	129	(deepseek) deepseek-flash • high
+QA-3	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	pi	2600000	2600000	0	0	143	0	0	(deepseek) deepseek-flash • high
+QA-5	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	2	pi	1100000	2000000	900000	50000	132	0	0	(deepseek) deepseek-flash • high ;; (nvidia) nvidia/nemotron-3.5-super-vl-120b-a12b • high
+QA-6	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	pi	7400000	7400000	0	32000	107	0	0	(deepseek) deepseek-flash • high
+QA-7	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	75200	73500	na	na	142	142	0	Build auto · Nemotron 3.5 Super VL (free) OpenRouter · thinking
+QA-9	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	326800	456000	na	na	118	3	3	Build auto · MiMo-V2.6-Flash OpenRouter · thinking
+PAIR-A-DEV	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	1	pi	24000	428000	404000	684367	34	1	1	(deepseek) deepseek-flash • high
+PAIR-A-QA	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	1	pi	57000	6700000	6643000	688000	36	8	8	(openrouter) xiaomi/mimo-v2.6-flash • high
+PM-A	137	2026-10-31T03:07:40Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	6	6	
+PAIR-F-DEV	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	1	pi	27000	207000	180000	134800	125	0	0	(deepseek) deepseek-flash • high
+PAIR-F-QA	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	2	pi	60000	289000	229000	52200	123	0	0	(deepseek) deepseek-flash • high ;; (openrouter) xiaomi/mimo-v2.6-flash • high
+PM-F	136	2026-10-31T03:12:42Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	1	0	
+PAIR-C-DEV	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	1	pi	20000	128000	108000	91838	122	0	0	(deepseek) deepseek-flash • high
+PAIR-C-QA	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	1	pi	28000	267000	239000	123099	121	0	0	(openrouter) xiaomi/mimo-v2.6-flash • high
+PAIR-E-DEV	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	1	pi	35000	113000	78000	72000	70	0	0	(deepseek) deepseek-flash • high
+PAIR-E-QA	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	1	pi	23000	307000	284000	16912	59	0	0	(openrouter) xiaomi/mimo-v2.6-flash • high
+PM-E	137	2026-10-31T03:07:40Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	1	0	
+PM-C	137	2026-10-31T03:07:40Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	12	0	
+PM-D	137	2026-10-31T03:07:40Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	
+PAIR-D-DEV	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	1	pi	20000	162000	142000	114883	124	0	0	(deepseek) deepseek-flash • high
+PAIR-D-QA	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	1	pi	74000	584000	510000	96000	94	0	0	(openrouter) xiaomi/mimo-v2.6-flash • high
+PAIR-B-DEV	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	1	pi	22000	240000	218000	264853	92	0	0	(deepseek) deepseek-flash • high
+PAIR-B-QA	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	2	pi	32000	2100000	2068000	380800	72	1	0	(deepseek) deepseek-flash • high ;; (openrouter) xiaomi/mimo-v2.6-flash • high
+PM-B	137	2026-10-31T03:07:40Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	
+PAIR-G-DEV	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	1	pi	20000	73000	53000	55862	125	0	0	(deepseek) deepseek-flash • high
+PAIR-G-QA	132	2026-10-31T03:32:52Z	2026-10-31T14:33:26Z	2	pi	35000	358000	323000	83300	101	0	0	(deepseek) deepseek-flash • high ;; (openrouter) xiaomi/mimo-v2.6-flash • high
+PM-G	136	2026-10-31T03:12:42Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	
+DEV-10	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	672200	715500	na	na	128	0	0	Build auto · DeepSeek / deepseek-flash DeepSeek · max
+HLDT-4	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	1	oc	850800	855700	na	na	134	0	0	Build auto · MiMo-V2.6-Pro OpenRouter · thinking
+QA-10	143	2026-10-31T02:37:33Z	2026-10-31T14:33:26Z	3	oc	422000	672200	na	na	140	0	0	Build auto · Nemotron 3.5 Super VL Free OpenCode · medium ;; Build auto · Nemotron 3.5 Super VL 120B A12B NVIDIA · thinking ;; Build auto · DeepSeek / deepseek-flash DeepSeek · max
+SPARE-1	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	
+SPARE-2	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	
+SPARE-3	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	
+SPARE-4	133	2026-10-31T03:27:49Z	2026-10-31T14:33:26Z	0	na	na	na	na	na	1	0	0	

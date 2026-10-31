@@ -29,3 +29,7 @@ PAIR-E-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	pair verifie
 PAIR-F-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	title read deepseek-flash at 03:37-03:42Z, mimo from 03:48Z
 PAIR-G-QA	AC-014	pi	mimo-v2.6-flash	high	openrouter-paid	title_only	title read deepseek-flash at 03:37-03:42Z, mimo from 03:48Z
 PM-A..PM-G, ORCHESTRATOR, REPORTER	none	claude code (per contract)	not sampled	not sampled	not sampled	identity_unbound	coordinator sessions; the meter shows no model label for them; no card is made (CS-009)
+DEV-4	AC-001	pi	nemotron-3.5-super (VL)	high	openrouter-free	title_only	final: took a lane at about 04:41Z; terminal transport error 05:59Z, idle for the rest of the window (T-36, CS-020)
+DEV-10	AC-004	opencode	deepseek-flash	max	deepseek-paid	title_only	final: two read-only or scripted lanes 13:00Z-14:40Z (T-38, T-39)
+QA-10	AC-015	opencode	nemotron-3.5-super (VL)	medium	opencode-free	title_only	label seen briefly before 03:00Z, then nemotron NVIDIA thinking (AC-002 tuple), then deepseek-flash max (AC-004) for the rest of the window; no task under any label
+SUB-A, SUB-B, SUB-B2, SUB-QA-1..5, LANDER	none	claude code subagents (per log wording)	named in log lines only: Opus (SUB-A, SUB-B2, SUB-QA-5), Sonnet (SUB-QA-1..4), not named (SUB-B, LANDER)	not stated	not stated	identity_unbound	orchestrator subagent lanes; never sampled by the meter; tasks T-40 to T-44 are listed as verifier and author data, no card is made (CS-009)

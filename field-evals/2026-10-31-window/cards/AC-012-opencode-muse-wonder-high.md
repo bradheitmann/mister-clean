@@ -29,3 +29,6 @@ Cost tripwire datum only (CS-010).
 
 ## Refresh 2 (data through 04:48Z)
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No task in the whole window; the label was replaced early in the window. Final counts: 0 tasks.

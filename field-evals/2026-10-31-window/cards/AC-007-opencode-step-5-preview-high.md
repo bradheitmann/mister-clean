@@ -35,3 +35,6 @@ n = 1 reviewed task.
 
 ## Refresh 2 (data through 04:48Z)
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No new task after 02:23Z. DEV-8 and HLDT-2 context counters never changed in the meter window. Final counts: 2 tasks (T-04 accepted first pass, T-05 unreviewed); 0 stalls; 0 provider limit events over 12 h. The operator's 0.5 tok/s report was never re-measured.

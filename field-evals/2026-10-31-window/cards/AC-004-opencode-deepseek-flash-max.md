@@ -30,3 +30,17 @@ QA-10's pane label moved Nemotron (OpenCode free) to Nemotron (NVIDIA) to this t
 
 ## Refresh 2 (data through 04:48Z)
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+- T-38 (DEV-10): read-only scoping of a pre-launch check, 26 min or less per the coordinator; recommendation (a scripted check, 0 model calls) adopted as the next lane.
+- T-39 (DEV-10): ran the scripted check in 69.8 min including a wait for a heavy-suite slot; result FAIL (the staged pairs do not qualify; this scores the pairs, not the worker); repeated on an updated base with the same result. Not reviewed by the window's end.
+- QA-10 kept this label for the rest of the window and issued no verdict.
+
+| field | value (final) |
+|---|---|
+| tasks delivered | 2 (T-38, T-39) |
+| first-pass verdict | n/a (T-38 adopted by the coordinator; T-39 unreviewed) |
+| speed | 26 or less; 69.8 including a queue wait |
+| context growth | 672.2k to 715.5k tokens on DEV-10 (OpenCode context size, not throughput) |
+| stalls | 0 |
+| provider limit events | 0 |

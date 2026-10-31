@@ -32,3 +32,6 @@ n = 1. It repaired every fault from the previous advisor answer (feedback was in
 
 ## Refresh 2 (data through 04:48Z)
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No new timed answer in the window. A fourth advisory question was written at 14:40Z, after the meter closed; its answer is outside this ledger. Final counts: 1 advisory answer (T-07, single-rater score); 0 provider limit events over 12 h.

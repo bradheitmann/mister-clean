@@ -29,3 +29,6 @@ The same model at max reasoning is AC-013 (advisor work). Levels are never merge
 
 ## Refresh 2 (data through 04:48Z)
 No new task in the log for this tuple between 03:09Z and 04:48Z; counts above are unchanged. Per-seat counter activity is in `data/meter-summary.tsv` (activity without a logged task is not counted as work).
+
+## Final refresh (meter through 14:33:26Z, log through 14:40:25Z)
+No new task. HLDT-3's last context change was 03:48Z. Final counts: 1 task (T-09, the audit, never itself checked); 0 stalls; 0 provider limit events over 12 h on the free route.
