@@ -11,6 +11,8 @@ state is [`CURRENT.md`](../CURRENT.md); the product contract is
 3. `references/` — product spec and doctrine.
 4. `project/planning/handoffs/` — dated PM handoffs (historical, never self-certifying).
 5. `project/planning/hygiene/MANUAL-LOOSE-ENDS-LEDGER.md` — manually tracked loose ends.
+6. `project/planning/ROADMAP.md` — planned additions, including the cross-project
+   evaluation standardization plan and its acceptance boundaries.
 
 ## Toolchain
 
