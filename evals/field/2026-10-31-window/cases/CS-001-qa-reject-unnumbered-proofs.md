@@ -36,3 +36,9 @@ The worker delivered the rework 38 minutes or less after the reject (queue time 
 
 ## Corroboration at refresh 2 (PM review, 2026-10-31)
 A second, model-free instance of hypothesis 1: adopting the same governance tool in another repository, the tool's own scaffolded done-list template failed the tool's strict check for the same reason (no numbered proof). The tool's maintainer confirmed it as a tooling defect. A gate that counts numbered proofs, paired with a template or contract that does not produce them, rejects work with no model involved. This raises the prior on hypothesis 1. It does not replace the treatment A/B/C replays, which remain the qualifying test.
+
+## Third instance (field, 2026-10-31T03:49Z)
+A verifier rejected a different worker delivery in the same source project partly for the same cause: the done list used "## Proof N —" headings, while the strict gate counts only top-level "N. " list items. The strict refusal count rose by one, and the delivery's own claim of "identical to baseline" was false. Other gates passed (crate tests twice, lint, scope, pins). The delivery also had unrelated findings, so this is not a single-cause rejection.
+- The author was the same model as this case's control agent (Nemotron 3.5 Super; harness unbound). This is therefore a second field observation of the control model failing the same way. It does not separate model from contract.
+- Taken together: the Charter-template instance shows the gate/template mismatch rejects work with no model involved; this instance shows the control model repeats the omission when the contract does not ask for numbered top-level items. Treatment B (contract states "top-level 1..n") remains the deciding replay.
+- Detector note: "numbered" is ambiguous to authors. The gate's rule is "top-level `N. ` list items", and two of three instances used another numbering form (letters; headings). The eval's oracle must state the exact form it checks.
