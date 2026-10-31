@@ -14,7 +14,7 @@
   if_dropped: "Routing recommendations rest on anecdotes; one flaky run bans or promotes an agent"
   status: proposed
 - id: G3
-  statement: "Honest identity and unknowns: every agent identity carries how it was observed (runtime receipt, pane title or contract); unknown limits, small samples and guesses are labelled, and nothing implies Mister Clean routes models before the routing slice is qualified."
+  statement: "Truthful identity and unknowns: every agent identity carries how it was observed (runtime receipt, pane title or contract); unknown limits, small samples and guesses are labelled, and nothing implies Mister Clean routes models before the routing slice is qualified."
   owner: "mister-clean PM"
   proof: "card-identity-check: a validator that refuses an agent card without identity_status in {receipt, title_only, contract_only} and refuses a numeric limit without a source and date or an explicit UNKNOWN"
   cost_per_run: "seconds; local validator"

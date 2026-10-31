@@ -24,10 +24,10 @@
   - not a router today: nothing here may imply Mister Clean routes models before the routing slice is qualified;
   - not an unlimited telemetry collector: field incidents carry confidence, privacy and provenance, plus only the evidence needed to remediate;
   - no design bound to the name "Mister Clean" (it may change).
-- The 3 guarantees that matter: G1 clean public data, G2 replayable evidence, G3 honest identity (detail follows).
+- The 3 guarantees that matter: G1 clean public data, G2 replayable evidence, G3 truthful identity (detail follows).
   - G1 **Clean public data:** nothing committed or contributed contains secrets, PII or proprietary project content; a secret/identifier scan passes on every commit.
   - G2 **Replayable evidence:** every eval result names its case, agent cards, verifier and commit, and can be re-run from those; a single non-repeated failure is a case study, never an eval verdict.
-  - G3 **Honest identity and unknowns:** agent identity is labelled by how it was observed (runtime receipt vs pane title vs contract); unknown limits, sample sizes and guesses are marked, never filled in.
+  - G3 **Truthful identity and unknowns:** agent identity is labelled by how it was observed (runtime receipt vs pane title vs contract); unknown limits, sample sizes and guesses are marked, never filled in.
 - Largest uncertainty: the private/public split and replay cost (detail follows).
   - where Brad's private eval data and the private id maps live, and how community contributions are kept clean;
   - whether field failures replay repeatably at acceptable cost on free inference;
