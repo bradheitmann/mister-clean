@@ -33,3 +33,6 @@ Project name, paths, branch names, slice ids and file names removed. Description
 
 ## Update at refresh 1 (03:10Z)
 The worker delivered the rework 38 minutes or less after the reject (queue time inside that is unknown): proofs renumbered 1 to 4, a fail-without mutant added, strict count equal to the baseline. That supports hypothesis 1 only weakly: the fix was a renumbering, so the worker could do it once told, but nothing shows it would have numbered unprompted under treatment B. Re-review is pending.
+
+## Corroboration at refresh 2 (PM review, 2026-10-31)
+A second, model-free instance of hypothesis 1: adopting the same governance tool in another repository, the tool's own scaffolded done-list template failed the tool's strict check for the same reason (no numbered proof). The tool's maintainer confirmed it as a tooling defect. A gate that counts numbered proofs, paired with a template or contract that does not produce them, rejects work with no model involved. This raises the prior on hypothesis 1. It does not replace the treatment A/B/C replays, which remain the qualifying test.

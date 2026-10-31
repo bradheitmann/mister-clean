@@ -26,3 +26,6 @@ From: the eval seat, 2026-10-31, refresh 1. These are observations, not verified
 ## Suggested records to add
 - A per-route record with fields: route id, model id, observed latency samples (n, p50, p95), observed limit events (text class, time), header presence.
 - A cost-per-call field for premium routes (see the cost tripwire case in the eval folder).
+
+## Correction (refresh 2)
+The "host input cap" row is not a model-atlas fact: 1,048,576 characters is the source project's configured input budget for one host profile, enforced by its own guard (see case CS-008). Sent to model-atlas as delta 1, which recorded it as rejected-not-a-model-atlas-fact. The premium-model cost row's subject is now named in delta 1 as well.
