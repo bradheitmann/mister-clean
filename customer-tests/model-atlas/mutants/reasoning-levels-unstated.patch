@@ -1,0 +1,11 @@
+--- a/export.json
++++ b/export.json
+@@ -116,7 +116,7 @@
+         "kind": "documented",
+         "last_verified": "2026-10-31",
+         "source": "src.owner-model-budget",
+-        "unknown": "the publisher's reasoning levels are not read in this slice"
++        "unknwn": "the publisher's reasoning levels are not read in this slice"
+       },
+       "status": "current",
+       "tokenizer": {
