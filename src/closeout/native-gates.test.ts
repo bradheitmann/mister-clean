@@ -6,11 +6,14 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -23,6 +26,7 @@ import {
   NativeGateGitTimeoutError,
   auditVerificationRunnerSafety,
   createExecutionSnapshot,
+  digestFile,
   discoverNativeGates,
   nativeGateFailureObservations,
 } from "./native-gates.js";
@@ -344,6 +348,115 @@ describe("native gate execution and validation", () => {
       evidence,
       { validation_time: new Date(Date.now() + 1_000) },
     )).resolves.toEqual([]);
+  });
+
+  it("spawns a multi-call proxy through the name it was invoked as", async () => {
+    const { evidence, repo, root } = fixture("proxy-invoked-name");
+    mkdirSync(join(repo, "rust"));
+    writeFileSync(join(repo, "rust", "Cargo.toml"), "[package]\nname='fixture'\nversion='0.1.0'\n");
+    commit(repo);
+
+    // rustup ships one binary that behaves differently per invoked name.
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    const multitool = join(bin, "multitool");
+    writeFileSync(multitool, [
+      "#!/bin/sh",
+      "invoked=$(basename \"$0\")",
+      "if [ \"$invoked\" != cargo ]; then",
+      "  echo \"error: unexpected argument '--all-targets' found\" >&2",
+      "  exit 1",
+      "fi",
+      "echo \"proxy saw $invoked\"",
+      "",
+    ].join("\n"));
+    chmodSync(multitool, 0o755);
+    const cargoLink = join(bin, "cargo");
+    symlinkSync(multitool, cargoLink);
+
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
+    try {
+      const object = captureRepositoryObject(repo);
+      const discovery = discoverNativeGates(repo, object);
+      expect(discovery.required_gate_ids).toEqual(["cargo:rust:test"]);
+
+      const coverage = await runNativeGates(repo, discovery, evidence, { timeout_ms: 10_000 });
+      const execution = coverage.executions[0]!;
+
+      expect(execution.state).toBe("passed");
+      expect(readFileSync(join(evidence, execution.stdout_ref.path), "utf8")).toContain("proxy saw cargo");
+      expect(execution.invoked_executable).toBe(cargoLink);
+      expect(execution.resolved_executable).toBe(realpathSync(multitool));
+      expect(execution.executable_sha256).toBe(await digestFile(realpathSync(multitool)));
+      await expect(validateNativeGateCoverage(
+        coverage,
+        discovery,
+        object,
+        evidence,
+        { validation_time: new Date(Date.now() + 1_000) },
+      )).resolves.toEqual([]);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it("blocks a gate whose invoked executable is retargeted between resolution and spawn", async () => {
+    const { evidence, repo, root } = fixture("proxy-retargeted");
+    mkdirSync(join(repo, "rust"));
+    writeFileSync(join(repo, "rust", "Cargo.toml"), "[package]\nname='fixture'\nversion='0.1.0'\n");
+    commit(repo);
+
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    const writeProxy = (path: string): void => {
+      writeFileSync(path, "#!/bin/sh\necho \"proxy saw $(basename \"$0\")\"\n");
+      chmodSync(path, 0o755);
+    };
+    const original = join(bin, "multitool");
+    const replacement = join(bin, "multitool-replacement");
+    writeProxy(original);
+    writeProxy(replacement);
+    const cargoLink = join(bin, "cargo");
+    symlinkSync(original, cargoLink);
+
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
+    try {
+      const object = captureRepositoryObject(repo);
+      const discovery = discoverNativeGates(repo, object);
+      const lease = acquireRepositoryVerificationLease(repo, () => new Date());
+      // The runner stamps started_at immediately before spawning, after the
+      // digest and the snapshot: the seam moves the link inside that window.
+      const now = (): Date => {
+        unlinkSync(cargoLink);
+        symlinkSync(replacement, cargoLink);
+        return new Date();
+      };
+
+      const coverage = await runNativeGates(repo, discovery, evidence, {
+        timeout_ms: 10_000,
+        now,
+        execution_lease: lease,
+      });
+      const execution = coverage.executions[0]!;
+
+      expect(execution.state).toBe("blocked");
+      expect(execution.failure_reason).toBe("executable_changed");
+      expect(execution.exit_code).toBeNull();
+      expect(execution.invoked_executable).toBe(cargoLink);
+      expect(execution.resolved_executable).toBe(realpathSync(original));
+      expect(execution.executable_sha256).toBe(await digestFile(realpathSync(original)));
+      await expect(validateNativeGateCoverage(
+        coverage,
+        discovery,
+        object,
+        evidence,
+        { validation_time: new Date(Date.now() + 1_000), require_passing: false },
+      )).resolves.toEqual([]);
+    } finally {
+      process.env.PATH = originalPath;
+    }
   });
 
   it("runs without operator credentials, stdin, or a TTY", async () => {
