@@ -1,0 +1,26 @@
+{
+  "schema": "customer-test/1",
+  "id": "mister-clean.model-atlas.1",
+  "focus": "model-atlas",
+  "owner": "PM-MISTER-CLEAN",
+  "created": "2026-11-01",
+  "artifact": {
+    "name": "model-atlas.export/1",
+    "version": "2026.11.01-2",
+    "sha256": "e126284754e2404e16fb05712da1eb14a43dc2637379678bf0b5ab627ac3e59a",
+    "fetch": "exports/model-atlas.export-2026.11.01-2.json"
+  },
+  "fixture": "customer-tests/model-atlas/fixtures/model-atlas.export-2026.11.01-2.json",
+  "run": {
+    "argv": ["bun", "customer-tests/model-atlas/registry-join.ts", "{artifact}", "{sha256}"],
+    "cwd": ".",
+    "timeout_s": 60,
+    "env": {}
+  },
+  "mutant": [
+    { "kind": "artifact_patch", "ref": "customer-tests/model-atlas/mutants/reasoning-levels-unstated.patch", "expect": "fail" },
+    { "kind": "artifact_patch", "ref": "customer-tests/model-atlas/mutants/duplicate-record-id.patch", "expect": "fail" }
+  ],
+  "expect": "pass",
+  "writes": "none"
+}

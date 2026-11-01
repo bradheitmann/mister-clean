@@ -39,7 +39,7 @@ One JSON file per test, in the **consumer** repository, at `customer-tests/<focu
 ```
 
 Rules:
-- The test consumes the focus repository's **published, pinned artifact** (name, version, sha256), never a live dependency on a sibling checkout. The runner places the artifact at a path and substitutes it for `{artifact}`.
+- The test consumes the focus repository's **published, pinned artifact** (name, version, sha256), never a live dependency on a sibling checkout. The runner places the artifact at a path and substitutes it for `{artifact}`. The placeholder `{sha256}` expands to the pin's sha256 on the pinned run and is dropped (the argument removed) on the current-main run, so a test may assert the pin without failing the current-main run on the hash alone. A test may also vendor the pinned bytes (`fixture`) when its publisher has cleared redistribution. `mutant` may be one object or a list.
 - `run.argv` is executed without a shell. `writes` is `none`: the test may use temporary directories only.
 - `mutant` describes a deliberate change (to the pinned artifact copy or to a fixture) that must turn the test red. A test whose mutant has never been observed red does not count.
 - A consumer with no genuine need writes no test; a test is never invented to fill a quota.
