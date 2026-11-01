@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { auditGitHubActionsRepository, type GitHubActionsFindingRule } from "./github-actions.js";
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -22,6 +23,7 @@ function fixture(workflow?: string): string {
   git(repository, "init", "-q", "-b", "main");
   git(repository, "config", "user.name", "Mister Clean Test");
   git(repository, "config", "user.email", "mister-clean.invalid");
+  applyHermeticHookPolicy(repository);
   writeFileSync(join(repository, "README.md"), "fixture\n", "utf8");
   if (workflow !== undefined) {
     mkdirSync(join(repository, ".github", "workflows"), { recursive: true });

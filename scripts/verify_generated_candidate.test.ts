@@ -7,6 +7,7 @@ import { dirname, join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { verifyGeneratedCandidate } from "./verify_generated_candidate.js";
+import { createFixtureRepository } from "../src/test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -78,9 +79,10 @@ function fixture(): string {
   ].join("\n"));
   mkdirSync(join(root, "node_modules"));
   command(root, "bun", ["run", "build:raw"]);
-  command(root, "git", ["init", "--quiet", "--initial-branch=main"]);
-  command(root, "git", ["config", "user.name", "Generated Fixture"]);
-  command(root, "git", ["config", "user.email", "generated-fixture.invalid"]);
+  createFixtureRepository(root, {
+    branch: "main",
+    identity: { name: "Generated Fixture", email: "generated-fixture.invalid" },
+  });
   command(root, "git", ["add", "--all"]);
   command(root, "git", ["commit", "--quiet", "-m", "fresh generated fixture"]);
   return root;

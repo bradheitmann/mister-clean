@@ -16,6 +16,7 @@ import {
   releaseAttestationBytes,
   verifyReleaseAttestation,
 } from "./attestation.js";
+import { applyHermeticHookPolicy } from "./test-support/fixture-repo.js";
 
 const temporaryRoots: string[] = [];
 const commit = "0123456789abcdef0123456789abcdef01234567";
@@ -192,6 +193,7 @@ describe("release attestation", () => {
     const devRoot = await fixture("dev");
     await put(devRoot, "src/cli.ts", "development cli\n");
     execFileSync("git", ["init", "-q", devRoot]);
+    applyHermeticHookPolicy(devRoot);
     const dev = await bindRuntimeAttestation(devRoot, {
       moduleUrl: pathToFileURL(join(devRoot, "src", "cli.ts")).href,
       expectedEntrypoint: "./bin/mister-clean.js",
@@ -232,6 +234,7 @@ describe("release attestation", () => {
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    applyHermeticHookPolicy(root);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", ["-C", root, "commit", "-qm", "release"]);
     execFileSync("git", ["-C", root, "tag", "v1.2.3"]);
@@ -251,6 +254,7 @@ describe("release attestation", () => {
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    applyHermeticHookPolicy(root);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", ["-C", root, "commit", "-qm", "release"]);
     execFileSync("git", ["-C", root, "tag", "v1.2.3"]);
@@ -270,6 +274,7 @@ describe("release attestation", () => {
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    applyHermeticHookPolicy(root);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", ["-C", root, "commit", "-qm", "release"]);
     execFileSync("git", ["-C", root, "tag", "v1.2.3"]);

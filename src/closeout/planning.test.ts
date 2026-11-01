@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { auditPlanningArtifacts, auditPlanningRepository, type PlanningSource } from "./planning.js";
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
 
 function source(path: string, content: string): PlanningSource {
   return { path, content };
@@ -3309,6 +3310,7 @@ result: partial
       execFileSync("git", ["init", "-q", repository]);
       execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
       execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      applyHermeticHookPolicy(repository);
       writeFileSync(join(repository, "implementation.txt"), "landed\n");
       execFileSync("git", ["-C", repository, "add", "implementation.txt"]);
       execFileSync("git", ["-C", repository, "commit", "-q", "-m", "implementation"]);
@@ -3400,6 +3402,7 @@ current_projection_command: mister-clean inspect repository-object . --json
       execFileSync("git", ["init", "-q", "-b", "main", repository]);
       execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
       execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      applyHermeticHookPolicy(repository);
       execFileSync("git", ["-C", repository, "add", "CURRENT.md", "references/product-spec.md"]);
       execFileSync("git", ["-C", repository, "commit", "-q", "-m", "fixture"]);
 
@@ -3431,6 +3434,7 @@ current_projection_command: mister-clean phantom repository-object . --json
       execFileSync("git", ["init", "-q", "-b", "main", repository]);
       execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
       execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      applyHermeticHookPolicy(repository);
       execFileSync("git", ["-C", repository, "add", "CURRENT.md"]);
       execFileSync("git", ["-C", repository, "commit", "-q", "-m", "fixture"]);
 
@@ -3589,6 +3593,7 @@ Admission accepted. Product scope remains independently governed.
       execFileSync("git", ["init", "-q", "-b", "main", repository]);
       execFileSync("git", ["-C", repository, "config", "user.email", "test.invalid"]);
       execFileSync("git", ["-C", repository, "config", "user.name", "Mister Clean Test"]);
+      applyHermeticHookPolicy(repository);
       writeFileSync(join(repository, "README.md"), "fixture\n");
       execFileSync("git", ["-C", repository, "add", "README.md"]);
       execFileSync("git", ["-C", repository, "commit", "-q", "-m", "fixture"]);

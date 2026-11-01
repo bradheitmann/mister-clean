@@ -22,6 +22,7 @@ import {
   type PrepareCloseoutOptions,
 } from "./prepare.js";
 import { validateReport } from "./records.js";
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
 import {
   CLOSEOUT_DETECTORS,
   createDetectorCoverage,
@@ -478,6 +479,7 @@ async function fixture(): Promise<Fixture> {
   await execute("git", ["init", "-b", "main", repo]);
   await git(repo, "config", "user.name", "Bundle Test");
   await git(repo, "config", "user.email", "bundle.invalid");
+  applyHermeticHookPolicy(repo);
   await Promise.all([
     put(join(repo, "planning/done/done.md"), DONE_PLANNING),
     put(join(repo, "planning/backlog/next.md"), NEXT_PLANNING),

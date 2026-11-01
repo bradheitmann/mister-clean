@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { captureFileCensus, compareFileCensuses, validateFileCensus } from "./census.js";
 import { captureRepositoryObject } from "./closeout/repository-object.js";
+import { createFixtureRepository } from "./test-support/fixture-repo.js";
 
 function fixture(): string {
   return mkdtempSync(join(tmpdir(), "mister-clean-census-"));
@@ -60,7 +61,7 @@ describe("canonical file census", () => {
     const target = join(repository, "evidence", "receipt.txt");
     const renamed = join(repository, "evidence", "renamed.txt");
     writeFileSync(target, "alpha\n");
-    execFileSync("git", ["init", "--quiet", repository]);
+    createFixtureRepository(repository);
     execFileSync("git", ["-C", repository, "add", "evidence/receipt.txt"]);
     const fixtureEmail = `user.email=seal${String.fromCharCode(64)}example.invalid`;
     execFileSync("git", ["-C", repository, "-c", "user.name=Seal Test", "-c", fixtureEmail, "commit", "--quiet", "-m", "seal fixture"]);

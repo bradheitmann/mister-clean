@@ -10,6 +10,7 @@ import { deriveQualification } from "../domain/qualification.js";
 import { openControlPlaneDatabase } from "../persistence/sqlite.js";
 import { readQualificationEvidence } from "./sqlite-store.js";
 import { ConfiguredEvaluationIdentityReceiptAuthority } from "./evaluation-intake.js";
+import { applyHermeticHookPolicy } from "../../test-support/fixture-repo.js";
 import * as receiptCustody from "./evaluation-identity-receipt.js";
 import {
   recordMachineLocalEvaluationOutcome,
@@ -112,6 +113,7 @@ async function localGitCheckout(directory: string, name: string): Promise<string
   execFileSync("git", ["init", "--quiet", root]);
   execFileSync("git", ["-C", root, "config", "user.email", ["evaluation", "example.test"].join("@")]);
   execFileSync("git", ["-C", root, "config", "user.name", "Evaluation Fixture"]);
+  applyHermeticHookPolicy(root);
   await writeFile(join(root, "README.md"), `${name}\n`, "utf8");
   execFileSync("git", ["-C", root, "add", "README.md"]);
   execFileSync("git", ["-C", root, "commit", "--quiet", "-m", "fixture"]);

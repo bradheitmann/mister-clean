@@ -23,6 +23,7 @@ import {
   type ComplexityPolicy,
 } from "./codebase-complexity.js";
 import { captureRepositoryObject } from "../closeout/repository-object.js";
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -46,6 +47,7 @@ function createRepository(): string {
   git(repository, "init", "-b", "main");
   git(repository, "config", "user.name", "Mister Clean Test");
   git(repository, "config", "user.email", "mister-clean.invalid");
+  applyHermeticHookPolicy(repository);
   return repository;
 }
 

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runVerifiedBuild } from "./run_verified_build.js";
+import { createFixtureRepository } from "../src/test-support/fixture-repo.js";
 
 const temporaryRoots: string[] = [];
 
@@ -13,9 +14,10 @@ async function repositoryFixture(): Promise<string> {
   const repository = await mkdtemp(join(tmpdir(), "mc-verified-build-test-"));
   temporaryRoots.push(repository);
   await writeFile(join(repository, "source.txt"), "pristine\n", "utf8");
-  execFileSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: repository });
-  execFileSync("git", ["config", "user.name", "Verified Build Fixture"], { cwd: repository });
-  execFileSync("git", ["config", "user.email", "verified-build.invalid"], { cwd: repository });
+  createFixtureRepository(repository, {
+    branch: "main",
+    identity: { name: "Verified Build Fixture", email: "verified-build.invalid" },
+  });
   execFileSync("git", ["add", "source.txt"], { cwd: repository });
   execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: repository });
   return repository;

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalCapabilityEvaluators } from "../contracts/capability-evaluator-registry.js";
 import { canonicalJson, sha256Bytes } from "./authority.js";
 import { startLocalControlPlaneRuntime } from "../../control-plane.js";
+import { applyHermeticHookPolicy } from "../../test-support/fixture-repo.js";
 import { openControlPlaneDatabase } from "../persistence/sqlite.js";
 import { rankAgents } from "../domain/ranking.js";
 import { AppendOnlyLocalMisterCleanInvocationJournal, readMisterCleanInvocationJournal } from "../../mister-clean-invocation-journal.js";
@@ -75,7 +76,7 @@ function preDispatchReceipt(payload: ReturnType<typeof startPayload>, invocation
   payload.retained.push(receipt);
   return receipt;
 }
-async function checkout(directory: string, name: string) { const root = join(directory, name); await mkdir(root); execFileSync("git", ["init", "--quiet", root]); execFileSync("git", ["-C", root, "config", "user.email", ["e2e", "example.test"].join("@")]); execFileSync("git", ["-C", root, "config", "user.name", "E2E"]); await writeFile(join(root, "README.md"), name); execFileSync("git", ["-C", root, "add", "README.md"]); execFileSync("git", ["-C", root, "commit", "--quiet", "-m", "fixture"]); return root; }
+async function checkout(directory: string, name: string) { const root = join(directory, name); await mkdir(root); execFileSync("git", ["init", "--quiet", root]); execFileSync("git", ["-C", root, "config", "user.email", ["e2e", "example.test"].join("@")]); execFileSync("git", ["-C", root, "config", "user.name", "E2E"]); applyHermeticHookPolicy(root); await writeFile(join(root, "README.md"), name); execFileSync("git", ["-C", root, "add", "README.md"]); execFileSync("git", ["-C", root, "commit", "--quiet", "-m", "fixture"]); return root; }
 
 describe("local evaluation intake transport", () => {
   it("credits only startup-configured receipts bound to the exact phase, lease, process, and imported invocation set", () => {

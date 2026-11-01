@@ -41,6 +41,9 @@ import {
   releaseAttestationBytes,
 } from "../src/attestation.js";
 import { CLEAN_CI_MATRIX } from "./run_clean_ci.ts";
+import { createFixtureRepository } from "../src/test-support/fixture-repo.ts";
+
+const RELEASE_FIXTURE_IDENTITY = { name: "Release Fixture", email: "release-fixture.invalid" };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const verifier = join(root, "scripts", "verify_packed_cli.mjs");
@@ -452,9 +455,7 @@ describe("release archive boundary", () => {
     }, null, 2)}\n`;
     writeFileSync(packagePath, packageBytes, "utf8");
     writeFrozenPnpmLock(source);
-    execFileSync("git", ["init", "-b", "main"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.name", "Release Fixture"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.email", "release-fixture.invalid"], { cwd: source, stdio: "pipe" });
+    createFixtureRepository(source, { branch: "main", identity: RELEASE_FIXTURE_IDENTITY });
     execFileSync("git", ["add", "."], { cwd: source, stdio: "pipe" });
     execFileSync("git", ["commit", "-m", "source"], { cwd: source, stdio: "pipe" });
     const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }).trim();
@@ -492,9 +493,7 @@ describe("release archive boundary", () => {
     }, null, 2)}\n`;
     writeFileSync(packagePath, packageBytes, "utf8");
     writeFrozenPnpmLock(source);
-    execFileSync("git", ["init", "-b", "main"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.name", "Release Fixture"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.email", "release-fixture.invalid"], { cwd: source, stdio: "pipe" });
+    createFixtureRepository(source, { branch: "main", identity: RELEASE_FIXTURE_IDENTITY });
     execFileSync("git", ["add", "."], { cwd: source, stdio: "pipe" });
     execFileSync("git", ["commit", "-m", "source"], { cwd: source, stdio: "pipe" });
     const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }).trim();
@@ -510,9 +509,7 @@ describe("release archive boundary", () => {
     const staging = join(temporary, "staging");
     copyRepositoryObject(root, source);
     mkdirSync(staging);
-    execFileSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.name", "Release Fixture"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.email", "release-fixture.invalid"], { cwd: source, stdio: "pipe" });
+    createFixtureRepository(source, { branch: "main", identity: RELEASE_FIXTURE_IDENTITY });
     execFileSync("git", ["add", "--all", "--force"], { cwd: source, stdio: "pipe" });
     execFileSync("git", ["commit", "--quiet", "-m", "exact candidate"], { cwd: source, stdio: "pipe" });
     const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }).trim();
@@ -839,9 +836,7 @@ describe("release archive boundary", () => {
     }
     const sourceManifest = await generateAttestedPackageManifest(source);
     writeFileSync(join(source, "MANIFEST.sha256"), sourceManifest.content, "utf8");
-    execFileSync("git", ["init", "-b", "main"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.name", "Release Fixture"], { cwd: source, stdio: "pipe" });
-    execFileSync("git", ["config", "user.email", "release-fixture.invalid"], { cwd: source, stdio: "pipe" });
+    createFixtureRepository(source, { branch: "main", identity: RELEASE_FIXTURE_IDENTITY });
     execFileSync("git", ["add", "."], { cwd: source, stdio: "pipe" });
     execFileSync("git", ["commit", "-m", "release fixture"], { cwd: source, stdio: "pipe" });
     execFileSync("git", ["tag", "v9.9.9-test"], { cwd: source, stdio: "pipe" });

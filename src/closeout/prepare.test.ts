@@ -24,6 +24,7 @@ import {
   acquireRepositoryVerificationLease,
 } from "./execution-lease.js";
 import { mintServerAttestationBinding } from "../runtime-binding.js";
+import { createFixtureRepository, fixtureCommit } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 const SOURCE_RUNTIME = mintServerAttestationBinding({
@@ -60,15 +61,12 @@ function fixture(name: string): { base: string; evidence: string; repo: string }
   const repo = join(base, "repo");
   const evidence = join(base, "evidence");
   mkdirSync(repo);
-  command(repo, "git", "init", "-b", "main");
-  command(repo, "git", "config", "user.name", "Fixture");
-  command(repo, "git", "config", "user.email", "fixture.invalid");
+  createFixtureRepository(repo, { branch: "main", identity: { name: "Fixture", email: "fixture.invalid" } });
   return { base, evidence, repo };
 }
 
 function commit(repository: string, message = "fixture"): void {
-  command(repository, "git", "add", ".");
-  command(repository, "git", "commit", "-m", message);
+  fixtureCommit(repository, message);
 }
 
 function json(path: string): Record<string, unknown> {

@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
+
 import {
   assertActionHygieneProcessCensus,
   captureActionHygiene,
@@ -31,6 +33,7 @@ function fixture(name: string): string {
   git(repository, "init", "-q", "-b", "main");
   git(repository, "config", "user.name", "Action Hygiene Test");
   git(repository, "config", "user.email", "action-hygiene.invalid");
+  applyHermeticHookPolicy(repository);
   writeFileSync(join(repository, ".gitignore"), "ignored.log\ncache/\n", "utf8");
   writeFileSync(join(repository, "tracked.txt"), "baseline\n", "utf8");
   git(repository, "add", ".gitignore", "tracked.txt");
