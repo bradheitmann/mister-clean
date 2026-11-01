@@ -1,6 +1,6 @@
 /** Schema, clock, evidence-byte, and closing-object validation for native gates. */
 import { lstat, realpath } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, basename, resolve } from "node:path";
 
 import type { RepositoryObject } from "./repository-object.js";
 import {
@@ -35,6 +35,18 @@ import {
   type NativeGateSubjectState,
   type ValidateNativeGateOptions,
 } from "./native-gates.js";
+
+const WINDOWS_EXECUTABLE_SUFFIX = /\.(?:exe|cmd|bat|com)$/iu;
+
+/** The child sees the name it was invoked as, so the record must name the gate's executable. */
+function invokedExecutableNameMatches(invoked: string, command: unknown): boolean {
+  const executable = record(command)?.executable;
+  if (typeof executable !== "string") return false;
+  const invokedName = basename(invoked);
+  if (invokedName === executable) return true;
+  return WINDOWS_EXECUTABLE_SUFFIX.test(invokedName)
+    && invokedName.slice(0, invokedName.lastIndexOf(".")) === executable;
+}
 
 export function validateSubjectState(value: unknown, label: string, errors: string[]): value is NativeGateSubjectState {
   const before = errors.length;
@@ -190,7 +202,7 @@ export async function validateNativeGateCoverage(
     const label = `coverage.executions[${String(index)}]`;
     const execution = validateExactKeys(value, [
       "gate_id", "kind", "isolation", "state", "failure_reason", "command", "command_sha256",
-      "resolved_executable", "executable_sha256", "started_at", "finished_at",
+      "resolved_executable", "invoked_executable", "executable_sha256", "started_at", "finished_at",
       "start_repository_object", "end_repository_object", "subject_start_state", "subject_end_state",
       "exit_code", "signal", "stdout_ref", "stderr_ref",
     ], label, errors);
@@ -249,6 +261,7 @@ export async function validateNativeGateCoverage(
       if (!new Set([
         "repository_object_mismatch", "invalid_cwd", "executable_unavailable", "executable_unreadable",
         "snapshot_unavailable", "subject_repository_changed", "spawn_error", "process_cleanup_failed",
+        "executable_changed",
       ]).has(String(reason))) {
         errors.push(`${label}.failure_reason is not valid for blocked state`);
       }
@@ -312,6 +325,13 @@ export async function validateNativeGateCoverage(
     if (execution.resolved_executable !== null && !hasExecutable) errors.push(`${label}.resolved_executable is invalid`);
     if (execution.executable_sha256 !== null && !hasExecutableDigest) errors.push(`${label}.executable_sha256 is invalid`);
     if (hasExecutable !== hasExecutableDigest) errors.push(`${label}: executable path and digest must be present together`);
+    const invokedExecutable = execution.invoked_executable;
+    const hasInvoked = typeof invokedExecutable === "string" && isAbsolute(invokedExecutable);
+    if (invokedExecutable !== null && !hasInvoked) errors.push(`${label}.invoked_executable is invalid`);
+    if (hasInvoked !== hasExecutable) errors.push(`${label}: invoked and resolved executable must be present together`);
+    if (hasInvoked && invokedExecutableNameMatches(invokedExecutable, execution.command) === false) {
+      errors.push(`${label}.invoked_executable does not carry the gate executable name`);
+    }
     if (execution.state !== "blocked" && execution.state !== "skipped" && (!hasExecutable || !hasExecutableDigest)) {
       errors.push(`${label}: an executed gate requires executable provenance`);
     }

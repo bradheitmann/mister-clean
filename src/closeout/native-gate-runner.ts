@@ -53,6 +53,12 @@ export interface ChildResult {
   readonly termination: "timeout" | "output_limit_exceeded" | "spawn_error" | "process_cleanup_failed" | null;
 }
 
+/** The PATH entry as found, and the file it resolves to. */
+export interface ResolvedExecutable {
+  readonly invoked: string;
+  readonly resolved: string;
+}
+
 export function safeIntegerOption(value: number | undefined, fallback: number, name: string): number {
   const resolved = value ?? fallback;
   assertPositiveInteger(name, resolved, 24 * 60 * 60 * 1_000);
@@ -88,19 +94,33 @@ export function executableCandidates(name: string, pathValue: string): readonly 
   return candidates;
 }
 
-export function resolveExecutable(name: string, pathValue: string): string | undefined {
+export function resolveExecutable(name: string, pathValue: string): ResolvedExecutable | undefined {
   if (!/^[a-zA-Z0-9._+-]+$/u.test(name)) return undefined;
   for (const candidate of executableCandidates(name, pathValue)) {
     try {
       const stat = lstatSync(candidate);
       if (!stat.isFile() && !stat.isSymbolicLink()) continue;
       accessSync(candidate, constants.X_OK);
-      return realpathSync(candidate);
+      return { invoked: candidate, resolved: realpathSync(candidate) };
     } catch {
       // Continue through PATH without accepting an unresolved or non-executable candidate.
     }
   }
   return undefined;
+}
+
+/**
+ * Multi-call proxies choose their behaviour from the name they were invoked as
+ * (rustup's `cargo` symlink), so the child must be started through `invoked`.
+ * The command must still be the file the evidence digested, so the pair has to
+ * still agree immediately before the spawn.
+ */
+export function executableUnchanged(executable: ResolvedExecutable): boolean {
+  try {
+    return realpathSync(executable.invoked) === executable.resolved;
+  } catch {
+    return false;
+  }
 }
 
 export function scrubbedEnvironment(home: string): NodeJS.ProcessEnv {
@@ -271,6 +291,7 @@ export async function blockedExecution(
   executableSha256: string | null = null,
   state: "blocked" | "skipped" = "blocked",
   diagnostic = "",
+  invokedExecutable: string | null = null,
 ): Promise<NativeGateExecution> {
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
@@ -284,6 +305,7 @@ export async function blockedExecution(
     command: gate.command,
     command_sha256: identity(gate.command),
     resolved_executable: resolvedExecutable,
+    invoked_executable: invokedExecutable,
     executable_sha256: executableSha256,
     started_at: started,
     finished_at: now().toISOString(),
@@ -349,8 +371,8 @@ export async function executeGate(
       captureSubjectState(repository),
     );
   }
-  const resolvedExecutable = resolveExecutable(gate.command.executable, process.env.PATH ?? "");
-  if (!resolvedExecutable) {
+  const executable = resolveExecutable(gate.command.executable, process.env.PATH ?? "");
+  if (!executable) {
     return await blockedExecution(
       gate,
       "executable_unavailable",
@@ -361,6 +383,7 @@ export async function executeGate(
       captureSubjectState(repository),
     );
   }
+  const { invoked: invokedExecutable, resolved: resolvedExecutable } = executable;
   let executableSha256: string;
   try {
     executableSha256 = await digestFile(resolvedExecutable);
@@ -374,6 +397,10 @@ export async function executeGate(
       subjectStartState,
       captureSubjectState(repository),
       resolvedExecutable,
+      null,
+      "blocked",
+      "",
+      invokedExecutable,
     );
   }
 
@@ -394,6 +421,7 @@ export async function executeGate(
       executableSha256,
       "blocked",
       `${errorMessage(error)}\n`,
+      invokedExecutable,
     );
   }
   const subjectBeforeChild = captureSubjectState(repository);
@@ -409,15 +437,35 @@ export async function executeGate(
       subjectBeforeChild,
       resolvedExecutable,
       executableSha256,
+      "blocked",
+      "",
+      invokedExecutable,
     );
   }
   const cwd = resolveGateCwd(snapshot.repository, gate.command.cwd);
   const startedAt = now().toISOString();
+  if (!executableUnchanged(executable)) {
+    await rm(snapshot.container, { recursive: true, force: true });
+    return await blockedExecution(
+      gate,
+      "executable_changed",
+      startObject,
+      evidenceRoot,
+      now,
+      subjectStartState,
+      captureSubjectState(repository),
+      resolvedExecutable,
+      executableSha256,
+      "blocked",
+      "",
+      invokedExecutable,
+    );
+  }
   let child: ChildResult;
   let endObject: RepositoryObject;
   try {
     child = await executeChild(
-      resolvedExecutable,
+      invokedExecutable,
       gate.command.argv,
       cwd,
       scrubbedEnvironment(snapshot.home),
@@ -483,6 +531,7 @@ export async function executeGate(
     command: gate.command,
     command_sha256: identity(gate.command),
     resolved_executable: resolvedExecutable,
+    invoked_executable: invokedExecutable,
     executable_sha256: executableSha256,
     started_at: startedAt,
     finished_at: finishedAt,

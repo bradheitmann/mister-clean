@@ -7815,7 +7815,7 @@ function isSourceDevelopmentEntrypoint(root, moduleUrl) {
 }
 
 // src/closeout/bundle.ts
-import { basename as basename11, dirname as dirname11, isAbsolute as isAbsolute18, resolve as resolve20 } from "path";
+import { basename as basename12, dirname as dirname11, isAbsolute as isAbsolute18, resolve as resolve20 } from "path";
 
 // src/census.ts
 import { constants } from "fs";
@@ -17839,7 +17839,7 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
 var DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 var COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
 var DISCOVERY_SCHEMA_VERSION = "1.3";
-var COVERAGE_SCHEMA_VERSION = "1.3";
+var COVERAGE_SCHEMA_VERSION = "1.4";
 var SCHEMA_VERSION2 = DISCOVERY_SCHEMA_VERSION;
 var DEFAULT_TIMEOUT_MS = 10 * 60 * 1e3;
 var DEFAULT_OUTPUT_BYTES = 1024 * 1024;
@@ -17885,6 +17885,7 @@ var NATIVE_GATE_FAILURE_REASONS = /* @__PURE__ */ new Set([
   "invalid_cwd",
   "executable_unavailable",
   "executable_unreadable",
+  "executable_changed",
   "snapshot_unavailable",
   "subject_repository_changed",
   "repository_mutated",
@@ -18961,7 +18962,15 @@ function discoverNativeGates(repository, repositoryObject) {
 
 // src/closeout/native-gate-validation.ts
 import { lstat as lstat4, realpath as realpath4 } from "fs/promises";
-import { isAbsolute as isAbsolute10, resolve as resolve12 } from "path";
+import { isAbsolute as isAbsolute10, basename as basename8, resolve as resolve12 } from "path";
+var WINDOWS_EXECUTABLE_SUFFIX = /\.(?:exe|cmd|bat|com)$/iu;
+function invokedExecutableNameMatches(invoked, command) {
+  const executable = record(command)?.executable;
+  if (typeof executable !== "string") return false;
+  const invokedName = basename8(invoked);
+  if (invokedName === executable) return true;
+  return WINDOWS_EXECUTABLE_SUFFIX.test(invokedName) && invokedName.slice(0, invokedName.lastIndexOf(".")) === executable;
+}
 function validateSubjectState(value, label, errors) {
   const before = errors.length;
   const raw = validateExactKeys(value, [
@@ -19112,6 +19121,7 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
       "command",
       "command_sha256",
       "resolved_executable",
+      "invoked_executable",
       "executable_sha256",
       "started_at",
       "finished_at",
@@ -19183,7 +19193,8 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
         "snapshot_unavailable",
         "subject_repository_changed",
         "spawn_error",
-        "process_cleanup_failed"
+        "process_cleanup_failed",
+        "executable_changed"
       ])).has(String(reason))) {
         errors.push(`${label}.failure_reason is not valid for blocked state`);
       }
@@ -19246,6 +19257,13 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
     if (execution.resolved_executable !== null && !hasExecutable) errors.push(`${label}.resolved_executable is invalid`);
     if (execution.executable_sha256 !== null && !hasExecutableDigest) errors.push(`${label}.executable_sha256 is invalid`);
     if (hasExecutable !== hasExecutableDigest) errors.push(`${label}: executable path and digest must be present together`);
+    const invokedExecutable = execution.invoked_executable;
+    const hasInvoked = typeof invokedExecutable === "string" && isAbsolute10(invokedExecutable);
+    if (invokedExecutable !== null && !hasInvoked) errors.push(`${label}.invoked_executable is invalid`);
+    if (hasInvoked !== hasExecutable) errors.push(`${label}: invoked and resolved executable must be present together`);
+    if (hasInvoked && invokedExecutableNameMatches(invokedExecutable, execution.command) === false) {
+      errors.push(`${label}.invoked_executable does not carry the gate executable name`);
+    }
     if (execution.state !== "blocked" && execution.state !== "skipped" && (!hasExecutable || !hasExecutableDigest)) {
       errors.push(`${label}: an executed gate requires executable provenance`);
     }
@@ -20048,7 +20066,7 @@ import { createHash as createHash15 } from "crypto";
 import { execFile } from "child_process";
 import { access, copyFile, lstat as lstat5, mkdir as mkdir2, mkdtemp as mkdtemp2, readFile as readFile2, readdir as readdir4, realpath as realpath5, rm as rm2 } from "fs/promises";
 import { tmpdir as tmpdir3 } from "os";
-import { basename as basename8, dirname as dirname8, isAbsolute as isAbsolute11, join as join7, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
+import { basename as basename9, dirname as dirname8, isAbsolute as isAbsolute11, join as join7, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
 import { promisify } from "util";
 var HEX643 = /^[0-9a-f]{64}$/;
 var EVENT_TIMESTAMP_FIELDS = /* @__PURE__ */ new Set([
@@ -20313,7 +20331,7 @@ async function contained(files, root, candidate) {
     let existing = lexical;
     const tail = [];
     while (!await files.exists(existing) && dirname8(existing) !== existing) {
-      tail.unshift(basename8(existing));
+      tail.unshift(basename9(existing));
       existing = dirname8(existing);
     }
     const targetReal = resolve13(await files.realpath(existing), ...tail);
@@ -23325,7 +23343,7 @@ import {
   readdir as readdir5,
   stat as stat2
 } from "fs/promises";
-import { basename as basename9, relative as relative12, resolve as resolve15, sep as sep11 } from "path";
+import { basename as basename10, relative as relative12, resolve as resolve15, sep as sep11 } from "path";
 var STACK_MARKERS = {
   node: ["package.json"],
   "node-bun": ["bun.lock", "bun.lockb"],
@@ -23595,7 +23613,7 @@ async function generateManifest(root) {
   const files = await walkFiles2(absoluteRoot, MANIFEST_EXCLUDED_DIRS);
   for (const file of files) {
     if (MANIFEST_EXCLUDED_FILES.has(file.relative)) continue;
-    if (basename9(file.relative).endsWith(".pyc") || basename9(file.relative).endsWith(".skill")) continue;
+    if (basename10(file.relative).endsWith(".pyc") || basename10(file.relative).endsWith(".skill")) continue;
     if (hasExcludedPart(file.relative, MANIFEST_EXCLUDED_DIRS)) continue;
     if (file.symlink && !(await stat2(file.absolute)).isFile()) continue;
     const bytes2 = await readFile3(file.absolute);
@@ -24025,11 +24043,18 @@ function resolveExecutable(name, pathValue) {
       const stat3 = lstatSync10(candidate);
       if (!stat3.isFile() && !stat3.isSymbolicLink()) continue;
       accessSync2(candidate, constants4.X_OK);
-      return realpathSync6(candidate);
+      return { invoked: candidate, resolved: realpathSync6(candidate) };
     } catch {
     }
   }
   return void 0;
+}
+function executableUnchanged(executable) {
+  try {
+    return realpathSync6(executable.invoked) === executable.resolved;
+  } catch {
+    return false;
+  }
 }
 function scrubbedEnvironment(home) {
   const env = {
@@ -24171,7 +24196,7 @@ function resolveGateCwd(repository, cwd) {
   if (!stat3.isDirectory()) throw new Error(`native gate cwd is not a directory: ${cwd}`);
   return target;
 }
-async function blockedExecution(gate, reason, object7, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "") {
+async function blockedExecution(gate, reason, object7, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
   const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(diagnostic, "utf8"), true);
@@ -24184,6 +24209,7 @@ async function blockedExecution(gate, reason, object7, evidenceRoot, now, subjec
     command: gate.command,
     command_sha256: identity2(gate.command),
     resolved_executable: resolvedExecutable,
+    invoked_executable: invokedExecutable,
     executable_sha256: executableSha256,
     started_at: started,
     finished_at: now().toISOString(),
@@ -24238,8 +24264,8 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
       captureSubjectState(repository)
     );
   }
-  const resolvedExecutable = resolveExecutable(gate.command.executable, process.env.PATH ?? "");
-  if (!resolvedExecutable) {
+  const executable = resolveExecutable(gate.command.executable, process.env.PATH ?? "");
+  if (!executable) {
     return await blockedExecution(
       gate,
       "executable_unavailable",
@@ -24250,6 +24276,7 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
       captureSubjectState(repository)
     );
   }
+  const { invoked: invokedExecutable, resolved: resolvedExecutable } = executable;
   let executableSha256;
   try {
     executableSha256 = await digestFile(resolvedExecutable);
@@ -24262,7 +24289,11 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
       now,
       subjectStartState,
       captureSubjectState(repository),
-      resolvedExecutable
+      resolvedExecutable,
+      null,
+      "blocked",
+      "",
+      invokedExecutable
     );
   }
   let snapshot;
@@ -24282,7 +24313,8 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
       executableSha256,
       "blocked",
       `${errorMessage2(error)}
-`
+`,
+      invokedExecutable
     );
   }
   const subjectBeforeChild = captureSubjectState(repository);
@@ -24297,16 +24329,36 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
       subjectStartState,
       subjectBeforeChild,
       resolvedExecutable,
-      executableSha256
+      executableSha256,
+      "blocked",
+      "",
+      invokedExecutable
     );
   }
   const cwd = resolveGateCwd(snapshot.repository, gate.command.cwd);
   const startedAt = now().toISOString();
+  if (!executableUnchanged(executable)) {
+    await rm3(snapshot.container, { recursive: true, force: true });
+    return await blockedExecution(
+      gate,
+      "executable_changed",
+      startObject,
+      evidenceRoot,
+      now,
+      subjectStartState,
+      captureSubjectState(repository),
+      resolvedExecutable,
+      executableSha256,
+      "blocked",
+      "",
+      invokedExecutable
+    );
+  }
   let child;
   let endObject;
   try {
     child = await executeChild(
-      resolvedExecutable,
+      invokedExecutable,
       gate.command.argv,
       cwd,
       scrubbedEnvironment(snapshot.home),
@@ -24371,6 +24423,7 @@ async function executeGate(repository, gate, discoveryObject, evidenceRoot, opti
     command: gate.command,
     command_sha256: identity2(gate.command),
     resolved_executable: resolvedExecutable,
+    invoked_executable: invokedExecutable,
     executable_sha256: executableSha256,
     started_at: startedAt,
     finished_at: finishedAt,
@@ -25957,7 +26010,7 @@ async function discoverPlanningRoots2(repo, files) {
   for (const row of directories) {
     const parent = dirname11(row.relative);
     const children = childrenByDirectory.get(parent) ?? /* @__PURE__ */ new Set();
-    children.add(basename11(row.relative).toLocaleLowerCase("und"));
+    children.add(basename12(row.relative).toLocaleLowerCase("und"));
     childrenByDirectory.set(parent, children);
   }
   const candidates = /* @__PURE__ */ new Set();
