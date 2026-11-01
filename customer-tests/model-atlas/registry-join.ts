@@ -6,7 +6,9 @@
  * `<record id>@<export version>`, and agent cards are keyed by harness, model
  * and reasoning level. So this repository needs, from each export:
  * - the export schema it was written against, and a non-empty export version;
- * - record ids that are unique and safe to embed in a `<id>@<version>` ref;
+ * - record ids (cards, providers, routes and any additive kind) that are unique
+ *   and safe to embed in a `<id>@<version>` ref; unknown record kinds are
+ *   accepted as additive schema growth, never a failure;
  * - every card's reasoning levels as a well-formed fact (kind, source and
  *   last_verified, plus either a non-empty list of level names or an explicit
  *   `unknown`), so an agent card can bind a level or record that it cannot.
@@ -22,7 +24,6 @@ import { readFileSync } from "node:fs";
 
 const EXPECTED_SCHEMA = "model-atlas.export/1";
 const RECORD_ID = /^[a-z0-9][a-z0-9.-]*$/u;
-const RECORD_KINDS: ReadonlySet<string> = new Set(["card", "provider"]);
 
 type Json = null | boolean | number | string | Json[] | { readonly [key: string]: Json };
 
@@ -98,7 +99,7 @@ export function checkExport(bytes: Uint8Array, expectedSha256: string | undefine
     }
     if (seen.has(id)) failures.push(`duplicate record id ${id}`);
     seen.add(id);
-    if (typeof kind !== "string" || !RECORD_KINDS.has(kind)) failures.push(`${id}: kind ${JSON.stringify(kind)} is not card or provider`);
+    if (typeof kind !== "string" || kind.length === 0) failures.push(`${id}: kind must be a non-empty string`);
     if (typeof version === "string") {
       const round = parseRegistryRef(registryRef(id, version));
       if (round?.id !== id || round.version !== version) failures.push(`${id}: ref does not round-trip`);
