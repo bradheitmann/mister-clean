@@ -16,6 +16,7 @@ import {
   semanticWorkingTreeSha256,
 } from "./semantic.js";
 import { mintServerAttestationBinding } from "../runtime-binding.js";
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 const SOURCE_RUNTIME = mintServerAttestationBinding({
@@ -45,6 +46,7 @@ function fixture(name: string): { readonly evidence: string; readonly repo: stri
   command(repo, "git", "init", "-b", "main");
   command(repo, "git", "config", "user.name", "Action Fixture");
   command(repo, "git", "config", "user.email", "action-fixture.invalid");
+  applyHermeticHookPolicy(repo);
   writeFileSync(join(repo, ".gitignore"), "ignored-debris/\n");
   writeFileSync(join(repo, "README.md"), "safe fixture\n");
   writeFileSync(join(repo, "planning", "done", "TASK.md"), [

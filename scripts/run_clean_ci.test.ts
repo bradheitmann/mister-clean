@@ -16,6 +16,7 @@ import {
   runCleanCi,
   TEST_NODE_MATRIX_TIMEOUT_MS,
 } from "./run_clean_ci.js";
+import { createFixtureRepository, fixtureCommit } from "../src/test-support/fixture-repo.js";
 
 const temporaryRoots: string[] = [];
 // The fixture runs 20 serial supervised commands: 4 metadata commands, 6
@@ -130,11 +131,11 @@ function fixture(buildsGeneratedOutput: boolean): string {
     "",
   ].join("\n"));
   put(root, "source.txt", "committed\n");
-  git(root, "init", "--quiet", "--initial-branch=main");
-  git(root, "config", "user.name", "Clean CI Fixture");
-  git(root, "config", "user.email", "clean-ci.invalid");
-  git(root, "add", "--all");
-  git(root, "commit", "--quiet", "-m", "fixture");
+  createFixtureRepository(root, {
+    branch: "main",
+    identity: { name: "Clean CI Fixture", email: "clean-ci.invalid" },
+  });
+  fixtureCommit(root, "fixture");
   return root;
 }
 

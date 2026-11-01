@@ -32,6 +32,7 @@ import {
 } from "./native-gates.js";
 import { runNativeGates } from "./native-gate-runner.js";
 import { validateNativeGateCoverage } from "./native-gate-validation.js";
+import { createFixtureRepository, fixtureCommit } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -49,16 +50,12 @@ function fixture(name: string): { evidence: string; repo: string; root: string }
   roots.push(root);
   const repo = join(root, "repo");
   const evidence = join(root, "evidence");
-  mkdirSync(repo);
-  command(repo, "git", "init", "-q", "-b", "main");
-  command(repo, "git", "config", "user.name", "Native Gate Fixture");
-  command(repo, "git", "config", "user.email", "native-gate.invalid");
+  createFixtureRepository(repo, { identity: { name: "Native Gate Fixture", email: "native-gate.invalid" } });
   return { evidence, repo, root };
 }
 
 function commit(repo: string): void {
-  command(repo, "git", "add", ".");
-  command(repo, "git", "commit", "-qm", "fixture");
+  fixtureCommit(repo, "fixture");
 }
 
 function subjectGitState(repo: string): Record<string, string> {

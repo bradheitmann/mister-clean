@@ -16,6 +16,7 @@ import {
 import { type CliIO, isDirectInvocation, runCli } from "./cli.js";
 import { createOpenGuardValidationFixture } from "./closeout/guard-authority.test-fixture.js";
 import { discoverSemanticProbeCandidates } from "./closeout/semantic.js";
+import { applyHermeticHookPolicy } from "./test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -60,6 +61,7 @@ async function attestedFixture(name: string): Promise<string> {
   execFileSync("git", ["init", "-q", root]);
   execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
   execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+  applyHermeticHookPolicy(root);
   execFileSync("git", ["-C", root, "add", "."]);
   execFileSync("git", ["-C", root, "commit", "-qm", "release"]);
   execFileSync("git", ["-C", root, "tag", "v1.2.3"]);
@@ -83,6 +85,7 @@ describe("unified Mister Clean CLI", () => {
     execFileSync("git", ["init", "-q", "-b", "main", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    applyHermeticHookPolicy(root);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
     const output = capture();
@@ -190,6 +193,7 @@ jobs:
     execFileSync("git", ["init", "-q", "-b", "main", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    applyHermeticHookPolicy(root);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
     const output = capture();
@@ -251,6 +255,7 @@ The credential validator is a security choke point and must be safe by construct
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    applyHermeticHookPolicy(root);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
     const output = capture();
@@ -281,6 +286,7 @@ The credential validator is a security choke point and must be safe by construct
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
     execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+    applyHermeticHookPolicy(root);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
     const candidates = discoverSemanticProbeCandidates(root);

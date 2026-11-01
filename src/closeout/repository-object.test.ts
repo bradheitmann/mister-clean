@@ -15,6 +15,8 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
+
 import {
   captureRepositoryObject,
   captureRepositoryObjectSurface,
@@ -37,6 +39,7 @@ function fixture(name: string, base = tmpdir()): string {
   git(repository, "config", "user.name", "Repository Object Test");
   git(repository, "config", "user.email", "repository-object.invalid");
   git(repository, "config", "core.filemode", "true");
+  applyHermeticHookPolicy(repository);
   writeFileSync(join(repository, ".gitignore"), "local-evidence.log\n", "utf8");
   writeFileSync(join(repository, "tracked.txt"), "tracked baseline\n", "utf8");
   writeFileSync(join(repository, "script.sh"), "#!/bin/sh\nexit 0\n", "utf8");

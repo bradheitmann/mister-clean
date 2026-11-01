@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { nodeGitPort } from "./bundle.js";
 import { captureRepositoryObject } from "./repository-object.js";
+import { createFixtureRepository } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -47,9 +48,10 @@ function sourceGitMetadata(root: string): unknown {
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), "mc-bundle-git-port-"));
   roots.push(root);
-  git(root, "init", "--quiet", "--initial-branch=main");
-  git(root, "config", "user.name", "Mister Clean Test");
-  git(root, "config", "user.email", "mister-clean-test.invalid");
+  createFixtureRepository(root, {
+    branch: "main",
+    identity: { name: "Mister Clean Test", email: "mister-clean-test.invalid" },
+  });
   writeFileSync(join(root, "tracked.txt"), "before\n", "utf8");
   git(root, "add", "tracked.txt");
   git(root, "commit", "--quiet", "-m", "fixture");

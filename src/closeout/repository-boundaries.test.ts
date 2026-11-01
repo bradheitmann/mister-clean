@@ -11,15 +11,14 @@ import {
   validateExternalProducerWireShape,
   type ObjectMapArrayWireContract,
 } from "./repository-boundaries.js";
+import { createFixtureRepository } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
 function fixture(files: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), "mister-clean-repository-boundaries-"));
   roots.push(root);
-  execFileSync("git", ["init", "-q", "-b", "main", root]);
-  execFileSync("git", ["-C", root, "config", "user.name", "Mister Clean Test"]);
-  execFileSync("git", ["-C", root, "config", "user.email", "mister-clean.invalid"]);
+  createFixtureRepository(root, { identity: { name: "Mister Clean Test", email: "mister-clean.invalid" } });
   for (const [path, source] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), source, "utf8");

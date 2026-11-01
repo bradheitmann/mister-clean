@@ -22,6 +22,7 @@ import {
   semanticCandidateSetSha256,
   semanticWorkingTreeSha256,
 } from "./semantic.js";
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
 
 function fixture(): { readonly evidenceRoot: string; readonly root: string; readonly policyPath: string } {
   const root = mkdtempSync(join(tmpdir(), "mister-clean-semantic-v2-subject-"));
@@ -37,6 +38,7 @@ The credential validator is a security choke point and is safe by construction.
   execFileSync("git", ["init", "-q", root]);
   execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
   execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+  applyHermeticHookPolicy(root);
   execFileSync("git", ["-C", root, "add", "."]);
   execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
   const policyDirectory = mkdtempSync(join(tmpdir(), "mister-clean-semantic-v2-policy-"));
@@ -183,6 +185,7 @@ describe("semantic evidence protocol v2", () => {
       execFileSync("git", ["init", "-q", root]);
       execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
       execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+      applyHermeticHookPolicy(root);
       execFileSync("git", ["-C", root, "add", "."]);
       execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
       const candidates = discoverSemanticProbeCandidates(root);
@@ -518,7 +521,7 @@ describe("semantic evidence protocol v2", () => {
     const evidenceRoot = mkdtempSync(join(tmpdir(), "mister-clean-semantic-v2-state-evidence-"));
     try {
       writeFileSync(join(root, "invocation-journal.ts"), 'import { appendFileSync } from "node:fs";\nappendFileSync("invocation-journal.jsonl", "event\\n");\n');
-      execFileSync("git", ["init", "-q", root]); execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]); execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]); execFileSync("git", ["-C", root, "add", "."]); execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
+      execFileSync("git", ["init", "-q", root]); execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]); execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]); applyHermeticHookPolicy(root); execFileSync("git", ["-C", root, "add", "."]); execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
       mkdirSync(join(evidenceRoot, "evidence")); writeFileSync(join(evidenceRoot, "evidence", "stdout.txt"), "append restart tail observed\n"); writeFileSync(join(evidenceRoot, "evidence", "stderr.txt"), "");
       const records = runtimeRecords(root, join(policyDirectory, "trust-policy.json"), evidenceRoot);
       expect(records.candidate.kind).toBe("bounded_state_lifecycle");

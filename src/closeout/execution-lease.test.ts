@@ -12,6 +12,7 @@ import {
   validateExecutionLeaseReceipt,
 } from "./execution-lease.js";
 import { spawnSupervisedCommand } from "./execution-supervisor.js";
+import { createFixtureRepository } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -28,9 +29,10 @@ function fixture(name: string): { readonly repository: string; readonly root: st
   roots.push(root);
   const repository = join(root, "repository");
   mkdirSync(repository);
-  git(repository, "init", "--quiet", "--initial-branch=main");
-  git(repository, "config", "user.name", "Execution Lease Fixture");
-  git(repository, "config", "user.email", "execution-lease.invalid");
+  createFixtureRepository(repository, {
+    branch: "main",
+    identity: { name: "Execution Lease Fixture", email: "execution-lease.invalid" },
+  });
   writeFileSync(join(repository, "tracked.txt"), "fixture\n");
   git(repository, "add", "tracked.txt");
   git(repository, "commit", "--quiet", "-m", "fixture");

@@ -12,6 +12,7 @@ import {
   semanticCandidateSetSha256,
   semanticWorkingTreeSha256,
 } from "./semantic.js";
+import { applyHermeticHookPolicy } from "../test-support/fixture-repo.js";
 
 function repository(contract: string): string {
   const root = mkdtempSync(join(tmpdir(), "mister-clean-semantic-"));
@@ -27,6 +28,7 @@ ${contract}
   execFileSync("git", ["init", "-q", root]);
   execFileSync("git", ["-C", root, "config", "user.name", "Fixture"]);
   execFileSync("git", ["-C", root, "config", "user.email", "fixture.invalid"]);
+  applyHermeticHookPolicy(root);
   execFileSync("git", ["-C", root, "add", "."]);
   execFileSync("git", ["-C", root, "commit", "-qm", "fixture"]);
   return root;

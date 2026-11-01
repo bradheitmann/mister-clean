@@ -14,6 +14,7 @@ import {
 } from "./prepare.js";
 import { isoTimestamp, validateManifest } from "./records.js";
 import { mintServerAttestationBinding } from "../runtime-binding.js";
+import { createFixtureRepository } from "../test-support/fixture-repo.js";
 
 type JsonObject = Record<string, unknown>;
 const roots: string[] = [];
@@ -70,9 +71,10 @@ async function prepared(name: string): Promise<{ repo: string; proof: string; bu
   roots.push(root);
   const repo = join(root, "repo");
   mkdirSync(repo, { recursive: true });
-  command(repo, "git", "init", "-b", "main");
-  command(repo, "git", "config", "user.name", "Hardening Test");
-  command(repo, "git", "config", "user.email", "hardening.invalid");
+  createFixtureRepository(repo, {
+    branch: "main",
+    identity: { name: "Hardening Test", email: "hardening.invalid" },
+  });
   mkdirSync(join(repo, "planning", "done"), { recursive: true });
   mkdirSync(join(repo, "planning", "backlog"), { recursive: true });
   writeFileSync(join(repo, "planning", "done", "done.md"), "done\n");

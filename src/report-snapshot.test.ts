@@ -6,6 +6,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { applyHermeticHookPolicy } from "./test-support/fixture-repo.js";
+
 // The report renderer is intentionally plain ESM so Bun can run it without a build step.
 // @ts-expect-error no declaration file is shipped for this local renderer module
 const { publishedScorecard, writeReceiptManifest } = await import("../scripts/report_snapshot.mjs");
@@ -24,6 +26,7 @@ describe("model-evidence report snapshots", () => {
       git(repository, "init", "-q");
       git(repository, "config", "user.email", ["fixture", "example.invalid"].join("@"));
       git(repository, "config", "user.name", "Fixture");
+      applyHermeticHookPolicy(repository);
       await writeFile(join(repository, "README.md"), "fixture\n");
       git(repository, "add", "README.md");
       git(repository, "commit", "-qm", "fixture");
