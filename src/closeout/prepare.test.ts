@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -287,6 +288,9 @@ describe("prepareCloseout", { timeout: 60_000 }, async () => {
     expect(debts.some((debt) => String(debt.class).startsWith("public_safety_")
       && Array.isArray(debt.detector_finding_fingerprints))).toBe(true);
     const publicSafetyDebt = debts.find((debt) => String(debt.class).startsWith("public_safety_"));
+    // Every family names where its repair lands, and the boundary is family-shaped.
+    expect(debts.every((debt) => typeof debt.repair_boundary === "string" && String(debt.repair_boundary).trim().length > 0)).toBe(true);
+    expect(String(publicSafetyDebt?.repair_boundary)).toBe("file:source.txt:1");
     expect(((publicSafetyDebt?.evidence as Array<Record<string, unknown>>)[0]?.command)).toBe(
       "mister-clean audit public-safety . --tracked --denylist-file public-safety-denylist.txt --json",
     );
@@ -749,5 +753,68 @@ Status: active
       requestRef: "request-1",
       executeSemanticProbes: true,
     })).rejects.toThrow(/requires semanticManifestPath/);
+  });
+});
+
+describe("prepareCloseout retirement", { timeout: 120_000 }, () => {
+  it("retires every debt under a committed ruling instead of repairing them one at a time", async () => {
+    const { base, evidence, repo } = fixture("retirement");
+    const denylist = join(base, "denylist.txt");
+    writeFileSync(denylist, "internal campaign\n");
+    mkdirSync(join(repo, "legacy"), { recursive: true });
+    writeFileSync(join(repo, "legacy", "notes.md"), "internal campaign marker\n");
+    writeFileSync(join(repo, "active.txt"), "internal campaign marker\n");
+    const rulingPath = "charter/owner-decisions/2026-11-01-retire-legacy.md";
+    mkdirSync(join(repo, "charter", "owner-decisions"), { recursive: true });
+    writeFileSync(join(repo, rulingPath), "Owner ruling: the legacy corpus is frozen.\n");
+    mkdirSync(join(repo, "charter", "retirements"), { recursive: true });
+    writeFileSync(join(repo, "charter", "retirements", "2026-11-01-legacy.json"), `${JSON.stringify({
+      record_type: "mister-clean.retirement",
+      schema_version: "1.0",
+      slug: "legacy-corpus",
+      roots: ["legacy"],
+      ruling: {
+        author: "operator",
+        at: "2026-11-01T00:00:00Z",
+        scope: "Retire the frozen legacy corpus",
+        evidence: {
+          path: rulingPath,
+          sha256: createHash("sha256").update(readFileSync(join(repo, rulingPath))).digest("hex"),
+        },
+      },
+    }, null, 2)}\n`);
+    commit(repo);
+
+    const prepared = await prepareCloseout({
+      repo,
+      evidenceHome: evidence,
+      runId: "retirement",
+      requestRef: "request-1",
+      publicSafetyDenylistPath: denylist,
+    });
+    const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
+    const debts = report.completion_debts as Array<Record<string, unknown>>;
+    const retired = debts.filter((debt) => String((debt.affected_paths as string[])[0]).startsWith("legacy/"));
+    const active = debts.filter((debt) => String((debt.affected_paths as string[])[0]) === "active.txt");
+
+    expect(retired.length).toBeGreaterThan(0);
+    expect(retired.every((debt) => debt.state === "accepted_exception" && debt.disposition === "accepted_exception")).toBe(true);
+    expect(retired[0]?.exception).toEqual(expect.objectContaining({
+      actor: "operator",
+      at: "2026-11-01T00:00:00Z",
+      scope: "retired root legacy",
+    }));
+    expect(active.length).toBeGreaterThan(0);
+    expect(active.every((debt) => debt.state === "open")).toBe(true);
+    expect(report.debt_census).toEqual({
+      discovered: debts.length,
+      paid: 0,
+      accepted_exception: retired.length,
+    });
+    expect(report.retirement_applications).toEqual([expect.objectContaining({
+      slug: "legacy-corpus",
+      root: "legacy",
+      record_path: "charter/retirements/2026-11-01-legacy.json",
+    })]);
   });
 });

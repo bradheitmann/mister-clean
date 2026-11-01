@@ -1241,6 +1241,7 @@ async function publicSafetyDebtFixture(includeDebt = true): Promise<PublicSafety
   const debt: RecordValue = {
     id: "DEBT-PUBLIC-SAFETY-1",
     procedure: "remove public-safety residue -> rerun tracked-surface audit",
+    repair_boundary: `file:${String(finding.path)}:${String(finding.line)}`,
     debt_key: canonicalRootDebtKey({
       repo_id: String((value.report.repo as RecordValue).id),
       normalizer: "mister-clean/public-safety-root@1",

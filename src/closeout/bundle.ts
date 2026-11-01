@@ -21,6 +21,7 @@ import {
 } from "./records.js";
 import {
   isCanonicalPlanningFileName,
+  isHarnessDefinitionPath,
   PLANNING_LANE_NAMES,
 } from "./repository.js";
 import {
@@ -105,7 +106,7 @@ const PLANNING_NAMES = new Set([
 const PLANNING_KINDS = new Set(["repo_files", "external_snapshot", "none"]);
 
 async function discoverPlanningRoots(repo: string, files: FilePort): Promise<Set<string>> {
-  const rows = await files.walk(repo);
+  const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative));
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = new Map<string, Set<string>>();
   for (const row of directories) {

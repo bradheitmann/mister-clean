@@ -63,6 +63,7 @@
     {
       "id": "DEBT-XX",
       "procedure": "<first half -> second half>",
+      "repair_boundary": "<where the repair lands: path, file:line, gate id, or probe-set id>",
       "state": "not_assessed",
       "disposition": "autonomously_validate",
       "evidence": [
