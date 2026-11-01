@@ -1,31 +1,36 @@
-# State — mister-clean — 2026-10-31T04:50Z, written by the project PM (Claude Code, Opus 5.5)
+# State — mister-clean — 2026-10-31T17:00Z, written by the project PM (Claude Code, Opus 5.5)
 Proven (with the proof names):
-- Nothing under this charter yet. Slice Zero proven_on is empty.
-- Existing release machinery (7.1.0 candidate) predates the charter; acceptance and publication of 7.1.0 are not established.
+- Nothing under this charter's Slice Zero yet; proven_on is empty.
+- Dependency advisories: the six high advisories (undici, zod, body-parser) are cleared on main; the scheduled dependency audit is green. Independently verified (author and verifier from different model families) on the exact merged tip.
+- Native-gate spawn fix landed (main 60e748d): gates spawn through the invoked PATH name, identity stays on the resolved path, with an immediate re-check (executable_changed). Independently verified on the exact tip fc1f68a: multi-call proxy and retarget proofs, each with a fail-without mutant.
+- Field-window evaluation of 2026-10-31 is landed (field-evals/2026-10-31-window/), with public seat labels replaced by opaque ids.
 Not proven / known gaps:
-- INTENT is ratification: pending-owner. COMMON-STANDARD.md v0.2 is landed and pending owner ratification; this repo's adoption map is charter/STANDARD-ADOPTION.md.
-- G1 audit-public exists (bun run audit:public); G2 eval-case-readback and G3 card-identity-check validators do not exist yet (Slice Zero).
-- High dependency advisories on main (undici, zod, body-parser): the scheduled dependency audit fails; fix in progress on branch fix/undici-advisories.
-- CI cannot run `charter check`: the governance tool's repository is not publicly fetchable. Recorded as a typed limitation; the check runs locally before every push. Publication is an owner decision.
-- config/public-package-identifiers.txt is committed and names the private identifier it forbids. Fix needs a hashed denylist form (COMMON-STANDARD v1 input) before the CI gate can stop reading the plain list. Scrubbing earlier history is an owner decision.
-- Ignored local receipts under assets/codebase-state-dashboard/receipts/ (never tracked or packaged) belong under the private data root; move when the machine-local eval store (EV-03) exists.
-- Git hooks not installed: the hooks directory is shared with worktrees this PM does not own; waiting on the owner's disposition of those worktrees.
-- Mister Clean CLOSE on this repo: discovery ran with the installed release; the formal prepare/action bundle is blocked while the repository-wide verification lease is held and the machine is overloaded. Repairs land through PRs verified by hosted CI.
+- INTENT and COMMON-STANDARD v0.2 await owner ratification. The owner decision on field evals (and its amendment) is recorded in charter/owner-decisions/.
+- The 7.1.0 candidate's packaged bytes changed (dependency fix and native-gate fix); its independent acceptance restarts. Publication is not established.
+- O-NG-1 (verifier finding, report-only): between the re-check and exec there is an inherent window (supervisor start-up, tens of milliseconds) in which a retargeted symlink would run a different binary than the one digested; closing it needs descriptor-based exec, which the runtime cannot express.
+- G2 eval-case-readback and G3 card-identity-check validators do not exist yet (Slice Zero).
+- CI cannot run `charter check`: the governance tool's repository is not publicly fetchable. Typed limitation; the check runs locally before every merge (charter pinned at c5327d1).
+- Local full suites cannot pass on a host whose global pre-commit hook refuses the suite's own fixture commits; hosted CI is the full-suite verdict there.
+- The formal Mister Clean prepare/closure bundle is not produced (needs a local full suite; see above).
+- Obligations: O-STD-1 (stop committing the plain denylist; hashed form), O-STD-2 (honor AGENT_PRIVATE_ROOT), O-STD-3 (a private case-study identifier in .gitignore and two build scripts), O-STD-4 (port scripts/*.mjs to strict TypeScript), O-STD-5 (plan-schema pin when work contracts are first used). Two early field-observation branches (open PR #9, draft PR #8) are archived and owned by the project PM; their content is to be imported as field-evals records after FE-1, not merged under evals/ (a shipped-materials root).
 Exact last-green command(s):
-- charter check and charter check --strict (charter 0.1.0), exit 0
-- mister-clean (installed release) audit github-actions and audit repository-boundaries, pass
+- charter check --strict (charter c5327d1), exit 0
+- mister-clean (installed release 7.0.2) audit planning / github-actions / repository-boundaries: pass, 0 findings
+- bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt: PASS
+- hosted CI verify and dependency-audit on main a021eeb: success; hosted verify on PR #23's exact tip fc1f68a: success
 Exact last-red command(s) and why:
-- pnpm audit --audit-level high: 6 high advisories (see above).
-- mister-clean audit public-safety: fails only on ignored, never-tracked local receipts (see above).
+- mister-clean audit public-safety: fails only on ignored, never-tracked local receipts (0 hits in tracked files).
+- local `bun run ci:check`: environment (host-global pre-commit hook refuses fixture commits), red identically at base.
 Next three bounded items (in order):
-1. Land the dependency advisory fix (Lane 1, DEV/QA pair; hosted CI is the full-suite verdict).
-2. Slice Zero: replay CS-001 with its control agent (LOOPS L1) and write the eval case plus its validator (DONE/slice-zero.md proofs 1-4).
-3. Hashed denylist form, then stop committing plain private identifiers.
+1. Slice Zero: replay CS-001 with its control agent and build the eval-case validator (DONE/slice-zero.md).
+2. FE-1: field-evals/1 schema and validator (project/planning/FIELD-EVALS-PLAN.md), aligned with the model-facts registry's route schema.
+3. O-STD-1: hashed denylist form, then stop committing the plain list.
 Open owner decisions:
 - Ratify INTENT and COMMON-STANDARD v0.2.
-- Disposition of older agent worktrees held outside this PM's custody (archive and export, then remove).
-- Whether the governance tool becomes publicly fetchable for CI.
+- Deletion of four retired agent worktrees that still hold untracked files (contents preserved externally with verified hashes), and of listed scratch files.
+- Whether the governance tool becomes publicly fetchable for CI; whether the guard hook exempts test-capsule fixture commits.
+- Whether earlier history is scrubbed of private names (no rewrite without that decision).
 Where everything is (branches, lanes, receipts):
+- main is the only integration branch; no lane is in flight.
 - Temporary worktrees and their lifecycle record live outside the repository, in the operator's worktree area.
-- Private evidence, eval id maps and handoffs live under the private data root (COMMON-STANDARD §1, AGENT_PRIVATE_ROOT), never in this repository.
-- evals/field-window-2026-10-31: field-window ledger (CS-001 source), not yet pushed.
+- Private evidence, id maps, handoffs and preserved trees live under the private data root, never in this repository.
