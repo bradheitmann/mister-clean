@@ -9,12 +9,12 @@ Not proven / known gaps:
 - The 7.1.0 candidate's packaged bytes changed (dependency fix and native-gate fix); its independent acceptance restarts. Publication is not established.
 - O-NG-1 (verifier finding, report-only): between the re-check and exec there is an inherent window (supervisor start-up, tens of milliseconds) in which a retargeted symlink would run a different binary than the one digested; closing it needs descriptor-based exec, which the runtime cannot express.
 - G2 eval-case-readback and G3 card-identity-check validators do not exist yet (Slice Zero).
-- CI cannot run `charter check`: the governance tool's repository is not publicly fetchable. Typed limitation; the check runs locally before every merge (charter pinned at c5327d1).
+- CI cannot run `charter check`: the governance tool's repository is not publicly fetchable. Typed limitation; the check runs locally before every merge (charter pinned at c923a80; CI job pattern C pinned to the same commit; local hooks deferred until the retired-worktree disposition lands).
 - Local full suites cannot pass on a host whose global pre-commit hook refuses the suite's own fixture commits; hosted CI is the full-suite verdict there.
 - The formal Mister Clean prepare/closure bundle is not produced (needs a local full suite; see above).
 - Obligations: O-STD-1 (stop committing the plain denylist; hashed form), O-STD-2 (honor AGENT_PRIVATE_ROOT), O-STD-3 (a private case-study identifier in .gitignore and two build scripts), O-STD-4 (port scripts/*.mjs to strict TypeScript), O-STD-5 (plan-schema pin when work contracts are first used). Two early field-observation branches (open PR #9, draft PR #8) are archived and owned by the project PM; their content is to be imported as field-evals records after FE-1, not merged under evals/ (a shipped-materials root).
 Exact last-green command(s):
-- charter check --strict (charter c5327d1), exit 0
+- charter check --strict (charter c923a80), exit 0
 - mister-clean (installed release 7.0.2) audit planning / github-actions / repository-boundaries: pass, 0 findings
 - bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt: PASS
 - hosted CI verify and dependency-audit on main a021eeb: success; hosted verify on PR #23's exact tip fc1f68a: success
