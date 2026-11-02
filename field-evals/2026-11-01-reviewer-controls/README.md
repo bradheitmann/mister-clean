@@ -8,6 +8,7 @@ This ledger is kept separate from `field-evals/2026-10-31-window/`. That ledger 
 | path | content |
 |---|---|
 | `data/control-tallies.tsv` | one row per session and population: reviewer model, pass counts for good and bad controls, and where the row came from |
+| `data/replays-dedup.tsv` | one row per recorded replay (deduplicated): session, pair set, reviewer model, population, good or bad control, stored verdict, and for bad controls whether the planted defect alone carried the refusal |
 | `cards/RC-nnn-*.md` | one card per reviewer metric, with the derivation, sample sizes and caveats |
 
 ## Rules this ledger follows

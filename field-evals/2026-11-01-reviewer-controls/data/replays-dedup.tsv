@@ -1,0 +1,301 @@
+session	pair_set	reviewer_model	population	control	stored_pass	defect_sufficient
+S-07	B	deepseek-v4-pro	P00	good	true	
+S-07	B	deepseek-v4-pro	P02	good	true	
+S-07	B	deepseek-v4-pro	P02	good	true	
+S-07	B	deepseek-v4-pro	P02	good	true	
+S-07	B	deepseek-v4-pro	P03	good	true	
+S-07	B	deepseek-v4-pro	P03	good	false	
+S-07	B	deepseek-v4-pro	P03	good	true	
+S-07	B	deepseek-v4-pro	P01	good	true	
+S-07	B	deepseek-v4-pro	P01	good	true	
+S-07	B	deepseek-v4-pro	P01	good	true	
+S-07	B	deepseek-v4-pro	P00	good	true	
+S-07	B	deepseek-v4-pro	P00	good	true	
+S-06	B	deepseek-v4-pro	P01	good	true	
+S-06	B	deepseek-v4-pro	P01	good	true	
+S-06	B	deepseek-v4-pro	P01	good	true	
+S-06	B	deepseek-v4-pro	P00	good	true	
+S-06	B	deepseek-v4-pro	P00	good	true	
+S-06	B	deepseek-v4-pro	P00	good	true	
+S-06	B	deepseek-v4-pro	P02	good	true	
+S-06	B	deepseek-v4-pro	P02	good	true	
+S-06	B	deepseek-v4-pro	P02	good	true	
+S-06	B	deepseek-v4-pro	P03	good	true	
+S-06	B	deepseek-v4-pro	P03	good	true	
+S-06	B	deepseek-v4-pro	P03	good	true	
+S-03	B	deepseek-v4-pro	P01	good	true	
+S-03	B	deepseek-v4-pro	P01	good	true	
+S-03	B	deepseek-v4-pro	P01	good	true	
+S-03	B	deepseek-v4-pro	P00	good	true	
+S-03	B	deepseek-v4-pro	P00	good	true	
+S-03	B	deepseek-v4-pro	P00	good	true	
+S-03	B	deepseek-v4-pro	P02	good	true	
+S-03	B	deepseek-v4-pro	P02	good	true	
+S-03	B	deepseek-v4-pro	P02	good	true	
+S-03	B	deepseek-v4-pro	P03	good	true	
+S-03	B	deepseek-v4-pro	P03	good	true	
+S-03	B	deepseek-v4-pro	P03	good	true	
+S-16	B	deepseek-v4-pro	P00	good	true	
+S-16	B	deepseek-v4-pro	P00	good	true	
+S-16	B	deepseek-v4-pro	P00	good	true	
+S-05	B	deepseek-v4-pro	P02	good	true	
+S-05	B	deepseek-v4-pro	P02	good	true	
+S-05	B	deepseek-v4-pro	P02	good	true	
+S-05	B	deepseek-v4-pro	P00	good	true	
+S-05	B	deepseek-v4-pro	P00	good	true	
+S-14	B	deepseek-v4-pro	P01	good	true	
+S-14	B	deepseek-v4-pro	P00	good	true	
+S-14	B	deepseek-v4-pro	P00	good	true	
+S-14	B	deepseek-v4-pro	P00	good	true	
+S-05	B	deepseek-v4-pro	P03	good	true	
+S-05	B	deepseek-v4-pro	P03	good	true	
+S-05	B	deepseek-v4-pro	P03	good	true	
+S-05	B	deepseek-v4-pro	P01	good	true	
+S-05	B	deepseek-v4-pro	P01	good	true	
+S-05	B	deepseek-v4-pro	P01	good	true	
+S-05	B	deepseek-v4-pro	P00	good	true	
+S-04	B	deepseek-v4-pro	P02	good	true	
+S-04	B	deepseek-v4-pro	P02	good	true	
+S-04	B	deepseek-v4-pro	P02	good	true	
+S-04	B	deepseek-v4-pro	P01	good	true	
+S-04	B	deepseek-v4-pro	P01	good	true	
+S-04	B	deepseek-v4-pro	P01	good	true	
+S-04	B	deepseek-v4-pro	P00	good	true	
+S-04	B	deepseek-v4-pro	P00	good	true	
+S-04	B	deepseek-v4-pro	P00	good	true	
+S-04	B	deepseek-v4-pro	P03	good	true	
+S-04	B	deepseek-v4-pro	P03	good	false	
+S-04	B	deepseek-v4-pro	P03	good	true	
+S-08	B	deepseek-v4-pro	P02	good	true	
+S-08	B	deepseek-v4-pro	P02	good	true	
+S-08	B	deepseek-v4-pro	P02	good	true	
+S-08	B	deepseek-v4-pro	P03	good	true	
+S-08	B	deepseek-v4-pro	P03	good	true	
+S-08	B	deepseek-v4-pro	P03	good	true	
+S-08	B	deepseek-v4-pro	P01	good	true	
+S-08	B	deepseek-v4-pro	P01	good	true	
+S-08	B	deepseek-v4-pro	P01	good	true	
+S-08	B	deepseek-v4-pro	P00	good	true	
+S-08	B	deepseek-v4-pro	P00	good	true	
+S-08	B	deepseek-v4-pro	P00	good	true	
+S-09	B	deepseek-v4-pro	P02	good	true	
+S-09	B	deepseek-v4-pro	P02	good	true	
+S-09	B	deepseek-v4-pro	P02	good	true	
+S-09	B	deepseek-v4-pro	P00	good	true	
+S-09	B	deepseek-v4-pro	P00	good	true	
+S-09	B	deepseek-v4-pro	P03	good	true	
+S-09	B	deepseek-v4-pro	P03	good	true	
+S-09	B	deepseek-v4-pro	P03	good	true	
+S-09	B	deepseek-v4-pro	P01	good	true	
+S-09	B	deepseek-v4-pro	P01	good	true	
+S-09	B	deepseek-v4-pro	P01	good	true	
+S-09	B	deepseek-v4-pro	P00	good	true	
+S-11	B	deepseek-flash	P02	good	true	
+S-11	B	deepseek-flash	P02	good	true	
+S-11	B	deepseek-flash	P02	good	true	
+S-11	B	deepseek-flash	P01	good	true	
+S-11	B	deepseek-flash	P01	good	true	
+S-11	B	deepseek-flash	P01	good	true	
+S-11	B	deepseek-flash	P00	good	false	
+S-11	B	deepseek-flash	P00	good	true	
+S-11	B	deepseek-flash	P00	good	true	
+S-13	B	deepseek-flash	P01	good	true	
+S-13	B	deepseek-flash	P01	good	true	
+S-13	B	deepseek-flash	P01	good	true	
+S-13	B	deepseek-flash	P00	good	true	
+S-13	B	deepseek-flash	P00	good	true	
+S-13	B	deepseek-flash	P00	good	true	
+S-13	B	deepseek-flash	P02	good	true	
+S-13	B	deepseek-flash	P02	good	true	
+S-13	B	deepseek-flash	P02	good	true	
+S-13	B	deepseek-flash	P03	good	false	
+S-13	B	deepseek-flash	P03	good	false	
+S-13	B	deepseek-flash	P03	good	true	
+S-11	B	deepseek-flash	P03	good	true	
+S-11	B	deepseek-flash	P03	good	true	
+S-11	B	deepseek-flash	P03	good	true	
+S-12	B	deepseek-flash	P02	good	true	
+S-12	B	deepseek-flash	P02	good	true	
+S-12	B	deepseek-flash	P02	good	true	
+S-12	B	deepseek-flash	P03	good	true	
+S-12	B	deepseek-flash	P03	good	true	
+S-12	B	deepseek-flash	P01	good	true	
+S-12	B	deepseek-flash	P01	good	true	
+S-12	B	deepseek-flash	P01	good	false	
+S-12	B	deepseek-flash	P03	good	true	
+S-10	B	deepseek-v4-pro	P02	good	true	
+S-10	B	deepseek-v4-pro	P02	good	true	
+S-10	B	deepseek-v4-pro	P02	good	true	
+S-12	B	deepseek-flash	P00	good	true	
+S-12	B	deepseek-flash	P00	good	true	
+S-12	B	deepseek-flash	P00	good	true	
+S-10	B	deepseek-v4-pro	P00	good	false	
+S-10	B	deepseek-v4-pro	P00	good	true	
+S-10	B	deepseek-v4-pro	P00	good	true	
+S-10	B	deepseek-v4-pro	P01	good	true	
+S-10	B	deepseek-v4-pro	P01	good	true	
+S-10	B	deepseek-v4-pro	P01	good	true	
+S-10	B	deepseek-v4-pro	P03	good	true	
+S-10	B	deepseek-v4-pro	P03	good	true	
+S-10	B	deepseek-v4-pro	P03	good	true	
+S-15	B	deepseek-v4-pro	P00	good	true	
+S-15	B	deepseek-v4-pro	P00	good	true	
+S-15	B	deepseek-v4-pro	P00	good	true	
+S-15	B	deepseek-v4-pro	P01	good	true	
+S-15	B	deepseek-v4-pro	P01	good	true	
+S-15	B	deepseek-v4-pro	P01	good	true	
+S-15	B	deepseek-v4-pro	P03	good	true	
+S-15	B	deepseek-v4-pro	P03	good	true	
+S-15	B	deepseek-v4-pro	P03	good	true	
+S-15	B	deepseek-v4-pro	P02	good	true	
+S-15	B	deepseek-v4-pro	P02	good	true	
+S-15	B	deepseek-v4-pro	P02	good	true	
+S-03	B	deepseek-v4-pro	P00	bad	false	false
+S-03	B	deepseek-v4-pro	P00	bad	false	true
+S-03	B	deepseek-v4-pro	P00	bad	false	true
+S-03	B	deepseek-v4-pro	P01	bad	false	false
+S-03	B	deepseek-v4-pro	P01	bad	false	true
+S-03	B	deepseek-v4-pro	P01	bad	false	false
+S-03	B	deepseek-v4-pro	P02	bad	false	false
+S-03	B	deepseek-v4-pro	P02	bad	false	false
+S-03	B	deepseek-v4-pro	P02	bad	false	false
+S-03	B	deepseek-v4-pro	P03	bad	false	true
+S-03	B	deepseek-v4-pro	P03	bad	false	true
+S-03	B	deepseek-v4-pro	P03	bad	false	true
+S-04	B	deepseek-v4-pro	P00	bad	false	true
+S-04	B	deepseek-v4-pro	P00	bad	false	true
+S-04	B	deepseek-v4-pro	P00	bad	false	true
+S-04	B	deepseek-v4-pro	P01	bad	false	true
+S-04	B	deepseek-v4-pro	P01	bad	false	false
+S-04	B	deepseek-v4-pro	P01	bad	false	false
+S-04	B	deepseek-v4-pro	P02	bad	false	false
+S-04	B	deepseek-v4-pro	P02	bad	false	true
+S-04	B	deepseek-v4-pro	P02	bad	false	false
+S-04	B	deepseek-v4-pro	P03	bad	false	false
+S-04	B	deepseek-v4-pro	P03	bad	false	true
+S-04	B	deepseek-v4-pro	P03	bad	false	true
+S-14	B	deepseek-v4-pro	P00	bad	false	true
+S-14	B	deepseek-v4-pro	P00	bad	false	true
+S-14	B	deepseek-v4-pro	P00	bad	false	true
+S-05	B	deepseek-v4-pro	P00	bad	false	true
+S-05	B	deepseek-v4-pro	P00	bad	false	true
+S-05	B	deepseek-v4-pro	P00	bad	false	true
+S-05	B	deepseek-v4-pro	P01	bad	false	true
+S-05	B	deepseek-v4-pro	P01	bad	false	true
+S-05	B	deepseek-v4-pro	P01	bad	false	true
+S-05	B	deepseek-v4-pro	P02	bad	false	false
+S-05	B	deepseek-v4-pro	P02	bad	false	false
+S-05	B	deepseek-v4-pro	P02	bad	false	false
+S-05	B	deepseek-v4-pro	P03	bad	false	false
+S-05	B	deepseek-v4-pro	P03	bad	false	false
+S-05	B	deepseek-v4-pro	P03	bad	false	false
+S-06	B	deepseek-v4-pro	P00	bad	false	true
+S-06	B	deepseek-v4-pro	P00	bad	false	true
+S-06	B	deepseek-v4-pro	P00	bad	false	true
+S-06	B	deepseek-v4-pro	P01	bad	false	true
+S-06	B	deepseek-v4-pro	P01	bad	false	true
+S-06	B	deepseek-v4-pro	P01	bad	false	false
+S-06	B	deepseek-v4-pro	P02	bad	false	false
+S-06	B	deepseek-v4-pro	P02	bad	false	false
+S-06	B	deepseek-v4-pro	P02	bad	false	false
+S-06	B	deepseek-v4-pro	P03	bad	false	true
+S-06	B	deepseek-v4-pro	P03	bad	false	true
+S-06	B	deepseek-v4-pro	P03	bad	false	false
+S-07	B	deepseek-v4-pro	P00	bad	false	true
+S-07	B	deepseek-v4-pro	P00	bad	false	true
+S-07	B	deepseek-v4-pro	P00	bad	false	true
+S-07	B	deepseek-v4-pro	P01	bad	false	true
+S-07	B	deepseek-v4-pro	P01	bad	false	false
+S-07	B	deepseek-v4-pro	P01	bad	false	false
+S-07	B	deepseek-v4-pro	P02	bad	false	false
+S-07	B	deepseek-v4-pro	P02	bad	false	false
+S-07	B	deepseek-v4-pro	P02	bad	false	false
+S-07	B	deepseek-v4-pro	P03	bad	false	true
+S-07	B	deepseek-v4-pro	P03	bad	false	true
+S-07	B	deepseek-v4-pro	P03	bad	false	true
+S-08	B	deepseek-v4-pro	P00	bad	false	true
+S-08	B	deepseek-v4-pro	P00	bad	false	true
+S-08	B	deepseek-v4-pro	P00	bad	false	true
+S-08	B	deepseek-v4-pro	P01	bad	false	true
+S-08	B	deepseek-v4-pro	P01	bad	false	true
+S-08	B	deepseek-v4-pro	P01	bad	false	true
+S-08	B	deepseek-v4-pro	P02	bad	false	false
+S-08	B	deepseek-v4-pro	P02	bad	false	false
+S-08	B	deepseek-v4-pro	P02	bad	false	false
+S-08	B	deepseek-v4-pro	P03	bad	false	false
+S-08	B	deepseek-v4-pro	P03	bad	false	true
+S-08	B	deepseek-v4-pro	P03	bad	false	true
+S-09	B	deepseek-v4-pro	P00	bad	false	true
+S-09	B	deepseek-v4-pro	P00	bad	false	true
+S-09	B	deepseek-v4-pro	P00	bad	false	true
+S-09	B	deepseek-v4-pro	P01	bad	false	true
+S-09	B	deepseek-v4-pro	P01	bad	false	true
+S-09	B	deepseek-v4-pro	P01	bad	false	true
+S-09	B	deepseek-v4-pro	P02	bad	false	true
+S-09	B	deepseek-v4-pro	P02	bad	false	false
+S-09	B	deepseek-v4-pro	P02	bad	false	false
+S-09	B	deepseek-v4-pro	P03	bad	false	false
+S-09	B	deepseek-v4-pro	P03	bad	false	false
+S-09	B	deepseek-v4-pro	P03	bad	false	true
+S-10	B	deepseek-v4-pro	P00	bad	false	true
+S-10	B	deepseek-v4-pro	P00	bad	false	true
+S-10	B	deepseek-v4-pro	P00	bad	false	true
+S-10	B	deepseek-v4-pro	P01	bad	false	false
+S-10	B	deepseek-v4-pro	P01	bad	false	true
+S-10	B	deepseek-v4-pro	P01	bad	false	true
+S-10	B	deepseek-v4-pro	P02	bad	false	false
+S-10	B	deepseek-v4-pro	P02	bad	false	false
+S-10	B	deepseek-v4-pro	P02	bad	false	false
+S-10	B	deepseek-v4-pro	P03	bad	false	true
+S-10	B	deepseek-v4-pro	P03	bad	false	false
+S-10	B	deepseek-v4-pro	P03	bad	false	true
+S-15	B	deepseek-v4-pro	P00	bad	false	true
+S-15	B	deepseek-v4-pro	P00	bad	false	true
+S-15	B	deepseek-v4-pro	P00	bad	false	true
+S-15	B	deepseek-v4-pro	P01	bad	false	true
+S-15	B	deepseek-v4-pro	P01	bad	false	false
+S-15	B	deepseek-v4-pro	P01	bad	false	true
+S-15	B	deepseek-v4-pro	P02	bad	false	false
+S-15	B	deepseek-v4-pro	P02	bad	false	false
+S-15	B	deepseek-v4-pro	P02	bad	false	false
+S-15	B	deepseek-v4-pro	P03	bad	false	true
+S-15	B	deepseek-v4-pro	P03	bad	false	true
+S-11	B	deepseek-flash	P00	bad	false	true
+S-11	B	deepseek-flash	P00	bad	false	true
+S-11	B	deepseek-flash	P00	bad	false	false
+S-11	B	deepseek-flash	P01	bad	false	true
+S-11	B	deepseek-flash	P01	bad	false	false
+S-11	B	deepseek-flash	P01	bad	false	false
+S-11	B	deepseek-flash	P02	bad	false	false
+S-11	B	deepseek-flash	P02	bad	false	false
+S-11	B	deepseek-flash	P02	bad	false	false
+S-11	B	deepseek-flash	P03	bad	false	false
+S-11	B	deepseek-flash	P03	bad	false	false
+S-11	B	deepseek-flash	P03	bad	false	false
+S-16	B	deepseek-v4-pro	P00	bad	false	true
+S-16	B	deepseek-v4-pro	P00	bad	false	false
+S-16	B	deepseek-v4-pro	P00	bad	false	true
+S-12	B	deepseek-flash	P00	bad	false	true
+S-12	B	deepseek-flash	P00	bad	false	true
+S-12	B	deepseek-flash	P00	bad	false	false
+S-12	B	deepseek-flash	P01	bad	false	true
+S-12	B	deepseek-flash	P01	bad	false	false
+S-12	B	deepseek-flash	P01	bad	false	true
+S-12	B	deepseek-flash	P02	bad	false	false
+S-12	B	deepseek-flash	P02	bad	false	false
+S-12	B	deepseek-flash	P02	bad	false	false
+S-12	B	deepseek-flash	P03	bad	false	false
+S-12	B	deepseek-flash	P03	bad	false	false
+S-12	B	deepseek-flash	P03	bad	false	false
+S-13	B	deepseek-flash	P00	bad	false	true
+S-13	B	deepseek-flash	P00	bad	false	true
+S-13	B	deepseek-flash	P00	bad	false	true
+S-13	B	deepseek-flash	P01	bad	false	false
+S-13	B	deepseek-flash	P01	bad	false	false
+S-13	B	deepseek-flash	P01	bad	false	false
+S-13	B	deepseek-flash	P02	bad	false	false
+S-13	B	deepseek-flash	P02	bad	false	false
+S-13	B	deepseek-flash	P02	bad	false	false
+S-13	B	deepseek-flash	P03	bad	false	false
+S-13	B	deepseek-flash	P03	bad	false	false
+S-13	B	deepseek-flash	P03	bad	false	false

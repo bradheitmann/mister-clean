@@ -40,3 +40,24 @@ Why it matters: the owner made deepseek-flash the default reviewer. A higher fal
 
 ## Refresh rule
 Append a row to `data/control-tallies.tsv` for every new qualification session, keyed by pair set, and recompute the table and the test. Report the result when the flash sample reaches 72 good replays, or sooner if a second floor breach occurs.
+
+## Refresh 1 (2026-11-02): per-replay evidence and defect attribution
+Source: `data/replays-dedup.tsv`. It has one row per recorded replay, deduplicated by session, population, replay and response hash, and covers pair set B only (14 sessions; S-14 to S-16 are partial sessions that stopped early). The reviewer model is read from each replay's own observation, and stored verdicts were reproduced with the project's own scoring code (149/149 bad, by an independent offline rescoring).
+
+| reviewer | good replays | false rejects | rate | bad replays | bad passed |
+|---|---|---|---|---|---|
+| deepseek-v4-pro | 115 | 3 | 2.6% | 113 | 0 |
+| deepseek-flash | 36 | 4 | 11.1% | 36 | 0 |
+
+- The false-reject gap holds with the larger v4-pro denominator: one-sided Fisher exact p = 0.056 (it was 0.088 in the original table). This is still a signal, not a finding.
+- The original table's set-B row (3/96) counted completed sessions from tallies only. This refresh adds the replays of three partial sessions (S-14, S-15 and S-16: 19 good replays, none rejected).
+
+**New column: `defect_sufficient` (bad controls only).** It is true when the refusal survives with the planted defect alone, i.e. the bad would pass once the planted defect's blocking findings are removed. A false value means the reviewer also blocked the bad for other reasons.
+
+| reviewer | P00 | P01 | P02 | P03 | all |
+|---|---|---|---|---|---|
+| deepseek-v4-pro | 31/33 | 18/27 | 2/27 | 17/26 | **68/113 (60%)** |
+| deepseek-flash | 7/9 | 3/9 | 0/9 | 0/9 | **10/36 (28%)** |
+
+- Flash refuses the same bad controls with additional blocking findings far more often (one-sided Fisher exact p = 0.0006). The direction holds in every population. This matches flash's higher false-reject rate: it is the stricter reviewer, not just a noisier one.
+- **Caveat that limits both tables:** the bad controls are not minimal pairs. They are synthetic placeholder projects, and the good controls are real extractions. So "additional blocking findings" are partly legitimate placeholder catches. The defect-attribution numbers measure reviewer strictness on these specific controls, not detection of the planted defect alone. The project has adopted minimal-pair controls; re-measure on them.
