@@ -64,6 +64,33 @@ export function isCanonicalPlanningFileName(path: string): boolean {
   return PLANNING_FILE_STEMS.has(stem);
 }
 
+/**
+ * Agent-harness definition subtrees, repository-relative.
+ *
+ * A harness ships slash commands, skills and agent definitions under fixed
+ * directories, and those files are commonly named like planning inputs
+ * (`.claude/commands/plan.md`). They define what an agent may do, they are not
+ * a project's planning corpus, so planning-root discovery skips these subtrees
+ * whether or not the host ignores them in Git.
+ */
+export const HARNESS_DEFINITION_DIRECTORIES: readonly string[] = [
+  ".agents/skills",
+  ".claude/agents",
+  ".claude/commands",
+  ".claude/skills",
+  ".codex",
+  ".cursor",
+  ".opencode",
+  ".pi",
+];
+
+/** True when a repository-relative path is a harness definition file or subtree. */
+export function isHarnessDefinitionPath(relativePath: string): boolean {
+  const normalized = relativePath.split(sep).join("/").replace(/^\.\//u, "");
+  return HARNESS_DEFINITION_DIRECTORIES.some((directory) => normalized === directory
+    || normalized.startsWith(`${directory}/`));
+}
+
 export { PLANNING_LANE_LIFECYCLES, PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
 import { PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
 
@@ -229,6 +256,7 @@ export function discoverPlanningRoots(repository: string): string[] {
 
   function visit(directory: string): void {
     const relativePath = relative(repository, directory);
+    if (relativePath !== "" && isHarnessDefinitionPath(relativePath)) return;
     const name = directory.split(sep).at(-1)?.toLocaleLowerCase() ?? "";
     if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
       candidates.add(directory);

@@ -38,6 +38,12 @@ import {
   nativeGateFailureObservations,
 } from "./native-gates.js";
 import { runNativeGates } from "./native-gate-runner.js";
+import {
+  applyPublicSafetyExemptions,
+  applyRetirements,
+  readPublicSafetyExemptions,
+  readRetirements,
+} from "./retirements.js";
 import { validateNativeGateCoverage } from "./native-gate-validation.js";
 import { acquireRepositoryVerificationLease } from "./execution-lease.js";
 import {
@@ -742,6 +748,13 @@ function assemblePrepareReport(
       ? "mister-clean audit semantic . --json"
       : `mister-clean audit semantic . --manifest semantic-probe-manifest.json${options.executeSemanticProbes ? " --execute" : ""} --json`;
   const publicSafetyCommand = `mister-clean audit public-safety . --tracked${publicSafetyInputRef === undefined ? "" : " --denylist-file public-safety-denylist.txt"} --json`;
+  // Committed rulings change how this run reads: retirements apply to every
+  // debt family at the end, exemptions only to the public-safety scan.
+  const retirements = readRetirements(repository);
+  const publicSafetyExemptions = applyPublicSafetyExemptions(
+    publicSafetyAudit?.findings ?? [],
+    readPublicSafetyExemptions(repository),
+  );
   const unassignedSemanticFindings = semanticAudit.findings
     .filter((finding) => finding.code === "semantic_probe_unassigned");
   const semanticDebts = semanticAudit.findings
@@ -752,6 +765,7 @@ function assemblePrepareReport(
     observation_count: 1,
     detector_finding_fingerprints: [semanticFindingFingerprint(finding.candidate_id, finding.code)],
     affected_paths: unique(finding.refs.map((ref) => ref.split("#line-", 1)[0] ?? ref)),
+    repair_boundary: `candidate:${finding.candidate_id}`,
     procedure: finding.classification === "confirmed_product_defect"
       ? `Repair ${finding.kind.replaceAll("_", " ")} and rerun its bound semantic probe`
       : finding.classification === "operate_time_pending"
@@ -791,6 +805,7 @@ function assemblePrepareReport(
       affected_paths: unique(unassignedSemanticFindings.flatMap((finding) => (
         finding.refs.map((ref) => ref.split("#line-", 1)[0] ?? ref)
       ))),
+      repair_boundary: `probe-set:${semanticAudit.candidate_set_sha256}`,
       procedure: `Triage the ${unassignedSemanticFindings.length} semantic candidates once, bind one complete manifest to candidate set ${semanticAudit.candidate_set_sha256}, then execute or explicitly dispose each candidate`,
       state: "open",
       disposition: "autonomously_validate",
@@ -808,12 +823,13 @@ function assemblePrepareReport(
       code: "semantic_probe_unassigned",
     }, fingerprints.map((fingerprint) => observationId("mister-clean/semantic_boundary@1", fingerprint))) as unknown as (typeof semanticDebts)[number]);
   }
-  const publicSafetyDebts = (publicSafetyAudit?.findings ?? []).map((finding) => baselineDebt(repoId, {
+  const publicSafetyDebts = publicSafetyExemptions.findings.map((finding) => baselineDebt(repoId, {
     id: `DEBT-PUBLIC-SAFETY-${finding.fingerprint.slice(0, 16).toUpperCase()}`,
     class: `public_safety_${finding.rule}`,
     observation_count: 1,
     detector_finding_fingerprints: [finding.fingerprint],
     affected_paths: [finding.path],
+    repair_boundary: `file:${finding.path}:${String(finding.line)}`,
     procedure: `Remove or remediate the ${finding.rule} public-safety finding, then rerun the redacted public-safety audit`,
     state: "open",
     disposition: "autonomously_repair",
@@ -837,6 +853,7 @@ function assemblePrepareReport(
     observation_count: 1,
     detector_finding_fingerprints: [finding.fingerprint],
     affected_paths: [finding.path],
+    repair_boundary: `file:${finding.path}`,
     procedure: `Make ${finding.path} safely text-assessable or explicitly remove it from the tracked shippable surface, then rerun public-safety inspection`,
     state: "open",
     disposition: "autonomously_repair",
@@ -874,6 +891,7 @@ function assemblePrepareReport(
       detector_finding_fingerprints: fingerprints,
       affected_paths: [first.path],
       affected_refs: unique(findings.flatMap((finding) => finding.refs)),
+      repair_boundary: `path:${first.path}`,
       procedure: `Repair ${first.rule.replaceAll("_", " ")} as one fail-closed workflow invariant, add a negative control, then rerun the GitHub Actions audit`,
       state: "open",
       disposition: "autonomously_repair",
@@ -901,6 +919,7 @@ function assemblePrepareReport(
       class: gate.disposition === "absent" ? "native_gate_absent" : `native_gate_${execution?.state ?? "unexecuted"}`,
       observation_count: 1,
       affected_paths: gate.source_refs.map((ref) => ref.path),
+      repair_boundary: `gate:${gate.id}`,
       procedure: gate.disposition === "absent"
         ? `Restore a safe repository-native ${gate.kind} gate for ${gate.id}, then rerun closeout`
         : `Repair ${gate.id} and rerun the exact repository-native gate on an unchanged repository object`,
@@ -931,14 +950,17 @@ function assemblePrepareReport(
     ...semanticDebts,
     ...nativeRootDebts,
   ];
-  const rootDebtRows: RootDebtAccountingRow[] = completionDebts.map((debt) => ({
-    debt_key: debt.debt_key,
-    normalizer: debt.normalizer,
-    cause_key: debt.cause_key,
-    state: debt.state,
-    disposition: debt.disposition,
-    origin: debt.origin,
-    observation_ids: debt.observation_ids,
+  const retirementOutcome = applyRetirements(completionDebts as unknown as JsonObject[], retirements);
+  const appliedDebts = retirementOutcome.debts;
+  const acceptedExceptions = appliedDebts.filter((debt) => debt.state === "accepted_exception").length;
+  const rootDebtRows: RootDebtAccountingRow[] = appliedDebts.map((debt) => ({
+    debt_key: debt.debt_key as string,
+    normalizer: debt.normalizer as string,
+    cause_key: debt.cause_key as CanonicalJsonValue,
+    state: debt.state as RootDebtAccountingRow["state"],
+    disposition: debt.disposition as RootDebtAccountingRow["disposition"],
+    origin: debt.origin as RootDebtAccountingRow["origin"],
+    observation_ids: debt.observation_ids as string[],
   }));
   const baselineObservationIds = [...new Set(
     rootDebtRows.flatMap((debt) => debt.observation_ids),
@@ -955,7 +977,7 @@ function assemblePrepareReport(
     repo: { id: repoId, commit: head, branch },
     mode,
     actions: [],
-    completion_debts: completionDebts,
+    completion_debts: appliedDebts,
     residuals: [],
     acceptance_criteria: criteriaIds.map((id) => ({
       id,
@@ -964,7 +986,12 @@ function assemblePrepareReport(
       evidence: ["not yet assessed"],
     })),
     verdict: "NOT_CLEAN",
-    debt_census: { discovered: completionDebts.length, paid: 0, accepted_exception: 0 },
+    debt_census: { discovered: appliedDebts.length, paid: 0, accepted_exception: acceptedExceptions },
+    retirement_applications: retirementOutcome.applications,
+    public_safety_debt_accounting: {
+      debt_count: publicSafetyRootDebts.length,
+      exempted_finding_count: publicSafetyExemptions.exempted.length,
+    },
     planning_accounting: {
       raw_finding_count: planningAudit.raw_finding_count,
       root_debt_count: planningAudit.root_debt_count,
@@ -985,6 +1012,7 @@ function assemblePrepareReport(
       tracked_path_count: publicSafetyAudit?.tracked_path_count ?? 0,
       finding_count: publicSafetyAudit?.findings.length ?? 0,
       unassessed_count: publicSafetyAudit?.unassessed.length ?? 0,
+      exempted_count: publicSafetyExemptions.exempted.length,
       evidence_ref: publicSafetyAuditRef ?? null,
     },
     github_actions_accounting: {

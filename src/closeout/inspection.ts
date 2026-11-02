@@ -47,6 +47,8 @@ export interface PublicSafetyFinding {
   readonly line: number;
   readonly path: string;
   readonly rule: string;
+  /** SHA-256 of the matched value: enough to recognise one planted fixture string, never the text. */
+  readonly value_sha256: string;
 }
 
 export type PublicSafetyUnassessedReason =
@@ -314,8 +316,14 @@ function selectedPathSetSha256(paths: readonly string[]): string {
     .digest("hex");
 }
 
-function publicSafetyFinding(path: string, line: number, rule: string): PublicSafetyFinding {
-  return { fingerprint: publicSafetyFingerprint({ path, line, rule }), path, line, rule };
+function publicSafetyFinding(path: string, line: number, rule: string, matched: string): PublicSafetyFinding {
+  return {
+    fingerprint: publicSafetyFingerprint({ path, line, rule }),
+    path,
+    line,
+    rule,
+    value_sha256: createHash("sha256").update(matched, "utf8").digest("hex"),
+  };
 }
 
 /**
@@ -429,14 +437,15 @@ function scanPublicSafetyFilesSync(
 
     for (const [index, line] of lines(text).entries()) {
       for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
-        if (expression.test(line) && !isPublicThirdPartyLegalIdentifier(file.relative, line, rule)) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, rule));
+        const match = expression.exec(line);
+        if (match && !isPublicThirdPartyLegalIdentifier(file.relative, line, rule)) {
+          findings.push(publicSafetyFinding(file.relative, index + 1, rule, match[0] ?? line.trim()));
         }
       }
       const folded = foldCase(line);
       for (const [termIndex, term] of customTerms.entries()) {
         if (folded.includes(foldCase(term))) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`));
+          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`, term));
         }
       }
     }

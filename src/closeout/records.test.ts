@@ -358,14 +358,25 @@ describe("validateReport", () => {
     const value = report({
       verdict: "NOT_CLEAN",
       handoff_assessment: { recommendation: "proceed", reasons: ["r"], conditions: [] },
-      completion_debts: [{ id: "D1", procedure: "review", state: "open", disposition: "autonomously_repair", evidence: [] }],
+      completion_debts: [{ id: "D1", procedure: "review", repair_boundary: "src/d1.ts", state: "open", disposition: "autonomously_repair", evidence: [] }],
     });
     expect(validateReport(value)).toContain("$.handoff_assessment.recommendation: unconditional proceed conflicts with NOT_CLEAN verdict");
   });
 
+  it("requires every debt to name where its repair lands", () => {
+    const boundaryless = report({
+      completion_debts: [{ id: "D1", procedure: "review", state: "open", disposition: "autonomously_repair", evidence: [] }],
+    });
+    expect(validateReport(boundaryless)).toContain("$.completion_debts[0].repair_boundary: required nonempty (every debt names where its repair lands)");
+    const empty = report({
+      completion_debts: [{ id: "D1", procedure: "review", repair_boundary: "  ", state: "open", disposition: "autonomously_repair", evidence: [] }],
+    });
+    expect(validateReport(empty)).toContain("$.completion_debts[0].repair_boundary: required nonempty (every debt names where its repair lands)");
+  });
+
   it("requires executed, typed, digest-bound evidence for satisfied debt", () => {
     const value = report({
-      completion_debts: [{ id: "D1", procedure: "execute acceptance", state: "satisfied", disposition: "autonomously_repair", evidence: ["done"] }],
+      completion_debts: [{ id: "D1", procedure: "execute acceptance", repair_boundary: "src/d1.ts", state: "satisfied", disposition: "autonomously_repair", evidence: ["done"] }],
       debt_census: { discovered: 1, paid: 1, accepted_exception: 0 },
     });
     expect(validateReport(value)).toContain("$.completion_debts[0].evidence: satisfied debt requires allowlisted, time-bound, digest-referenced execution evidence");
@@ -375,7 +386,7 @@ describe("validateReport", () => {
 
   it("requires complete operator rulings for accepted exceptions", () => {
     const value = report({
-      completion_debts: [{ id: "D1", procedure: "historical review", state: "accepted_exception", disposition: "accepted_exception", evidence: [], exception: { actor: "operator", at: "2026-08-25T10:00:00Z", scope: "D1", rationale: "historical", ref: evidenceRef } }],
+      completion_debts: [{ id: "D1", procedure: "historical review", repair_boundary: "src/d1.ts", state: "accepted_exception", disposition: "accepted_exception", evidence: [], exception: { actor: "operator", at: "2026-08-25T10:00:00Z", scope: "D1", rationale: "historical", ref: evidenceRef } }],
       debt_census: { discovered: 1, paid: 0, accepted_exception: 1 },
     });
     expect(validateReport(value, false, true)).toEqual([]);
@@ -387,7 +398,7 @@ describe("validateReport", () => {
   });
 
   it("does not permit stale documentation to become an accepted exception or residual", () => {
-    const debt = { id: "D1", procedure: "fix", state: "accepted_exception", disposition: "accepted_exception", evidence: [], exception: { actor: "operator", at: "2026-08-25T10:00:00Z", scope: "D1", rationale: "history", ref: evidenceRef }, class: "stale_doc" };
+    const debt = { id: "D1", procedure: "fix", repair_boundary: "src/d1.ts", state: "accepted_exception", disposition: "accepted_exception", evidence: [], exception: { actor: "operator", at: "2026-08-25T10:00:00Z", scope: "D1", rationale: "history", ref: evidenceRef }, class: "stale_doc" };
     expect(validateReport(report({ completion_debts: [debt], debt_census: { discovered: 1, paid: 0, accepted_exception: 1 } }))).toContain("$.completion_debts[0].disposition: a reviewer-reported stale doc/comment is PAYABLE regardless of severity label -- accepted_exception is for irreparable historical limits only; fix the doc before CLEAN");
     expect(validateReport(report({ residuals: [{ kind: "roadmap", represented_at: "plan", class: "stale_doc" }] }))).toContain("$.residuals[0]: a reviewer-reported stale doc/comment is payable debt, not a residual -- move it to completion_debts and fix it before CLEAN");
   });
