@@ -28,7 +28,7 @@ b97a3d54909032f9f5dccba9a3b36dfc08fc065a0abd7af7a41ea4dd887180d9  ./assets/codeb
 b32333bbd5e144d2e2c736df9ce0cd977f73ed50d53c57bcee7051e9ad8c7ce6  ./assets/codebase-state-dashboard/product-mark.svg
 2b280962cfe5fdaf4513877c3d65184c8f71ddadb75f000f8b52b7a40bf57ada  ./assets/codebase-state-dashboard/tsconfig.scorecard.json
 ad4137f8e86b7ff051d650ee37a6c33757154a5698c798526ce0fa47b9d91e46  ./assets/regression-delta.json
-9b61c86aa9d3eb2bbbd5ca444c2ab10deedee304e452c5d5f29459ff6908d9a1  ./bin/mister-clean.js
+6374aa5c6c0dd1f965bed4af3d191a21f4cfa2c1d3b05f524dcc3e07e5998899  ./bin/mister-clean.js
 a512a7f3940e1d875ebe4485a8e676e557c6279305b9d55c3529c6ddcd5752cf  ./dist/control-plane.d.ts
 b94336915979cd3a7420574b03d4f5d03dbd6c54a15de5961d0609a0e9dac7d5  ./dist/control-plane.js
 20afd4527ea2b6486b48ff858e84a93c847f7fbfb5ea3022e79585657272c2f8  ./dist/control-plane/assets/CormorantGaramond-Medium-B9HO_40Y.ttf

@@ -94,18 +94,21 @@ export function isHarnessDefinitionPath(relativePath: string): boolean {
 }
 
 /**
- * True when `directory` is a separate checkout nested inside this repository.
+ * True when `directory` is a separate checkout nested inside `repository`.
  *
- * Any directory below the root that holds a `.git` entry - a file, as a linked
- * worktree or a submodule writes it, or a directory, as a clone does - is a
+ * Any directory below the root that holds a `.git` entry — a file, as a linked
+ * worktree or a submodule writes it, or a directory, as a clone does — is a
  * different checkout with its own `plans/`, `tasks/` and `reports/` trees. Those
  * are not this repository's planning corpus, and walking them multiplies the
  * corpus by the number of checkouts (measured on a large workspace: 13 nested
  * worktrees, 223,468 files, 2.39 B characters retained in one `audit planning`
  * run, which exhausted the heap).
  *
- * The rule is deliberately not a list of harness paths: a worktree an operator
- * keeps under `tmp/`, a nested clone and a submodule are all covered.
+ * Every walker in the closeout path shares this one helper, so `audit planning`,
+ * the bundle validator and the planning-candidate scan cannot disagree. The rule
+ * is deliberately not a list of harness paths: a worktree an operator keeps under
+ * `tmp/`, a nested clone and a submodule are all covered. The root itself is
+ * always walked, even when the root is a worktree.
  */
 export function isNestedCheckout(repository: string, directory: string): boolean {
   if (resolve(directory) === resolve(repository)) return false;
@@ -394,7 +397,7 @@ export function listEntriesRecursively(root: string): RecursiveEntry[] {
   function visit(directory: string): void {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path);
+      if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path)) visit(path);
       else if (entry.isSymbolicLink()) entries.push({ kind: "symlink", path });
       else if (entry.isFile()) entries.push({ kind: "file", path });
       else entries.push({ kind: "other", path });

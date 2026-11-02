@@ -10490,7 +10490,7 @@ function listEntriesRecursively(root) {
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join2(directory, entry.name);
-      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path);
+      if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path)) visit(path);
       else if (entry.isSymbolicLink()) entries2.push({ kind: "symlink", path });
       else if (entry.isFile()) entries2.push({ kind: "file", path });
       else entries2.push({ kind: "other", path });
@@ -13977,7 +13977,7 @@ function planningCandidatePaths(root, planningRoots) {
   for (const entry of readdirSync3(root, { withFileTypes: true })) {
     const path = resolve6(root, entry.name);
     if (entry.isFile()) append(path);
-    else if (entry.isDirectory() && !entry.isSymbolicLink() && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
+    else if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path) && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
       for (const nested of listEntriesRecursively(path)) if (nested.kind === "file") append(nested.path);
     }
   }
@@ -20353,7 +20353,7 @@ var nodeFilePort = {
         if (entry.isSymbolicLink()) rows.push({ absolute, relative: rel, kind: "symlink" });
         else if (entry.isDirectory()) {
           rows.push({ absolute, relative: rel, kind: "directory" });
-          await visit(absolute);
+          if (!isNestedCheckout(rootPath, absolute)) await visit(absolute);
         } else if (entry.isFile()) rows.push({ absolute, relative: rel, kind: "file" });
         else rows.push({ absolute, relative: rel, kind: "other" });
       }
@@ -26144,13 +26144,7 @@ var PLANNING_NAMES = /* @__PURE__ */ new Set([
 ]);
 var PLANNING_KINDS = /* @__PURE__ */ new Set(["repo_files", "external_snapshot", "none"]);
 async function discoverPlanningRoots2(repo, files) {
-  const walked = await files.walk(repo);
-  const nestedCheckouts = new Set(
-    walked.filter((row) => basename12(row.relative) === ".git").map((row) => dirname11(row.relative)).filter((directory) => directory !== "." && directory !== "")
-  );
-  const rows = walked.filter((row) => !isHarnessDefinitionPath(row.relative)).filter((row) => ![...nestedCheckouts].some(
-    (directory) => row.relative === directory || row.relative.startsWith(`/`)
-  ));
+  const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative));
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = /* @__PURE__ */ new Map();
   for (const row of directories) {

@@ -118,3 +118,47 @@ The retained-character and in-process figures are the like-for-like pair from th
 committed). `time -l` adds the absolute process peak for the fixed build; the pre-fix run under the same instrument would
 be a ~13-minute OOM run, so it is recorded from the instrumented trace instead. Planing roots on the workspace: 126 → 9
 (unchanged by the generalization, which removes the name list rather than adding reach).
+
+## Rework 2 (QA rejected 2c02f049; PM confirmed)
+
+Three defects, all real, all mine:
+
+1. **The bundle half was dead code.** `bundle-runtime.ts` `nodeFilePort.walk` already skips any entry named `.git`
+   (`IGNORED_WALK`), so no `.git` row ever reached `bundle.ts` and my `nestedCheckouts` set was always empty. Worse, the
+   filter contained `row.relative.startsWith(\`/\`)` — a literal slash — because a shell heredoc/perl substitution ate
+   `${directory}`. The bundle path still walked nested checkouts while claiming otherwise, and would have demanded that
+   `tmp/wt/tasks` be declared where `audit planning` skips it.
+2. **The check now lives in the walks, not in a post-filter.** `nodeFilePort.walk` refuses to descend into a non-root
+   directory holding a `.git` entry; the dead row filter and its broken slash are deleted. `bundle.ts`'s
+   `discoverPlanningRoots` keeps only the harness-definition filter.
+3. **The two planning-analysis walks had no check.** `listEntriesRecursively` (used by the planning-root listing and by the
+   docs-like candidate scan) now prunes nested checkouts, and `planningCandidatePaths` refuses to enter a docs-like directory
+   that is itself a checkout, so a clone at `docs/vendor-repo/` is never read.
+
+**One shared helper, four call sites.** `isNestedCheckout(repository, directory)` in `repository.ts` is the single rule
+(`.git` file or directory, never the root); it is used by `discoverPlanningRoots`, `listEntriesRecursively`,
+`nodeFilePort.walk` (`bundle-runtime.ts:278`) and `planningCandidatePaths` (`planning-analysis/repository.ts:96`). No walker
+can now disagree with another.
+
+Proofs (`nested-checkout.test.ts`, 4/4):
+- (a) **bundle walk**: `tmp/wt/.git` (file) and `tmp/clone/.git/` (directory) are rows but their subtrees never are;
+  `tmp/notes/tasks/TASK-3.md` without a `.git` still is (near-miss control).
+  **Mutant: drop the walk check → RED.**
+- (b) **planning-analysis**: `docs/vendor-repo/.git/` carrying an active-implementation `HANDOFF.md` → its path never
+  appears in the audit's findings or raw findings.
+- (c) **root that is a worktree**: `isNestedCheckout(root, root)` is false and the root's `plans/` is still discovered,
+  while `tmp/wt` is pruned.
+Plus the earlier file: `planning-roots.test.ts` 5/5, `planning.test.ts` 139/139, `bundle.test.ts` 128/128.
+
+Re-measurement on the large workspace (read-only, same command), after rework 2:
+
+| | wall | exit | output | process peak (`time -l`) |
+|---|---|---|---|---|
+| before any exclusion | ~13 min → OOM | 134 | 0 B | 15.8 GB (instrumented trace) |
+| 2c02f049 (harness list + dead bundle filter) | 128 s | 1 (findings) | 401,643,253 B | 6,188,974,080 B |
+| this rework | 124 s | 1 (findings) | 401,643,253 B | 6,348,947,456 B |
+
+The generalization costs nothing measurable on this workspace (the nested checkouts are pruned by the `.git` rule exactly as
+the harness list pruned them) and it now also holds for a clone under `docs/` and for a worktree an operator keeps anywhere
+else. `tsc` 0, `audit:public` PASS, `build:raw` + `generated:postbuild:check` PASS (82 entries); packaged bytes regenerated
+by the normal scripts.
