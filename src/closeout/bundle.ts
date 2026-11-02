@@ -106,7 +106,20 @@ const PLANNING_NAMES = new Set([
 const PLANNING_KINDS = new Set(["repo_files", "external_snapshot", "none"]);
 
 async function discoverPlanningRoots(repo: string, files: FilePort): Promise<Set<string>> {
-  const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative));
+  const walked = await files.walk(repo);
+  // The same nested-checkout rule as the audit walk, from the row list: any
+  // directory holding a `.git` entry other than the root is a separate checkout.
+  const nestedCheckouts = new Set(
+    walked
+      .filter((row) => basename(row.relative) === ".git")
+      .map((row) => dirname(row.relative))
+      .filter((directory) => directory !== "." && directory !== ""),
+  );
+  const rows = walked
+    .filter((row) => !isHarnessDefinitionPath(row.relative))
+    .filter((row) => ![...nestedCheckouts].some(
+      (directory) => row.relative === directory || row.relative.startsWith(`/`),
+    ));
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = new Map<string, Set<string>>();
   for (const row of directories) {

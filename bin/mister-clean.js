@@ -10255,13 +10255,6 @@ function isCanonicalPlanningFileName(path) {
   const stem = name.slice(0, -extension.length).toLocaleLowerCase("und");
   return PLANNING_FILE_STEMS.has(stem);
 }
-var HARNESS_WORKTREE_DIRECTORIES = [
-  ".agents/worktrees",
-  ".claude/worktrees",
-  ".codex/worktrees",
-  ".cursor/worktrees",
-  ".pi/worktrees"
-];
 var HARNESS_DEFINITION_DIRECTORIES = [
   ".agents/skills",
   ".claude/agents",
@@ -10274,9 +10267,13 @@ var HARNESS_DEFINITION_DIRECTORIES = [
 ];
 function isHarnessDefinitionPath(relativePath) {
   const normalized = relativePath.split(sep3).join("/").replace(/^\.\//u, "");
-  return [...HARNESS_DEFINITION_DIRECTORIES, ...HARNESS_WORKTREE_DIRECTORIES].some(
+  return HARNESS_DEFINITION_DIRECTORIES.some(
     (directory) => normalized === directory || normalized.startsWith(`${directory}/`)
   );
+}
+function isNestedCheckout(repository, directory) {
+  if (resolve3(directory) === resolve3(repository)) return false;
+  return existsSync2(join2(directory, ".git"));
 }
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
   "__fixtures__",
@@ -10433,6 +10430,7 @@ function discoverPlanningRoots(repository) {
   function visit(directory) {
     const relativePath = relative3(repository, directory);
     if (relativePath !== "" && isHarnessDefinitionPath(relativePath)) return;
+    if (isNestedCheckout(repository, directory)) return;
     const name = directory.split(sep3).at(-1)?.toLocaleLowerCase() ?? "";
     if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
       candidates.add(directory);
@@ -26146,7 +26144,13 @@ var PLANNING_NAMES = /* @__PURE__ */ new Set([
 ]);
 var PLANNING_KINDS = /* @__PURE__ */ new Set(["repo_files", "external_snapshot", "none"]);
 async function discoverPlanningRoots2(repo, files) {
-  const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative));
+  const walked = await files.walk(repo);
+  const nestedCheckouts = new Set(
+    walked.filter((row) => basename12(row.relative) === ".git").map((row) => dirname11(row.relative)).filter((directory) => directory !== "." && directory !== "")
+  );
+  const rows = walked.filter((row) => !isHarnessDefinitionPath(row.relative)).filter((row) => ![...nestedCheckouts].some(
+    (directory) => row.relative === directory || row.relative.startsWith(`/`)
+  ));
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = /* @__PURE__ */ new Map();
   for (const row of directories) {

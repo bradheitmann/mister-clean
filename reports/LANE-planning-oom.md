@@ -83,3 +83,38 @@ Proofs:
 audited set) rather than exposing a retained-characters counter to the test. The retained-characters number is the
 instrumented trace above (2,392,769,775 → 170,958,445), which is the stronger measurement but cannot be asserted from a
 committed test without shipping the counter in production code.
+
+## Rework 1 (PM review of 22110dc6): the root invariant, not one instance
+
+1. **Generalized.** The fix is no longer a list of harness worktree paths. `isNestedCheckout(repository, directory)` refuses
+   to descend into any directory below the root that holds a `.git` entry — a file (linked worktree, submodule) or a
+   directory (clone) — because that is a different checkout with its own `plans/`, `tasks/`, `reports/`. The audit walk calls
+   it before descending; the bundle validator applies the same rule to its row list (any `.git` row's directory prunes its
+   subtree). `HARNESS_WORKTREE_DIRECTORIES` is **gone** — the `.git` rule subsumes it; `HARNESS_DEFINITION_DIRECTORIES`
+   stays because a harness definition tree (`.claude/commands`, `.codex`, …) carries no `.git` and the rule does not cover it.
+2. **Comment placement fixed.** The worktree note had been inserted between the existing `/** … */` JSDoc and the constant
+   it documents, so that JSDoc had come to document the wrong constant. Each `/** */` block now sits directly above its own
+   constant (`HARNESS_DEFINITION_DIRECTORIES`, `isNestedCheckout`), in the surrounding style.
+
+Proofs (`planning-roots.test.ts`, 5/5):
+- **Non-harness nested checkout**: `tmp/wt/.git` (a file) with `tasks/` and `plans/`, and `tmp/clone/.git/` (a directory)
+  with `tasks/` — neither is discovered.
+- **Near-miss control**: `tmp/notes/tasks/` with the same shape but no `.git` **is** discovered, so the rule is about
+  checkouts, not about `tmp/`.
+- Harness worktrees (`.claude/.codex/.agents`) still pruned, and their `.git` entries are what prune them now.
+- 200 artifacts planted inside a nested worktree stay out of the audited set (`planningRootCount ≤ 1`, `artifactCount < 200`).
+- **Mutant: remove the `.git` check → three tests RED** (`tmp/wt` root appears, worktree roots appear, nested corpus counted),
+  then restored.
+
+Re-measurement on the large workspace, read-only, same command (`audit planning … --json`):
+
+| | retained characters | in-process RSS peak | process peak (time -l) | wall | exit | output |
+|---|---|---|---|---|---|---|
+| 22110dc6 (harness list) | 170,958,445 | 1,997 MB | — | — | 1 (findings) | 401,643,253 B |
+| before any exclusion | 2,392,769,775 | 15,781 MB | — | ~13 min to OOM | 134 (OOM, no output) | 0 B |
+| this rework | 170,958,445 | 1,997 MB | 6,188,974,080 B (5.9 GB) | 128 s | 1 (findings) | 401,643,253 B |
+
+The retained-character and in-process figures are the like-for-like pair from the instrumented trace (counters reverted, not
+committed). `time -l` adds the absolute process peak for the fixed build; the pre-fix run under the same instrument would
+be a ~13-minute OOM run, so it is recorded from the instrumented trace instead. Planing roots on the workspace: 126 → 9
+(unchanged by the generalization, which removes the name list rather than adding reach).

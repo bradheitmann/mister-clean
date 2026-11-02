@@ -79,21 +79,42 @@ describe("planning root discovery", () => {
   });
 });
 
-describe("planning root discovery in a workspace with nested agent worktrees", () => {
-  it("does not descend into a harness worktree's own planning trees", async () => {
+describe("planning root discovery with nested checkouts", () => {
+  it("does not descend into a nested checkout, wherever it lives", async () => {
+    const base = scratch("nested-checkout");
+    const repository = join(base, "repo");
+    createFixtureRepository(repository);
+    put(repository, "plans/ROADMAP.md");
+    // A worktree at a NON-harness path: `tmp/wt` holds a `.git` FILE, as a
+    // linked worktree writes it, and its own planning trees.
+    put(repository, "tmp/wt/.git", "gitdir: /elsewhere/worktrees/wt\n");
+    put(repository, "tmp/wt/tasks/TASK-1.md");
+    put(repository, "tmp/wt/plans/ROADMAP.md");
+    // A nested CLONE holds a `.git` directory.
+    put(repository, "tmp/clone/.git/HEAD", "ref: refs/heads/main\n");
+    put(repository, "tmp/clone/tasks/TASK-2.md");
+    // Near-miss control: same shape, no `.git`, so it IS this repository.
+    put(repository, "tmp/notes/tasks/TASK-3.md");
+
+    const roots = discoverPlanningRoots(repository);
+    expect(roots).toContain("plans");
+    expect(roots).toContain("tmp/notes/tasks");
+    expect(roots.some((root) => root.startsWith("tmp/wt") || root.startsWith("tmp/clone"))).toBe(false);
+  });
+
+  it("does not descend into a harness worktree.s own planning trees", async () => {
     const base = scratch("nested-worktrees");
     const repository = join(base, "repo");
     createFixtureRepository(repository);
     put(repository, "plans/ROADMAP.md");
     // A nested checkout of the same repository, exactly as a harness keeps them.
     for (const worktree of [".claude/worktrees/agent-a", ".codex/worktrees/agent-b", ".agents/worktrees/agent-c"]) {
+      put(repository, `${worktree}/.git`, "gitdir: /elsewhere/worktrees/agent\n");
       put(repository, `${worktree}/plans/ROADMAP.md`);
       put(repository, `${worktree}/reports/lane/tasks/TASK-1.md`);
       put(repository, `${worktree}/docs/PRIMER.md`);
     }
-    for (const path of [".claude/worktrees/agent-a/plans", ".claude/worktrees/agent-a/reports/lane/tasks"]) {
-      expect(isHarnessDefinitionPath(path)).toBe(true);
-    }
+    expect(isHarnessDefinitionPath(".claude/commands/plan.md")).toBe(true);
     expect(isHarnessDefinitionPath("plans")).toBe(false);
 
     const roots = discoverPlanningRoots(repository);
@@ -110,6 +131,7 @@ describe("planning root discovery in a workspace with nested agent worktrees", (
     put(repository, "plans/ROADMAP.md", "# Roadmap\n\nOne slice.\n");
     // 200 artifacts inside a nested worktree: before the exclusion these were
     // walked and retained (measured: 2.39 B characters on a real workspace).
+    put(repository, ".claude/worktrees/agent-a/.git", "gitdir: /elsewhere/worktrees/agent\n");
     for (let index = 0; index < 200; index += 1) {
       put(repository, `.claude/worktrees/agent-a/plans/slice-${String(index)}.md`, `# Slice ${String(index)}\n`);
     }
