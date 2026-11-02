@@ -6,7 +6,7 @@ reasoning_label: thinking
 identity_status: title_only   # model/reasoning read from the pane title or footer; not bound to a runtime receipt
 evidence_class: field         # naturalistic; never averaged into a controlled score
 window: 2026-10-31T02:37Z/open
-model_registry_ref: unbound      # PM to bind to a model-facts registry record id; facts are not copied here
+model_registry_ref: xiaomi-mimo-v2.6-flash@2026.11.02-3   # card only; route not bound (identity title_only)
 ---
 
 # AC-009 — opencode / mimo-v2.6-flash / thinking

@@ -1,11 +1,11 @@
 --- a/export.json
 +++ b/export.json
-@@ -166,7 +166,7 @@
+@@ -863,7 +863,7 @@
        },
        "freshness": "current",
        "freshness_days": 7,
 -      "id": "provider.nvidia",
-+      "id": "provider.openrouter",
++      "id": "provider.deepseek",
        "kind": "provider",
        "last_verified": "2026-10-31",
-       "rate_limit_headers": {
+       "otel_provider_name": {

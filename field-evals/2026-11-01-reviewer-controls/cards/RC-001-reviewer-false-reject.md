@@ -4,7 +4,7 @@ metric: reviewer false-reject rate on known-good controls
 evidence_class: controlled_replay   # same control bytes within a pair set; k=3 per population
 identity_status: requested_model_recorded   # model on each replay observation; provider-reported model not checked
 window: 2026-11-01T05:55Z/2026-11-02T01:02Z
-model_registry_ref: unbound   # bind deepseek-flash and deepseek-v4-pro to model-facts registry ids
+model_registry_ref: [deepseek-v4-flash@2026.11.02-3, deepseek-v4-pro@2026.11.02-3]   # see "Registry binding" below
 ---
 
 # RC-001: reviewer false-reject rate (deepseek-flash vs deepseek-v4-pro)
@@ -61,3 +61,9 @@ Source: `data/replays-dedup.tsv`. It has one row per recorded replay, deduplicat
 
 - Flash refuses the same bad controls with additional blocking findings far more often (one-sided Fisher exact p = 0.0006). The direction holds in every population. This matches flash's higher false-reject rate: it is the stricter reviewer, not just a noisier one.
 - **Caveat that limits both tables:** the bad controls are not minimal pairs. They are synthetic placeholder projects, and the good controls are real extractions. So "additional blocking findings" are partly legitimate placeholder catches. The defect-attribution numbers measure reviewer strictness on these specific controls, not detection of the planted defect alone. The project has adopted minimal-pair controls; re-measure on them.
+
+## Registry binding (2026-11-02, seam-sync with the model-facts registry)
+The reviewer names in this card's data are provider model ids as the project's host reports them. They bind to registry cards through the registry's own route records (export 2026.11.02-3):
+- `deepseek-flash` → route `route.deepseek.deepseek-flash` → card `deepseek-v4-flash`;
+- `deepseek-v4-pro` → route `route.deepseek.deepseek-v4-pro` → card `deepseek-v4-pro`.
+Join other repositories' model data on the CARD id (the form `<id>@<export_version>`), not on the provider model id. Note: the registry is retiring card `deepseek-v4-flash` (the provider now serves `deepseek-flash` as DeepSeek-V4.1-Flash); after its export 2026.11.03-1, `route.deepseek.deepseek-flash` binds card `deepseek-v4.1-flash`, and this card is re-bound then.

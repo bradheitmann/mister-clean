@@ -36,7 +36,7 @@ a specialized model that fits the task. A run never jumps more than one tier.
 ```
 adjacent(from: {model_id, reasoning_level}, task, registry, policy) -> [Move]
 Move = {kind, to: {model_id, reasoning_level}, tier_from, tier_to}
-kind ∈ more_reasoning | same_tier_other_family | one_tier_up | one_tier_down_specialist
+kind ∈ more_reasoning | same_tier_other_lineage | one_tier_up | one_tier_down_specialist
 ```
 
 - The function is pure and deterministic. The task is an input: tier 1 accepts
@@ -64,3 +64,6 @@ kind ∈ more_reasoning | same_tier_other_family | one_tier_up | one_tier_down_s
 - Whether moves should echo the harness back as an opaque string.
 - The eval-evidence filter depends on the eval-case and agent-card formats
   (charter Slice Zero).
+
+## Amendment (2026-11-02, seam-sync with the tier ladder)
+The same-tier move kind is `same_tier_other_lineage`, not `same_tier_other_family`. The ladder renamed it because "families" are TASK families in the ladder's registry (ladder amendment 2026-10-31; ladder `crates/core/src/adjacent.rs`, accepted on its branch s10). The other three kinds are unchanged. No code consumes the kind yet.
