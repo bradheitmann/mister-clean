@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -49,6 +50,14 @@ describe("detectStack", () => {
 
     await expect(detectStack(root)).resolves.toEqual({
       ecosystems: ["node", "node-bun", "node-pnpm", "typescript", "github-actions", "shell"],
+      stacks: [
+        { ecosystem: "node", manifest_path: "package.json" },
+        { ecosystem: "node-bun", manifest_path: "bun.lock" },
+        { ecosystem: "node-pnpm", manifest_path: "pnpm-lock.yaml" },
+        { ecosystem: "typescript", manifest_path: "tsconfig.json" },
+        { ecosystem: "github-actions", manifest_path: ".github/workflows" },
+        { ecosystem: "shell", manifest_path: "scripts/check.sh" },
+      ],
       exitCode: 0,
       status: "detected",
     });
@@ -56,7 +65,7 @@ describe("detectStack", () => {
 
   it("keeps an unknown stack exit-relevant rather than silently skipping adapters", async () => {
     const root = await fixture("unknown");
-    await expect(detectStack(root)).resolves.toEqual({ ecosystems: [], exitCode: 3, status: "unknown" });
+    await expect(detectStack(root)).resolves.toEqual({ ecosystems: [], stacks: [], exitCode: 3, status: "unknown" });
   });
 });
 
@@ -234,5 +243,39 @@ describe("generatePackageManifest", () => {
     await expect(generatePackageManifest(root)).rejects.toThrow(
       "package manifest rejects symlinked package entry: SKILL.md",
     );
+  });
+});
+
+describe("detectStack on workspace manifests", () => {
+  it("detects a Rust workspace whose manifest lives in a subdirectory, naming the path", async () => {
+    const root = await fixture("workspace-manifest");
+    await put(root, "app/Cargo.toml", "[package]\nname='app'\nversion='0.1.0'\n");
+    await put(root, "README.md", "workspace\n");
+    execFileSync("git", ["init", "-q", "-b", "main", root]);
+    execFileSync("git", ["-C", root, "add", "-A"]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Fixture", "-c", "user.email=fixture.invalid", "commit", "-qm", "fixture"]);
+
+    const result = await detectStack(root);
+    expect(result.status).toBe("detected");
+    expect(result.ecosystems).toContain("rust");
+    expect(result.stacks).toContainEqual({ ecosystem: "rust", manifest_path: "app/Cargo.toml" });
+  });
+
+  it("ignores manifests inside ignored, vendored, and too-deep trees", async () => {
+    const root = await fixture("vendored-manifest");
+    await put(root, ".gitignore", "node_modules/\ntarget/\n");
+    await put(root, "app/Cargo.toml", "[package]\nname='app'\nversion='0.1.0'\n");
+    await put(root, "vendor/Cargo.toml", "[package]\nname='vendored'\nversion='0.1.0'\n");
+    await put(root, "node_modules/dependency/Cargo.toml", "[package]\nname='dep'\nversion='0.1.0'\n");
+    await put(root, "a/b/c/d/Cargo.toml", "[package]\nname='deep'\nversion='0.1.0'\n");
+    execFileSync("git", ["init", "-q", "-b", "main", root]);
+    execFileSync("git", ["-C", root, "add", "-A"]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Fixture", "-c", "user.email=fixture.invalid", "commit", "-qm", "fixture"]);
+
+    const result = await detectStack(root);
+    // Only the depth-1 tracked manifest counts; vendor/ is tracked but vendored.
+    expect(result.stacks.filter((entry) => entry.ecosystem === "rust")).toEqual([
+      { ecosystem: "rust", manifest_path: "app/Cargo.toml" },
+    ]);
   });
 });

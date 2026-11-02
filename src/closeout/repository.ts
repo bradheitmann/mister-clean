@@ -121,20 +121,61 @@ function compareCodePoints(left: string, right: string): number {
   return leftPoints.length - rightPoints.length;
 }
 
+/**
+ * Output bound for every Git child the closeout path starts.
+ *
+ * Node's spawnSync default is 1 MiB, which is smaller than a real repository's
+ * path list: `git ls-files -z` is ~2.1 MB on a 14,600-file workspace, and that
+ * shortfall surfaced as an ENOBUFS crash inside `audit repository-boundaries`.
+ * One documented bound covers every call site that imports it, and a child that
+ * would exceed it is refused as `git_output_too_large` with the bytes observed
+ * and the limit, never as a raw ENOBUFS.
+ */
+export const GIT_OUTPUT_LIMIT_BYTES = 256 * 1024 * 1024;
+
+/** Typed refusal for a Git child whose output would exceed the shared bound. */
+export class GitOutputTooLargeError extends Error {
+  readonly code = "git_output_too_large";
+  constructor(
+    readonly command: string,
+    readonly observed_bytes: number,
+    readonly limit_bytes: number,
+  ) {
+    super(`${command} produced at least ${String(observed_bytes)} bytes of output, over the ${String(limit_bytes)}-byte Git output bound`);
+    this.name = "GitOutputTooLargeError";
+  }
+}
+
+export interface RunGitOptions {
+  /** Lower or raise the output bound for this call; the shared bound by default. */
+  readonly max_buffer_bytes?: number;
+}
+
+function gitOutputFailure(args: readonly string[], error: unknown, bufferedBytes: number, limit: number): unknown {
+  const code = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "";
+  if (code !== "ENOBUFS") return error;
+  return new GitOutputTooLargeError(`git ${args.join(" ")}`, bufferedBytes, limit);
+}
+
 export function runGit(
   repository: string,
   args: readonly string[],
   allowedStatuses: readonly number[] = [0],
+  options: RunGitOptions = {},
 ): GitResult {
+  const limit = options.max_buffer_bytes ?? GIT_OUTPUT_LIMIT_BYTES;
   const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: limit,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  if (result.error) {
+    throw gitOutputFailure(args, result.error, Buffer.byteLength(result.stdout ?? "", "utf8"), limit);
+  }
   const status = result.status ?? 1;
   const stdout = result.stdout.trim();
   const stderr = result.stderr.trim();
-  if (result.error) throw result.error;
   if (!allowedStatuses.includes(status)) {
     throw new Error(stderr || `git ${args.join(" ")} exited ${status}`);
   }
@@ -145,9 +186,12 @@ function gitNullPaths(repository: string, args: readonly string[]): string[] {
   const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  if (result.error) throw result.error;
+  if (result.error) {
+    throw gitOutputFailure(args, result.error, Buffer.byteLength(result.stdout ?? "", "utf8"), GIT_OUTPUT_LIMIT_BYTES);
+  }
   if ((result.status ?? 1) !== 0) {
     throw new Error(result.stderr.trim() || `git ${args.join(" ")} exited ${result.status ?? 1}`);
   }

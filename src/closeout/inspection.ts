@@ -16,6 +16,7 @@ import {
 import { basename, relative, resolve, sep } from "node:path";
 
 import { generateAttestedPackageManifest } from "../attestation.js";
+import { runGit } from "./repository.js";
 import { foldCase } from "./normalization.js";
 
 export const STACK_MARKERS = {
@@ -36,9 +37,68 @@ export type Ecosystem = keyof typeof STACK_MARKERS | "shell";
 
 export interface StackDetectionResult {
   readonly ecosystems: readonly Ecosystem[];
+  /** Which marker proved each stack, and where it lives (root marker, or a subdirectory manifest). */
+  readonly stacks: readonly DetectedStack[];
   /** Matches the legacy detector: 0 when an adapter applies, 3 when manual inspection is required. */
   readonly exitCode: 0 | 3;
   readonly status: "detected" | "unknown";
+}
+
+export interface DetectedStack {
+  readonly ecosystem: Ecosystem;
+  /** Repository-relative path of the marker that proved this stack. */
+  readonly manifest_path: string;
+}
+
+/** Marker search depth: how many directories below the root a manifest may live. */
+export const STACK_MARKER_MAX_DEPTH = 3;
+
+/** Vendored or generated trees: a manifest inside them does not describe this repository. */
+const STACK_MARKER_IGNORED_SEGMENTS = new Set([
+  "node_modules", "target", "dist", "build", "out", "coverage",
+  "vendor", ".venv", "venv", "env", ".git",
+]);
+
+function markerDepth(path: string): number {
+  return path.split("/").length - 1;
+}
+
+function insideIgnoredTree(path: string): boolean {
+  return path
+    .split("/")
+    .slice(0, -1)
+    .some((segment) => STACK_MARKER_IGNORED_SEGMENTS.has(segment.toLocaleLowerCase("und")));
+}
+
+function trackedRepositoryPaths(root: string): readonly string[] | undefined {
+  try {
+    return runGit(root, ["ls-files", "-z"]).stdout.split("\0").filter((path) => path.length > 0);
+  } catch {
+    // Not a Git repository (or Git is unavailable): the caller falls back to the root markers.
+    return undefined;
+  }
+}
+
+function markerMatches(marker: string, path: string): boolean {
+  if (marker.includes("/")) return path.startsWith(`${marker}/`);
+  return path.split("/").at(-1) === marker;
+}
+
+/**
+ * Find one marker at the root, or - for a workspace whose manifest lives in a
+ * subdirectory - among tracked files within `STACK_MARKER_MAX_DEPTH`.
+ *
+ * Tracked files only: an untracked or ignored copy of a manifest is not evidence
+ * about this repository, and vendored trees are skipped by segment name.
+ */
+async function findMarker(marker: string, root: string, tracked: readonly string[] | undefined): Promise<string | undefined> {
+  if (await exists(resolve(root, marker))) return marker;
+  if (!tracked) return undefined;
+  const candidates = tracked
+    .filter((path) => !insideIgnoredTree(path) && markerDepth(path) <= STACK_MARKER_MAX_DEPTH)
+    .filter((path) => markerMatches(marker, path))
+    .sort((left, right) => markerDepth(left) - markerDepth(right) || left.localeCompare(right));
+  return candidates[0];
 }
 
 export interface PublicSafetyFinding {
@@ -218,33 +278,43 @@ function walkFilesSync(root: string, excluded: ReadonlySet<string>): WalkedPath[
   return files.sort((left, right) => compareCodePoints(left.relative, right.relative));
 }
 
-async function containsShellFile(root: string): Promise<boolean> {
+async function firstShellFile(root: string): Promise<string | undefined> {
   try {
-    return (await walkFiles(root, new Set([".git", "node_modules"]))).some((file) => file.relative.endsWith(".sh"));
+    return (await walkFiles(root, new Set([".git", "node_modules"])))
+      .filter((file) => file.relative.endsWith(".sh"))
+      .map((file) => file.relative.split(sep).join("/"))
+      .sort()[0];
   } catch {
     // The Python detector deliberately treats an unreadable recursive glob as
     // no shell evidence; the unknown-stack result still prevents a false pass.
-    return false;
+    return undefined;
   }
 }
 
 /** Ordered marker and shell detection semantics for the stack adapter router. */
 export async function detectStack(root: string): Promise<StackDetectionResult> {
   const absoluteRoot = resolve(root);
-  const ecosystems: Ecosystem[] = [];
+  const tracked = trackedRepositoryPaths(absoluteRoot);
+  const stacks: DetectedStack[] = [];
 
   for (const [ecosystem, markers] of Object.entries(STACK_MARKERS) as Array<
     [Exclude<Ecosystem, "shell">, readonly string[]]
   >) {
-    if ((await Promise.all(markers.map((marker) => exists(resolve(absoluteRoot, marker))))).some(Boolean)) {
-      ecosystems.push(ecosystem);
+    for (const marker of markers) {
+      const found = await findMarker(marker, absoluteRoot, tracked);
+      if (found) {
+        stacks.push({ ecosystem, manifest_path: found });
+        break;
+      }
     }
   }
-  if (await containsShellFile(absoluteRoot)) ecosystems.push("shell");
+  const shell = await firstShellFile(absoluteRoot);
+  if (shell) stacks.push({ ecosystem: "shell", manifest_path: shell });
 
+  const ecosystems = stacks.map((entry) => entry.ecosystem);
   return ecosystems.length > 0
-    ? { ecosystems, exitCode: 0, status: "detected" }
-    : { ecosystems, exitCode: 3, status: "unknown" };
+    ? { ecosystems, stacks, exitCode: 0, status: "detected" }
+    : { ecosystems, stacks, exitCode: 3, status: "unknown" };
 }
 
 /** Load the legacy newline-delimited denylist without exposing the terms in results. */

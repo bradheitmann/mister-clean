@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -292,5 +292,32 @@ describe("release attestation", () => {
     const gitignore = await readFile(join(repositoryRoot, ".gitignore"), "utf8");
     expect(packageJson.files).toContain("RELEASE_ATTESTATION.json");
     expect(gitignore.split("\n")).toContain("RELEASE_ATTESTATION.json");
+  });
+});
+
+describe("source-checkout attestation", () => {
+  it("names an unreleased source checkout instead of reporting the attestation ENOENT", async () => {
+    const root = await packageFixture("source-checkout");
+    await rm(join(root, RELEASE_ATTESTATION_FILE));
+    await mkdir(join(root, ".git"), { recursive: true });
+
+    const result = await verifyReleaseAttestation(root);
+    const resolved = await realpath(root);
+
+    expect(result.status).toBe("fail");
+    expect(result.source_checkout).toBe(true);
+    expect(result.resolved_root).toBe(resolved);
+    expect(result.errors[0]).toBe(
+      `unreleased source checkout at ${resolved}: run the installed release, or build and attest a release`,
+    );
+    expect(result.errors.some((error) => error.startsWith(`${RELEASE_ATTESTATION_FILE}:`))).toBe(false);
+  });
+
+  it("keeps the ordinary attestation verdict for a packaged root without a Git checkout", async () => {
+    const root = await packageFixture("packaged-no-git");
+    const result = await verifyReleaseAttestation(root);
+    expect(result.source_checkout).toBe(false);
+    expect(result.errors).toEqual([]);
+    expect(result.status).toBe("pass");
   });
 });

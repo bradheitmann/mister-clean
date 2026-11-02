@@ -6,6 +6,42 @@ import { assertDirectory, discoverPlanningRoots, git, isGitAncestor, listEntries
 import { auditPlanningArtifacts as assessPlanningArtifacts, finalizePlanningAudit, isPlanningTextPath,
   type PlanningSource, type PlanningFinding, type PlanningAuditResult, type PlanningRepositoryObservations } from "./policy.js";
 
+/**
+ * Deadline for one `audit planning` run.
+ *
+ * The walk is linear in tracked files (0.17-0.49 s at the shapes we could build),
+ * but a very large workspace can still exceed any budget, and a run that hits it
+ * must say what it covered instead of printing nothing.
+ */
+export const DEFAULT_PLANNING_DEADLINE_MS = 240_000;
+
+export interface PlanningAuditDeadline {
+  readonly deadline_ms: number;
+  /** Injected clock for tests; wall clock by default. */
+  readonly now?: () => number;
+}
+
+export interface PlanningAuditPartial {
+  readonly record_type: "mister-clean.planning-audit-partial";
+  readonly schema_version: "1.0";
+  readonly status: "timeout";
+  readonly deadline_ms: number;
+  readonly elapsed_ms: number;
+  readonly covered: {
+    readonly planning_roots: readonly string[];
+    readonly artifacts: readonly string[];
+  };
+  readonly pending_count: number;
+}
+
+/** Typed deadline hit: carries what the run covered so a caller can report it. */
+export class PlanningAuditTimeout extends Error {
+  constructor(readonly partial: PlanningAuditPartial) {
+    super(`planning audit deadline reached after ${String(partial.elapsed_ms)} ms: ${String(partial.covered.artifacts.length)} artifacts covered, ${String(partial.pending_count)} pending`);
+    this.name = "PlanningAuditTimeout";
+  }
+}
+
 function observationsFor(repository: string): PlanningRepositoryObservations {
   return {
     projectionCommandPasses: (command) => proveCurrentProjectionCommand(command, repository).status === "pass",
@@ -96,16 +132,49 @@ function discoverUnprojectedPlanningCandidates(
   return { candidates, findings };
 }
 
-export function auditPlanningRepository(repository: string): PlanningAuditResult {
+export function auditPlanningRepository(
+  repository: string,
+  deadline?: PlanningAuditDeadline,
+): PlanningAuditResult {
   const root = resolve(repository);
   assertDirectory(root);
+  const clock = deadline?.now ?? (() => Date.now());
+  const started = clock();
+  const deadlineMs = deadline?.deadline_ms;
+  const elapsed = (): number => clock() - started;
+  const expiredPartial = (covered: {
+    readonly planning_roots: readonly string[];
+    readonly artifacts: readonly string[];
+  }, pending: number): PlanningAuditTimeout => new PlanningAuditTimeout({
+    record_type: "mister-clean.planning-audit-partial",
+    schema_version: "1.0",
+    status: "timeout",
+    deadline_ms: deadlineMs ?? 0,
+    elapsed_ms: elapsed(),
+    covered,
+    pending_count: Math.max(0, pending),
+  });
   const planningRoots = discoverPlanningRoots(root);
+  const planned = planningRoots.map((rootText) => {
+    const rootPath = resolve(root, rootText);
+    const rootStat = lstatSync(rootPath);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      return [{
+        kind: rootStat.isFile() ? "file" : rootStat.isSymbolicLink() ? "symlink" : "other",
+        path: rootPath,
+      } as { readonly kind: "file" | "other" | "symlink"; readonly path: string }];
+    }
+    return [...listEntriesRecursively(rootPath)];
+  });
+  const entries = planned.flat();
   const sources: PlanningSource[] = [];
+  const covered: string[] = [];
   const appendEntry = (entry: { readonly kind: "file" | "other" | "symlink"; readonly path: string }): void => {
     const relativePath = relative(root, entry.path).split(sep).join("/");
     if (entry.kind === "file" && basename(entry.path) === ".gitkeep" && lstatSync(entry.path).size === 0) return;
     if (entry.kind !== "file" || !isPlanningTextPath(entry.path)) {
       sources.push({ content: "", path: relativePath });
+      covered.push(relativePath);
       return;
     }
     let content = "";
@@ -113,18 +182,17 @@ export function auditPlanningRepository(repository: string): PlanningAuditResult
       content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(entry.path));
     } catch {
       sources.push({ content: "", path: relativePath });
+      covered.push(relativePath);
       return;
     }
     sources.push({ content: content.includes("\0") ? "" : content, path: relativePath });
+    covered.push(relativePath);
   };
-  for (const rootText of planningRoots) {
-    const rootPath = resolve(root, rootText);
-    const rootStat = lstatSync(rootPath);
-    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-      appendEntry({ kind: rootStat.isFile() ? "file" : rootStat.isSymbolicLink() ? "symlink" : "other", path: rootPath });
-      continue;
+  for (const entry of entries) {
+    if (deadlineMs !== undefined && elapsed() > deadlineMs) {
+      throw expiredPartial({ planning_roots: planningRoots, artifacts: covered }, entries.length - covered.length);
     }
-    for (const entry of listEntriesRecursively(rootPath)) appendEntry(entry);
+    appendEntry(entry);
   }
   let snapshot = "unbound";
   try {

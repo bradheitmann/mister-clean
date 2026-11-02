@@ -8,7 +8,8 @@ import {
   isSourceDevelopmentEntrypoint,
   verifyReleaseAttestation,
 } from "./attestation.js";
-import { nodeCloseoutEngine } from "./closeout/engine.js";
+import { PlanningAuditTimeout, nodeCloseoutEngine } from "./closeout/engine.js";
+import { DEFAULT_PLANNING_DEADLINE_MS } from "./closeout/planning.js";
 import { loadDenylist, scanTrackedPublicSafetySync } from "./closeout/inspection.js";
 import { inspectRepositoryObject } from "./closeout/repository-inspection.js";
 import { packageRoot, trackedShippablePaths } from "./closeout/repository.js";
@@ -381,12 +382,17 @@ async function runDetect(args: string[], io: CliIO): Promise<number> {
   const root = args.shift();
   if (!root) throw new UsageError("detect stack requires a repository path");
   const listOnly = removeFlag(args, "--list");
+  const json = removeFlag(args, "--json");
   assertNoArgs(args);
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     io.stderr(`ERROR: not a directory: ${resolve(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
+  if (json) {
+    io.stdout(JSON.stringify({ resolved_root: resolve(root), ...result }, null, 2));
+    return result.exitCode;
+  }
   if (result.status === "unknown") {
     io.stdout("NO KNOWN ECOSYSTEM DETECTED -- inspect manually; adapter checks may not be silently skipped");
     return result.exitCode;
@@ -414,8 +420,26 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
   const root = args[0]?.startsWith("--") === false ? (args.shift() as string) : process.cwd();
   if (kind === "planning") {
     const json = removeFlag(args, "--json");
+    const deadlineOption = removeOption(args, "--deadline-ms");
     assertNoArgs(args);
-    const result = await nodeCloseoutEngine.auditPlanning(root);
+    const deadlineMs = deadlineOption === undefined ? DEFAULT_PLANNING_DEADLINE_MS : Number(deadlineOption);
+    if (!Number.isSafeInteger(deadlineMs) || deadlineMs <= 0) {
+      throw new UsageError("--deadline-ms requires a positive integer number of milliseconds");
+    }
+    let result;
+    try {
+      result = await nodeCloseoutEngine.auditPlanning(root, { deadline_ms: deadlineMs });
+    } catch (error) {
+      // A deadline hit is a typed partial: never empty output, never the silence
+      // the adopter saw on a very large workspace.
+      if (!(error instanceof PlanningAuditTimeout)) throw error;
+      if (json) io.stdout(JSON.stringify(error.partial, null, 2));
+      else {
+        io.stdout(`planning: TIMEOUT deadline_ms=${error.partial.deadline_ms} elapsed_ms=${error.partial.elapsed_ms} artifacts=${error.partial.covered.artifacts.length} pending=${error.partial.pending_count}`);
+        for (const path of error.partial.covered.artifacts) io.stdout(`covered\t${path}`);
+      }
+      return 1;
+    }
     if (json) io.stdout(JSON.stringify(result, null, 2));
     else {
       for (const finding of result.findings) {

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -129,6 +129,18 @@ describe("unified Mister Clean CLI", () => {
     expect(output.stdout).toEqual([
       "NO KNOWN ECOSYSTEM DETECTED -- inspect manually; adapter checks may not be silently skipped",
     ]);
+  });
+
+  it("reports stack detection as JSON, naming the resolved root and each manifest", async () => {
+    const root = fixture("stack-json");
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, "Cargo.toml"), "[package]\nname='app'\nversion='0.1.0'\n", "utf8");
+    const output = capture();
+    expect(await runCli(["detect", "stack", root, "--json"], output.io)).toBe(0);
+    const parsed = JSON.parse(output.stdout.join("\n")) as Record<string, unknown>;
+    expect(parsed.resolved_root).toBe(resolve(root));
+    expect(parsed.status).toBe("detected");
+    expect(parsed.stacks).toContainEqual({ ecosystem: "rust", manifest_path: "Cargo.toml" });
   });
 
   it("reports public-safety locations without source contents", async () => {

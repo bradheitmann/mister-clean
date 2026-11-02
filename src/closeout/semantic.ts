@@ -6,6 +6,7 @@ import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "
 import { parse as parseYaml } from "yaml";
 
 import {
+  GIT_OUTPUT_LIMIT_BYTES,
   assertDirectory,
   discoverPlanningRoots,
   git,
@@ -642,6 +643,7 @@ function repositoryObjectPaths(repository: string): string[] {
   const listed = spawnSync("git", ["--no-optional-locks", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (listed.error) throw listed.error;

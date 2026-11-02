@@ -20,8 +20,13 @@ import {
 } from "./prepare.js";
 import {
   auditPlanningRepository,
+  type PlanningAuditDeadline,
+  PlanningAuditTimeout,
   type PlanningAuditResult,
 } from "./planning.js";
+
+export type PlanningAuditOptions = PlanningAuditDeadline;
+export { PlanningAuditTimeout };
 import {
   auditSemanticRepository,
   type SemanticAuditOptions,
@@ -54,7 +59,7 @@ export interface CloseoutEngine {
   validateRecord(kind: CloseoutRecordKind, data: unknown, allowPlaceholders?: boolean): readonly string[];
   validateBundle(path: string, options?: BundleValidationOptions): Promise<BundleValidationResult>;
   detectStack(root: string): Promise<StackDetectionResult>;
-  auditPlanning(root: string): Promise<PlanningAuditResult>;
+  auditPlanning(root: string, options?: PlanningAuditOptions): Promise<PlanningAuditResult>;
   auditSemantic(root: string, options?: SemanticAuditOptions): Promise<SemanticAuditResult>;
   auditGitHubActions(root: string): Promise<GitHubActionsAuditResult>;
   auditRepositoryBoundaries(root: string): Promise<RepositoryBoundaryAuditResult>;
@@ -78,8 +83,8 @@ export const nodeCloseoutEngine: CloseoutEngine = {
   },
   validateBundle: validateBundleFile,
   detectStack,
-  async auditPlanning(root) {
-    return auditPlanningRepository(root);
+  async auditPlanning(root, options) {
+    return auditPlanningRepository(root, options);
   },
   async auditSemantic(root, options) {
     if (options?.evidencePackagePath !== undefined) {
