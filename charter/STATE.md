@@ -35,6 +35,7 @@ Not proven / known gaps:
   - O-ABL-1 (the CI wiring above);
   - O-RC-002 (instruction-polarity card, waiting on the evidence owner's second-family check);
   - O-R18-2 (a by-reference false-fail check, waiting for a P05 reconciler item that passes inline).
+  - O-FE1-SCHEMA (seam-sync with reveng): FE-1 reads the project's published telemetry schemas (`reveng.project-operation/1`, `reveng.run-observation/1`, `reveng.host-input-manifest/1`), with raw task-dir reads only where no schema exists. Today mister-clean evals read raw task dirs.
 Exact last-green command(s):
 - charter check --strict (charter b9323cd), exit 0
 - mister-clean (installed release 7.0.2) audit github-actions: pass, 0 findings
