@@ -106,6 +106,10 @@ export interface AttestationVerificationResult {
   readonly record_type: "mister-clean.release-attestation-result";
   readonly schema_version: "1.0";
   readonly status: "pass" | "fail";
+  /** The root the verification actually resolved, named on every result. */
+  readonly resolved_root: string;
+  /** True when the root is a Git checkout without a release attestation (an unreleased source tree). */
+  readonly source_checkout: boolean;
   readonly package_root: string;
   readonly package_root_realpath: string;
   readonly errors: readonly string[];
@@ -490,13 +494,26 @@ export async function verifyReleaseAttestation(
     if (dirty.length) errors.push(`source tree: dirty paths other than ${RELEASE_ATTESTATION_FILE}: ${dirty.join(", ")}`);
   }
 
+  // A source checkout is not a corrupted install: say so, instead of leaving the
+  // consumer with a bare ENOENT and a stale-manifest line to interpret.
+  const sourceCheckout = existsSync(join(packageRootRealpath, ".git"));
+  const reportedErrors = sourceCheckout && !attestation
+    ? [
+        `unreleased source checkout at ${packageRootRealpath}: run the installed release, or build and attest a release`,
+        ...errors.filter((error) => !error.startsWith(`${RELEASE_ATTESTATION_FILE}:`)
+          && !error.startsWith("MANIFEST.sha256: stale")),
+      ]
+    : errors;
+
   return {
     record_type: "mister-clean.release-attestation-result",
     schema_version: "1.0",
-    status: errors.length ? "fail" : "pass",
+    status: reportedErrors.length ? "fail" : "pass",
+    resolved_root: packageRootRealpath,
+    source_checkout: sourceCheckout,
     package_root: packageRoot,
     package_root_realpath: packageRootRealpath,
-    errors,
+    errors: reportedErrors,
     ...(attestation ? {
       package: attestation.package,
       claimed_source: attestation.claimed_source,

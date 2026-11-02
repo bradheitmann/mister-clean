@@ -5,6 +5,8 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 
 import { parseDocument } from "yaml";
 
+import { GIT_OUTPUT_LIMIT_BYTES } from "./repository.js";
+
 export type GitHubActionsFindingRule =
   | "health_gate_nonblocking"
   | "health_gate_identity_unbound"
@@ -544,6 +546,7 @@ function trackedWorkflowPaths(repository: string): string[] {
   return execFileSync("git", ["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   })
     .split("\0")

@@ -381,12 +381,17 @@ async function runDetect(args: string[], io: CliIO): Promise<number> {
   const root = args.shift();
   if (!root) throw new UsageError("detect stack requires a repository path");
   const listOnly = removeFlag(args, "--list");
+  const json = removeFlag(args, "--json");
   assertNoArgs(args);
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     io.stderr(`ERROR: not a directory: ${resolve(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
+  if (json) {
+    io.stdout(JSON.stringify({ resolved_root: resolve(root), ...result }, null, 2));
+    return result.exitCode;
+  }
   if (result.status === "unknown") {
     io.stdout("NO KNOWN ECOSYSTEM DETECTED -- inspect manually; adapter checks may not be silently skipped");
     return result.exitCode;

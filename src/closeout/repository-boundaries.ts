@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync } from "node:fs";
 import { extname, join, normalize, posix, resolve } from "node:path";
 
+import { GIT_OUTPUT_LIMIT_BYTES } from "./repository.js";
+
 export type ParserSurfaceShape = "bun" | "custom" | "go" | "node" | "python" | "rust" | "shell";
 
 export type RepositoryBoundaryRule =
@@ -76,6 +78,7 @@ function candidatePaths(root: string): string[] {
   return execFileSync("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
   }).split("\0").filter(Boolean).sort();
 }
 

@@ -12,6 +12,11 @@ import {
   type ObjectMapArrayWireContract,
 } from "./repository-boundaries.js";
 import { createFixtureRepository } from "../test-support/fixture-repo.js";
+import {
+  GIT_OUTPUT_LIMIT_BYTES,
+  GitOutputTooLargeError,
+  runGit,
+} from "./repository.js";
 
 const roots: string[] = [];
 
@@ -149,5 +154,46 @@ export function parseLines(text: string): Record<string, string> {
     const result = auditRepositoryBoundaries(root);
     expect(result.external_contract_count).toBe(1);
     expect(result.findings).toContainEqual(expect.objectContaining({ rule: "external_producer_contract_invalid" }));
+  });
+});
+
+describe("repository boundary audit on a large tracked surface", { timeout: 240_000 }, () => {
+  it("completes when the tracked path list is larger than the spawnSync default buffer", () => {
+    // A real 14,600-file workspace produces ~2.1 MB of `git ls-files -z`, over
+    // Node's 1 MiB spawnSync default: this fixture crosses 1 MiB the cheap way,
+    // with long path components rather than thousands of files.
+    const root = mkdtempSync(join(tmpdir(), "mister-clean-repository-boundaries-large-"));
+    roots.push(root);
+    createFixtureRepository(root, { identity: { name: "Mister Clean Test", email: "mister-clean.invalid" } });
+    const segment = "s".repeat(250);
+    const directory = join(root, segment, segment);
+    mkdirSync(directory, { recursive: true });
+    const leaf = "f".repeat(240);
+    for (let index = 0; index < 1_500; index += 1) {
+      writeFileSync(join(directory, `${leaf}-${String(index).padStart(4, "0")}`), "plain\n");
+    }
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "commit", "-qm", "large fixture"]);
+
+    const listed = execFileSync("git", ["-C", root, "ls-files", "-z"], { encoding: "utf8", maxBuffer: GIT_OUTPUT_LIMIT_BYTES });
+    expect(Buffer.byteLength(listed, "utf8")).toBeGreaterThan(1024 * 1024);
+
+    const result = auditRepositoryBoundaries(root);
+    expect(result.candidate_path_count).toBeGreaterThanOrEqual(1_500);
+    expect(result.status).toBe("pass");
+  });
+
+  it("refuses with a typed git_output_too_large error instead of a raw ENOBUFS", () => {
+    const root = fixture({ "source.ts": "export const value = 1;\n" });
+    let failure: unknown;
+    try {
+      runGit(root, ["ls-files", "-z"], [0], { max_buffer_bytes: 8 });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(GitOutputTooLargeError);
+    expect(failure).toMatchObject({ code: "git_output_too_large", limit_bytes: 8 });
+    expect((failure as GitOutputTooLargeError).observed_bytes).toBeGreaterThanOrEqual(8);
+    expect(String(failure)).toContain("over the 8-byte Git output bound");
   });
 });

@@ -7702,13 +7702,20 @@ async function verifyReleaseAttestation(root, options = {}) {
     const dirty = releaseRelevantStatus(packageRootRealpath);
     if (dirty.length) errors.push(`source tree: dirty paths other than ${RELEASE_ATTESTATION_FILE}: ${dirty.join(", ")}`);
   }
+  const sourceCheckout = existsSync(join(packageRootRealpath, ".git"));
+  const reportedErrors = sourceCheckout && !attestation ? [
+    `unreleased source checkout at ${packageRootRealpath}: run the installed release, or build and attest a release`,
+    ...errors.filter((error) => !error.startsWith(`${RELEASE_ATTESTATION_FILE}:`) && !error.startsWith("MANIFEST.sha256: stale"))
+  ] : errors;
   return {
     record_type: "mister-clean.release-attestation-result",
     schema_version: "1.0",
-    status: errors.length ? "fail" : "pass",
+    status: reportedErrors.length ? "fail" : "pass",
+    resolved_root: packageRootRealpath,
+    source_checkout: sourceCheckout,
     package_root: packageRoot2,
     package_root_realpath: packageRootRealpath,
-    errors,
+    errors: reportedErrors,
     ...attestation ? {
       package: attestation.package,
       claimed_source: attestation.claimed_source,
@@ -10287,16 +10294,36 @@ function compareCodePoints3(left, right) {
   }
   return leftPoints.length - rightPoints.length;
 }
-function runGit2(repository, args, allowedStatuses = [0]) {
+var GIT_OUTPUT_LIMIT_BYTES = 256 * 1024 * 1024;
+var GitOutputTooLargeError = class extends Error {
+  constructor(command, observed_bytes, limit_bytes) {
+    super(`${command} produced at least ${String(observed_bytes)} bytes of output, over the ${String(limit_bytes)}-byte Git output bound`);
+    this.command = command;
+    this.observed_bytes = observed_bytes;
+    this.limit_bytes = limit_bytes;
+    this.name = "GitOutputTooLargeError";
+  }
+  code = "git_output_too_large";
+};
+function gitOutputFailure(args, error, bufferedBytes, limit) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  if (code !== "ENOBUFS") return error;
+  return new GitOutputTooLargeError(`git ${args.join(" ")}`, bufferedBytes, limit);
+}
+function runGit2(repository, args, allowedStatuses = [0], options = {}) {
+  const limit = options.max_buffer_bytes ?? GIT_OUTPUT_LIMIT_BYTES;
   const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: limit,
     stdio: ["ignore", "pipe", "pipe"]
   });
+  if (result.error) {
+    throw gitOutputFailure(args, result.error, Buffer.byteLength(result.stdout ?? "", "utf8"), limit);
+  }
   const status = result.status ?? 1;
   const stdout = result.stdout.trim();
   const stderr = result.stderr.trim();
-  if (result.error) throw result.error;
   if (!allowedStatuses.includes(status)) {
     throw new Error(stderr || `git ${args.join(" ")} exited ${status}`);
   }
@@ -10306,9 +10333,12 @@ function gitNullPaths(repository, args) {
   const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
-  if (result.error) throw result.error;
+  if (result.error) {
+    throw gitOutputFailure(args, result.error, Buffer.byteLength(result.stdout ?? "", "utf8"), GIT_OUTPUT_LIMIT_BYTES);
+  }
   if ((result.status ?? 1) !== 0) {
     throw new Error(result.stderr.trim() || `git ${args.join(" ")} exited ${result.status ?? 1}`);
   }
@@ -14414,6 +14444,7 @@ function repositoryObjectPaths(repository) {
   const listed = spawnSync3("git", ["--no-optional-locks", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
   if (listed.error) throw listed.error;
@@ -23307,6 +23338,7 @@ function trackedWorkflowPaths(repository) {
   return execFileSync5("git", ["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"], {
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   }).split("\0").filter((path) => /\.ya?ml$/iu.test(path)).sort();
 }
@@ -23373,6 +23405,43 @@ var STACK_MARKERS = {
   docker: ["Dockerfile", "docker-compose.yml", "compose.yaml"],
   "github-actions": [".github/workflows"]
 };
+var STACK_MARKER_MAX_DEPTH = 3;
+var STACK_MARKER_IGNORED_SEGMENTS = /* @__PURE__ */ new Set([
+  "node_modules",
+  "target",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  "vendor",
+  ".venv",
+  "venv",
+  "env",
+  ".git"
+]);
+function markerDepth(path) {
+  return path.split("/").length - 1;
+}
+function insideIgnoredTree(path) {
+  return path.split("/").slice(0, -1).some((segment) => STACK_MARKER_IGNORED_SEGMENTS.has(segment.toLocaleLowerCase("und")));
+}
+function trackedRepositoryPaths(root) {
+  try {
+    return runGit2(root, ["ls-files", "-z"]).stdout.split("\0").filter((path) => path.length > 0);
+  } catch {
+    return void 0;
+  }
+}
+function markerMatches(marker, path) {
+  if (marker.includes("/")) return path.startsWith(`${marker}/`);
+  return path.split("/").at(-1) === marker;
+}
+async function findMarker(marker, root, tracked) {
+  if (await exists(resolve15(root, marker))) return marker;
+  if (!tracked) return void 0;
+  const candidates = tracked.filter((path) => !insideIgnoredTree(path) && markerDepth(path) <= STACK_MARKER_MAX_DEPTH).filter((path) => markerMatches(marker, path)).sort((left, right) => markerDepth(left) - markerDepth(right) || left.localeCompare(right));
+  return candidates[0];
+}
 var PUBLIC_SAFETY_EXCLUDED_PARTS = /* @__PURE__ */ new Set([
   ".git",
   ".venv",
@@ -23473,23 +23542,30 @@ function walkFilesSync(root, excluded2) {
   visit(absoluteRoot);
   return files.sort((left, right) => compareCodePoints5(left.relative, right.relative));
 }
-async function containsShellFile(root) {
+async function firstShellFile(root) {
   try {
-    return (await walkFiles2(root, /* @__PURE__ */ new Set([".git", "node_modules"]))).some((file) => file.relative.endsWith(".sh"));
+    return (await walkFiles2(root, /* @__PURE__ */ new Set([".git", "node_modules"]))).filter((file) => file.relative.endsWith(".sh")).map((file) => file.relative.split(sep11).join("/")).sort()[0];
   } catch {
-    return false;
+    return void 0;
   }
 }
 async function detectStack(root) {
   const absoluteRoot = resolve15(root);
-  const ecosystems = [];
+  const tracked = trackedRepositoryPaths(absoluteRoot);
+  const stacks = [];
   for (const [ecosystem, markers] of Object.entries(STACK_MARKERS)) {
-    if ((await Promise.all(markers.map((marker) => exists(resolve15(absoluteRoot, marker))))).some(Boolean)) {
-      ecosystems.push(ecosystem);
+    for (const marker of markers) {
+      const found = await findMarker(marker, absoluteRoot, tracked);
+      if (found) {
+        stacks.push({ ecosystem, manifest_path: found });
+        break;
+      }
     }
   }
-  if (await containsShellFile(absoluteRoot)) ecosystems.push("shell");
-  return ecosystems.length > 0 ? { ecosystems, exitCode: 0, status: "detected" } : { ecosystems, exitCode: 3, status: "unknown" };
+  const shell = await firstShellFile(absoluteRoot);
+  if (shell) stacks.push({ ecosystem: "shell", manifest_path: shell });
+  const ecosystems = stacks.map((entry) => entry.ecosystem);
+  return ecosystems.length > 0 ? { ecosystems, stacks, exitCode: 0, status: "detected" } : { ecosystems, stacks, exitCode: 3, status: "unknown" };
 }
 async function loadDenylist(path) {
   if (!path) return [];
@@ -27936,7 +28012,8 @@ function finding3(rule, path, detail, relatedPaths = []) {
 function candidatePaths(root) {
   return execFileSync6("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES
   }).split("\0").filter(Boolean).sort();
 }
 function readableText(root, path) {
@@ -30018,12 +30095,17 @@ async function runDetect(args, io) {
   const root = args.shift();
   if (!root) throw new UsageError("detect stack requires a repository path");
   const listOnly = removeFlag(args, "--list");
+  const json = removeFlag(args, "--json");
   assertNoArgs(args);
   if (!existsSync11(root) || !statSync5(root).isDirectory()) {
     io.stderr(`ERROR: not a directory: ${resolve26(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
+  if (json) {
+    io.stdout(JSON.stringify({ resolved_root: resolve26(root), ...result }, null, 2));
+    return result.exitCode;
+  }
   if (result.status === "unknown") {
     io.stdout("NO KNOWN ECOSYSTEM DETECTED -- inspect manually; adapter checks may not be silently skipped");
     return result.exitCode;
