@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, relative, resolve, sep } from "node:path";
 import { proveCurrentProjectionCommand } from "../repository-inspection.js";
-import { assertDirectory, discoverPlanningRoots, git, isGitAncestor, listEntriesRecursively } from "../repository.js";
+import { assertDirectory, discoverPlanningRoots, git, isGitAncestor, isNestedCheckout, listEntriesRecursively } from "../repository.js";
 import { auditPlanningArtifacts as assessPlanningArtifacts, finalizePlanningAudit, isPlanningTextPath,
   type PlanningSource, type PlanningFinding, type PlanningAuditResult, type PlanningRepositoryObservations } from "./policy.js";
 
@@ -93,6 +93,7 @@ function planningCandidatePaths(root: string, planningRoots: readonly string[]):
     const path = resolve(root, entry.name);
     if (entry.isFile()) append(path);
     else if (entry.isDirectory() && !entry.isSymbolicLink()
+      && !isNestedCheckout(root, path)
       && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
       for (const nested of listEntriesRecursively(path)) if (nested.kind === "file") append(nested.path);
     }

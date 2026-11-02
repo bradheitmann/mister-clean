@@ -10267,7 +10267,13 @@ var HARNESS_DEFINITION_DIRECTORIES = [
 ];
 function isHarnessDefinitionPath(relativePath) {
   const normalized = relativePath.split(sep3).join("/").replace(/^\.\//u, "");
-  return HARNESS_DEFINITION_DIRECTORIES.some((directory) => normalized === directory || normalized.startsWith(`${directory}/`));
+  return HARNESS_DEFINITION_DIRECTORIES.some(
+    (directory) => normalized === directory || normalized.startsWith(`${directory}/`)
+  );
+}
+function isNestedCheckout(repository, directory) {
+  if (resolve3(directory) === resolve3(repository)) return false;
+  return existsSync2(join2(directory, ".git"));
 }
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
   "__fixtures__",
@@ -10424,6 +10430,7 @@ function discoverPlanningRoots(repository) {
   function visit(directory) {
     const relativePath = relative3(repository, directory);
     if (relativePath !== "" && isHarnessDefinitionPath(relativePath)) return;
+    if (isNestedCheckout(repository, directory)) return;
     const name = directory.split(sep3).at(-1)?.toLocaleLowerCase() ?? "";
     if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
       candidates.add(directory);
@@ -10483,7 +10490,7 @@ function listEntriesRecursively(root) {
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join2(directory, entry.name);
-      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path);
+      if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path)) visit(path);
       else if (entry.isSymbolicLink()) entries2.push({ kind: "symlink", path });
       else if (entry.isFile()) entries2.push({ kind: "file", path });
       else entries2.push({ kind: "other", path });
@@ -13970,7 +13977,7 @@ function planningCandidatePaths(root, planningRoots) {
   for (const entry of readdirSync3(root, { withFileTypes: true })) {
     const path = resolve6(root, entry.name);
     if (entry.isFile()) append(path);
-    else if (entry.isDirectory() && !entry.isSymbolicLink() && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
+    else if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path) && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
       for (const nested of listEntriesRecursively(path)) if (nested.kind === "file") append(nested.path);
     }
   }
@@ -20346,7 +20353,7 @@ var nodeFilePort = {
         if (entry.isSymbolicLink()) rows.push({ absolute, relative: rel, kind: "symlink" });
         else if (entry.isDirectory()) {
           rows.push({ absolute, relative: rel, kind: "directory" });
-          await visit(absolute);
+          if (!isNestedCheckout(rootPath, absolute)) await visit(absolute);
         } else if (entry.isFile()) rows.push({ absolute, relative: rel, kind: "file" });
         else rows.push({ absolute, relative: rel, kind: "other" });
       }

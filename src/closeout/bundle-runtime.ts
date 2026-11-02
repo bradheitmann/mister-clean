@@ -12,6 +12,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { promisify } from "node:util";
 
 import { canonicalIdentity } from "./normalization.js";
+import { isNestedCheckout } from "./repository.js";
 import { isoTimestamp } from "./records.js";
 import { nodeProcessPort, type ActionHygieneProcessPort } from "./action-hygiene.js";
 import type { FileRuntimeAttestationBinding } from "../runtime-binding.js";
@@ -270,7 +271,12 @@ export const nodeFilePort: FilePort = {
         const absolute = resolve(directory, entry.name);
         const rel = posix(relative(rootPath, absolute));
         if (entry.isSymbolicLink()) rows.push({ absolute, relative: rel, kind: "symlink" });
-        else if (entry.isDirectory()) { rows.push({ absolute, relative: rel, kind: "directory" }); await visit(absolute); }
+        else if (entry.isDirectory()) {
+          rows.push({ absolute, relative: rel, kind: "directory" });
+          // A directory holding a `.git` entry below the root is a different
+          // checkout (linked worktree, submodule or clone): never descend.
+          if (!isNestedCheckout(rootPath, absolute)) await visit(absolute);
+        }
         else if (entry.isFile()) rows.push({ absolute, relative: rel, kind: "file" });
         else rows.push({ absolute, relative: rel, kind: "other" });
       }

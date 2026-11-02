@@ -71,7 +71,8 @@ export function isCanonicalPlanningFileName(path: string): boolean {
  * directories, and those files are commonly named like planning inputs
  * (`.claude/commands/plan.md`). They define what an agent may do, they are not
  * a project's planning corpus, so planning-root discovery skips these subtrees
- * whether or not the host ignores them in Git.
+ * whether or not the host ignores them in Git. These trees carry no `.git`
+ * entry, so the nested-checkout rule below does not cover them.
  */
 export const HARNESS_DEFINITION_DIRECTORIES: readonly string[] = [
   ".agents/skills",
@@ -87,8 +88,31 @@ export const HARNESS_DEFINITION_DIRECTORIES: readonly string[] = [
 /** True when a repository-relative path is a harness definition file or subtree. */
 export function isHarnessDefinitionPath(relativePath: string): boolean {
   const normalized = relativePath.split(sep).join("/").replace(/^\.\//u, "");
-  return HARNESS_DEFINITION_DIRECTORIES.some((directory) => normalized === directory
-    || normalized.startsWith(`${directory}/`));
+  return HARNESS_DEFINITION_DIRECTORIES.some(
+    (directory) => normalized === directory || normalized.startsWith(`${directory}/`),
+  );
+}
+
+/**
+ * True when `directory` is a separate checkout nested inside `repository`.
+ *
+ * Any directory below the root that holds a `.git` entry — a file, as a linked
+ * worktree or a submodule writes it, or a directory, as a clone does — is a
+ * different checkout with its own `plans/`, `tasks/` and `reports/` trees. Those
+ * are not this repository's planning corpus, and walking them multiplies the
+ * corpus by the number of checkouts (measured on a large workspace: 13 nested
+ * worktrees, 223,468 files, 2.39 B characters retained in one `audit planning`
+ * run, which exhausted the heap).
+ *
+ * Every walker in the closeout path shares this one helper, so `audit planning`,
+ * the bundle validator and the planning-candidate scan cannot disagree. The rule
+ * is deliberately not a list of harness paths: a worktree an operator keeps under
+ * `tmp/`, a nested clone and a submodule are all covered. The root itself is
+ * always walked, even when the root is a worktree.
+ */
+export function isNestedCheckout(repository: string, directory: string): boolean {
+  if (resolve(directory) === resolve(repository)) return false;
+  return existsSync(join(directory, ".git"));
 }
 
 export { PLANNING_LANE_LIFECYCLES, PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
@@ -301,6 +325,7 @@ export function discoverPlanningRoots(repository: string): string[] {
   function visit(directory: string): void {
     const relativePath = relative(repository, directory);
     if (relativePath !== "" && isHarnessDefinitionPath(relativePath)) return;
+    if (isNestedCheckout(repository, directory)) return;
     const name = directory.split(sep).at(-1)?.toLocaleLowerCase() ?? "";
     if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
       candidates.add(directory);
@@ -372,7 +397,7 @@ export function listEntriesRecursively(root: string): RecursiveEntry[] {
   function visit(directory: string): void {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path);
+      if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path)) visit(path);
       else if (entry.isSymbolicLink()) entries.push({ kind: "symlink", path });
       else if (entry.isFile()) entries.push({ kind: "file", path });
       else entries.push({ kind: "other", path });

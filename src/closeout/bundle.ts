@@ -106,6 +106,9 @@ const PLANNING_NAMES = new Set([
 const PLANNING_KINDS = new Set(["repo_files", "external_snapshot", "none"]);
 
 async function discoverPlanningRoots(repo: string, files: FilePort): Promise<Set<string>> {
+  // The walk itself refuses to descend into a nested checkout (bundle-runtime's
+  // nodeFilePort uses the same shared helper), so the rows here are already this
+  // repository's own files.
   const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative));
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = new Map<string, Set<string>>();
