@@ -1,0 +1,11 @@
+--- a/ablations/view-ab.ts
++++ b/ablations/view-ab.ts
+@@ -218,7 +218,7 @@
+       flip: summaryA.majority !== "tie" && summaryB.majority !== "tie" && summaryA.majority !== summaryB.majority,
+       cross_verdict_agreement: a.length * b.length === 0 ? 0 : round(agreeing / (a.length * b.length)),
+       cross_jaccard: crossJaccard === null ? null : round(crossJaccard),
+-      findings_moved_beyond_noise: crossJaccard === null || floor === null ? null : round(crossJaccard) < floor,
++      findings_moved_beyond_noise: crossJaccard === null || floor === null ? null : round(crossJaccard) < floor - 1,
+       only_in_a: exclusiveMajority(a, b),
+       only_in_b: exclusiveMajority(b, a),
+     };

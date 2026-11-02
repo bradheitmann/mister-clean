@@ -23,6 +23,7 @@
   "include": [
     "src/**/*.ts",
     "env.d.ts",
-    "customer-tests/**/*.ts"
+    "customer-tests/**/*.ts",
+    "ablations/**/*.ts"
   ]
 }
