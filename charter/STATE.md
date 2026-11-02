@@ -1,36 +1,58 @@
-# State — mister-clean — 2026-10-31T17:00Z, written by the project PM (Claude Code, Opus 5.5)
+# State — mister-clean — 2026-11-02T07:20Z, written by the project PM (Claude Code, Opus 5.5)
 Proven (with the proof names):
 - Nothing under this charter's Slice Zero yet; proven_on is empty.
-- Dependency advisories: the six high advisories (undici, zod, body-parser) are cleared on main; the scheduled dependency audit is green. Independently verified (author and verifier from different model families) on the exact merged tip.
-- Native-gate spawn fix landed (main 60e748d): gates spawn through the invoked PATH name, identity stays on the resolved path, with an immediate re-check (executable_changed). Independently verified on the exact tip fc1f68a: multi-call proxy and retarget proofs, each with a fail-without mutant.
-- Field-window evaluation of 2026-10-31 is landed (field-evals/2026-10-31-window/), with public seat labels replaced by opaque ids.
+- Dependency advisories: the six high advisories (undici, zod, body-parser) are cleared on main. Independently verified (author and verifier from different model families) on the exact merged tip.
+- Native-gate spawn fix landed (60e748d). Gates spawn through the invoked PATH name; identity stays on the resolved path, with an immediate re-check (executable_changed). Verified on the exact tip fc1f68a.
+- Hermetic test fixtures landed (5b83a44). Test-created repositories disable inherited hooks repo-locally and never touch the operator's configuration. Verified on the exact tip 53471f4.
+- Discovery and retirement landed (c5a85c9). Three changes, verified on the exact tip 1fa2fcd:
+  - harness definition folders are not planning roots;
+  - ratified retirements are read from charter/retirements/ with an in-repository evidence {path, sha256};
+  - every debt family reports a real repair boundary, and fixture exemptions are keyed by {file, rule, value_sha256}.
+- Customer test for the model-facts registry export accepts additive record kinds (2452aa9).
+- Field-evals:
+  - the 2026-10-31 window (opaque seat ids);
+  - reviewer-control card RC-001 (1ba6d13): reviewer false-reject rate from control-pair replays; a signal, not yet significant.
+- Charter pinned at 7b12eea (this change). Hooks are installed in the common hook directory: pre-commit runs check; pre-push runs check --strict plus gate. The host's language guard runs beside them.
 Not proven / known gaps:
-- INTENT and COMMON-STANDARD v0.2 await owner ratification. The owner decision on field evals (and its amendment) is recorded in charter/owner-decisions/.
-- The 7.1.0 candidate's packaged bytes changed (dependency fix and native-gate fix); its independent acceptance restarts. Publication is not established.
-- O-NG-1 (verifier finding, report-only): between the re-check and exec there is an inherent window (supervisor start-up, tens of milliseconds) in which a retargeted symlink would run a different binary than the one digested; closing it needs descriptor-based exec, which the runtime cannot express.
+- INTENT and COMMON-STANDARD v0.2 await owner ratification.
+- The 7.1.0 candidate's packaged bytes changed (dependency, native-gate, hermetic and discovery fixes). Its independent acceptance restarts at the release lane. Publication is not established; the installed judge is still 7.0.2.
+- O-RET-2 (open): a retirement record and its evidence can land in the same commit, so an agent could ratify its own retirement. Interim rule: the owner's ruling is committed before the record, and a human reviews every retirement.
+- O-NG-1 (report-only): an inherent window between the re-check and exec; closing it needs descriptor-based exec.
 - G2 eval-case-readback and G3 card-identity-check validators do not exist yet (Slice Zero).
-- CI cannot run `charter check`: the governance tool's repository is not publicly fetchable. Typed limitation; the check runs locally before every merge (charter pinned at c923a80; CI job pattern C pinned to the same commit; local hooks deferred until the retired-worktree disposition lands).
-- Local full suites cannot pass on a host whose global pre-commit hook refuses the suite's own fixture commits; hosted CI is the full-suite verdict there.
+- CI cannot run `charter check`: the governance tool's source is not reachable from the runner. Typed limitation. The check runs locally before every merge; the CI job is pattern C template v2 at the same pin.
+- Local full suite on this host: NOT VERIFIED. Hosted CI on the same commit (1ba6d13) is green and is the full-suite verdict. In the quiet slot of 2026-11-02 the local parts were:
+  - build:raw: 30/31;
+  - test:node: 814/828;
+  - test:bun: 202/211;
+  - control-plane:check: 67/67.
+  The failures fall in three environment classes:
+  - capsule commits refused by the host-global language guard (an owner decision is pending on capsule hook disabling);
+  - local socket and process-kill tests that fail deterministically in the operator agent's shell (fast, identical on rerun alone);
+  - stale build outputs that follow from the first two.
+  Origin class: `unestablished` until a host without the guard reproduces green.
 - The formal Mister Clean prepare/closure bundle is not produced (needs a local full suite; see above).
-- Obligations: O-STD-1 (stop committing the plain denylist; hashed form), O-STD-2 (honor AGENT_PRIVATE_ROOT), O-STD-3 (a private case-study identifier in .gitignore and two build scripts), O-STD-4 (port scripts/*.mjs to strict TypeScript), O-STD-5 (plan-schema pin when work contracts are first used). Two early field-observation branches (open PR #9, draft PR #8) are archived and owned by the project PM; their content is to be imported as field-evals records after FE-1, not merged under evals/ (a shipped-materials root).
+- Lane 3c (large-repository audits) is in progress on fix/large-repo-audits:
+  - O-BUF-1, O-STACK-1 and O-ATT-1 are done but not yet verified;
+  - O-PERF-1 is split into a deadline with a typed partial result, plus a profile on the real repository.
+- Obligations:
+  - O-STD-1..5;
+  - O-PLAN-1 (backlog register shape);
+  - O-RET-2;
+  - O-PERF-1 (b);
+  - the two archived early field-observation branches, to be imported after FE-1.
 Exact last-green command(s):
-- charter check --strict (charter c923a80), exit 0
-- mister-clean (installed release 7.0.2) audit planning / github-actions / repository-boundaries: pass, 0 findings
+- charter check --strict (charter 7b12eea), exit 0
+- mister-clean (installed release 7.0.2) audit github-actions: pass, 0 findings
 - bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt: PASS
-- hosted CI verify and dependency-audit on main a021eeb: success; hosted verify on PR #23's exact tip fc1f68a: success
+- hosted CI verify and dependency-audit on main 1ba6d13: success
 Exact last-red command(s) and why:
-- mister-clean audit public-safety: fails only on ignored, never-tracked local receipts (0 hits in tracked files).
-- local `bun run ci:check`: environment (host-global pre-commit hook refuses fixture commits), red identically at base.
+- local `bun run test` at 1ba6d13: build:verified stops at its capsule commit (host-global language guard). Environment, red identically at base.
+- local test:node / test:bun at 1ba6d13: 14 and 9 failures in the environment classes above.
 Next three bounded items (in order):
-1. Slice Zero: replay CS-001 with its control agent and build the eval-case validator (DONE/slice-zero.md).
-2. FE-1: field-evals/1 schema and validator (project/planning/FIELD-EVALS-PLAN.md), aligned with the model-facts registry's route schema.
-3. O-STD-1: hashed denylist form, then stop committing the plain list.
+1. Lane 3c: verify, merge, then the read-only acceptance run against the large repository.
+2. Slice Zero: replay CS-001 with its control agent and build the eval-case validator (DONE/slice-zero.md).
+3. FE-1: field-evals/1 schema and validator, aligned with the model-facts registry's route schema.
 Open owner decisions:
 - Ratify INTENT and COMMON-STANDARD v0.2.
-- Deletion of four retired agent worktrees that still hold untracked files (contents preserved externally with verified hashes), and of listed scratch files.
-- Whether the governance tool becomes publicly fetchable for CI; whether the guard hook exempts test-capsule fixture commits.
-- Whether earlier history is scrubbed of private names (no rewrite without that decision).
-Where everything is (branches, lanes, receipts):
-- main is the only integration branch; no lane is in flight.
-- Temporary worktrees and their lifecycle record live outside the repository, in the operator's worktree area.
-- Private evidence, id maps, handoffs and preserved trees live under the private data root, never in this repository.
+- Capsule hook disabling for the clean-CI and generated-candidate capsules (needed for a local full suite on a guarded host).
+- Deletion of retired agent worktrees that still hold untracked files (contents preserved externally with verified hashes), and of listed scratch files.
