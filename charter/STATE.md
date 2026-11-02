@@ -25,9 +25,9 @@ Not proven / known gaps:
 - The formal Mister Clean prepare/closure bundle is not produced (it needs a local full suite).
 - **CI pins charter 7b12eea while local is b9323cd.** The CI bump, and wiring `bun ablations/view-ab.ts --self-test` into CI, both need a workflow edit. The host's security-guidance hook blocked that edit (its warning is about untrusted event input, which neither change uses), and it was deliberately not routed around.
 - **Model-registry joins:**
-  - the 15 agent cards in field-evals/2026-10-31-window carry `model_registry_ref: unbound` and free-text model names;
-  - the customer test pins registry export 2026.11.01-2, which lacks current cards such as deepseek-v4-flash;
-  - the current export is 2026.11.01-4.
+  - all 15 field-window agent cards and RC-001 now name registry card ids (export 2026.11.02-3), or `none` where the export has no card (9 cards: nemotron-3.5-super, step-5-preview, inkling, mimo-v2.6-pro, nemotron-3-ultra, muse-wonder);
+  - the customer test is re-pinned to the current export 2026.11.02-3 (fixture vendored with the publisher's clearance; both mutants observed RED);
+  - the registry will retire card deepseek-v4-flash for deepseek-v4.1-flash on route.deepseek.deepseek-flash (its lane flash-identity-1, expected export 2026.11.03-1). The three flash cards and RC-001 are re-bound then.
 - Obligations:
   - O-STD-1..5, O-PLAN-1, O-RET-2 (self-ratification gap; interim rule: commit the owner's ruling before the retirement record);
   - O-PERF-2 (`audit planning` emits about 401 MB of JSON on a large workspace; peak RSS 6.35 GB);
@@ -46,9 +46,7 @@ Exact last-red command(s) and why:
 - local test:node / test:bun at 1ba6d13: 14 and 9 failures in the environment classes above.
 Next three bounded items (in order):
 1. Lane 4: the 7.1.0 release candidate. Classify the version, run full acceptance on a host without the guard (or after the owner's capsule decision), stop before publish.
-2. Model-registry joins:
-   - bind the 15 field-window agent cards to registry card ids, via the registry's route records, as RC-001 now is;
-   - refresh the customer-test pin to the current export.
+2. Model-registry joins: re-bind the flash cards and RC-001 to deepseek-v4.1-flash when export 2026.11.03-1 lands; re-bind `none` cards when the registry adds them; re-pin the customer test each focus window.
 3. O-PERF-2 (bounded/summary planning output) and O-CENSUS-1.
 Open owner decisions:
 - Ratify INTENT and COMMON-STANDARD v0.2.

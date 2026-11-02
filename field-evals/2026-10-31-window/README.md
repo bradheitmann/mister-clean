@@ -28,3 +28,6 @@ Concepts (owner definitions): an agent is harness + model + reasoning level; pro
 
 ## Regenerating the derived tables
 `SEAT_MAP_SED=<private combined seat map> tools/refresh-derived.sh /absolute/path/to/raw-meter.tsv` (input columns: utc, surface, title, model, footer, banner). The combined map is the private seat map followed by the private opaque-id map, so derived tables only ever contain opaque ids.
+
+## Registry binding (2026-11-02)
+Every agent card's `model_registry_ref` now names a model-registry card id in the form `<id>@<export_version>` (export 2026.11.02-3), or `none@2026.11.02-3` when that export carries no card for the model. Bound: deepseek-v4-flash (3 cards), deepseek-v4-pro (1), xiaomi-mimo-v2.6-flash (2). No card: nemotron-3.5-super (3; its routes exist without a card), and step-5-preview, inkling, mimo-v2.6-pro, nemotron-3-ultra and muse-wonder (6). Routes stay unbound, because these cards' identity is title_only (CS-009). Join other repositories' model data on the card id, never on a free-text model name.
