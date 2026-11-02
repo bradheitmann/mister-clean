@@ -13923,6 +13923,14 @@ function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 
 }
 
 // src/closeout/planning-analysis/repository.ts
+var DEFAULT_PLANNING_DEADLINE_MS = 24e4;
+var PlanningAuditTimeout = class extends Error {
+  constructor(partial) {
+    super(`planning audit deadline reached after ${String(partial.elapsed_ms)} ms: ${String(partial.covered.artifacts.length)} artifacts covered, ${String(partial.pending_count)} pending`);
+    this.partial = partial;
+    this.name = "PlanningAuditTimeout";
+  }
+};
 function observationsFor(repository) {
   return {
     projectionCommandPasses: (command) => proveCurrentProjectionCommand(command, repository).status === "pass",
@@ -13990,16 +13998,43 @@ function discoverUnprojectedPlanningCandidates(root, planningRoots, planningSour
   }));
   return { candidates, findings };
 }
-function auditPlanningRepository(repository) {
+function auditPlanningRepository(repository, deadline) {
   const root = resolve6(repository);
   assertDirectory(root);
+  const clock = deadline?.now ?? (() => Date.now());
+  const started = clock();
+  const deadlineMs = deadline?.deadline_ms;
+  const elapsed = () => clock() - started;
+  const expiredPartial = (covered2, pending) => new PlanningAuditTimeout({
+    record_type: "mister-clean.planning-audit-partial",
+    schema_version: "1.0",
+    status: "timeout",
+    deadline_ms: deadlineMs ?? 0,
+    elapsed_ms: elapsed(),
+    covered: covered2,
+    pending_count: Math.max(0, pending)
+  });
   const planningRoots = discoverPlanningRoots(root);
+  const planned = planningRoots.map((rootText) => {
+    const rootPath = resolve6(root, rootText);
+    const rootStat = lstatSync3(rootPath);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      return [{
+        kind: rootStat.isFile() ? "file" : rootStat.isSymbolicLink() ? "symlink" : "other",
+        path: rootPath
+      }];
+    }
+    return [...listEntriesRecursively(rootPath)];
+  });
+  const entries2 = planned.flat();
   const sources = [];
+  const covered = [];
   const appendEntry = (entry) => {
     const relativePath = relative5(root, entry.path).split(sep5).join("/");
     if (entry.kind === "file" && basename5(entry.path) === ".gitkeep" && lstatSync3(entry.path).size === 0) return;
     if (entry.kind !== "file" || !isPlanningTextPath(entry.path)) {
       sources.push({ content: "", path: relativePath });
+      covered.push(relativePath);
       return;
     }
     let content = "";
@@ -14007,18 +14042,17 @@ function auditPlanningRepository(repository) {
       content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync2(entry.path));
     } catch {
       sources.push({ content: "", path: relativePath });
+      covered.push(relativePath);
       return;
     }
     sources.push({ content: content.includes("\0") ? "" : content, path: relativePath });
+    covered.push(relativePath);
   };
-  for (const rootText of planningRoots) {
-    const rootPath = resolve6(root, rootText);
-    const rootStat = lstatSync3(rootPath);
-    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-      appendEntry({ kind: rootStat.isFile() ? "file" : rootStat.isSymbolicLink() ? "symlink" : "other", path: rootPath });
-      continue;
+  for (const entry of entries2) {
+    if (deadlineMs !== void 0 && elapsed() > deadlineMs) {
+      throw expiredPartial({ planning_roots: planningRoots, artifacts: covered }, entries2.length - covered.length);
     }
-    for (const entry of listEntriesRecursively(rootPath)) appendEntry(entry);
+    appendEntry(entry);
   }
   let snapshot = "unbound";
   try {
@@ -29647,8 +29681,8 @@ var nodeCloseoutEngine = {
   },
   validateBundle: validateBundleFile,
   detectStack,
-  async auditPlanning(root) {
-    return auditPlanningRepository(root);
+  async auditPlanning(root, options) {
+    return auditPlanningRepository(root, options);
   },
   async auditSemantic(root, options) {
     if (options?.evidencePackagePath !== void 0) {
@@ -30133,8 +30167,24 @@ async function runAudit(args, io) {
   const root = args[0]?.startsWith("--") === false ? args.shift() : process.cwd();
   if (kind === "planning") {
     const json2 = removeFlag(args, "--json");
+    const deadlineOption = removeOption(args, "--deadline-ms");
     assertNoArgs(args);
-    const result2 = await nodeCloseoutEngine.auditPlanning(root);
+    const deadlineMs = deadlineOption === void 0 ? DEFAULT_PLANNING_DEADLINE_MS : Number(deadlineOption);
+    if (!Number.isSafeInteger(deadlineMs) || deadlineMs <= 0) {
+      throw new UsageError("--deadline-ms requires a positive integer number of milliseconds");
+    }
+    let result2;
+    try {
+      result2 = await nodeCloseoutEngine.auditPlanning(root, { deadline_ms: deadlineMs });
+    } catch (error) {
+      if (!(error instanceof PlanningAuditTimeout)) throw error;
+      if (json2) io.stdout(JSON.stringify(error.partial, null, 2));
+      else {
+        io.stdout(`planning: TIMEOUT deadline_ms=${error.partial.deadline_ms} elapsed_ms=${error.partial.elapsed_ms} artifacts=${error.partial.covered.artifacts.length} pending=${error.partial.pending_count}`);
+        for (const path of error.partial.covered.artifacts) io.stdout(`covered	${path}`);
+      }
+      return 1;
+    }
     if (json2) io.stdout(JSON.stringify(result2, null, 2));
     else {
       for (const finding4 of result2.findings) {
