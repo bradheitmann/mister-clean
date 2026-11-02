@@ -10255,6 +10255,13 @@ function isCanonicalPlanningFileName(path) {
   const stem = name.slice(0, -extension.length).toLocaleLowerCase("und");
   return PLANNING_FILE_STEMS.has(stem);
 }
+var HARNESS_WORKTREE_DIRECTORIES = [
+  ".agents/worktrees",
+  ".claude/worktrees",
+  ".codex/worktrees",
+  ".cursor/worktrees",
+  ".pi/worktrees"
+];
 var HARNESS_DEFINITION_DIRECTORIES = [
   ".agents/skills",
   ".claude/agents",
@@ -10267,7 +10274,9 @@ var HARNESS_DEFINITION_DIRECTORIES = [
 ];
 function isHarnessDefinitionPath(relativePath) {
   const normalized = relativePath.split(sep3).join("/").replace(/^\.\//u, "");
-  return HARNESS_DEFINITION_DIRECTORIES.some((directory) => normalized === directory || normalized.startsWith(`${directory}/`));
+  return [...HARNESS_DEFINITION_DIRECTORIES, ...HARNESS_WORKTREE_DIRECTORIES].some(
+    (directory) => normalized === directory || normalized.startsWith(`${directory}/`)
+  );
 }
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
   "__fixtures__",

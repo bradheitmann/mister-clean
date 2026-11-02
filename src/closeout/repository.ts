@@ -73,6 +73,21 @@ export function isCanonicalPlanningFileName(path: string): boolean {
  * a project's planning corpus, so planning-root discovery skips these subtrees
  * whether or not the host ignores them in Git.
  */
+/// Agent-harness scratch worktrees are nested checkouts of the SAME repository.
+///
+/// They are not this repository's planning corpus: a single workspace can hold
+/// dozens of them, each with its own `plans/`, `tasks/` and `reports/` trees, and
+/// walking them multiplies the corpus by the number of worktrees (measured: 13
+/// nested worktrees, 223,468 files, 2.39 B characters in one `audit planning`
+/// run, which is what exhausted the heap).
+export const HARNESS_WORKTREE_DIRECTORIES: readonly string[] = [
+  ".agents/worktrees",
+  ".claude/worktrees",
+  ".codex/worktrees",
+  ".cursor/worktrees",
+  ".pi/worktrees",
+];
+
 export const HARNESS_DEFINITION_DIRECTORIES: readonly string[] = [
   ".agents/skills",
   ".claude/agents",
@@ -87,8 +102,9 @@ export const HARNESS_DEFINITION_DIRECTORIES: readonly string[] = [
 /** True when a repository-relative path is a harness definition file or subtree. */
 export function isHarnessDefinitionPath(relativePath: string): boolean {
   const normalized = relativePath.split(sep).join("/").replace(/^\.\//u, "");
-  return HARNESS_DEFINITION_DIRECTORIES.some((directory) => normalized === directory
-    || normalized.startsWith(`${directory}/`));
+  return [...HARNESS_DEFINITION_DIRECTORIES, ...HARNESS_WORKTREE_DIRECTORIES].some(
+    (directory) => normalized === directory || normalized.startsWith(`${directory}/`),
+  );
 }
 
 export { PLANNING_LANE_LIFECYCLES, PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";

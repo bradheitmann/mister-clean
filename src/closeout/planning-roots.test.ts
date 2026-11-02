@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { discoverPlanningRoots, isCanonicalPlanningFileName, isHarnessDefinitionPath } from "./repository.js";
-import { createFixtureRepository } from "../test-support/fixture-repo.js";
+import { auditPlanningRepository } from "./planning.js";
+import { createFixtureRepository, fixtureCommit } from "../test-support/fixture-repo.js";
 
 const roots: string[] = [];
 
@@ -75,5 +76,47 @@ describe("planning root discovery", () => {
       .toContain("!! local-corpora/");
 
     expect(discoverPlanningRoots(repository).sort()).toEqual(["local-corpora/legacy/planning", "planning"]);
+  });
+});
+
+describe("planning root discovery in a workspace with nested agent worktrees", () => {
+  it("does not descend into a harness worktree's own planning trees", async () => {
+    const base = scratch("nested-worktrees");
+    const repository = join(base, "repo");
+    createFixtureRepository(repository);
+    put(repository, "plans/ROADMAP.md");
+    // A nested checkout of the same repository, exactly as a harness keeps them.
+    for (const worktree of [".claude/worktrees/agent-a", ".codex/worktrees/agent-b", ".agents/worktrees/agent-c"]) {
+      put(repository, `${worktree}/plans/ROADMAP.md`);
+      put(repository, `${worktree}/reports/lane/tasks/TASK-1.md`);
+      put(repository, `${worktree}/docs/PRIMER.md`);
+    }
+    for (const path of [".claude/worktrees/agent-a/plans", ".claude/worktrees/agent-a/reports/lane/tasks"]) {
+      expect(isHarnessDefinitionPath(path)).toBe(true);
+    }
+    expect(isHarnessDefinitionPath("plans")).toBe(false);
+
+    const roots = discoverPlanningRoots(repository);
+    expect(roots).toContain("plans");
+    expect(roots.some((root) => root.startsWith(".claude/worktrees")
+      || root.startsWith(".codex/worktrees")
+      || root.startsWith(".agents/worktrees"))).toBe(false);
+  });
+
+  it("keeps a nested worktree corpus out of the audited artifact set", { timeout: 120_000 }, async () => {
+    const base = scratch("nested-worktrees-audit");
+    const repository = join(base, "repo");
+    createFixtureRepository(repository);
+    put(repository, "plans/ROADMAP.md", "# Roadmap\n\nOne slice.\n");
+    // 200 artifacts inside a nested worktree: before the exclusion these were
+    // walked and retained (measured: 2.39 B characters on a real workspace).
+    for (let index = 0; index < 200; index += 1) {
+      put(repository, `.claude/worktrees/agent-a/plans/slice-${String(index)}.md`, `# Slice ${String(index)}\n`);
+    }
+    fixtureCommit(repository, "nested worktrees");
+
+    const result = auditPlanningRepository(repository);
+    expect(result.planningRootCount).toBeLessThanOrEqual(1);
+    expect(result.artifactCount).toBeLessThan(200);
   });
 });
