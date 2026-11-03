@@ -386,6 +386,23 @@ function selectedPathSetSha256(paths: readonly string[]): string {
     .digest("hex");
 }
 
+/**
+ * Digests of every built-in public-safety rule match in `text`, per line. It is
+ * the same rule table and value digest the scanner emits, so a receipt can be
+ * checked for leaked matched values and an earlier blob can be searched for a
+ * digest without either side ever serialising the matched text.
+ */
+export function publicSafetyValueDigestsInText(text: string): readonly { readonly rule: string; readonly value_sha256: string }[] {
+  const digests: { readonly rule: string; readonly value_sha256: string }[] = [];
+  for (const line of lines(text)) {
+    for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
+      const match = line.match(expression);
+      if (match) digests.push({ rule, value_sha256: createHash("sha256").update(match[0] ?? line.trim(), "utf8").digest("hex") });
+    }
+  }
+  return digests;
+}
+
 function publicSafetyFinding(path: string, line: number, rule: string, matched: string): PublicSafetyFinding {
   return {
     fingerprint: publicSafetyFingerprint({ path, line, rule }),

@@ -3994,10 +3994,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep19, value } = collItem;
+        const { start, key, sep: sep21, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep19?.[0],
+          next: key ?? sep21?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -4011,7 +4011,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep19) {
+          if (!keyProps.anchor && !keyProps.tag && !sep21) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map2.comment)
@@ -4035,7 +4035,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep19 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep21 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -4051,7 +4051,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep19, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep21, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -4142,7 +4142,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep19 = "";
+        let sep21 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -4156,13 +4156,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep19 + cb;
-              sep19 = "";
+                comment += sep21 + cb;
+              sep21 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep19 += source;
+                sep21 += source;
               hasSpace = true;
               break;
             default:
@@ -4205,18 +4205,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep19, value } = collItem;
+        const { start, key, sep: sep21, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep19?.[0],
+          next: key ?? sep21?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep19 && !value) {
+          if (!props.anchor && !props.tag && !sep21 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -4270,8 +4270,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep19 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep19, null, props, onError);
+        if (!isMap && !sep21 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep21, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -4283,7 +4283,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep19 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep21 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -4294,8 +4294,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep19)
-                for (const st of sep19) {
+              if (sep21)
+                for (const st of sep21) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -4312,7 +4312,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep19, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep21, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -4492,7 +4492,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep19 = "";
+      let sep21 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines2[i][0].slice(trimIndent) + "\n";
@@ -4509,24 +4509,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep19 + indent.slice(trimIndent) + content;
-          sep19 = "\n";
+          value += sep21 + indent.slice(trimIndent) + content;
+          sep21 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep19 === " ")
-            sep19 = "\n";
-          else if (!prevMoreIndented && sep19 === "\n")
-            sep19 = "\n\n";
-          value += sep19 + indent.slice(trimIndent) + content;
-          sep19 = "\n";
+          if (sep21 === " ")
+            sep21 = "\n";
+          else if (!prevMoreIndented && sep21 === "\n")
+            sep21 = "\n\n";
+          value += sep21 + indent.slice(trimIndent) + content;
+          sep21 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep19 === "\n")
+          if (sep21 === "\n")
             value += "\n";
           else
-            sep19 = "\n";
+            sep21 = "\n";
         } else {
-          value += sep19 + content;
-          sep19 = " ";
+          value += sep21 + content;
+          sep21 = " ";
           prevMoreIndented = false;
         }
       }
@@ -4708,25 +4708,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep19 = " ";
+      let sep21 = " ";
       let pos = first.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
-          if (sep19 === "\n")
-            res += sep19;
+          if (sep21 === "\n")
+            res += sep21;
           else
-            sep19 = "\n";
+            sep21 = "\n";
         } else {
-          res += sep19 + match[1];
-          sep19 = " ";
+          res += sep21 + match[1];
+          sep21 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep19 + (match?.[1] ?? "");
+      return res + sep21 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -5536,14 +5536,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep19, value }) {
+    function stringifyItem({ start, key, sep: sep21, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep19)
-        for (const st of sep19)
+      if (sep21)
+        for (const st of sep21)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -6710,18 +6710,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep19;
+          let sep21;
           if (scalar3.end) {
-            sep19 = scalar3.end;
-            sep19.push(this.sourceToken);
+            sep21 = scalar3.end;
+            sep21.push(this.sourceToken);
             delete scalar3.end;
           } else
-            sep19 = [this.sourceToken];
+            sep21 = [this.sourceToken];
           const map2 = {
             type: "block-map",
             offset: scalar3.offset,
             indent: scalar3.indent,
-            items: [{ start, key: scalar3, sep: sep19 }]
+            items: [{ start, key: scalar3, sep: sep21 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map2;
@@ -6874,15 +6874,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep19 = it.sep;
-                  sep19.push(this.sourceToken);
+                  const sep21 = it.sep;
+                  sep21.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep19 }]
+                    items: [{ start: start2, key, sep: sep21 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -7076,13 +7076,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep19 = fc.end.splice(1, fc.end.length);
-            sep19.push(this.sourceToken);
+            const sep21 = fc.end.splice(1, fc.end.length);
+            sep21.push(this.sourceToken);
             const map2 = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep19 }]
+              items: [{ start, key: fc, sep: sep21 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map2;
@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync11, readFileSync as readFileSync16, realpathSync as realpathSync10, statSync as statSync5, writeFileSync as writeFileSync7 } from "fs";
-import { isAbsolute as isAbsolute23, join as join16, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync19, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
+import { isAbsolute as isAbsolute24, join as join19, relative as relative20, resolve as resolve28, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -23646,6 +23646,16 @@ function publicSafetyUnassessed(path, reason) {
 function selectedPathSetSha256(paths) {
   return createHash17("sha256").update(JSON.stringify([...new Set(paths)].sort(compareCodePoints5)), "utf8").digest("hex");
 }
+function publicSafetyValueDigestsInText(text3) {
+  const digests = [];
+  for (const line of lines(text3)) {
+    for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
+      const match = line.match(expression);
+      if (match) digests.push({ rule, value_sha256: createHash17("sha256").update(match[0] ?? line.trim(), "utf8").digest("hex") });
+    }
+  }
+  return digests;
+}
 function publicSafetyFinding(path, line, rule, matched) {
   return {
     fingerprint: publicSafetyFingerprint({ path, line, rule }),
@@ -24336,7 +24346,7 @@ function resolveGateCwd(repository, cwd) {
   if (!stat3.isDirectory()) throw new Error(`native gate cwd is not a directory: ${cwd}`);
   return target;
 }
-async function blockedExecution(gate, reason, object7, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
+async function blockedExecution(gate, reason, object9, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
   const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(diagnostic, "utf8"), true);
@@ -24353,8 +24363,8 @@ async function blockedExecution(gate, reason, object7, evidenceRoot, now, subjec
     executable_sha256: executableSha256,
     started_at: started,
     finished_at: now().toISOString(),
-    start_repository_object: object7,
-    end_repository_object: object7,
+    start_repository_object: object9,
+    end_repository_object: object9,
     subject_start_state: subjectStartState,
     subject_end_state: subjectEndState,
     exit_code: null,
@@ -29831,6 +29841,788 @@ function journalFromEnvironment(environment) {
   return new AppendOnlyLocalMisterCleanInvocationJournal(invocationJournalPathFromEnvironment(environment));
 }
 
+// src/closeout/finding-anchors.ts
+import { createHash as createHash24 } from "crypto";
+import { spawnSync as spawnSync6 } from "child_process";
+import { existsSync as existsSync11, readFileSync as readFileSync16, statSync as statSync5 } from "fs";
+import { join as join16 } from "path";
+var RECEIPT_FAMILIES = [
+  "planning_graph",
+  "public_safety",
+  "github_actions",
+  "repository_boundaries",
+  "semantic_boundary"
+];
+var ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy"];
+function sha256Text(value) {
+  return createHash24("sha256").update(value, "utf8").digest("hex");
+}
+function receiptFingerprint(input) {
+  return sha256Text([input.family, input.rule, input.path, input.anchor_kind, input.content_sha256].join("\0"));
+}
+function normalizeWhitespace(value) {
+  return value.replaceAll(/\s+/g, " ").trim();
+}
+function trimmedLineSha256(line) {
+  return sha256Text(line.trim());
+}
+function object7(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asString(value, label) {
+  if (typeof value !== "string" || value.length === 0) throw new Error(`${label}: expected a nonempty string`);
+  return value;
+}
+function posixPath(prefix, path) {
+  const normalized = path.split("\\").join("/").replace(/^\.\//u, "");
+  if (!prefix || normalized === ".") return prefix ? prefix : normalized;
+  return `${prefix}/${normalized}`;
+}
+function workingTreeBlobOids(repository, paths) {
+  const regular = [...new Set(paths)].filter((path) => {
+    const absolute = join16(repository, path);
+    try {
+      return existsSync11(absolute) && statSync5(absolute).isFile();
+    } catch {
+      return false;
+    }
+  }).sort();
+  const oids = /* @__PURE__ */ new Map();
+  if (regular.length === 0) return oids;
+  const result = spawnSync6("git", ["--no-optional-locks", "-C", repository, "hash-object", "--stdin-paths"], {
+    encoding: "utf8",
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    input: `${regular.join("\n")}
+`,
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+  if (result.error) throw result.error;
+  if ((result.status ?? 1) !== 0) throw new Error(result.stderr.trim() || "git hash-object --stdin-paths failed");
+  const lines2 = result.stdout.trim().split("\n");
+  if (lines2.length !== regular.length) throw new Error("git hash-object returned an unexpected number of object ids");
+  regular.forEach((path, index) => {
+    oids.set(path, lines2[index] ?? "");
+  });
+  return oids;
+}
+function githubActionsRefText(repository, ref) {
+  const marker = ref.lastIndexOf("#line-");
+  const path = marker < 0 ? ref : ref.slice(0, marker);
+  const line = marker < 0 ? null : Number(ref.slice(marker + "#line-".length));
+  if (line === null || !Number.isInteger(line) || line < 1) return { text: "", line: null };
+  let text3;
+  try {
+    text3 = readFileSync16(join16(repository, path), "utf8");
+  } catch {
+    return { text: "", line };
+  }
+  const row = text3.split(/\r?\n/u)[line - 1];
+  return { text: row === void 0 ? "" : row.trim(), line };
+}
+function receiptFindingsFromAudit(family, audit, context) {
+  const record4 = object7(audit);
+  if (!record4) throw new Error(`${family}: audit result must be an object`);
+  if (family === "repository_boundaries") {
+    if (record4.record_type !== "mister-clean.repository-boundary-audit" || !Array.isArray(record4.findings)) {
+      throw new Error("repository_boundaries: audit result is not canonical");
+    }
+  } else if (family === "public_safety") {
+    if (!Array.isArray(record4.findings) || !Array.isArray(record4.unassessed)) {
+      throw new Error("public_safety: audit result is not canonical");
+    }
+  } else {
+    const errors = detectorResultShapeErrors(family, audit);
+    if (errors.length > 0) throw new Error(`${family}: audit result is not canonical: ${errors[0]}`);
+  }
+  const prefix = (context.path_prefix ?? "").replace(/\/+$/u, "");
+  const rows = [];
+  const pathsToHash = /* @__PURE__ */ new Set();
+  const semanticCandidatePaths = /* @__PURE__ */ new Map();
+  if (family === "semantic_boundary") {
+    for (const candidate of record4.candidates) {
+      const row = object7(candidate);
+      if (row && typeof row.id === "string" && typeof row.path === "string") semanticCandidatePaths.set(row.id, row.path);
+    }
+  }
+  const sourceRows = family === "planning_graph" ? record4.raw_findings : family === "public_safety" ? [...record4.findings, ...record4.unassessed] : record4.findings;
+  for (const value of sourceRows) {
+    const row = object7(value);
+    if (!row) throw new Error(`${family}: finding must be an object`);
+    const rawPath = family === "semantic_boundary" ? semanticCandidatePaths.get(asString(row.candidate_id, `${family}.candidate_id`)) ?? "." : asString(row.path, `${family}.path`);
+    const path = posixPath(prefix, rawPath);
+    rows.push({ row, path });
+    pathsToHash.add(path);
+  }
+  const oids = (context.blobOids ?? ((paths) => workingTreeBlobOids(context.repository, paths)))([...pathsToHash]);
+  const anchored = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const { row, path } of rows) {
+    const blobOid = oids.get(path) ?? null;
+    let rule;
+    let kind;
+    let content;
+    let lineHint = null;
+    let severity = null;
+    let legacy;
+    let probe;
+    if (family === "public_safety") {
+      legacy = asString(row.fingerprint, "public_safety.fingerprint");
+      if (typeof row.rule === "string") {
+        rule = row.rule;
+        kind = "value_digest";
+        content = asString(row.value_sha256, "public_safety.value_sha256");
+        if (!/^[0-9a-f]{64}$/u.test(content)) throw new Error("public_safety.value_sha256: expected lowercase SHA-256");
+        lineHint = typeof row.line === "number" ? row.line : null;
+        probe = { kind, rule, value_sha256: content };
+      } else {
+        rule = `unassessed:${asString(row.reason, "public_safety.reason")}`;
+        kind = "detail_digest";
+        content = sha256Text(`unassessed\0${row.reason}`);
+        probe = { kind, blob_oid: blobOid };
+      }
+    } else if (family === "github_actions") {
+      rule = asString(row.rule, "github_actions.rule");
+      severity = typeof row.severity === "string" ? row.severity : null;
+      legacy = asString(row.fingerprint, "github_actions.fingerprint");
+      kind = "line_content";
+      const auditRoot = prefix ? join16(context.repository, prefix) : context.repository;
+      const refs = [...new Set(row.refs)].sort().map((ref) => githubActionsRefText(auditRoot, ref));
+      const texts = refs.map((item) => item.text);
+      const lineDigests = texts.map(trimmedLineSha256);
+      content = sha256Text(texts.join("\n"));
+      lineHint = refs.find((item) => item.line !== null)?.line ?? null;
+      probe = { kind, line_sha256s: lineDigests };
+    } else if (family === "planning_graph") {
+      rule = asString(row.code, "planning_graph.code");
+      legacy = planningFindingFingerprint(asString(row.id, "planning_graph.id"));
+      kind = "detail_digest";
+      content = sha256Text([rule, asString(row.subject, "planning_graph.subject"), normalizeWhitespace(asString(row.detail, "planning_graph.detail"))].join("\0"));
+      probe = { kind, blob_oid: blobOid };
+    } else if (family === "repository_boundaries") {
+      rule = asString(row.rule, "repository_boundaries.rule");
+      legacy = asString(row.fingerprint, "repository_boundaries.fingerprint");
+      kind = "detail_digest";
+      content = sha256Text(asString(row.detail, "repository_boundaries.detail"));
+      probe = { kind, blob_oid: blobOid };
+    } else {
+      rule = asString(row.code, "semantic_boundary.code");
+      legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
+      kind = "whole_repo";
+      content = asString(record4.candidate_set_sha256, "semantic_boundary.candidate_set_sha256");
+      probe = { kind, content_sha256: content };
+    }
+    const fingerprint2 = receiptFingerprint({ family, rule, path, anchor_kind: kind, content_sha256: content });
+    if (seen.has(fingerprint2)) continue;
+    seen.add(fingerprint2);
+    anchored.push({
+      finding: {
+        fingerprint: fingerprint2,
+        family,
+        rule,
+        path,
+        anchor: { kind, blob_oid: blobOid, content_sha256: content, line_hint: lineHint },
+        severity,
+        legacy_fingerprint: legacy
+      },
+      probe
+    });
+  }
+  return anchored.sort((left, right) => left.finding.fingerprint.localeCompare(right.finding.fingerprint));
+}
+
+// src/closeout/second-pass.ts
+import { existsSync as existsSync13, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
+import { dirname as dirname16, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+
+// src/run-receipt.ts
+import { appendFileSync as appendFileSync2, existsSync as existsSync12, mkdirSync as mkdirSync6, readFileSync as readFileSync17, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
+import { createHash as createHash25, randomUUID as randomUUID8 } from "crypto";
+import { dirname as dirname15, isAbsolute as isAbsolute23, join as join17, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
+var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
+var RUN_RECEIPT_SCHEMA_VERSION = "1";
+var RECEIPT_INDEX_FILE = "receipts.index.jsonl";
+var ReceiptRootInsideRepositoryError = class extends Error {
+  constructor(receipt_root) {
+    super("receipt root must not be inside the audited repository");
+    this.receipt_root = receipt_root;
+    this.name = "ReceiptRootInsideRepositoryError";
+  }
+  code = "receipt_root_inside_repository";
+};
+var ReceiptPrivacyError = class extends Error {
+  constructor(violations) {
+    super(`receipt refused: ${violations.join("; ")}`);
+    this.violations = violations;
+    this.name = "ReceiptPrivacyError";
+  }
+  code = "receipt_privacy_violation";
+};
+var RunReceiptInvalidError = class extends Error {
+  constructor(errors) {
+    super(`run receipt is invalid: ${errors.join("; ")}`);
+    this.errors = errors;
+    this.name = "RunReceiptInvalidError";
+  }
+  code = "run_receipt_invalid";
+};
+var HEX645 = /^[0-9a-f]{64}$/u;
+var HEX40 = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
+function object8(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function exactKeys(record4, expected, path, errors) {
+  const keys = Object.keys(record4).sort();
+  const wanted = [...expected].sort();
+  if (keys.length === wanted.length && keys.every((key, index) => key === wanted[index])) return true;
+  errors.push(`${path}: expected exactly the keys ${wanted.join(",")}; got ${keys.join(",")}`);
+  return false;
+}
+function canonicalTimestamp3(value) {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+function isRepositoryRelativePath(path) {
+  if (path.length === 0 || isAbsolute23(path) || path.startsWith("/") || path.includes("\\")) return false;
+  if (/^[A-Za-z]:/u.test(path) || /[\u0000-\u001f\u007f]/u.test(path)) return false;
+  return path === "." || path.split("/").every((part) => part.length > 0 && part !== "..");
+}
+function sha256Hex(value) {
+  return createHash25("sha256").update(value, "utf8").digest("hex");
+}
+function repositoryIdSha256(repositoryId) {
+  return sha256Hex(repositoryId);
+}
+function runReceiptErrors(value) {
+  const errors = [];
+  const record4 = object8(value);
+  if (!record4) return ["$: expected object"];
+  if (!exactKeys(record4, [
+    "record_type",
+    "schema_version",
+    "receipt_id",
+    "invocation_id",
+    "mode",
+    "repository_id",
+    "subject",
+    "dirty",
+    "detector_registry_sha256",
+    "runtime_identity_sha256",
+    "agent",
+    "families",
+    "findings",
+    "verdict",
+    "exit_code",
+    "observed_at",
+    "finished_at"
+  ], "$", errors)) return errors;
+  if (record4.record_type !== RUN_RECEIPT_RECORD_TYPE) errors.push(`$.record_type: expected ${RUN_RECEIPT_RECORD_TYPE}`);
+  if (record4.schema_version !== RUN_RECEIPT_SCHEMA_VERSION) errors.push(`$.schema_version: expected ${RUN_RECEIPT_SCHEMA_VERSION}`);
+  if (typeof record4.receipt_id !== "string" || !/^mc-receipt:[0-9a-f-]{36}$/u.test(record4.receipt_id)) errors.push("$.receipt_id: expected mc-receipt:<uuid>");
+  if (record4.invocation_id !== null && (typeof record4.invocation_id !== "string" || !record4.invocation_id.startsWith("mc-invocation:"))) errors.push("$.invocation_id: expected null or mc-invocation:<uuid>");
+  if (!["CLOSE", "AUDIT", "SECOND_PASS"].includes(String(record4.mode))) errors.push("$.mode: expected CLOSE, AUDIT or SECOND_PASS");
+  if (typeof record4.repository_id !== "string" || !/^(?:remote:[^\s/]+\/.+|local-path-sha256:[0-9a-f]{64})$/u.test(record4.repository_id)) errors.push("$.repository_id: expected remote:<host>/<path> or local-path-sha256:<hex>");
+  const subject = object8(record4.subject);
+  if (subject && exactKeys(subject, ["repository_object", "head_commit", "head_tree"], "$.subject", errors)) {
+    if (typeof subject.head_commit !== "string" || !HEX40.test(subject.head_commit)) errors.push("$.subject.head_commit: expected Git object id");
+    if (typeof subject.head_tree !== "string" || !HEX40.test(subject.head_tree)) errors.push("$.subject.head_tree: expected Git object id");
+    const repositoryObject = object8(subject.repository_object);
+    if (subject.repository_object !== null) {
+      if (!repositoryObject || !exactKeys(repositoryObject, ["record_type", "schema_version", "head_commit", "surface", "entry_count", "sha256"], "$.subject.repository_object", errors)) {
+        if (!repositoryObject) errors.push("$.subject.repository_object: expected null or RepositoryObject 1.0");
+      } else if (repositoryObject.record_type !== "mister-clean.repository-object" || repositoryObject.schema_version !== "1.0" || repositoryObject.surface !== "tracked_and_nonignored" || !Number.isInteger(repositoryObject.entry_count) || typeof repositoryObject.sha256 !== "string" || !HEX645.test(repositoryObject.sha256) || repositoryObject.head_commit !== subject.head_commit) {
+        errors.push("$.subject.repository_object: expected RepositoryObject 1.0 bound to subject.head_commit");
+      }
+    }
+  } else if (!subject) errors.push("$.subject: expected object");
+  if (typeof record4.dirty !== "boolean") errors.push("$.dirty: expected boolean");
+  if (typeof record4.detector_registry_sha256 !== "string" || !HEX645.test(record4.detector_registry_sha256)) errors.push("$.detector_registry_sha256: expected lowercase SHA-256");
+  if (typeof record4.runtime_identity_sha256 !== "string" || !HEX645.test(record4.runtime_identity_sha256)) errors.push("$.runtime_identity_sha256: expected lowercase SHA-256");
+  const agent = object8(record4.agent);
+  if (agent && exactKeys(agent, ["identity_status", "card_ref", "source"], "$.agent", errors)) {
+    if (!["receipt", "title_only", "contract_only", "unobserved"].includes(String(agent.identity_status))) errors.push("$.agent.identity_status: expected receipt, title_only, contract_only or unobserved");
+    if (agent.card_ref !== null && (typeof agent.card_ref !== "string" || agent.card_ref.length === 0 || isAbsolute23(agent.card_ref) || agent.card_ref.includes("/"))) errors.push("$.agent.card_ref: expected null or an opaque reference without path separators");
+    if (agent.source !== null && !["flag", "env", "lifecycle"].includes(String(agent.source))) errors.push("$.agent.source: expected flag, env, lifecycle or null");
+    if (agent.identity_status === "unobserved" && (agent.card_ref !== null || agent.source !== null)) errors.push("$.agent: unobserved identity carries no card_ref or source");
+    if (agent.identity_status !== "unobserved" && (agent.card_ref === null || agent.source === null)) errors.push("$.agent: an observed identity requires card_ref and source");
+  } else if (!agent) errors.push("$.agent: expected object");
+  const families = Array.isArray(record4.families) ? record4.families : void 0;
+  if (!families || families.some((family) => !RECEIPT_FAMILIES.includes(family)) || new Set(families).size !== families.length) errors.push("$.families: expected unique receipt families");
+  const findings = Array.isArray(record4.findings) ? record4.findings : void 0;
+  if (!findings) errors.push("$.findings: expected array");
+  const seen = /* @__PURE__ */ new Set();
+  for (const [index, value2] of (findings ?? []).entries()) {
+    const path = `$.findings[${index}]`;
+    const finding4 = object8(value2);
+    if (!finding4 || !exactKeys(finding4, ["fingerprint", "family", "rule", "path", "anchor", "severity", "legacy_fingerprint"], path, errors)) {
+      if (!finding4) errors.push(`${path}: expected object`);
+      continue;
+    }
+    if (typeof finding4.fingerprint !== "string" || !HEX645.test(finding4.fingerprint)) errors.push(`${path}.fingerprint: expected lowercase SHA-256`);
+    else if (seen.has(finding4.fingerprint)) errors.push(`${path}.fingerprint: duplicate`);
+    else seen.add(finding4.fingerprint);
+    if (!RECEIPT_FAMILIES.includes(finding4.family)) errors.push(`${path}.family: unknown family`);
+    else if (families && !families.includes(finding4.family)) errors.push(`${path}.family: not among the receipt's families`);
+    if (typeof finding4.rule !== "string" || finding4.rule.length === 0) errors.push(`${path}.rule: required`);
+    if (typeof finding4.path !== "string" || !isRepositoryRelativePath(finding4.path)) errors.push(`${path}.path: expected a repository-relative path`);
+    if (finding4.severity !== null && typeof finding4.severity !== "string") errors.push(`${path}.severity: expected string or null`);
+    if (typeof finding4.legacy_fingerprint !== "string" || !HEX645.test(finding4.legacy_fingerprint)) errors.push(`${path}.legacy_fingerprint: expected lowercase SHA-256`);
+    const anchor = object8(finding4.anchor);
+    if (anchor && exactKeys(anchor, ["kind", "blob_oid", "content_sha256", "line_hint"], `${path}.anchor`, errors)) {
+      if (!ANCHOR_KINDS.includes(anchor.kind)) errors.push(`${path}.anchor.kind: unknown anchor kind`);
+      if (anchor.blob_oid !== null && (typeof anchor.blob_oid !== "string" || !HEX40.test(anchor.blob_oid))) errors.push(`${path}.anchor.blob_oid: expected null or Git object id`);
+      if (typeof anchor.content_sha256 !== "string" || !HEX645.test(anchor.content_sha256)) errors.push(`${path}.anchor.content_sha256: expected lowercase SHA-256`);
+      if (anchor.line_hint !== null && (!Number.isInteger(anchor.line_hint) || Number(anchor.line_hint) < 1)) errors.push(`${path}.anchor.line_hint: expected null or positive integer`);
+    } else if (!anchor) errors.push(`${path}.anchor: expected object`);
+  }
+  if (!["CLEAN", "NOT_CLEAN", "AUDIT_ONLY"].includes(String(record4.verdict))) errors.push("$.verdict: expected CLEAN, NOT_CLEAN or AUDIT_ONLY");
+  if (!Number.isInteger(record4.exit_code) || Number(record4.exit_code) < 0 || Number(record4.exit_code) > 255) errors.push("$.exit_code: expected 0..255");
+  if (!canonicalTimestamp3(record4.observed_at)) errors.push("$.observed_at: expected canonical ISO timestamp");
+  if (!canonicalTimestamp3(record4.finished_at)) errors.push("$.finished_at: expected canonical ISO timestamp");
+  return errors;
+}
+function receiptPrivacyViolations(receipt) {
+  const violations = [];
+  for (const [index, finding4] of receipt.findings.entries()) {
+    if (!isRepositoryRelativePath(finding4.path)) violations.push(`$.findings[${index}].path is not repository-relative`);
+  }
+  if (receipt.agent.card_ref !== null && (isAbsolute23(receipt.agent.card_ref) || receipt.agent.card_ref.includes("/"))) {
+    violations.push("$.agent.card_ref must not be a path");
+  }
+  if (/^remote:[^/]*@/u.test(receipt.repository_id) || /:\/\/[^/]*@/u.test(receipt.repository_id)) {
+    violations.push("$.repository_id must not carry credentials");
+  }
+  const matches = publicSafetyValueDigestsInText(canonicalJson(receipt));
+  for (const match of matches) violations.push(`receipt text matches public-safety rule ${match.rule} (value digest ${match.value_sha256.slice(0, 12)})`);
+  return violations;
+}
+function receiptRootFromEnvironment(environment) {
+  const override = environment.MISTER_CLEAN_RECEIPT_ROOT;
+  const stateRoot = environment.XDG_STATE_HOME ?? (environment.HOME === void 0 || environment.HOME.trim().length === 0 ? void 0 : `${environment.HOME}/.local/state`);
+  const root = override === void 0 || override.trim().length === 0 ? stateRoot === void 0 ? void 0 : `${stateRoot}/mister-clean/receipts` : override;
+  if (root === void 0) throw new Error("Mister Clean requires HOME, XDG_STATE_HOME or MISTER_CLEAN_RECEIPT_ROOT to resolve its receipt root");
+  if (!isAbsolute23(root)) throw new Error("MISTER_CLEAN_RECEIPT_ROOT must be an absolute machine-local path");
+  return root;
+}
+function realOrResolved(path) {
+  const resolved = resolve26(path);
+  const pending = [];
+  let cursor = resolved;
+  for (; ; ) {
+    try {
+      return join17(realpathSync10(cursor), ...[...pending].reverse());
+    } catch {
+    }
+    const parent = dirname15(cursor);
+    if (parent === cursor) return resolved;
+    pending.push(cursor.slice(parent.length + 1));
+    cursor = parent;
+  }
+}
+function containedIn(root, candidate) {
+  const relation = relative18(realOrResolved(root), realOrResolved(candidate));
+  return relation === "" || !relation.startsWith(`..${sep18}`) && relation !== ".." && !isAbsolute23(relation);
+}
+var LocalRunReceiptStore = class {
+  #root;
+  constructor(root) {
+    if (!isAbsolute23(root)) throw new Error("receipt root must be an absolute machine-local path");
+    this.#root = root;
+  }
+  get root() {
+    return this.#root;
+  }
+  /** Typed refusal when the receipt root lies inside (or is) the audited repository. */
+  assertOutsideRepository(repository) {
+    if (containedIn(repository, this.#root)) throw new ReceiptRootInsideRepositoryError(this.#root);
+  }
+  receiptPath(receipt) {
+    return join17(this.#root, repositoryIdSha256(receipt.repository_id), `${receipt.receipt_id.replace(/^mc-receipt:/u, "")}.json`);
+  }
+  /** Validate, refuse private content, then write the receipt (0600) and append the index line. */
+  write(receipt, repository) {
+    this.assertOutsideRepository(repository);
+    const errors = runReceiptErrors(receipt);
+    if (errors.length > 0) throw new RunReceiptInvalidError(errors);
+    const violations = receiptPrivacyViolations(receipt);
+    if (violations.length > 0) throw new ReceiptPrivacyError(violations);
+    const path = this.receiptPath(receipt);
+    mkdirSync6(dirname15(path), { recursive: true, mode: 448 });
+    writeFileSync7(path, `${canonicalJson(receipt)}
+`, { encoding: "utf8", flag: "wx", mode: 384 });
+    const entry = {
+      receipt_id: receipt.receipt_id,
+      repository_id_sha256: repositoryIdSha256(receipt.repository_id),
+      mode: receipt.mode,
+      head_commit: receipt.subject.head_commit,
+      subject_sha256: receipt.subject.repository_object?.sha256 ?? null,
+      dirty: receipt.dirty,
+      families: receipt.families,
+      finding_count: receipt.findings.length,
+      verdict: receipt.verdict,
+      observed_at: receipt.observed_at,
+      path: relative18(this.#root, path).split(sep18).join("/")
+    };
+    appendFileSync2(join17(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}
+`, { encoding: "utf8", flag: "a", mode: 384 });
+    return path;
+  }
+  /** Read one receipt by id or by path; refuses anything that does not validate. */
+  read(reference) {
+    const path = reference.startsWith("mc-receipt:") ? this.#pathForId(reference) : resolve26(reference);
+    if (path === void 0 || !existsSync12(path)) throw new RunReceiptInvalidError([`receipt not found: ${reference}`]);
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync17(path, "utf8"));
+    } catch {
+      throw new RunReceiptInvalidError([`receipt is not valid JSON: ${reference}`]);
+    }
+    const errors = runReceiptErrors(parsed);
+    if (errors.length > 0) throw new RunReceiptInvalidError(errors);
+    return parsed;
+  }
+  index() {
+    const path = join17(this.#root, RECEIPT_INDEX_FILE);
+    if (!existsSync12(path)) return [];
+    const contents = readFileSync17(path, "utf8");
+    if (contents.length === 0) return [];
+    if (!contents.endsWith("\n")) throw new RunReceiptInvalidError(["receipt index must end with a newline"]);
+    return contents.slice(0, -1).split("\n").map((line, index) => {
+      let parsed;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        throw new RunReceiptInvalidError([`receipt index is not valid JSONL at line ${index + 1}`]);
+      }
+      const record4 = object8(parsed);
+      if (!record4 || typeof record4.receipt_id !== "string" || typeof record4.repository_id_sha256 !== "string" || typeof record4.path !== "string") {
+        throw new RunReceiptInvalidError([`receipt index has an invalid entry at line ${index + 1}`]);
+      }
+      return record4;
+    });
+  }
+  /** Index entries for one repository identity, oldest first. */
+  forRepository(repositoryId) {
+    const sha = repositoryIdSha256(repositoryId);
+    return this.index().filter((entry) => entry.repository_id_sha256 === sha).sort((left, right) => left.observed_at.localeCompare(right.observed_at) || left.receipt_id.localeCompare(right.receipt_id));
+  }
+  #pathForId(receiptId) {
+    const entry = this.index().find((item) => item.receipt_id === receiptId);
+    return entry === void 0 ? void 0 : join17(this.#root, entry.path);
+  }
+};
+function newReceiptId() {
+  return `mc-receipt:${randomUUID8()}`;
+}
+function agentFromCard(reference, source) {
+  if (reference === void 0 || reference.trim().length === 0) return { identity_status: "unobserved", card_ref: null, source: null };
+  const path = resolve26(reference);
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync17(path, "utf8"));
+  } catch {
+    throw new Error("agent card must be a readable JSON object");
+  }
+  const card = object8(parsed);
+  const status = card?.identity_status;
+  if (!card || !["receipt", "title_only", "contract_only", "unobserved"].includes(String(status))) {
+    throw new Error("agent card requires identity_status: receipt, title_only, contract_only or unobserved");
+  }
+  if (status === "unobserved") return { identity_status: "unobserved", card_ref: null, source: null };
+  const explicitId = typeof card.card_id === "string" && card.card_id.length > 0 && !card.card_id.includes("/") ? card.card_id : void 0;
+  const cardRef = explicitId ?? `sha256:${sha256Hex(readFileSync17(path, "utf8"))}`;
+  return { identity_status: status, card_ref: cardRef, source };
+}
+function agentFromEnvironment(flagValue, environment) {
+  if (flagValue !== void 0) return agentFromCard(flagValue, "flag");
+  return agentFromCard(environment.MISTER_CLEAN_AGENT_CARD, "env");
+}
+
+// src/closeout/second-pass.ts
+var SECOND_PASS_CLASSES = [
+  "cleared",
+  "persisting",
+  "persisting_rewritten",
+  "persisting_unseen",
+  "introduced",
+  "unresolvable_earlier_bytes",
+  "flaky"
+];
+function gitPortFor(repository) {
+  return {
+    blobOidAt(head, path) {
+      const result = runGit2(repository, ["rev-parse", "--verify", "-q", `${head}:${path}`], [0, 1]);
+      return result.status === 0 && result.stdout.length > 0 ? result.stdout : void 0;
+    },
+    blobTextAt(head, path) {
+      const exists2 = runGit2(repository, ["cat-file", "-e", `${head}:${path}`], [0, 1, 128]);
+      if (exists2.status !== 0) return void 0;
+      return runGit2(repository, ["cat-file", "-p", `${head}:${path}`]).stdout;
+    }
+  };
+}
+function earlierHolds(git2, head, path, probe, earlierWholeRepoHashes) {
+  if (probe.kind === "whole_repo") return earlierWholeRepoHashes.has(probe.content_sha256);
+  if (probe.kind === "legacy") return void 0;
+  if (probe.kind === "detail_digest") {
+    const oid = git2.blobOidAt(head, path);
+    if (oid === void 0) return void 0;
+    return probe.blob_oid !== null && oid === probe.blob_oid;
+  }
+  const text3 = git2.blobTextAt(head, path);
+  if (text3 === void 0) return void 0;
+  if (probe.kind === "line_content") {
+    const present = new Set(text3.split(/\r?\n/u).map(trimmedLineSha256));
+    return probe.line_sha256s.every((digest4) => present.has(digest4));
+  }
+  if (probe.rule.startsWith("custom-denylist-")) return void 0;
+  return publicSafetyValueDigestsInText(text3).some((match) => match.rule === probe.rule && match.value_sha256 === probe.value_sha256);
+}
+function flakyFingerprints(history) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const entry of history) {
+    if (entry.subject_sha256 === null) continue;
+    groups.set(entry.subject_sha256, [...groups.get(entry.subject_sha256) ?? [], entry.fingerprints]);
+  }
+  const flaky = /* @__PURE__ */ new Set();
+  for (const runs of groups.values()) {
+    if (runs.length < 3) continue;
+    const universe = new Set(runs.flat());
+    for (const fingerprint2 of universe) {
+      const presence = runs.map((run) => run.includes(fingerprint2));
+      const turns = presence.filter((value, index) => index > 0 && value !== presence[index - 1]).length;
+      if (turns >= 2) flaky.add(fingerprint2);
+    }
+  }
+  return flaky;
+}
+function classifySecondPass(input) {
+  const legacyJoin = input.earlier.kind === "legacy_bundle";
+  const key = (finding4) => legacyJoin ? finding4.legacy_fingerprint : finding4.fingerprint;
+  const earlierByKey = new Map(input.earlier.findings.map((finding4) => [key(finding4), finding4]));
+  const currentByKey = new Map(input.current.map((item) => [key(item.finding), item]));
+  const earlierWholeRepo = new Set(input.earlier.findings.filter((finding4) => finding4.anchor.kind === "whole_repo").map((finding4) => finding4.anchor.content_sha256));
+  const earlierDirty = input.earlier.dirty !== false;
+  const flaky = input.flaky ?? /* @__PURE__ */ new Set();
+  const rows = [];
+  const row = (finding4, observed, classification, basis) => ({
+    fingerprint: finding4.fingerprint,
+    legacy_fingerprint: finding4.legacy_fingerprint,
+    family: finding4.family,
+    rule: finding4.rule,
+    path: finding4.path,
+    classification: flaky.has(finding4.fingerprint) ? "flaky" : classification,
+    observed,
+    basis: flaky.has(finding4.fingerprint) ? `alternates across >=3 receipts of one identical subject; underlying: ${classification}` : basis
+  });
+  for (const [joinKey, earlier] of earlierByKey) {
+    if (!input.earlier.families.includes(earlier.family)) continue;
+    const current = currentByKey.get(joinKey);
+    if (current === void 0) {
+      rows.push(row(earlier, "earlier_only", "cleared", "earlier finding not observed by the second pass"));
+      continue;
+    }
+    if (legacyJoin) {
+      rows.push(row(current.finding, "both", "persisting", "legacy fingerprint joined; no anchor to test for a rewrite"));
+      continue;
+    }
+    const holds = earlierHolds(input.git, input.earlier.head_commit, current.finding.path, current.probe, earlierWholeRepo);
+    rows.push(holds === true ? row(current.finding, "both", "persisting", `anchored bytes found at ${input.earlier.head_commit.slice(0, 12)}:${current.finding.path}`) : row(current.finding, "both", "persisting_rewritten", `anchored bytes not found at ${input.earlier.head_commit.slice(0, 12)}:${current.finding.path}`));
+  }
+  for (const [joinKey, current] of currentByKey) {
+    if (earlierByKey.has(joinKey) && input.earlier.families.includes(current.finding.family)) continue;
+    if (!input.earlier.families.includes(current.finding.family)) continue;
+    const holds = earlierHolds(input.git, input.earlier.head_commit, current.finding.path, current.probe, earlierWholeRepo);
+    if (holds === true) {
+      rows.push(row(current.finding, "current_only", "persisting_unseen", `MISS: anchored bytes already committed at ${input.earlier.head_commit.slice(0, 12)}:${current.finding.path}`));
+    } else if (earlierDirty) {
+      rows.push(row(current.finding, "current_only", "unresolvable_earlier_bytes", input.earlier.dirty === null ? "earlier record cannot say whether its subject was dirty; not guessing" : "earlier subject was dirty; the committed tree cannot prove absence"));
+    } else {
+      rows.push(row(current.finding, "current_only", "introduced", holds === void 0 ? `path absent at ${input.earlier.head_commit.slice(0, 12)}` : `anchored bytes absent at ${input.earlier.head_commit.slice(0, 12)}:${current.finding.path}`));
+    }
+  }
+  return rows.sort((left, right) => left.family.localeCompare(right.family) || left.path.localeCompare(right.path) || left.fingerprint.localeCompare(right.fingerprint));
+}
+function captureReceiptSubject(root, options = {}) {
+  if (!existsSync13(resolve27(root)) || !statSync6(resolve27(root)).isDirectory()) return void 0;
+  const resolved = realpathSync11(resolve27(root));
+  const toplevel = runGit2(resolved, ["rev-parse", "--show-toplevel"], [0, 128]);
+  if (toplevel.status !== 0 || toplevel.stdout.length === 0) return void 0;
+  const repository = realpathSync11(resolve27(toplevel.stdout));
+  const headCommit = runGit2(repository, ["rev-parse", "--verify", "HEAD^{commit}"], [0, 128]);
+  if (headCommit.status !== 0) return void 0;
+  const headTree = runGit2(repository, ["rev-parse", "--verify", "HEAD^{tree}"]).stdout;
+  const dirty = runGit2(repository, ["status", "--porcelain", "--untracked-files=normal"]).stdout.length > 0;
+  const relation = relative19(repository, resolved).split(sep19).join("/");
+  return {
+    repository,
+    subject: {
+      repository_object: options.subject_hash === false ? null : captureRepositoryObject(repository),
+      head_commit: headCommit.stdout,
+      head_tree: headTree
+    },
+    dirty,
+    repository_id: repositoryIdentity(repository),
+    path_prefix: relation
+  };
+}
+function assembleRunReceipt(input) {
+  return {
+    record_type: "mister-clean.run-receipt",
+    schema_version: "1",
+    receipt_id: newReceiptId(),
+    invocation_id: input.invocation_id,
+    mode: input.mode,
+    repository_id: input.capture.repository_id,
+    subject: input.capture.subject,
+    dirty: input.capture.dirty,
+    detector_registry_sha256: detectorRegistrySha256(),
+    runtime_identity_sha256: detectorRuntimeIdentitySha256(createDetectorRuntimeIdentity(input.runtimeAttestation)),
+    agent: input.agent,
+    families: [...input.families].sort(),
+    findings: [...input.findings].sort((left, right) => left.fingerprint.localeCompare(right.fingerprint)),
+    verdict: input.verdict,
+    exit_code: input.exit_code,
+    observed_at: input.observed_at,
+    finished_at: input.finished_at
+  };
+}
+function runReadOnlyFamilies(capture, root, families, options = {}) {
+  const results = {};
+  const anchored = [];
+  const context = { repository: capture.repository, path_prefix: capture.path_prefix };
+  for (const family of families) {
+    let result;
+    if (family === "planning_graph") result = auditPlanningRepository(root, options.deadline_ms === void 0 ? void 0 : { deadline_ms: options.deadline_ms });
+    else if (family === "public_safety") result = scanTrackedPublicSafetySync(root, trackedShippablePaths(root), loadDenylistSync(options.denylistPath));
+    else if (family === "github_actions") result = auditGitHubActionsRepository(root);
+    else if (family === "repository_boundaries") result = auditRepositoryBoundaries(root);
+    else result = auditSemanticRepository(root, { execute: false });
+    results[family] = result;
+    anchored.push(...receiptFindingsFromAudit(family, result, context));
+  }
+  return { anchored, results };
+}
+var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
+function legacyBaselineFromBundle(reference) {
+  const path = resolve27(reference);
+  if (!existsSync13(path)) return void 0;
+  const directory = statSync6(path).isDirectory() ? path : dirname16(path);
+  const deltaPath = join18(directory, "regression-delta.json");
+  if (!existsSync13(deltaPath)) return void 0;
+  const delta = JSON.parse(readFileSync18(deltaPath, "utf8"));
+  const coverage = delta.detector_coverage;
+  const executions = Array.isArray(coverage?.executions) ? coverage.executions : void 0;
+  const baseline = coverage?.baseline_repository_object;
+  const headCommit = typeof baseline?.head_commit === "string" ? baseline.head_commit : void 0;
+  if (!executions || headCommit === void 0) return void 0;
+  const families = [];
+  const findings = [];
+  for (const execution of executions) {
+    const detectorId = String(execution.detector_id);
+    if (!LEGACY_DETECTOR_FAMILIES.has(detectorId)) continue;
+    const family = detectorId;
+    families.push(family);
+    const resultRef = execution.result_ref;
+    const resultPath = typeof resultRef?.path === "string" ? join18(directory, resultRef.path) : void 0;
+    let fingerprints;
+    if (resultPath !== void 0 && existsSync13(resultPath)) {
+      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync18(resultPath, "utf8")));
+    }
+    fingerprints ??= Array.isArray(execution.finding_fingerprints) ? execution.finding_fingerprints : [];
+    for (const legacy of fingerprints) {
+      findings.push({
+        fingerprint: legacy,
+        family,
+        rule: "legacy",
+        path: ".",
+        anchor: { kind: "legacy", blob_oid: null, content_sha256: legacy, line_hint: null },
+        severity: null,
+        legacy_fingerprint: legacy
+      });
+    }
+  }
+  return {
+    kind: "legacy_bundle",
+    ref: relative19(process.cwd(), deltaPath) || deltaPath,
+    head_commit: headCommit,
+    dirty: null,
+    families,
+    findings,
+    subject_sha256: typeof baseline?.sha256 === "string" ? baseline.sha256 : null
+  };
+}
+function baselineFromReceipt(receipt) {
+  return {
+    kind: "receipt",
+    ref: receipt.receipt_id,
+    head_commit: receipt.subject.head_commit,
+    dirty: receipt.dirty,
+    families: receipt.families,
+    findings: receipt.findings,
+    subject_sha256: receipt.subject.repository_object?.sha256 ?? null
+  };
+}
+function resolveEarlierBaseline(store, repositoryId, against) {
+  if (against === void 0) {
+    const entries2 = store.forRepository(repositoryId).filter((entry) => entry.mode !== "SECOND_PASS");
+    const latest = entries2.at(-1) ?? store.forRepository(repositoryId).at(-1);
+    if (latest === void 0) throw new Error("no earlier receipt for this repository; pass --against <receipt_id|bundle>");
+    return baselineFromReceipt(store.read(latest.receipt_id));
+  }
+  if (!against.startsWith("mc-receipt:")) {
+    const legacy = legacyBaselineFromBundle(against);
+    if (legacy !== void 0) return legacy;
+  }
+  const receipt = store.read(against);
+  if (receipt.repository_id !== repositoryId) throw new Error("the earlier receipt belongs to a different repository identity");
+  return baselineFromReceipt(receipt);
+}
+function runSecondPass(input) {
+  const clock = input.now ?? (() => /* @__PURE__ */ new Date());
+  const observedAt = clock().toISOString();
+  const capture = captureReceiptSubject(input.root, { subject_hash: input.subject_hash ?? true });
+  if (capture === void 0) throw new Error("second-pass requires a Git worktree with at least one commit");
+  input.store.assertOutsideRepository(capture.repository);
+  const earlier = resolveEarlierBaseline(input.store, capture.repository_id, input.against);
+  const families = earlier.families.filter((family) => RECEIPT_FAMILIES.includes(family));
+  const { anchored } = runReadOnlyFamilies(capture, input.root, families, input.denylistPath === void 0 ? {} : { denylistPath: input.denylistPath });
+  const receipt = assembleRunReceipt({
+    capture,
+    mode: "SECOND_PASS",
+    invocation_id: input.invocation_id,
+    runtimeAttestation: input.runtimeAttestation,
+    agent: input.agent,
+    families,
+    findings: anchored.map((item) => item.finding),
+    verdict: "AUDIT_ONLY",
+    exit_code: anchored.length > 0 ? 1 : 0,
+    observed_at: observedAt,
+    finished_at: clock().toISOString()
+  });
+  const receiptPath = input.store.write(receipt, capture.repository);
+  const history = input.store.forRepository(capture.repository_id).map((entry) => {
+    const record4 = input.store.read(entry.receipt_id);
+    return { subject_sha256: record4.subject.repository_object?.sha256 ?? null, fingerprints: record4.findings.map((finding4) => finding4.fingerprint) };
+  });
+  const rows = classifySecondPass({ earlier, current: anchored, git: input.git ?? gitPortFor(capture.repository), flaky: flakyFingerprints(history) });
+  const counts = Object.fromEntries(SECOND_PASS_CLASSES.map((name) => [name, rows.filter((item) => item.classification === name).length]));
+  const result = {
+    record_type: "mister-clean.second-pass",
+    schema_version: "1",
+    repository_id: capture.repository_id,
+    against: { kind: earlier.kind, ref: earlier.ref, head_commit: earlier.head_commit, dirty: earlier.dirty },
+    current: { receipt_id: receipt.receipt_id, head_commit: capture.subject.head_commit, dirty: capture.dirty },
+    families,
+    rows,
+    counts,
+    miss_count: counts.persisting_unseen,
+    exitCode: anchored.length > 0 ? 1 : 0
+  };
+  return { result, receipt, receipt_path: receiptPath };
+}
+
 // src/cli.ts
 var UsageError = class extends Error {
 };
@@ -29868,16 +30660,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside2(root, candidate) {
-  const rootPath = resolve26(root);
-  const candidatePath = resolve26(candidate);
-  const relation = relative18(
-    existsSync11(rootPath) ? realpathSync10(rootPath) : rootPath,
-    existsSync11(candidatePath) ? realpathSync10(candidatePath) : candidatePath
+  const rootPath = resolve28(root);
+  const candidatePath = resolve28(candidate);
+  const relation = relative20(
+    existsSync14(rootPath) ? realpathSync12(rootPath) : rootPath,
+    existsSync14(candidatePath) ? realpathSync12(candidatePath) : candidatePath
   );
-  return relation === "" || !relation.startsWith(`..${sep18}`) && relation !== ".." && !relation.startsWith("/");
+  return relation === "" || !relation.startsWith(`..${sep20}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync16(path, "utf8"));
+  return JSON.parse(readFileSync19(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -29892,11 +30684,11 @@ async function runSemantic(args, io) {
     const proposalsPath = removeOption(args, "--case-proposals", true);
     const runId = removeOption(args, "--run-id", true);
     const challengeNonce = removeOption(args, "--nonce", true);
-    const outputPath = resolve26(removeOption(args, "--output", true));
+    const outputPath = resolve28(removeOption(args, "--output", true));
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync11(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync14(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -29918,7 +30710,7 @@ async function runSemantic(args, io) {
       runId,
       runtimeCases
     });
-    writeFileSync7(outputPath, `${canonicalJson(plan2)}
+    writeFileSync8(outputPath, `${canonicalJson(plan2)}
 `, { flag: "wx" });
     if (json2) io.stdout(JSON.stringify(plan2, null, 2));
     else io.stdout(`semantic-plan: WROTE candidates=${plan2.candidates.length} sha256=${plan2.plan_sha256} path=${outputPath}`);
@@ -29954,7 +30746,7 @@ async function runSemantic(args, io) {
   else io.stdout(`semantic-v2: ${result.verdict.toLocaleUpperCase("und")} candidate=${candidateId2} errors=${result.errors.length}`);
   return result.verdict === "attested_satisfied" ? 0 : 1;
 }
-async function runPrepare(args, io, runtimeAttestation) {
+async function runPrepare(args, io, runtimeAttestation, onPrepared) {
   const repo = removeOption(args, "--repo", true);
   const evidenceHome = removeOption(args, "--evidence-home", true);
   const runId = removeOption(args, "--run-id", true);
@@ -30002,6 +30794,7 @@ async function runPrepare(args, io, runtimeAttestation) {
     runtimeAttestation
   });
   io.stdout(prepared.bundleDirectory);
+  onPrepared?.({ repo, bundleDirectory: prepared.bundleDirectory, mode: rawMode ?? "CLOSE" });
   return 0;
 }
 function actionUsage(io, subcommand) {
@@ -30080,19 +30873,19 @@ async function runValidate(args, io, runtimeAttestation) {
   if (kind !== "bundle" && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for bundle validation");
   }
-  if (acceptedEvaluatorPath !== void 0 && !isAbsolute23(acceptedEvaluatorPath)) {
+  if (acceptedEvaluatorPath !== void 0 && !isAbsolute24(acceptedEvaluatorPath)) {
     throw new UsageError("--accepted-evaluator requires an absolute path");
   }
   if (structural && acceptedEvaluatorPath !== void 0) {
     throw new UsageError("--accepted-evaluator is only valid for live bundle validation");
   }
-  if (guardAuthorityPath !== void 0 && !isAbsolute23(guardAuthorityPath)) {
+  if (guardAuthorityPath !== void 0 && !isAbsolute24(guardAuthorityPath)) {
     throw new UsageError("--guard-authority requires an absolute path");
   }
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join16(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join19(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -30138,13 +30931,13 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync11(root) || !statSync5(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve26(root)}`);
+  if (!existsSync14(root) || !statSync7(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve28(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
   if (json) {
-    io.stdout(JSON.stringify({ resolved_root: resolve26(root), ...result }, null, 2));
+    io.stdout(JSON.stringify({ resolved_root: resolve28(root), ...result }, null, 2));
     return result.exitCode;
   }
   if (result.status === "unknown") {
@@ -30153,9 +30946,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join16(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync11(reference)) return 0;
-  const text3 = readFileSync16(reference, "utf8");
+  const reference = join19(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync14(reference)) return 0;
+  const text3 = readFileSync19(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -30166,7 +30959,7 @@ ${text3.slice(start, next < 0 ? void 0 : next).trimEnd()}`);
   }
   return 0;
 }
-async function runAudit(args, io) {
+async function runAudit(args, io, onResult) {
   const kind = args.shift();
   if (!(/* @__PURE__ */ new Set(["github-actions", "planning", "public-safety", "repository-boundaries", "semantic"])).has(String(kind))) {
     throw new UsageError("audit requires github-actions, planning, public-safety, repository-boundaries, or semantic");
@@ -30199,6 +30992,7 @@ async function runAudit(args, io) {
       }
       io.stdout(`planning: ${result2.status.toLocaleUpperCase("und")} artifacts=${result2.artifactCount} structured=${result2.structuredArtifactCount} findings=${result2.findings.length}`);
     }
+    onResult?.({ root, family: "planning_graph", result: result2 });
     return result2.exitCode;
   }
   if (kind === "semantic") {
@@ -30228,6 +31022,7 @@ async function runAudit(args, io) {
       }
       io.stdout(`semantic: ${result2.status.toLocaleUpperCase("und")} candidates=${result2.candidate_probe_count} executed=${result2.executed_probe_count} findings=${result2.findings.length}`);
     }
+    onResult?.({ root, family: "semantic_boundary", result: result2 });
     return result2.exitCode;
   }
   if (kind === "github-actions") {
@@ -30241,6 +31036,7 @@ async function runAudit(args, io) {
       }
       io.stdout(`github-actions: ${result2.status.toLocaleUpperCase("und")} workflows=${result2.workflow_count} sensitive=${result2.sensitive_workflow_count} findings=${result2.findings.length}`);
     }
+    onResult?.({ root, family: "github_actions", result: result2 });
     return result2.exitCode;
   }
   if (kind === "repository-boundaries") {
@@ -30254,6 +31050,7 @@ async function runAudit(args, io) {
       }
       io.stdout(`repository-boundaries: ${result2.status.toLocaleUpperCase("und")} parsers=${result2.parser_surfaces.length} contracts=${result2.external_contract_count} findings=${result2.findings.length}`);
     }
+    onResult?.({ root, family: "repository_boundaries", result: result2 });
     return result2.exitCode;
   }
   const json = removeFlag(args, "--json");
@@ -30267,11 +31064,13 @@ async function runAudit(args, io) {
   ) : await nodeCloseoutEngine.scanPublicSafety(root, denylist);
   if (json) {
     io.stdout(JSON.stringify(result, null, 2));
+    onResult?.({ root, family: "public_safety", result });
     return result.exitCode;
   }
   for (const finding4 of result.findings) io.stdout(`${finding4.path}:${finding4.line}: ${finding4.rule}`);
   if (result.status === "fail") io.stderr(`public-safety: FAIL (${result.findings.length} finding(s))`);
   else io.stdout("public-safety: PASS");
+  onResult?.({ root, family: "public_safety", result });
   return result.exitCode;
 }
 async function runManifest(args, io) {
@@ -30280,16 +31079,16 @@ async function runManifest(args, io) {
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join16(resolve26(root), "MANIFEST.sha256");
+  const path = join19(resolve28(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync11(path) || readFileSync16(path, "utf8") !== result.content) {
+    if (!existsSync14(path) || readFileSync19(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
     io.stdout(`manifest: PASS (${result.entries.length} entries)`);
     return 0;
   }
-  writeFileSync7(path, result.content, "utf8");
+  writeFileSync8(path, result.content, "utf8");
   io.stdout(`manifest: wrote ${result.entries.length} entries`);
   return 0;
 }
@@ -30330,8 +31129,8 @@ async function runCensus(args, io) {
       exclusions,
       output_path: output
     });
-    writeFileSync7(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
-    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve26(output)}`);
+    writeFileSync8(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
+    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve28(output)}`);
     return 0;
   }
   if (subcommand === "validate") {
@@ -30387,17 +31186,84 @@ async function bindCliRuntime(io) {
     return void 0;
   }
 }
-function usage(io) {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare)");
+function takeReceiptRunOptions(args) {
+  const agentCard = removeOption(args, "--agent-card");
+  const subjectHash = !removeFlag(args, "--no-subject-hash");
+  return { agent: agentFromEnvironment(agentCard, process.env), subjectHash };
 }
-async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = void 0) {
+function writeRunReceipt(io, receipts, input) {
+  const captured = captureReceiptSubject(input.root, { subject_hash: subjectHashFor(input) });
+  if (captured === void 0) {
+    io.stderr("receipt: SKIPPED reason=not_a_git_worktree");
+    return;
+  }
+  const capture = {
+    ...captured,
+    ...input.pathsRelativeToToplevel ? { path_prefix: "" } : {},
+    subject: input.subjectFromBundle !== void 0 && input.subjectFromBundle.head_commit === captured.subject.head_commit ? { ...captured.subject, repository_object: input.subjectFromBundle } : captured.subject
+  };
+  receipts.assertOutsideRepository(capture.repository);
+  const context = { repository: capture.repository, path_prefix: capture.path_prefix };
+  const findings = input.results.flatMap((entry) => receiptFindingsFromAudit(entry.family, entry.result, context).map((item) => item.finding));
+  const receipt = assembleRunReceipt({
+    capture,
+    mode: input.mode,
+    invocation_id: input.invocationId,
+    runtimeAttestation: input.runtimeAttestation,
+    agent: input.options.agent,
+    families: input.results.map((entry) => entry.family),
+    findings,
+    verdict: input.verdict,
+    exit_code: input.exitCode,
+    observed_at: input.observedAt,
+    finished_at: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  receipts.write(receipt, capture.repository);
+  io.stderr(`receipt: WROTE id=${receipt.receipt_id} mode=${receipt.mode} families=${receipt.families.join(",")} findings=${receipt.findings.length}`);
+}
+function subjectHashFor(input) {
+  return input.subjectFromBundle !== void 0 ? false : input.options.subjectHash;
+}
+async function runSecondPassCommand(args, io, runtimeAttestation, receipts, options, invocationId) {
+  const root = args[0]?.startsWith("--") === false ? args.shift() : process.cwd();
+  const against = removeOption(args, "--against");
+  const denylistPath = removeOption(args, "--denylist-file");
+  const json = removeFlag(args, "--json");
+  assertNoArgs(args);
+  if (receipts === void 0) throw new UsageError("second-pass requires a receipt store (set HOME, XDG_STATE_HOME or MISTER_CLEAN_RECEIPT_ROOT)");
+  const { result, receipt } = runSecondPass({
+    store: receipts,
+    root,
+    ...against === void 0 ? {} : { against },
+    ...denylistPath === void 0 ? {} : { denylistPath },
+    runtimeAttestation,
+    agent: options.agent,
+    invocation_id: invocationId,
+    subject_hash: options.subjectHash
+  });
+  io.stderr(`receipt: WROTE id=${receipt.receipt_id} mode=SECOND_PASS families=${receipt.families.join(",")} findings=${receipt.findings.length}`);
+  if (json) io.stdout(JSON.stringify(result, null, 2));
+  else {
+    for (const row of result.rows) io.stdout(`${row.classification}	${row.family}	${row.rule}	${row.path}	${row.basis}`);
+    const summary = SECOND_PASS_CLASSES.map((name) => `${name}=${result.counts[name]}`).join(" ");
+    io.stdout(`second-pass: MISSES=${result.miss_count} against=${result.against.kind}:${result.against.head_commit.slice(0, 12)} ${summary}`);
+  }
+  return result.exitCode;
+}
+function usage(io) {
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+}
+function receiptStoreFromEnvironment(environment) {
+  return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));
+}
+async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = void 0, receipts = void 0) {
   const args = [...argv2];
   const command = args.shift();
   let invocationId;
   let lifecycleRunEventId = null;
   let terminalRecorded = false;
   try {
-    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "attest"])).has(String(command))) {
+    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "attest"])).has(String(command))) {
       usage(io);
       return 2;
     }
@@ -30412,11 +31278,65 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
     else {
       const runtimeAttestation = await bindCliRuntime(io);
       if (!runtimeAttestation) exitCode = 2;
-      else if (command === "prepare") exitCode = await runPrepare(args, io, runtimeAttestation);
-      else if (command === "action") exitCode = await runAction(args, io, runtimeAttestation);
+      else if (command === "prepare" || command === "audit" || command === "second-pass") {
+        const receiptOptions = takeReceiptRunOptions(args);
+        const observedAt = (/* @__PURE__ */ new Date()).toISOString();
+        if (command === "second-pass") {
+          exitCode = await runSecondPassCommand(args, io, runtimeAttestation, receipts, receiptOptions, invocationId ?? null);
+        } else if (command === "audit") {
+          let observed;
+          exitCode = await runAudit(args, io, (entry) => {
+            observed = entry;
+          });
+          if (receipts !== void 0 && observed !== void 0) {
+            writeRunReceipt(io, receipts, {
+              root: observed.root,
+              mode: "AUDIT",
+              results: [{ family: observed.family, result: observed.result }],
+              verdict: "AUDIT_ONLY",
+              exitCode,
+              observedAt,
+              runtimeAttestation,
+              options: receiptOptions,
+              invocationId: invocationId ?? null
+            });
+          }
+        } else {
+          let prepared;
+          exitCode = await runPrepare(args, io, runtimeAttestation, (entry) => {
+            prepared = entry;
+          });
+          if (receipts !== void 0 && prepared !== void 0) {
+            const bundle = prepared.bundleDirectory;
+            const families = [
+              { family: "planning_graph", file: "planning-audit.json" },
+              { family: "public_safety", file: "public-safety-audit.json" },
+              { family: "github_actions", file: "github-actions-audit.json" },
+              { family: "semantic_boundary", file: "semantic-audit.json" }
+            ];
+            const results = families.filter((entry) => existsSync14(join19(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join19(bundle, entry.file)) }));
+            const report = record3(readJson3(join19(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join19(bundle, "regression-delta.json")));
+            const baselineObject = record3(delta?.baseline_repository_object);
+            const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
+            writeRunReceipt(io, receipts, {
+              root: prepared.repo,
+              mode: "CLOSE",
+              results,
+              verdict,
+              exitCode,
+              observedAt,
+              runtimeAttestation,
+              options: receiptOptions,
+              invocationId: invocationId ?? null,
+              ...baselineObject === void 0 ? {} : { subjectFromBundle: baselineObject },
+              pathsRelativeToToplevel: true
+            });
+          }
+        }
+      } else if (command === "action") exitCode = await runAction(args, io, runtimeAttestation);
       else if (command === "validate") exitCode = await runValidate(args, io, runtimeAttestation);
       else if (command === "detect") exitCode = await runDetect(args, io);
-      else if (command === "audit") exitCode = await runAudit(args, io);
       else if (command === "inspect") exitCode = await runInspect(args, io);
       else if (command === "census") exitCode = await runCensus(args, io);
       else if (command === "manifest") exitCode = await runManifest(args, io);
@@ -30444,9 +31364,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
 function isDirectInvocation(argvPath, moduleUrl) {
   if (!argvPath) return false;
   try {
-    return realpathSync10(argvPath) === realpathSync10(fileURLToPath3(moduleUrl));
+    return realpathSync12(argvPath) === realpathSync12(fileURLToPath3(moduleUrl));
   } catch {
-    const invokedPath = resolve26(argvPath);
+    const invokedPath = resolve28(argvPath);
     return invokedPath === fileURLToPath3(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }
@@ -30455,7 +31375,13 @@ if (isDirectInvocation(process.argv[1], import.meta.url)) {
   const directCommand = directArgs[0];
   const isHelpOrVersion = directCommand === void 0 || directCommand === "--help" || directCommand === "help" || directCommand === "--version" || directCommand === "version";
   try {
-    process.exitCode = await runCli(directArgs, defaultIO(), void 0, isHelpOrVersion ? void 0 : journalFromEnvironment(process.env));
+    process.exitCode = await runCli(
+      directArgs,
+      defaultIO(),
+      void 0,
+      isHelpOrVersion ? void 0 : journalFromEnvironment(process.env),
+      isHelpOrVersion ? void 0 : receiptStoreFromEnvironment(process.env)
+    );
   } catch (error) {
     process.stderr.write(`ERROR: ${error instanceof Error ? error.message : String(error)}
 `);
@@ -30464,5 +31390,6 @@ if (isDirectInvocation(process.argv[1], import.meta.url)) {
 }
 export {
   isDirectInvocation,
+  receiptStoreFromEnvironment,
   runCli
 };

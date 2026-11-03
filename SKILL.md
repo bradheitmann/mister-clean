@@ -59,6 +59,7 @@ an attributable operator ruling recorded on the affected artifact.
 | `CONFORM` | Normalize a named current, historical, or generated corpus | Preserve provenance under the conformance contract. |
 | `GUARD` | Guard an active implementation before accepted history advances | Use the exact-tree four-role barrier. |
 | `AUDIT` | Explicit “audit,” “review only,” “inspect only,” or “make no changes” | Read-only findings and evidence; no repository or external mutation. |
+| `second-pass` | An independent re-audit after a run's findings were remediated | Read-only. `mister-clean second-pass <repo> [--against <receipt_id|bundle>]` joins a fresh audit to the earlier run receipt by stable fingerprint and classifies each finding (cleared, persisting, MISS, introduced) from Git. |
 
 Never downgrade a bare invocation to `AUDIT` because it is short.
 
