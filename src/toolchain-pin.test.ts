@@ -30,9 +30,13 @@ afterEach(() => {
 describe("toolchain pin", () => {
   it("ci pin: .bun-version equals the bun-version CI installs", () => {
     const workflow = readFileSync(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8");
-    const pins = [...workflow.matchAll(/^\s*bun-version:\s*([0-9.]+)\s*$/gmu)].map((match) => match[1]);
-    expect(pins.length).toBeGreaterThan(0);
-    for (const ciPin of pins) expect(readBunPin(repositoryRoot)).toBe(ciPin);
+    // Every setup-bun step either reads .bun-version directly or names the same literal.
+    const literals = [...workflow.matchAll(/^\s*bun-version:\s*([0-9.]+)\s*$/gmu)].map((match) => match[1]);
+    const fromFile = [...workflow.matchAll(/^\s*bun-version-file:\s*\.bun-version\s*$/gmu)].length;
+    const setups = [...workflow.matchAll(/uses:\s*oven-sh\/setup-bun@/gu)].length;
+    expect(setups).toBeGreaterThan(0);
+    expect(literals.length + fromFile).toBe(setups);
+    for (const ciPin of literals) expect(readBunPin(repositoryRoot)).toBe(ciPin);
   });
 
   it("mismatch: a different running bun is refused with both versions named", () => {
