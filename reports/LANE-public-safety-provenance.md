@@ -115,4 +115,22 @@ in the brief do not exist in this fresh worktree (that data directory is local t
 
 ## Full `test:node` result
 
-(filled in below after the run)
+Run once on tip `7e9aa4d` (the implementation commit; this section is the only change after it):
+`MISTER_CLEAN_RECEIPT_ROOT=<mktemp -d> nice -n 10 pnpm run test:node` under bun 1.4.0 on PATH →
+**50 files: 43 passed, 7 failed; 888 tests: 873 passed, 15 failed; 3,973 s** (host under load from other lanes).
+Same count and the same classes as the 7.3.0 lane's local run recorded in `charter/STATE.md` (hosted CI is the arbiter).
+Every red classified; none is a candidate defect:
+
+| Red | Test(s) | Class | Evidence |
+|---|---|---|---|
+| 1–5 | `scripts/verify_generated_candidate.test.ts` (5) | environment: capsule commit refused | `git commit` inside the scratch capsule refused by the host-global `lang-guard` pre-commit hook ("this commit adds untyped code"); the capsule needs its `.mjs` fixtures. Known class (STATE "capsule commits refused by the host-global language guard"). |
+| 6–7 | `scripts/run_clean_ci.test.ts` (2) | environment: capsule commit refused | `supervised command exited 128: pnpm` in the cold-clone capsule, downstream of the same hook refusal. Known class. |
+| 8 | `scripts/release_path.test.mjs` real build in external capsule | environment: 120 s budget under load plus the capsule class | `Test timed out in 120000ms` then `Hook timed out`. Known class. |
+| 9–10 | `src/closeout/execution-lease.test.ts` (2) | environment: process-kill in the operator shell | daemonised target not killed (`process.kill(pid, 0)` did not throw); successor admitted while the child tree lingers. Known class (STATE "process-kill tests fail in the operator shell"). |
+| 11–13 | `src/closeout/bundle.test.ts` native-gate trio (3) | environment: 30 s budget under load | `Test timed out in 30000ms` ×3; rerun in isolation on the same tip → 3/3 passed. |
+| 14 | `src/closeout/native-gates.test.ts` no-progress timeout | environment: timing under load | typed `NativeGateGitTimeoutError` thrown but its fields differed from the expected object under load; rerun in isolation → passed. |
+| 15 | `src/closeout/repository-boundaries.test.ts` large tracked surface | environment: 10 s `afterEach` hook budget under load | body completed; the fixture-removal hook timed out; rerun in isolation → 2/2 passed. Adjacent to this lane's area (bounded listing) and green alone. |
+
+Isolation reruns (sequential, `nice -n 10`, `--testTimeout=120000`, `-t` on the named tests): repository-boundaries 2/2,
+native-gates 1/1, bundle 3/3. The capsule and process-kill classes are not reproducible green on this host by design;
+hosted CI on the pushed branch is the verdict for them.
