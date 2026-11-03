@@ -506,8 +506,15 @@ async function collectPrepareTopology(
     targetCommit,
     upstream,
     planningRoots,
+    planningAudit,
     unclassifiedPlanningPaths,
   } = context;
+  // Planning-root provenance: when `.mister-clean/planning.json` applied, each
+  // system names it with its digest (planning-audit.json records it as well).
+  const planningConfig = planningAudit.planning_config;
+  const planningConfigSources = planningConfig
+    ? [`${planningConfig.path} sha256:${planningConfig.sha256}`]
+    : [];
   let planningSystems: JsonObject[];
   if (planningRoots.length) {
     planningSystems = await Promise.all(planningRoots.map(async (rootText, index) => {
@@ -527,7 +534,7 @@ async function collectPrepareTopology(
         id: `repository-planning-${index + 1}`,
         kind: "repo_files",
         sources: [rootText],
-        schema_sources: ["repository lane/artifact convention; verify manually"],
+        schema_sources: ["repository lane/artifact convention; verify manually", ...planningConfigSources],
         validators: ["mister-clean audit planning . --json", "mister-clean live planning census"],
         corpus: {
           roots: [rootText],
@@ -546,7 +553,7 @@ async function collectPrepareTopology(
         id: "no-repository-planning",
         kind: "none",
         sources: ["independent shallow root scan"],
-        schema_sources: ["no planning schema found"],
+        schema_sources: ["no planning schema found", ...planningConfigSources],
         validators: ["mister-clean planning discovery"],
         corpus: {
           roots: [],

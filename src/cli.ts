@@ -12,7 +12,7 @@ import { PlanningAuditTimeout, nodeCloseoutEngine } from "./closeout/engine.js";
 import { DEFAULT_PLANNING_DEADLINE_MS } from "./closeout/planning.js";
 import { loadDenylist, scanTrackedPublicSafetySync } from "./closeout/inspection.js";
 import { inspectRepositoryObject } from "./closeout/repository-inspection.js";
-import { packageRoot, trackedShippablePaths } from "./closeout/repository.js";
+import { packageRoot, PlanningConfigInvalidError, trackedShippablePaths } from "./closeout/repository.js";
 import {
   executionContentionJson,
   ExecutionResourceBusyError,
@@ -432,6 +432,13 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
     } catch (error) {
       // A deadline hit is a typed partial: never empty output, never the silence
       // the adopter saw on a very large workspace.
+      if (error instanceof PlanningConfigInvalidError) {
+        // A typed refusal, never a silent fall back to the heuristic.
+        const refusal = { code: error.code, path: error.path, reason: error.reason };
+        if (json) io.stdout(JSON.stringify(refusal, null, 2));
+        io.stderr(`ERROR: ${error.message}`);
+        return 2;
+      }
       if (!(error instanceof PlanningAuditTimeout)) throw error;
       if (json) io.stdout(JSON.stringify(error.partial, null, 2));
       else {

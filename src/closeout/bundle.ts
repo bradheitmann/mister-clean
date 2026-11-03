@@ -22,7 +22,11 @@ import {
 import {
   isCanonicalPlanningFileName,
   isHarnessDefinitionPath,
+  isPlanningPathExcluded,
+  loadPlanningConfig,
+  PLANNING_CONFIG_PATH,
   PLANNING_LANE_NAMES,
+  PlanningConfigInvalidError,
 } from "./repository.js";
 import {
   auditPlanningArtifacts,
@@ -105,11 +109,21 @@ const PLANNING_NAMES = new Set([
 ]);
 const PLANNING_KINDS = new Set(["repo_files", "external_snapshot", "none"]);
 
-async function discoverPlanningRoots(repo: string, files: FilePort): Promise<Set<string>> {
+/**
+ * Live planning roots for bundle validation. The repository-level planning
+ * config is loaded and validated by the same `loadPlanningConfig` that
+ * `audit planning` and `prepare` use, so declared roots and excludes apply here
+ * identically; an invalid config throws `planning_config_invalid`.
+ */
+export async function discoverBundlePlanningRoots(repo: string, files: FilePort): Promise<Set<string>> {
+  const config = loadPlanningConfig(repo);
+  if (config?.roots !== undefined) return new Set(config.roots);
+  const exclude = [...(config?.exclude ?? []), PLANNING_CONFIG_PATH];
   // The walk itself refuses to descend into a nested checkout (bundle-runtime's
   // nodeFilePort uses the same shared helper), so the rows here are already this
   // repository's own files.
-  const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative));
+  const rows = (await files.walk(repo)).filter((row) =>
+    !isHarnessDefinitionPath(row.relative) && !isPlanningPathExcluded(row.relative, exclude));
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = new Map<string, Set<string>>();
   for (const row of directories) {
@@ -186,7 +200,16 @@ async function validatePlanning(
   if (clean && planning.unknown !== false) errors.push(`${path}.unknown: CLEAN requires false`);
   const systems = array(planning.systems);
   if (systems.length === 0) { errors.push(`${path}.systems: required nonempty array`); return; }
-  const discovered = repo ? await discoverPlanningRoots(repo, files) : new Set<string>();
+  let discovered = new Set<string>();
+  if (repo) {
+    try {
+      discovered = await discoverBundlePlanningRoots(repo, files);
+    } catch (error) {
+      if (!(error instanceof PlanningConfigInvalidError)) throw error;
+      errors.push(`${path}: ${error.message}`);
+      return;
+    }
+  }
   const declared = new Set<string>();
   const none = systems.filter((item) => object(item)?.kind === "none");
   if (none.length && systems.length !== 1) errors.push(`${path}.systems: kind=none is only valid as the sole discovered planning system`);

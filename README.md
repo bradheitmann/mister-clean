@@ -202,6 +202,31 @@ acceptance can be `not_applicable` only with a structured rationale.
 Repository-specific schemas and validators still run in addition to this
 conservative cross-repository gate.
 
+A repository can replace or bound the discovery heuristic with
+`.mister-clean/planning.json`:
+
+```json
+{ "schema": "mister-clean.planning-config/1",
+  "roots": ["plans", "charter/DONE"],
+  "exclude": ["reports"] }
+```
+
+With no file, the heuristic runs unchanged. When `roots` is present (an array,
+possibly empty), exactly those repository-relative paths are the planning roots
+and the heuristic is off; `[]` declares that the repository has no planning
+roots. `exclude` (optional) lists repository-relative path prefixes that
+discovery and the unprojected-planning probe never walk into, in both modes; a
+declared root inside an exclude is an error. An invalid config refuses with a
+typed `planning_config_invalid` (code, path and reason; exit 2 at the CLI) and
+never falls back to the heuristic. Invalid means malformed JSON, an unknown
+schema or key, a non-string entry, an absolute path, a `..` segment or anything
+outside the repository, a declared root that does not exist or is a symbolic
+link, or a root that is a harness-definition path or inside a nested checkout.
+`audit planning`, `prepare` and the bundle validator share one loader, and
+`audit planning --json` reports `planning_config: { path, sha256 }` or `null`;
+`prepare` also names the config and its digest in each planning system's
+`schema_sources`.
+
 Child references have an explicit semantic role. Normal work artifacts use
 `child_parentage`: a child row resolves to exactly one artifact and creates a
 graph edge. Artifacts typed `index`, `status_index`, or `rollup` use
