@@ -57,6 +57,14 @@ $mister-clean
 The entrypoint is [SKILL.md](SKILL.md). It routes to focused references only
 when the current repository makes them relevant.
 
+Install from a verified release archive (the `mister-clean-v<version>-verified-release`
+artifact of the tag's CI run, also attached to the GitHub release), not from a source
+checkout: the archive carries `RELEASE_ATTESTATION.json`, which the release step produces and
+which never exists in the source tree even though `package.json` `files` names it, and a package
+`MANIFEST.sha256` regenerated for the release (the source tree tracks its own copy, pinned to the
+current build). Attest the installed root before use
+(`node <root>/bin/mister-clean.js attest <root> --json --strict`).
+
 For a closeout expected to span multiple agent turns, the optional
 [persistent orchestration-goal template](templates/orchestration-goal.md) keeps
 the pay-until-paid loop, no-harm boundary, and terminal condition stable across
