@@ -105,3 +105,9 @@ appears in none of them (`grep -rl` → 0). `git status` of the worktree clean t
 - Test fixtures spawn `git` per fixture repository (init, identity, hermetic hook policy, commits); teardown is one
   recursive `rmSync` per fixture in `afterEach`, no hook timeouts widened. The three files take about three minutes on
   this loaded host, dominated by transform/import time.
+
+## Rework 1 (PM, after the MC/DEV rejection of e7fed741)
+- Rejection: MANIFEST.sha256 at e7fed741 did not match the tip's own dist bytes. Root cause found on the 7.2.0 bump the same hour: the dist bundles hash differently per bun version (1.3.9 host default, 1.4.3 Homebrew, 1.4.0 CI pin); only a bun 1.4.0 build reproduces CI (STATE: O-TOOLCHAIN-1).
+- Rebased onto main e1f0090 (v7.2.0). `pnpm run build:raw` twice from a clean `dist/` under bun 1.4.0: identical both times — dist/public.js `b79cf045f022f82e…`, dist/stdio.js `8584c95baa9708db…`, bin/mister-clean.js `beec2f4792d3f699…` (unchanged from the committed bin), MANIFEST.sha256 `168948bf690fde39…`. `manifest:package:check` PASS (82 entries).
+- Re-run at this tip: `tsc --noEmit` clean; `audit:public` PASS (83 files); `charter check --strict` ok; the three proof files 19/19 with the `test:node` flags and `MISTER_CLEAN_SOURCE_DEVELOPMENT=1`.
+- Only MANIFEST.sha256 and this section changed in the rework.
