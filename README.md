@@ -224,16 +224,30 @@ possibly empty), exactly those repository-relative paths are the planning roots
 and the heuristic is off; `[]` declares that the repository has no planning
 roots. `exclude` (optional) lists repository-relative path prefixes that
 discovery and the unprojected-planning probe never walk into, in both modes; a
-declared root inside an exclude is an error. An invalid config refuses with a
-typed `planning_config_invalid` (code, path and reason; exit 2 at the CLI) and
-never falls back to the heuristic. Invalid means malformed JSON, an unknown
-schema or key, a non-string entry, an absolute path, a `..` segment or anything
-outside the repository, a declared root that does not exist or is a symbolic
-link, or a root that is a harness-definition path or inside a nested checkout.
-`audit planning`, `prepare` and the bundle validator share one loader, and
-`audit planning --json` reports `planning_config: { path, sha256 }` or `null`;
-`prepare` also names the config and its digest in each planning system's
-`schema_sources`.
+declared root inside an exclude is an error. An exclude entry is either a
+string, as above, or an object `{ "path": "reports", "kind": "archive" }` with
+`kind` `evidence` or `archive`. Both forms bound planning discovery
+identically. Only the object form also prunes repository-native gate
+discovery: a `package.json`, `Cargo.toml` or `go.mod` under an evidence or
+archive root is an artifact of record, not an executable surface, so `prepare`
+does not run it as a gate. The exclusion is visible, never silent: discovery
+records each skipped manifest as
+`{ kind: "gate_candidate_excluded_by_planning_policy", path, manifest, exclude_root }`
+in `native-gate-discovery.json` and the closeout report lists it under the
+verification dimension as `gate candidate excluded by planning policy: <path>`.
+A repository that wants such a manifest gated moves it out of the archive
+root. String excludes keep their planning-only meaning, so no existing config
+changes behaviour. An invalid config refuses with a typed
+`planning_config_invalid` (code, path and reason; exit 2 at the CLI) and never
+falls back to the heuristic. Invalid means malformed JSON, an unknown schema or
+key, an entry that is neither a string nor a `{ path, kind }` object, an
+unknown exclude `kind`, an absolute path, a `..` segment or anything outside
+the repository, a declared root that does not exist or is a symbolic link, or
+a root that is a harness-definition path or inside a nested checkout. `audit
+planning`, `prepare`, the bundle validator and native-gate discovery share one
+loader, and `audit planning --json` reports `planning_config: { path, sha256 }`
+or `null`; `prepare` also names the config and its digest in each planning
+system's `schema_sources`.
 
 Child references have an explicit semantic role. Normal work artifacts use
 `child_parentage`: a child row resolves to exactly one artifact and creates a
