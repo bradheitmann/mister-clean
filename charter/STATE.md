@@ -1,66 +1,52 @@
-# State — mister-clean — 2026-11-03T04:17Z (from `date -u`), written by the project PM (Claude Code) at the 7.2.0 release
+# State — mister-clean — 2026-11-03T06:17Z (from `date -u`), written by the project PM (Claude Code) at the 7.3.0 release
 Proven (with the proof names):
 - Nothing under this charter's Slice Zero yet; proven_on is empty.
 - Dependency advisories cleared, native-gate spawn fix (60e748d), hermetic test fixtures (5b83a44) and discovery-and-retirement (c5a85c9): each independently verified on its exact tip, as recorded in earlier states.
-- Large-repository audits (5f98f84; verified by MC/QA on 0b0d5f15):
-  - Git child output is bounded, with a typed `git_output_too_large` refusal;
-  - stack markers are found in subdirectories (`detect stack --json`);
-  - an unreleased source checkout is named as such;
-  - `audit planning` has a deadline that prints a typed partial result.
-- Planning-audit out-of-memory fix (c8e388c; a Claude reviewer REJECTED the first freeze and ACCEPTED a3253787):
-  - no planning, bundle or analysis walk descends into a nested checkout (a directory holding `.git`);
-  - on a 14,600-file workspace, in-process peak memory went from 15.8 GB (OOM, exit 134) to 2.0 GB, and the audit now completes.
-- Two customer defects (77a0b7a4; MC/DEV, a second model family, REJECTED 218898be and ACCEPTED 77a0b7a4; merged as 4bddae5 with hosted CI green on the exact tip):
-  - `prepare` on a large repository: `trackedShippablePaths` goes through the bounded Git listing; a regression test lists more than 1 MiB of tracked paths through an index-only fixture;
-  - repository planning config `.mister-clean/planning.json` (`mister-clean.planning-config/1`; `roots`, `exclude`); invalid config is a typed `planning_config_invalid` refusal; honored identically by `audit planning`, `prepare` and the bundle validator; on the 14,600-file workspace with a config: findings 29,137 → 633, output 401 MB → 5.8 MB, 712 s → 15 s.
-- Field-evals:
-  - the 2026-10-31 window;
-  - reviewer-control card RC-001 with per-replay evidence and defect attribution (3d5280e). Flash is the stricter reviewer: false rejects 4/36 vs v4-pro 3/115 (p = 0.056), and the planted defect is sufficient in 10/36 vs 68/113 (p = 0.0006);
-  - instruction-polarity card RC-002 (implicit-constant omission; v4-pro 11/14 vs flash 5/30, p = 0.00013; the k=3 probe is directional only);
-  - every card and the customer test are bound to model-registry export 2026.11.03-1 (PR #44, e542257); both customer-test mutants observed RED.
-- Generic view-ablation A/B comparator, `ablations/view-ab.ts` (`ablation-replay/1`, 634038e): self-test plus a fail-without mutant (observed RED). The project consumed it in its round-18 ablation.
-- Charter: pinned binary b9323cd locally (hooks reinstalled); SPEC 56f03db2 unchanged since 7b12eea.
-- 7.2.0 candidate (this branch, on main 4bddae5): version 7.2.0 in package.json and SKILL.md; MANIFEST.sha256 regenerated from two byte-identical clean `build:raw` runs under bun 1.4.0, the version CI pins (dist/public.js fbcd5577…, dist/stdio.js adbb6e1e…, bin 5072720b…); `manifest:package:check` PASS (82 entries); `charter check --strict` ok; prospective-package public-safety PASS (83 files). The release proof is the CI tag run's verified archive, never this checkout.
-- Packaged bytes depend on the bun version (found when the first bump commit dcd368e failed CI's capsule check): under bun 1.3.9 the same tree bundles to dist/public.js 4acf097e… / dist/stdio.js 94cd6f13…, under 1.4.0 to fbcd5577… / adbb6e1e…; `build:scorecard` output differs likewise. Only a bun 1.4.0 build reproduces CI. This also explains the two MANIFEST disagreements between lanes and QA on 2026-11-03.
+- Large-repository audits (5f98f84; verified by MC/QA on 0b0d5f15): bounded Git child output with a typed `git_output_too_large` refusal; stack markers in subdirectories (`detect stack --json`); an unreleased source checkout named as such; `audit planning` deadline with a typed partial result.
+- Planning-audit out-of-memory fix (c8e388c; a Claude reviewer REJECTED the first freeze and ACCEPTED a3253787): no walk descends into a nested checkout; 15.8 GB (OOM) → 2.0 GB on a 14,600-file workspace.
+- Two customer defects (77a0b7a4; MC/DEV REJECTED 218898be, ACCEPTED 77a0b7a4; merged 4bddae5, hosted CI green): `prepare` lists tracked paths through the bounded Git listing (regression test over 1 MiB of paths); repository planning config `.mister-clean/planning.json` (`mister-clean.planning-config/1`; typed `planning_config_invalid`; honored identically by `audit planning`, `prepare`, bundle validator). On the 14,600-file workspace with a config: findings 29,137 → 633, output 401 MB → 5.8 MB, 712 s → 15 s.
+- **Release 7.2.0** (main e1f0090; annotated tag v7.2.0, tag object fedafb02; CI tag run 41579332552 green; archive bradheitmann-mister-clean-7.2.0.tgz sha256 8fceda2aceead917e2f27127cf96752896e8b9368578c9b1c26757f755193824 with receipt on the GitHub release; installed at the maintainer's `~/.claude/skills/mister-clean`, `attest --strict` pass, 7.0.2 preserved). First installable release since 7.0.2. The first bump commit dcd368e failed CI's capsule check and was fixed forward at 9cac717 (see O-TOOLCHAIN-1).
+- **7.3.0 lane: run receipts and the second pass** (feat/run-receipts-second-pass; charter/DONE/run-receipts.md, 8 proofs, 19 tests): `mister-clean.run-receipt/1` under `<state>/mister-clean/receipts/` (0600; a root inside the audited repository is a typed refusal, exit 2; repo-relative paths and digests only; privacy refusal on matched public-safety values); stable fingerprints `sha256(family\0rule\0path\0anchor.kind\0content_sha256)` with legacy fingerprints preserved; `second-pass` classifies cleared / persisting / persisting_rewritten / persisting_unseen (MISS) / introduced / unresolvable_earlier_bytes / flaky through Git, never guessed. QA by MC/DEV (second family): REJECTED e7fed741 (MANIFEST), ACCEPTED e9bceb1 2026-11-03T04:49:34Z (4 mutants RED, privacy sweep clean, probes ok); hosted CI then failed e9bceb1 on the SKILL.md budget; rework 2 at 2f95687 (SKILL.md trimmed with no doctrine change; 19,975 bytes), hosted CI green, MC/DEV re-check: ACCEPTED 2f956879 at 2026-11-03T06:32:44Z (checks a, b, d green; local full suite 15 red classified to known environment classes with hosted CI 882/882 as the arbiter).
+- 7.3.0 candidate (this branch): version 7.3.0 in package.json and SKILL.md; MANIFEST from two byte-identical clean `build:raw` runs under bun 1.4.0 (dist/public.js 6c1fa211…, dist/stdio.js b65d5ed5…, bin beec2f47…); `manifest:package:check` PASS (82 entries). The release proof is the CI tag run's verified archive, never this checkout.
+- Field-evals: the 2026-10-31 window; RC-001 (flash false rejects 4/36 vs v4-pro 3/115, p = 0.056; defect sufficient 10/36 vs 68/113, p = 0.0006); RC-002 (implicit-constant omission; 11/14 vs 5/30, p = 0.00013; k=3 probe directional); all bound to model-registry export 2026.11.03-1 (PR #44); customer-test mutants RED.
+- `ablations/view-ab.ts` (`ablation-replay/1`, 634038e): self-test plus a fail-without mutant (RED).
+- Charter: pinned binary b9323cd locally; SPEC 56f03db2 unchanged since 7b12eea.
+- Self-clean baseline (read-only, judge = installed 7.2.0, subject main e1f0090): `audit planning`, `audit github-actions`, `audit repository-boundaries` each 0 findings. The loop's first pass must therefore be the full CLOSE procedure, not the bounded audits.
 Not proven / known gaps:
 - INTENT and COMMON-STANDARD v0.2 await owner ratification.
-- Release state: v7.1.0 was published 2026-10-19 (49fc8207) as a source release whose lightweight tag never triggered CI, so it has no verified archive and consumers still run 7.0.2. 7.2.0 is every fix merged since v7.1.0 plus the two defect fixes above, released with an annotated tag pushed from git so that CI builds the verified archive. The field-study version is 7.3.0 (run receipts, second pass): its lane was frozen at e7fed741 and REJECTED by MC/DEV on one defect (MANIFEST carried the previous lane's dist hashes; all 19 proofs, 4 mutants and the privacy sweep were green); rework is a rebase onto 4bddae5 and a regenerated MANIFEST.
-- Local full suite on this host: NOT VERIFIED. Hosted CI is the full-suite verdict. Two environment classes:
-  - capsule commits refused by the host-global language guard (owner decision pending);
-  - socket and process-kill tests failing in the operator agent's shell.
-- The repository pins bun only in the CI workflow (1.4.0); the host's default bun is 1.3.9 and Homebrew's is 1.4.3, so a lane or QA seat that builds with the PATH default produces a MANIFEST CI rejects. New obligation O-TOOLCHAIN-1: pin the bun version in the repository (a `.bun-version` or `packageManager`-style pin that CI reads) and make the manifest and determinism gates record and refuse a mismatched toolchain. Until then: build with bun 1.4.0 (a private install under `$TMPDIR/bun140` was used here).
-- The formal Mister Clean prepare/closure bundle is not produced (it needs a local full suite).
-- **CI pins charter 7b12eea while local is b9323cd.** The CI bump, and wiring `bun ablations/view-ab.ts --self-test` into CI, both need a workflow edit. The host's security-guidance hook blocked that edit (its warning is about untrusted event input, which neither change uses), and it was deliberately not routed around.
-- **Model-registry joins:** 9 field-window cards still name `none` because the export has no card for them (nemotron-3.5-super, step-5-preview, inkling, mimo-v2.6-pro, nemotron-3-ultra, muse-wonder); they bind when the registry publishes cards.
+- `prepare` end to end on the 14,850-file / 576 MB workspace with the installed 7.2.0: the listing and audit phases complete in ~2 min (the DEFECT 1 scope); native-gate execution then materializes one full snapshot checkout per discovered gate (9 Cargo projects), and under host load 9–11 each checkout exceeded the 300 s no-progress limit (typed NativeGateGitTimeoutError, fails closed; a plain `git worktree add --detach` of the same tree took 694 s at the time). The run ended in a correct refusal (`subject repository changed`) caused by the PM's own worktree test inside the clone. A quiet-slot rerun with nothing else touching the clone is owed before "prepare on the large workspace" is called proven.
+- Local full suite on this host: NOT VERIFIED (capsule commits refused by the host-global language guard; socket and process-kill tests fail in the operator shell). Hosted CI is the full-suite verdict. Under bun 1.4.0, `build:raw` completes on this host.
+- **CI pins charter 7b12eea while local is b9323cd.** The CI bump and `bun ablations/view-ab.ts --self-test` wiring need a workflow edit the host's security hook blocked; not routed around.
+- **Model-registry joins:** 9 field-window cards name `none` because the export has no card for them.
 - Obligations:
-  - O-STD-1..5, O-PLAN-1, O-RET-2 (self-ratification gap; interim rule: commit the owner's ruling before the retirement record);
-  - O-PERF-2, narrowed: with a planning config the large-workspace `audit planning` output is 5.8 MB; the heuristic path (no config) is still about 401 MB of JSON at 6.35 GB peak RSS;
-  - O-CENSUS-1 (`src/census.ts` walk has no nested-checkout check);
-  - O-ABL-1 (the CI wiring above);
-  - O-R18-2 (a by-reference false-fail check, waiting for a P05 reconciler item that passes inline);
-  - O-FE1-SCHEMA (seam-sync with the main customer project): FE-1 reads a customer project's published telemetry schemas (named in that project's seam record, not here), with raw task-dir reads only where no schema exists. Today mister-clean evals read raw task dirs.
+  - O-TOOLCHAIN-1: packaged dist bytes depend on the bun version (1.3.9 host default, 1.4.3 Homebrew, 1.4.0 CI pin give three different dist hashes). Pin bun in the repository and make the manifest and determinism gates record and refuse a mismatched toolchain. Until then build with bun 1.4.0 only.
+  - O-GATE-SNAPSHOT-1: one snapshot per run reused across native gates (or a sparse checkout of the gate root), and a progress-aware timeout that counts checked-out entries as progress.
+  - O-GATE-SCOPE-1 (owner / A/EXEC-PM ruling): a gate discovered under a planning-excluded artifact (`reports/LANE-p00-…`) is probably not an intended gate; decide whether planning excludes also prune gate discovery.
+  - O-TMP-1: the product left 14 temp dirs (`mister-clean-bundle-*`, `mister-clean-native-gate-snapshot-*`) and the tests 77 fixture dirs in `$TMPDIR` over four days; remove temp roots in exit handlers and list unremovable ones in the receipt; tests tear down in `finally`.
+  - O-QA-BRIEF-1: lane QA briefs require the full `test:node` suite under the pinned toolchain, not only the lane proofs (CI caught the SKILL.md budget that QA did not).
+  - O-STD-1..5, O-PLAN-1, O-RET-2; O-PERF-2 (narrowed: heuristic path still ~401 MB); O-CENSUS-1; O-ABL-1; O-R18-2; O-FE1-SCHEMA; O-DATA-1 (data product; starter set per charter/owner-decisions/2026-11-03-starter-eval-set.md).
 Exact last-green command(s):
 - charter check --strict (charter b9323cd), exit 0, on this candidate
-- MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts manifest . --package --check: PASS (82 entries), on this candidate after two byte-identical clean builds
+- MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts manifest . --package --check: PASS (82 entries) after two byte-identical clean `build:raw` runs under bun 1.4.0
+- hosted CI verify, dependency-audit and charter on 2f95687 (PR #47) and on main e1f0090: success; CI tag run 41579332552 (v7.2.0): success
+- node ~/.claude/skills/mister-clean/bin/mister-clean.js attest ~/.claude/skills/mister-clean --json --strict: pass (7.2.0)
 - bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt: PASS (83 files)
-- bun ablations/view-ab.ts --self-test: ok
-- hosted CI verify, dependency-audit and charter on 77a0b7a4 (PR #45) and on main 4bddae5: success
-- mister-clean (installed release 7.0.2) audit github-actions: pass, 0 findings
 Exact last-red command(s) and why:
-- local `bun run test` at 1ba6d13: `build:verified` stops at its capsule commit (host-global language guard). Environment; red identically at base.
-- local test:node / test:bun at 1ba6d13: 14 and 9 failures in the environment classes above.
-- hosted CI verify on the first bump commit dcd368e: `clean ci: FAIL (build:raw changed the candidate RepositoryObject)`; cause: MANIFEST dist hashes from a bun 1.3.9 build. Fixed forward in the next commit with a bun 1.4.0 build. (`bun run build:raw` completes on this host under bun 1.4.0; the earlier "stops at a socket test" note was wrong for this path.)
+- hosted CI verify on dcd368e: `clean ci: FAIL (build:raw changed the candidate RepositoryObject)` — MANIFEST from a bun 1.3.9 build; fixed at 9cac717.
+- hosted CI verify on e9bceb1: `src/skill-contract.test.ts` SKILL.md 20,289 > 20,000 bytes; fixed at 2f95687.
+- installed 7.2.0 `prepare` on the large clone: exit 2 after 2661 s, `subject repository changed while native-gate isolation was being proven` (PM interference; see above).
+- local `bun run test` at 1ba6d13: `build:verified` stops at its capsule commit (host-global language guard). Environment.
 Next three bounded items (in order):
-1. Tag v7.2.0 (annotated, from git), verify the CI archive, install it, and re-run prepare on the large workspace.
-2. 7.3.0: rework e7fed741 (rebase, MANIFEST), re-QA, land, tag; then the self-clean loop on this repository, then the field study across the other repositories.
-3. The data-product slice (O-DATA-1): store, importer, starter-set derivation per charter/owner-decisions/2026-11-03-starter-eval-set.md, redacting export. O-CENSUS-1 remains.
-Housekeeping done at wind-down (2026-11-03):
-- Branches: only `main` plus the two early field-observation branches behind PR #8 and PR #9 remain on origin. Merged or superseded branches were deleted after confirming each tip has an `archive/*` tag on origin.
-- The PM's local private data was consolidated into two roots (the product state directory and the agent private root) plus a tool cache. It was verified by an independent reviewer. Nothing private is in this repository.
-- New obligation O-DATA-1 (owner request): consolidate eval, case and field-study data from every repository that uses Mister Clean into one store, as a usable data product. Inventory first, then the FE-1 schema, store and importer, then a redacting export. The owner decided the starter set (charter/owner-decisions/2026-11-03-starter-eval-set.md); what else is public is still open.
+1. Land 7.3.0: merge PR #47 on QA acceptance of the exact tip, merge this bump, annotated tag v7.3.0, verify the CI archive, GitHub release, install, attest.
+2. Self-clean loop cycle 1 on this repository with the installed 7.3.0 as judge: full CLOSE on a frozen object with a run receipt, remediate, second pass, classify misses, general fixes only (O-TOOLCHAIN-1 and O-TMP-1 are the first candidates), release, log, commit, push. Heats of 3 with /deadlock-breaker and /code-red between heats.
+3. Quiet-slot `prepare` rerun on the large clone; then the field study across the other repositories (FIELD-STUDY-PROTOCOL), commit and push when measurement starts.
+Housekeeping (2026-11-03):
+- Branches on origin: `main`, the two early field-observation branches (PR #8, #9), and live lanes only; every merged or superseded branch has an `archive/*` tag (including archive/run-receipts-rejected-e7fed741). The 7.3.0 lane branch was once pushed as a forced update after a rebase (lease on e7fed741); the PM recorded it as a rule breach to avoid (merge main into a pushed lane instead).
+- The PM's local private data lives in two roots plus a tool cache; nothing private is in this repository. Owner decision 2026-11-03: the release ships a synthetic, derived starter eval set.
 
 Open owner decisions:
 - Ratify INTENT and COMMON-STANDARD v0.2.
 - Capsule hook disabling for the clean-CI and generated-candidate capsules.
 - Allow the CI workflow edit (charter pin bump and comparator self-test).
 - Deletion of four retired agent worktrees that still hold untracked files (contents preserved externally with verified hashes), and of listed scratch files.
+- O-GATE-SCOPE-1 (above).
