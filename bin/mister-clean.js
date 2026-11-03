@@ -17583,7 +17583,8 @@ import {
   mkdtemp,
   readdir as readdir3,
   readlink,
-  rm
+  rm,
+  writeFile
 } from "fs/promises";
 import { tmpdir as tmpdir2 } from "os";
 import { basename as basename7, dirname as dirname7, isAbsolute as isAbsolute9, join as join6, relative as relative9, resolve as resolve11, sep as sep9 } from "path";
@@ -18462,6 +18463,20 @@ async function copySubjectWorktree(subject, snapshot) {
     });
   }
 }
+async function copyLocalExcludeRules(subject, snapshot, timeoutMs) {
+  const gitPath = (repository) => gitLine3(repository, ["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], timeoutMs);
+  const source = gitPath(subject);
+  let rules;
+  try {
+    rules = readFileSync6(source);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  const target = gitPath(snapshot);
+  await mkdir(dirname7(target), { recursive: true });
+  await writeFile(target, rules);
+}
 async function createExecutionSnapshot(subject, expected, options = {}) {
   const gitTimeoutMs = options.git_timeout_ms ?? SNAPSHOT_GIT_TIMEOUT_MS;
   assertPositiveInteger("git_timeout_ms", gitTimeoutMs);
@@ -18476,6 +18491,7 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
       throw new Error(`unsupported Git object format ${JSON.stringify(objectFormat)}`);
     }
     gitBytes3(repository, ["init", "--quiet", `--object-format=${objectFormat}`], gitTimeoutMs);
+    await copyLocalExcludeRules(subject, repository, gitTimeoutMs);
     gitBytes3(repository, ["fetch", "--quiet", "--no-tags", subject, expected.head_commit], gitTimeoutMs);
     gitBytes3(repository, ["checkout", "--quiet", "--detach", expected.head_commit], gitTimeoutMs);
     restoreReachabilityRefs(subject, repository, gitTimeoutMs);
@@ -18496,7 +18512,9 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
     await copySubjectWorktree(subject, repository);
     const repositoryObject = captureRepositoryObject(repository);
     if (!stableEqual(repositoryObject, expected)) {
-      throw new Error("disposable native-gate snapshot does not reproduce the exact subject repository object");
+      throw new Error(
+        `disposable native-gate snapshot does not reproduce the exact subject repository object (subject ${expected.sha256} entries=${expected.entry_count}; snapshot ${repositoryObject.sha256} entries=${repositoryObject.entry_count})`
+      );
     }
     return {
       container,

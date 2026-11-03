@@ -705,6 +705,30 @@ async function copySubjectWorktree(subject: string, snapshot: string): Promise<v
   }
 }
 
+/**
+ * Ignore rules that live only in the subject's Git directory (`info/exclude`,
+ * written by tools and harnesses, never committed) decide which untracked paths
+ * belong to the subject's RepositoryObject. A fresh snapshot repository has no
+ * such rules, so carry them over before the snapshot's object is captured.
+ * Paths resolve through `--git-path`, which follows a linked worktree to its
+ * common directory.
+ */
+async function copyLocalExcludeRules(subject: string, snapshot: string, timeoutMs: number): Promise<void> {
+  const gitPath = (repository: string) =>
+    gitLine(repository, ["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], timeoutMs);
+  const source = gitPath(subject);
+  let rules: Buffer;
+  try {
+    rules = readFileSync(source);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  const target = gitPath(snapshot);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, rules);
+}
+
 export interface NativeGateExecutionSnapshotOptions {
   /** Upper bound for each Git child the snapshot starts. */
   readonly git_timeout_ms?: number;
@@ -728,6 +752,7 @@ export async function createExecutionSnapshot(
       throw new Error(`unsupported Git object format ${JSON.stringify(objectFormat)}`);
     }
     gitBytes(repository, ["init", "--quiet", `--object-format=${objectFormat}`], gitTimeoutMs);
+    await copyLocalExcludeRules(subject, repository, gitTimeoutMs);
     gitBytes(repository, ["fetch", "--quiet", "--no-tags", subject, expected.head_commit], gitTimeoutMs);
     gitBytes(repository, ["checkout", "--quiet", "--detach", expected.head_commit], gitTimeoutMs);
     restoreReachabilityRefs(subject, repository, gitTimeoutMs);
@@ -748,7 +773,11 @@ export async function createExecutionSnapshot(
     await copySubjectWorktree(subject, repository);
     const repositoryObject = captureRepositoryObject(repository);
     if (!stableEqual(repositoryObject, expected)) {
-      throw new Error("disposable native-gate snapshot does not reproduce the exact subject repository object");
+      throw new Error(
+        "disposable native-gate snapshot does not reproduce the exact subject repository object"
+        + ` (subject ${expected.sha256} entries=${expected.entry_count};`
+        + ` snapshot ${repositoryObject.sha256} entries=${repositoryObject.entry_count})`,
+      );
     }
     return {
       container,
