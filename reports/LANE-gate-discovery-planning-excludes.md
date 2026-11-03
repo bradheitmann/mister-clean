@@ -104,6 +104,36 @@ is red; the native-gates leftover check (below) passed in this full run.
   branch. Environment class: shared-tmpdir crosstalk between concurrent lanes
   (the product-side leftover question is already O-TMP-1 in `charter/STATE.md`).
 
+## After merging main 56c00cc (provenance, `.bun-version` pin, CURRENT.md)
+
+`git merge --no-edit origin/main` (no rebase). One conflict, the generated
+`MANIFEST.sha256`, resolved by taking main's copy and regenerating. The
+auto-merged `bin/mister-clean.js` equals the fresh build byte for byte.
+
+| command | result |
+|---|---|
+| `bun run build:materials` then `pnpm exec tsc --noEmit` | exit 0 |
+| `pnpm run build:raw` twice, `dist/` removed before each | identical hashes: `bin/mister-clean.js` 53b28eca…, `dist/public.js` 1e160172…, `dist/stdio.js` e6ae7768…, `dist/planning.js` d079be0c…, `dist/control-plane.js` b9433691…; `MANIFEST.sha256` 39bd7787… |
+| `bun run manifest:package:check` | PASS (82 entries) |
+| proofs + `planning-config`, `native-gates`, `skill-contract`, `toolchain-pin` tests (same vitest flags) | 5 files, 97/97 pass |
+| `bun run audit:public` | PASS (83 files) |
+| `charter check --strict` | ok |
+| `SKILL.md` | unchanged, 19,975 bytes |
+| `pnpm run test:node` | see "Full suite after the merge" below |
+
+### Compatibility of the 1.4 discovery record with released 7.3.0 evidence
+
+The released 7.3.0 CLI (`bin/mister-clean.js` on main) writes
+`DISCOVERY_SCHEMA_VERSION = "1.3"` and no `excluded_candidates` key. The
+validator keeps a legacy path for exactly that shape: a `1.3` record without
+the key validates (covered by the "legacy 1.3 discovery record" test). Only a
+record that claims `1.4` and lacks the key is refused, and no released writer
+produces that shape. So bundles and evidence written by 7.3.0 keep validating.
+The key stays required on `1.4` rather than optional-on-read because the
+discovery record is validated by exact keys and bound by `catalog_sha256`; an
+absent key would make two different byte shapes mean the same catalog, which
+is the ambiguity the exact-key rule exists to refuse.
+
 ## Out of scope (recorded obligations)
 
 - Runner-safety findings (`repository:runner-safety`) under evidence/archive
