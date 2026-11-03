@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { receiptFindingsFromAudit, type ReceiptFinding } from "./finding-anchors.js";
+import { receiptFindingsFromAudit, type ReceiptFamily, type ReceiptFinding } from "./finding-anchors.js";
 import { scanTrackedPublicSafetySync } from "./inspection.js";
 import { trackedShippablePaths } from "./repository.js";
 import {
@@ -17,7 +17,9 @@ import {
   legacyBaselineFromBundle,
   runSecondPass,
   type EarlierBaseline,
+  type FlakyHistoryEntry,
 } from "./second-pass.js";
+import { type CliIO, runCli } from "../cli.js";
 import { mintServerAttestationBinding } from "../runtime-binding.js";
 import { LocalRunReceiptStore } from "../run-receipt.js";
 import { createFixtureRepository, fixtureCommit, fixtureGit } from "../test-support/fixture-repo.js";
@@ -55,6 +57,25 @@ const UNOBSERVED = { identity_status: "unobserved", card_ref: null, source: null
 
 function currentPublicSafety(root: string) {
   return receiptFindingsFromAudit("public_safety", scanTrackedPublicSafetySync(root, trackedShippablePaths(root), []), { repository: root });
+}
+
+function historyEntry(receiptId: string, subject: string | null, families: readonly ReceiptFamily[], fingerprints: readonly string[]): FlakyHistoryEntry {
+  const family = families[0]!;
+  return { receipt_id: receiptId, subject_sha256: subject, families, findings: fingerprints.map((fingerprint) => ({ fingerprint, family })) };
+}
+
+function publicSafetyReceipt(receiptId: string, subject: string | null, fingerprints: readonly string[]): FlakyHistoryEntry {
+  return historyEntry(receiptId, subject, ["public_safety"], fingerprints);
+}
+
+function planningReceipt(receiptId: string, subject: string): FlakyHistoryEntry {
+  return historyEntry(receiptId, subject, ["planning_graph"], []);
+}
+
+function cliOutput(): { io: CliIO; stderr: string[]; stdout: string[] } {
+  const stderr: string[] = [];
+  const stdout: string[] = [];
+  return { io: { stderr: (line) => stderr.push(line), stdout: (line) => stdout.push(line) }, stderr, stdout };
 }
 
 function baselineAt(root: string, findings: readonly ReceiptFinding[], dirty = false): EarlierBaseline {
@@ -170,19 +191,95 @@ describe("second pass classification", () => {
   it("marks a fingerprint flaky only when it alternates across three or more receipts of one identical subject", () => {
     const subject = "s".repeat(64);
     expect(flakyFingerprints([
-      { subject_sha256: subject, fingerprints: ["a", "b"] },
-      { subject_sha256: subject, fingerprints: ["a"] },
-      { subject_sha256: subject, fingerprints: ["a", "b"] },
-      { subject_sha256: "t".repeat(64), fingerprints: ["c"] },
-      { subject_sha256: null, fingerprints: ["d"] },
-    ])).toEqual(new Set(["b"]));
-    expect(flakyFingerprints([{ subject_sha256: subject, fingerprints: ["a"] }, { subject_sha256: subject, fingerprints: [] }])).toEqual(new Set());
+      publicSafetyReceipt("mc-receipt:1", subject, ["a", "b"]),
+      publicSafetyReceipt("mc-receipt:2", subject, ["a"]),
+      publicSafetyReceipt("mc-receipt:3", subject, ["a", "b"]),
+      publicSafetyReceipt("mc-receipt:4", "t".repeat(64), ["c"]),
+      publicSafetyReceipt("mc-receipt:5", null, ["d"]),
+    ])).toEqual(new Map([["b", { family: "public_safety", receipt_ids: ["mc-receipt:1", "mc-receipt:2", "mc-receipt:3"] }]]));
+    expect(flakyFingerprints([publicSafetyReceipt("mc-receipt:1", subject, ["a"]), publicSafetyReceipt("mc-receipt:2", subject, [])])).toEqual(new Map());
     // One turn (a miss later seen, or a finding that stopped being reported) is not alternation.
     expect(flakyFingerprints([
-      { subject_sha256: subject, fingerprints: [] },
-      { subject_sha256: subject, fingerprints: ["a"] },
-      { subject_sha256: subject, fingerprints: ["a"] },
-    ])).toEqual(new Set());
+      publicSafetyReceipt("mc-receipt:1", subject, []),
+      publicSafetyReceipt("mc-receipt:2", subject, ["a"]),
+      publicSafetyReceipt("mc-receipt:3", subject, ["a"]),
+    ])).toEqual(new Map());
+  });
+
+  it("family-scoped-history: a receipt that did not examine the finding's family contributes no turn", () => {
+    const subject = "s".repeat(64);
+    // A (public_safety, X present), B (planning_graph, nothing), A' (public_safety, X present): X is not flaky.
+    expect(flakyFingerprints([
+      publicSafetyReceipt("mc-receipt:a", subject, ["x"]),
+      planningReceipt("mc-receipt:b", subject),
+      publicSafetyReceipt("mc-receipt:a2", subject, ["x"]),
+    ])).toEqual(new Map());
+    // The field defect: five single-family AUDIT receipts, public_safety in the middle, then a second pass of public_safety.
+    expect(flakyFingerprints([
+      planningReceipt("mc-receipt:pg", subject),
+      publicSafetyReceipt("mc-receipt:ps", subject, ["x"]),
+      historyEntry("mc-receipt:gha", subject, ["github_actions"], []),
+      historyEntry("mc-receipt:rb", subject, ["repository_boundaries"], []),
+      historyEntry("mc-receipt:sb", subject, ["semantic_boundary"], []),
+      publicSafetyReceipt("mc-receipt:sp", subject, []),
+    ])).toEqual(new Map());
+  });
+
+  it("two-turns-within-family: present, absent, present inside one family on one subject is flaky", () => {
+    const subject = "s".repeat(64);
+    expect(flakyFingerprints([
+      publicSafetyReceipt("mc-receipt:a", subject, ["x"]),
+      publicSafetyReceipt("mc-receipt:a2", subject, []),
+      publicSafetyReceipt("mc-receipt:a3", subject, ["x"]),
+    ])).toEqual(new Map([["x", { family: "public_safety", receipt_ids: ["mc-receipt:a", "mc-receipt:a2", "mc-receipt:a3"] }]]));
+  });
+
+  it("flaky-basis-names-family-receipts: the row basis names the receipt ids of the finding's family only", () => {
+    const root = repository("basis");
+    writeFileSync(join(root, "notes.txt"), `contact=${PLANTED}\n`);
+    fixtureCommit(root);
+    const current = currentPublicSafety(root);
+    const x = current[0]!.finding.fingerprint;
+    const subject = "s".repeat(64);
+    const flaky = flakyFingerprints([
+      publicSafetyReceipt("mc-receipt:ps-1", subject, [x]),
+      planningReceipt("mc-receipt:pg-1", subject),
+      publicSafetyReceipt("mc-receipt:ps-2", subject, []),
+      planningReceipt("mc-receipt:pg-2", subject),
+      publicSafetyReceipt("mc-receipt:ps-3", subject, [x]),
+    ]);
+    expect(flaky.get(x)).toEqual({ family: "public_safety", receipt_ids: ["mc-receipt:ps-1", "mc-receipt:ps-2", "mc-receipt:ps-3"] });
+    const rows = classifySecondPass({ earlier: baselineAt(root, current.map((item) => item.finding)), current, git: gitPortFor(root), flaky });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ classification: "flaky", observed: "both" });
+    expect(rows[0]!.basis).toBe("alternates across public_safety receipts mc-receipt:ps-1, mc-receipt:ps-2, mc-receipt:ps-3 of one identical subject; underlying: persisting");
+    expect(rows[0]!.basis).not.toContain("pg-");
+  });
+
+  it("cli-cleared-not-flaky: planning, public-safety (untracked offender), second-pass on one identical subject reads cleared", async () => {
+    const root = repository("cli-cleared");
+    writeFileSync(join(root, "README.md"), "clean\n");
+    fixtureCommit(root);
+    // Untracked, non-ignored: the default public-safety walk sees it; the second pass's tracked scope does not.
+    writeFileSync(join(root, "notes.txt"), `contact=${PLANTED}\n`);
+    const store = new LocalRunReceiptStore(join(scratch("cli-cleared-root"), "receipts"));
+    const planning = cliOutput();
+    expect(await runCli(["audit", "planning", root, "--json"], planning.io, undefined, undefined, store)).toBe(0);
+    const publicSafety = cliOutput();
+    expect(await runCli(["audit", "public-safety", root, "--json"], publicSafety.io, undefined, undefined, store)).toBe(1);
+    const [planningEntry, publicSafetyEntry] = store.index();
+    expect(planningEntry).toMatchObject({ mode: "AUDIT", families: ["planning_graph"], finding_count: 0 });
+    expect(publicSafetyEntry).toMatchObject({ mode: "AUDIT", families: ["public_safety"], finding_count: 1 });
+    const secondPass = cliOutput();
+    expect(await runCli(["second-pass", root, "--against", publicSafetyEntry!.receipt_id, "--json"], secondPass.io, undefined, undefined, store)).toBe(0);
+    const result = JSON.parse(secondPass.stdout.join("\n")) as { rows: readonly { classification: string; basis: string; path: string }[]; counts: Record<string, number> };
+    expect(result.rows).toEqual([expect.objectContaining({ classification: "cleared", path: "notes.txt", basis: "earlier finding not observed by the second pass" })]);
+    expect(result.counts).toMatchObject({ cleared: 1, flaky: 0 });
+    // All three receipts share one subject; the SECOND_PASS receipt examined public_safety and counts as its second receipt.
+    const entries = store.index();
+    expect(entries.map((entry) => entry.mode)).toEqual(["AUDIT", "AUDIT", "SECOND_PASS"]);
+    expect(new Set(entries.map((entry) => entry.subject_sha256)).size).toBe(1);
+    expect(entries[2]).toMatchObject({ families: ["public_safety"], finding_count: 0 });
   });
 
   it("runs end to end: writes a SECOND_PASS receipt beside the AUDIT receipt and classifies against it", () => {
