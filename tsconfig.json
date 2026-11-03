@@ -32,6 +32,9 @@
     "scripts/generate_codebase_history.ts",
     "scripts/report_snapshot.ts",
     "scripts/render_model_scorecard.ts",
-    "scripts/render_case_study_report.ts"
+    "scripts/render_case_study_report.ts",
+    "scripts/test-tmp-root.ts",
+    "scripts/test-tmp-root.test.ts",
+    "vitest.config.ts"
   ]
 }
