@@ -1,0 +1,82 @@
+{
+  "record_type": "mister-clean.eval-case",
+  "schema_version": "1",
+  "case_id": "CS-001",
+  "field_case": {
+    "path": "field-evals/2026-10-31-window/cases/CS-001-qa-reject-unnumbered-proofs.md",
+    "sha256": "73f6026ded4783ff933c236686fb92eb8a5309195b73083b24001acf92e5c259"
+  },
+  "phenomenon": "A reviewer rejects known-good work: CS-001's verifier refused a functionally correct change, and in controlled replay the same reviewer model refused known-good controls under a 2-of-3 repeat floor.",
+  "agent_cards": [
+    {
+      "card_id": "AC-003",
+      "model_registry_ref": "deepseek-v4.1-flash@2026.11.03-1",
+      "role": "subject"
+    },
+    {
+      "card_id": "AC-006",
+      "model_registry_ref": "deepseek-v4-pro@2026.11.03-1",
+      "role": "control"
+    }
+  ],
+  "verifier": {
+    "name": "control-pair qualification gate (a good control must pass 2 of 3) plus its mutant check",
+    "kind": "gate script",
+    "binding": "unbound",
+    "reason": "RC-001 records the gate's rule and that stored verdicts were reproduced by the source project's own scoring code (149 of 149), but neither the gate script's bytes nor its sha256 appear in this repository; the session-to-source map with each session's control-pair sha256 lives under the private data root (field-evals/2026-11-01-reviewer-controls/README.md, rules)."
+  },
+  "base_commit": {
+    "repository": "the source project: a Rust spec-compiler project, unnamed in this repository (field-evals/2026-10-31-window/README.md)",
+    "binding": "unbound",
+    "reason": "RC-001 and the reviewer-controls ledger remove the source project's paths and run ids and record no commit; CS-001's replication plan names the commit before the worker's change without a sha."
+  },
+  "replay": {
+    "floor": "2/3",
+    "sessions": 13,
+    "rows_source": {
+      "path": "field-evals/2026-11-01-reviewer-controls/data/control-tallies.tsv",
+      "sha256": "70862bfd01d4d73e18fd0998098d310598b5e4aff38c993f1dee00df0a2e99fe"
+    },
+    "outcome": "met",
+    "per_reviewer": [
+      {
+        "card_id": "AC-003",
+        "reviewer_model": "deepseek-flash",
+        "pair_set": "B",
+        "sessions": 3,
+        "good_replays": 36,
+        "false_rejects": 4,
+        "populations_at_floor": 2,
+        "floor_breaches": 1,
+        "bad_passes": 0
+      },
+      {
+        "card_id": "AC-006",
+        "reviewer_model": "deepseek-v4-pro",
+        "pair_set": "A",
+        "sessions": 2,
+        "good_replays": 24,
+        "false_rejects": 1,
+        "populations_at_floor": 1,
+        "floor_breaches": 0,
+        "bad_passes": 0
+      },
+      {
+        "card_id": "AC-006",
+        "reviewer_model": "deepseek-v4-pro",
+        "pair_set": "B",
+        "sessions": 8,
+        "good_replays": 96,
+        "false_rejects": 3,
+        "populations_at_floor": 3,
+        "floor_breaches": 0,
+        "bad_passes": 0
+      }
+    ]
+  },
+  "derived_from": {
+    "path": "field-evals/2026-11-01-reviewer-controls/cards/RC-001-reviewer-false-reject.md",
+    "sha256": "efbdac9ac9ab6ea16e9fdb729d63929860af198078e4315d31b3ef5bd84d2b51"
+  },
+  "created_at": "2026-11-03T07:20:42Z"
+}

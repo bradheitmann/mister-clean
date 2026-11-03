@@ -414,6 +414,34 @@ committed at the earlier HEAD), `introduced`, `unresolvable_earlier_bytes`
 A pre-7.3 closeout bundle joins through its legacy fingerprints. Pass
 `--no-subject-hash` to skip the RepositoryObject capture on very large trees.
 
+## Eval cases
+
+A durable eval case (`mister-clean.eval-case/1`, `src/eval-case.ts`) is the
+machine-readable record of one field failure that was replayed with its control
+agent: it cites the narrative case file, the card the replay was derived from
+and the tallies its counts come from (each by repository-relative path plus
+sha256), exactly two agent cards as `<registry card id>@<export version>` (one
+`subject`, one `control`), the constant verifier by sha256, and the base commit.
+Registry refs must name the export pinned by the customer test
+(`customer-tests/model-atlas/registry-join.json`, `artifact.version`); the
+validator reads that pin rather than keeping a second copy.
+
+```sh
+mister-clean eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo .
+mister-clean eval-case validate path/to/case.eval.json --repo path/to/checkout --json
+```
+
+The validator is read-only and writes nothing. It exits 0 with a typed
+`eval_case_valid` result when every citation binds, and 2 with a typed refusal
+listing each citation that did not: `path_missing`, `sha256_mismatch`,
+`registry_export_mismatch`, `agent_cards_count`, `verifier_unbound`,
+`base_commit_unbound`, `registry_pin_missing` or `record_shape`. A verifier or
+base commit written as `binding: "unbound"` with a reason is an honest record
+and still a refusal: a replay without a constant verifier is a case study, not
+an eval result. Like `attest`, this verb runs without the runtime attestation,
+because it asserts nothing about the runtime, only about the record and the
+repository bytes it cites.
+
 ## Public-safety boundary
 
 The public distribution contains generalized doctrine and synthetic examples.

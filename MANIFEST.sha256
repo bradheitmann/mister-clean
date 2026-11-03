@@ -1,5 +1,5 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
-04039ccbac801f62878d28e4d21ca7e85de446a218947464db43f16ea4a37870  ./README.md
+7c7be8fc9c047759e8b52b057b4a8522410f57f1c9fe434ce2479745ba82d4c0  ./README.md
 1c4bdca67124f577bebe87528e852a44f48d772a71255b68e9780c52b153b803  ./SECURITY.md
 2e2cb4938daf187060f48129704963a860aa9217a178756aae2177e96174325b  ./SKILL.md
 5e575cbe7a53b8b85aa0b0924eabf338e88669aaf368ae2cbff48a7c6eccf80e  ./THIRD_PARTY_NOTICES.md
@@ -28,7 +28,7 @@ b97a3d54909032f9f5dccba9a3b36dfc08fc065a0abd7af7a41ea4dd887180d9  ./assets/codeb
 b32333bbd5e144d2e2c736df9ce0cd977f73ed50d53c57bcee7051e9ad8c7ce6  ./assets/codebase-state-dashboard/product-mark.svg
 2b280962cfe5fdaf4513877c3d65184c8f71ddadb75f000f8b52b7a40bf57ada  ./assets/codebase-state-dashboard/tsconfig.scorecard.json
 ad4137f8e86b7ff051d650ee37a6c33757154a5698c798526ce0fa47b9d91e46  ./assets/regression-delta.json
-beec2f4792d3f6999d62ab88bb7ae9f479e047efc72d4a11f83426a7c2eb45c7  ./bin/mister-clean.js
+c349a24758da5d7e422f79a41125f61ec521a7b8316b03bde0ce3a71ac0087e9  ./bin/mister-clean.js
 a512a7f3940e1d875ebe4485a8e676e557c6279305b9d55c3529c6ddcd5752cf  ./dist/control-plane.d.ts
 b94336915979cd3a7420574b03d4f5d03dbd6c54a15de5961d0609a0e9dac7d5  ./dist/control-plane.js
 20afd4527ea2b6486b48ff858e84a93c847f7fbfb5ea3022e79585657272c2f8  ./dist/control-plane/assets/CormorantGaramond-Medium-B9HO_40Y.ttf

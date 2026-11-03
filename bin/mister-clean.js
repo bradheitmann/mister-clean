@@ -601,8 +601,8 @@ var require_Node = __commonJS({
         };
         const res = toJS.toJS(this, "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
     };
@@ -708,13 +708,13 @@ var require_Alias = __commonJS({
         const anchor = anchors2 && source && anchors2.get(source);
         return anchor ? anchor.count * anchor.aliasCount : 0;
       } else if (identity4.isCollection(node)) {
-        let count = 0;
+        let count2 = 0;
         for (const item of node.items) {
           const c = getAliasCount(doc, item, anchors2);
-          if (c > count)
-            count = c;
+          if (c > count2)
+            count2 = c;
         }
-        return count;
+        return count2;
       } else if (identity4.isPair(node)) {
         const kc = getAliasCount(doc, node.key, anchors2);
         const vc = getAliasCount(doc, node.value, anchors2);
@@ -3667,8 +3667,8 @@ var require_Document = __commonJS({
         };
         const res = toJS.toJS(this.contents, jsonArg ?? "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
       /**
@@ -3745,12 +3745,12 @@ var require_errors = __commonJS({
         lineStr = prev + lineStr;
       }
       if (/[^ ]/.test(lineStr)) {
-        let count = 1;
+        let count2 = 1;
         const end = error.linePos[1];
         if (end?.line === line && end.col > col) {
-          count = Math.max(1, Math.min(end.col - col, 80 - ci));
+          count2 = Math.max(1, Math.min(end.col - col, 80 - ci));
         }
-        const pointer = " ".repeat(ci) + "^".repeat(count);
+        const pointer = " ".repeat(ci) + "^".repeat(count2);
         error.message += `:
 
 ${lineStr}
@@ -3994,10 +3994,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep21, value } = collItem;
+        const { start, key, sep: sep22, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep21?.[0],
+          next: key ?? sep22?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -4011,7 +4011,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep21) {
+          if (!keyProps.anchor && !keyProps.tag && !sep22) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map2.comment)
@@ -4035,7 +4035,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep21 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep22 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -4051,7 +4051,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep21, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep22, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -4142,7 +4142,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep21 = "";
+        let sep22 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -4156,13 +4156,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep21 + cb;
-              sep21 = "";
+                comment += sep22 + cb;
+              sep22 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep21 += source;
+                sep22 += source;
               hasSpace = true;
               break;
             default:
@@ -4205,18 +4205,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep21, value } = collItem;
+        const { start, key, sep: sep22, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep21?.[0],
+          next: key ?? sep22?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep21 && !value) {
+          if (!props.anchor && !props.tag && !sep22 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -4270,8 +4270,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep21 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep21, null, props, onError);
+        if (!isMap && !sep22 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep22, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -4283,7 +4283,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep21 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep22 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -4294,8 +4294,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep21)
-                for (const st of sep21) {
+              if (sep22)
+                for (const st of sep22) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -4312,7 +4312,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep21, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep22, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -4492,7 +4492,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep21 = "";
+      let sep22 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines2[i][0].slice(trimIndent) + "\n";
@@ -4509,24 +4509,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep21 + indent.slice(trimIndent) + content;
-          sep21 = "\n";
+          value += sep22 + indent.slice(trimIndent) + content;
+          sep22 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep21 === " ")
-            sep21 = "\n";
-          else if (!prevMoreIndented && sep21 === "\n")
-            sep21 = "\n\n";
-          value += sep21 + indent.slice(trimIndent) + content;
-          sep21 = "\n";
+          if (sep22 === " ")
+            sep22 = "\n";
+          else if (!prevMoreIndented && sep22 === "\n")
+            sep22 = "\n\n";
+          value += sep22 + indent.slice(trimIndent) + content;
+          sep22 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep21 === "\n")
+          if (sep22 === "\n")
             value += "\n";
           else
-            sep21 = "\n";
+            sep22 = "\n";
         } else {
-          value += sep21 + content;
-          sep21 = " ";
+          value += sep22 + content;
+          sep22 = " ";
           prevMoreIndented = false;
         }
       }
@@ -4708,25 +4708,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep21 = " ";
+      let sep22 = " ";
       let pos = first.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
-          if (sep21 === "\n")
-            res += sep21;
+          if (sep22 === "\n")
+            res += sep22;
           else
-            sep21 = "\n";
+            sep22 = "\n";
         } else {
-          res += sep21 + match[1];
-          sep21 = " ";
+          res += sep22 + match[1];
+          sep22 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep21 + (match?.[1] ?? "");
+      return res + sep22 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -5536,14 +5536,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep21, value }) {
+    function stringifyItem({ start, key, sep: sep22, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep21)
-        for (const st of sep21)
+      if (sep22)
+        for (const st of sep22)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -6710,18 +6710,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep21;
+          let sep22;
           if (scalar3.end) {
-            sep21 = scalar3.end;
-            sep21.push(this.sourceToken);
+            sep22 = scalar3.end;
+            sep22.push(this.sourceToken);
             delete scalar3.end;
           } else
-            sep21 = [this.sourceToken];
+            sep22 = [this.sourceToken];
           const map2 = {
             type: "block-map",
             offset: scalar3.offset,
             indent: scalar3.indent,
-            items: [{ start, key: scalar3, sep: sep21 }]
+            items: [{ start, key: scalar3, sep: sep22 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map2;
@@ -6874,15 +6874,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep21 = it.sep;
-                  sep21.push(this.sourceToken);
+                  const sep22 = it.sep;
+                  sep22.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep21 }]
+                    items: [{ start: start2, key, sep: sep22 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -7076,13 +7076,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep21 = fc.end.splice(1, fc.end.length);
-            sep21.push(this.sourceToken);
+            const sep22 = fc.end.splice(1, fc.end.length);
+            sep22.push(this.sourceToken);
             const map2 = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep21 }]
+              items: [{ start, key: fc, sep: sep22 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map2;
@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync14, readFileSync as readFileSync19, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
-import { isAbsolute as isAbsolute24, join as join19, relative as relative20, resolve as resolve28, sep as sep20 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync20, realpathSync as realpathSync13, statSync as statSync8, writeFileSync as writeFileSync8 } from "fs";
+import { isAbsolute as isAbsolute25, join as join20, relative as relative21, resolve as resolve29, sep as sep21 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -10805,8 +10805,8 @@ function assertFilesystemCoverage(repository, entries2) {
   const directoryPrefixes = /* @__PURE__ */ new Set();
   for (const entry of entries2) {
     const segments = entry.path.split("/");
-    for (let count = 1; count < segments.length; count += 1) {
-      directoryPrefixes.add(segments.slice(0, count).join("/"));
+    for (let count2 = 1; count2 < segments.length; count2 += 1) {
+      directoryPrefixes.add(segments.slice(0, count2).join("/"));
     }
   }
   function walk(directory, parentPathBytes) {
@@ -10907,12 +10907,12 @@ function hashRegularFile(hash, absolute, path, before, captureBytes) {
     let remaining = before.size;
     while (remaining > 0n) {
       const requested = Number(remaining > BigInt(buffer.length) ? BigInt(buffer.length) : remaining);
-      const count = readSync(descriptor, buffer, 0, requested, null);
-      if (count === 0) throw new Error(`unstable regular file ended during read: ${JSON.stringify(path)}`);
-      const chunk = buffer.subarray(0, count);
+      const count2 = readSync(descriptor, buffer, 0, requested, null);
+      if (count2 === 0) throw new Error(`unstable regular file ended during read: ${JSON.stringify(path)}`);
+      const chunk = buffer.subarray(0, count2);
       hash.update(chunk);
       chunks?.push(Buffer.from(chunk));
-      remaining -= BigInt(count);
+      remaining -= BigInt(count2);
     }
     const afterRead = fstatSync(descriptor, { bigint: true });
     if (!stableStat(opened, afterRead)) {
@@ -16901,10 +16901,10 @@ function captureWorktreeTopology(repository) {
   finish();
   return rows.sort((left, right) => compare2(left.path, right.path));
 }
-function splitStatusPrefix(value, count, source) {
+function splitStatusPrefix(value, count2, source) {
   const fields = [];
   let cursor = 0;
-  for (let index = 0; index < count; index += 1) {
+  for (let index = 0; index < count2; index += 1) {
     const next = value.indexOf(" ", cursor);
     if (next < 0) throw new Error(`${source} returned a truncated row`);
     fields.push(value.slice(cursor, next));
@@ -18534,9 +18534,9 @@ function digestFileSync(path) {
   try {
     const buffer = Buffer.allocUnsafe(1024 * 1024);
     for (; ; ) {
-      const count = readSync2(descriptor, buffer, 0, buffer.length, null);
-      if (count === 0) break;
-      hash.update(buffer.subarray(0, count));
+      const count2 = readSync2(descriptor, buffer, 0, buffer.length, null);
+      if (count2 === 0) break;
+      hash.update(buffer.subarray(0, count2));
     }
   } finally {
     closeSync3(descriptor);
@@ -19960,8 +19960,8 @@ function regressionEvidenceErrors(evidence) {
     }
   }
   for (const id of [...universe].sort(compareCanonicalText)) {
-    const count = owners.get(id) ?? 0;
-    if (count !== 1) errors.push(`observation ${id}: must map to exactly one root debt (${count} owners)`);
+    const count2 = owners.get(id) ?? 0;
+    if (count2 !== 1) errors.push(`observation ${id}: must map to exactly one root debt (${count2} owners)`);
   }
   return errors;
 }
@@ -24454,7 +24454,7 @@ function resolveGateCwd(repository, cwd) {
   if (!stat3.isDirectory()) throw new Error(`native gate cwd is not a directory: ${cwd}`);
   return target;
 }
-async function blockedExecution(gate, reason, object9, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
+async function blockedExecution(gate, reason, object10, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
   const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(diagnostic, "utf8"), true);
@@ -24471,8 +24471,8 @@ async function blockedExecution(gate, reason, object9, evidenceRoot, now, subjec
     executable_sha256: executableSha256,
     started_at: started,
     finished_at: now().toISOString(),
-    start_repository_object: object9,
-    end_repository_object: object9,
+    start_repository_object: object10,
+    end_repository_object: object10,
     subject_start_state: subjectStartState,
     subject_end_state: subjectEndState,
     exit_code: null,
@@ -30154,9 +30154,10 @@ function receiptFindingsFromAudit(family, audit, context) {
   return anchored.sort((left, right) => left.finding.fingerprint.localeCompare(right.finding.fingerprint));
 }
 
-// src/closeout/second-pass.ts
+// src/eval-case.ts
+import { createHash as createHash26 } from "crypto";
 import { existsSync as existsSync13, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
-import { dirname as dirname16, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+import { isAbsolute as isAbsolute24, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
 import { appendFileSync as appendFileSync2, existsSync as existsSync12, mkdirSync as mkdirSync6, readFileSync as readFileSync17, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
@@ -30462,7 +30463,252 @@ function agentFromEnvironment(flagValue, environment) {
   return agentFromCard(environment.MISTER_CLEAN_AGENT_CARD, "env");
 }
 
+// src/eval-case.ts
+var EVAL_CASE_RECORD_TYPE = "mister-clean.eval-case";
+var EVAL_CASE_SCHEMA_VERSION = "1";
+var EVAL_CASE_VALIDATION_RECORD_TYPE = "mister-clean.eval-case-validation";
+var REGISTRY_PIN_PATH = "customer-tests/model-atlas/registry-join.json";
+var HEX646 = /^[0-9a-f]{64}$/u;
+var HEX402 = /^[0-9a-f]{40}$/u;
+var CASE_ID = /^[A-Z]{2,4}-[0-9]{3,}$/u;
+var CARD_ID = /^[A-Z]{2,4}-[0-9]{3,}$/u;
+var FLOOR = /^([1-9][0-9]*)\/([1-9][0-9]*)$/u;
+var TIMESTAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{3})?Z$/u;
+var REGISTRY_RECORD_ID = /^[a-z0-9][a-z0-9.-]*$/u;
+function object9(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function exactKeys2(record4, expected, path, refusals) {
+  const keys = Object.keys(record4).sort();
+  const wanted = [...expected].sort();
+  if (keys.length === wanted.length && keys.every((key, index) => key === wanted[index])) return true;
+  refusals.push({ code: "record_shape", citation: path, detail: `expected exactly the keys ${wanted.join(",")}; got ${keys.join(",")}` });
+  return false;
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function count(value) {
+  return Number.isInteger(value) && Number(value) >= 0;
+}
+function shape(refusals, citation, detail) {
+  refusals.push({ code: "record_shape", citation, detail });
+}
+function citationShape(value, path, refusals) {
+  const citation = object9(value);
+  if (!citation) {
+    shape(refusals, path, "expected an object with path and sha256");
+    return false;
+  }
+  if (!exactKeys2(citation, ["path", "sha256"], path, refusals)) return false;
+  let ok = true;
+  if (typeof citation.path !== "string" || !isRepositoryRelativePath(citation.path) || citation.path === ".") {
+    shape(refusals, `${path}.path`, "expected a repository-relative file path");
+    ok = false;
+  }
+  if (typeof citation.sha256 !== "string" || !HEX646.test(citation.sha256)) {
+    shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
+    ok = false;
+  }
+  return ok;
+}
+function parseRegistryRef(ref) {
+  const at = ref.lastIndexOf("@");
+  if (at <= 0 || at === ref.length - 1) return void 0;
+  const id = ref.slice(0, at);
+  const version = ref.slice(at + 1);
+  if (!REGISTRY_RECORD_ID.test(id) || version.includes("@") || version.trim().length === 0) return void 0;
+  return { id, version };
+}
+function evalCaseShapeRefusals(value) {
+  const refusals = [];
+  const record4 = object9(value);
+  if (!record4) return [{ code: "record_shape", citation: "$", detail: "expected a JSON object" }];
+  if (!exactKeys2(record4, [
+    "record_type",
+    "schema_version",
+    "case_id",
+    "field_case",
+    "phenomenon",
+    "agent_cards",
+    "verifier",
+    "base_commit",
+    "replay",
+    "derived_from",
+    "created_at"
+  ], "$", refusals)) return refusals;
+  if (record4.record_type !== EVAL_CASE_RECORD_TYPE) shape(refusals, "$.record_type", `expected ${EVAL_CASE_RECORD_TYPE}`);
+  if (record4.schema_version !== EVAL_CASE_SCHEMA_VERSION) shape(refusals, "$.schema_version", `expected "${EVAL_CASE_SCHEMA_VERSION}"`);
+  if (typeof record4.case_id !== "string" || !CASE_ID.test(record4.case_id)) shape(refusals, "$.case_id", "expected a case id such as CS-001");
+  citationShape(record4.field_case, "$.field_case", refusals);
+  if (!nonEmptyString(record4.phenomenon) || record4.phenomenon.includes("\n")) shape(refusals, "$.phenomenon", "expected one sentence");
+  const cardIds = /* @__PURE__ */ new Set();
+  const cards = Array.isArray(record4.agent_cards) ? record4.agent_cards : void 0;
+  if (!cards) shape(refusals, "$.agent_cards", "expected an array of agent cards");
+  else {
+    if (cards.length !== 2) refusals.push({ code: "agent_cards_count", citation: "$.agent_cards", detail: `expected exactly 2 agent cards; got ${cards.length}` });
+    const roles = [];
+    for (const [index, value2] of cards.entries()) {
+      const path = `$.agent_cards[${index}]`;
+      const card = object9(value2);
+      if (!card) {
+        shape(refusals, path, "expected an object");
+        continue;
+      }
+      if (!exactKeys2(card, ["card_id", "model_registry_ref", "role"], path, refusals)) continue;
+      if (typeof card.card_id !== "string" || !CARD_ID.test(card.card_id)) shape(refusals, `${path}.card_id`, "expected a card id such as AC-003");
+      else if (cardIds.has(card.card_id)) shape(refusals, `${path}.card_id`, "duplicate card id");
+      else cardIds.add(card.card_id);
+      if (typeof card.model_registry_ref !== "string" || parseRegistryRef(card.model_registry_ref) === void 0) {
+        shape(refusals, `${path}.model_registry_ref`, "expected <registry card id>@<export version>");
+      }
+      if (card.role !== "subject" && card.role !== "control") shape(refusals, `${path}.role`, "expected subject or control");
+      else roles.push(card.role);
+    }
+    if (cards.length === 2 && !(roles.includes("subject") && roles.includes("control"))) {
+      shape(refusals, "$.agent_cards", "expected one subject card and one control card");
+    }
+  }
+  const verifier = object9(record4.verifier);
+  if (!verifier) shape(refusals, "$.verifier", "expected an object");
+  else if (verifier.binding === "unbound") {
+    if (exactKeys2(verifier, ["name", "kind", "binding", "reason"], "$.verifier", refusals)) {
+      if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
+      if (!nonEmptyString(verifier.reason)) shape(refusals, "$.verifier.reason", "an unbound verifier must state why");
+      refusals.push({ code: "verifier_unbound", citation: "$.verifier", detail: nonEmptyString(verifier.reason) ? verifier.reason : "verifier bytes are not bound" });
+    }
+  } else if (exactKeys2(verifier, ["name", "kind", "sha256"], "$.verifier", refusals)) {
+    if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
+    if (typeof verifier.sha256 !== "string" || !HEX646.test(verifier.sha256)) shape(refusals, "$.verifier.sha256", "expected lowercase SHA-256");
+  }
+  const base = object9(record4.base_commit);
+  if (!base) shape(refusals, "$.base_commit", "expected an object");
+  else if (base.binding === "unbound") {
+    if (exactKeys2(base, ["repository", "binding", "reason"], "$.base_commit", refusals)) {
+      if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
+      if (!nonEmptyString(base.reason)) shape(refusals, "$.base_commit.reason", "an unbound base commit must state why");
+      refusals.push({ code: "base_commit_unbound", citation: "$.base_commit", detail: nonEmptyString(base.reason) ? base.reason : "base commit is not bound" });
+    }
+  } else if (exactKeys2(base, ["repository", "sha"], "$.base_commit", refusals)) {
+    if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
+    if (typeof base.sha !== "string" || !HEX402.test(base.sha)) shape(refusals, "$.base_commit.sha", "expected a 40-hex commit sha");
+  }
+  const replay = object9(record4.replay);
+  if (!replay) shape(refusals, "$.replay", "expected an object");
+  else if (exactKeys2(replay, ["floor", "sessions", "rows_source", "outcome", "per_reviewer"], "$.replay", refusals)) {
+    const floor = typeof replay.floor === "string" ? replay.floor.match(FLOOR) : null;
+    if (!floor || Number(floor[1]) > Number(floor[2])) shape(refusals, "$.replay.floor", "expected a repeat floor k/n with k <= n");
+    if (!count(replay.sessions) || replay.sessions < 1) shape(refusals, "$.replay.sessions", "expected a positive session count");
+    citationShape(replay.rows_source, "$.replay.rows_source", refusals);
+    if (replay.outcome !== "met" && replay.outcome !== "missed") shape(refusals, "$.replay.outcome", "expected met or missed");
+    const rows = Array.isArray(replay.per_reviewer) ? replay.per_reviewer : void 0;
+    if (!rows || rows.length === 0) shape(refusals, "$.replay.per_reviewer", "expected at least one per-reviewer row");
+    else {
+      let subjectBreaches = 0;
+      const subjectIds = new Set((cards ?? []).filter((card) => object9(card)?.role === "subject").map((card) => String(object9(card)?.card_id)));
+      for (const [index, value2] of rows.entries()) {
+        const path = `$.replay.per_reviewer[${index}]`;
+        const row = object9(value2);
+        if (!row) {
+          shape(refusals, path, "expected an object");
+          continue;
+        }
+        if (!exactKeys2(row, ["card_id", "reviewer_model", "pair_set", "sessions", "good_replays", "false_rejects", "populations_at_floor", "floor_breaches", "bad_passes"], path, refusals)) continue;
+        if (typeof row.card_id !== "string" || !cardIds.has(row.card_id)) shape(refusals, `${path}.card_id`, "expected the id of one of the record's agent cards");
+        if (!nonEmptyString(row.reviewer_model)) shape(refusals, `${path}.reviewer_model`, "required");
+        if (!nonEmptyString(row.pair_set)) shape(refusals, `${path}.pair_set`, "required");
+        for (const key of ["sessions", "good_replays", "false_rejects", "populations_at_floor", "floor_breaches", "bad_passes"]) {
+          if (!count(row[key])) shape(refusals, `${path}.${key}`, "expected a non-negative integer");
+        }
+        if (count(row.false_rejects) && count(row.good_replays) && row.false_rejects > row.good_replays) shape(refusals, `${path}.false_rejects`, "cannot exceed good_replays");
+        if (count(row.floor_breaches) && typeof row.card_id === "string" && subjectIds.has(row.card_id)) subjectBreaches += row.floor_breaches;
+      }
+      if ((replay.outcome === "met" || replay.outcome === "missed") && replay.outcome === "met" !== subjectBreaches > 0) {
+        shape(refusals, "$.replay.outcome", `outcome ${String(replay.outcome)} disagrees with the subject's floor_breaches (${subjectBreaches})`);
+      }
+    }
+  }
+  citationShape(record4.derived_from, "$.derived_from", refusals);
+  if (typeof record4.created_at !== "string" || !TIMESTAMP.test(record4.created_at) || !Number.isFinite(Date.parse(record4.created_at))) {
+    shape(refusals, "$.created_at", "expected an ISO-8601 UTC timestamp");
+  }
+  return refusals;
+}
+function sha256Of(path) {
+  return createHash26("sha256").update(readFileSync18(path)).digest("hex");
+}
+function containedIn2(root, candidate) {
+  const relation = relative19(realpathSync11(root), realpathSync11(candidate));
+  return relation === "" || !relation.startsWith(`..${sep19}`) && relation !== ".." && !isAbsolute24(relation);
+}
+function bindCitation(root, citation, pointer, refusals, bound) {
+  const target = join18(root, ...citation.path.split("/"));
+  if (!existsSync13(target) || !statSync6(target).isFile() || !containedIn2(root, target)) {
+    refusals.push({ code: "path_missing", citation: pointer, detail: `${citation.path} is not a file inside the repository` });
+    return;
+  }
+  const actual = sha256Of(target);
+  if (actual !== citation.sha256) {
+    refusals.push({ code: "sha256_mismatch", citation: pointer, detail: `${citation.path}: expected ${citation.sha256}, got ${actual}` });
+    return;
+  }
+  bound.push(pointer);
+}
+function pinnedRegistryExportVersion(root) {
+  const path = join18(root, ...REGISTRY_PIN_PATH.split("/"));
+  if (!existsSync13(path)) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync18(path, "utf8"));
+  } catch {
+    return void 0;
+  }
+  const artifact = object9(object9(parsed)?.artifact);
+  const version = artifact?.version;
+  return typeof version === "string" && version.length > 0 && !version.includes("@") ? version : void 0;
+}
+function validateEvalCase(input) {
+  const root = resolve27(input.repositoryRoot);
+  const refusals = evalCaseShapeRefusals(input.record);
+  const bound = [];
+  const record4 = object9(input.record);
+  const caseId = typeof record4?.case_id === "string" ? record4.case_id : null;
+  const pin = pinnedRegistryExportVersion(root);
+  if (refusals.every((refusal) => refusal.code !== "record_shape")) {
+    const evalCase = input.record;
+    bindCitation(root, evalCase.field_case, "$.field_case", refusals, bound);
+    if (pin === void 0) {
+      refusals.push({ code: "registry_pin_missing", citation: REGISTRY_PIN_PATH, detail: "the pinned model-registry export version could not be read (artifact.version)" });
+    } else {
+      for (const [index, card] of evalCase.agent_cards.entries()) {
+        const pointer = `$.agent_cards[${index}].model_registry_ref`;
+        const ref = parseRegistryRef(card.model_registry_ref);
+        if (ref === void 0 || ref.version !== pin) {
+          refusals.push({ code: "registry_export_mismatch", citation: pointer, detail: `${card.model_registry_ref}: expected export ${pin}` });
+        } else bound.push(pointer);
+      }
+    }
+    if ("sha256" in evalCase.verifier) bound.push("$.verifier");
+    if ("sha" in evalCase.base_commit) bound.push("$.base_commit");
+    bindCitation(root, evalCase.replay.rows_source, "$.replay.rows_source", refusals, bound);
+    bindCitation(root, evalCase.derived_from, "$.derived_from", refusals, bound);
+  }
+  return {
+    record_type: EVAL_CASE_VALIDATION_RECORD_TYPE,
+    schema_version: "1",
+    status: refusals.length === 0 ? "eval_case_valid" : "eval_case_refused",
+    case_id: caseId,
+    record_path: input.recordPath,
+    repository_root: root,
+    registry_export_version: pin ?? null,
+    bound,
+    refusals
+  };
+}
+
 // src/closeout/second-pass.ts
+import { existsSync as existsSync14, readFileSync as readFileSync19, realpathSync as realpathSync12, statSync as statSync7 } from "fs";
+import { dirname as dirname16, join as join19, relative as relative20, resolve as resolve28, sep as sep20 } from "path";
 var SECOND_PASS_CLASSES = [
   "cleared",
   "persisting",
@@ -30568,16 +30814,16 @@ function classifySecondPass(input) {
   return rows.sort((left, right) => left.family.localeCompare(right.family) || left.path.localeCompare(right.path) || left.fingerprint.localeCompare(right.fingerprint));
 }
 function captureReceiptSubject(root, options = {}) {
-  if (!existsSync13(resolve27(root)) || !statSync6(resolve27(root)).isDirectory()) return void 0;
-  const resolved = realpathSync11(resolve27(root));
+  if (!existsSync14(resolve28(root)) || !statSync7(resolve28(root)).isDirectory()) return void 0;
+  const resolved = realpathSync12(resolve28(root));
   const toplevel = runGit2(resolved, ["rev-parse", "--show-toplevel"], [0, 128]);
   if (toplevel.status !== 0 || toplevel.stdout.length === 0) return void 0;
-  const repository = realpathSync11(resolve27(toplevel.stdout));
+  const repository = realpathSync12(resolve28(toplevel.stdout));
   const headCommit = runGit2(repository, ["rev-parse", "--verify", "HEAD^{commit}"], [0, 128]);
   if (headCommit.status !== 0) return void 0;
   const headTree = runGit2(repository, ["rev-parse", "--verify", "HEAD^{tree}"]).stdout;
   const dirty = runGit2(repository, ["status", "--porcelain", "--untracked-files=normal"]).stdout.length > 0;
-  const relation = relative19(repository, resolved).split(sep19).join("/");
+  const relation = relative20(repository, resolved).split(sep20).join("/");
   return {
     repository,
     subject: {
@@ -30629,12 +30875,12 @@ function runReadOnlyFamilies(capture, root, families, options = {}) {
 }
 var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
 function legacyBaselineFromBundle(reference) {
-  const path = resolve27(reference);
-  if (!existsSync13(path)) return void 0;
-  const directory = statSync6(path).isDirectory() ? path : dirname16(path);
-  const deltaPath = join18(directory, "regression-delta.json");
-  if (!existsSync13(deltaPath)) return void 0;
-  const delta = JSON.parse(readFileSync18(deltaPath, "utf8"));
+  const path = resolve28(reference);
+  if (!existsSync14(path)) return void 0;
+  const directory = statSync7(path).isDirectory() ? path : dirname16(path);
+  const deltaPath = join19(directory, "regression-delta.json");
+  if (!existsSync14(deltaPath)) return void 0;
+  const delta = JSON.parse(readFileSync19(deltaPath, "utf8"));
   const coverage = delta.detector_coverage;
   const executions = Array.isArray(coverage?.executions) ? coverage.executions : void 0;
   const baseline = coverage?.baseline_repository_object;
@@ -30648,10 +30894,10 @@ function legacyBaselineFromBundle(reference) {
     const family = detectorId;
     families.push(family);
     const resultRef = execution.result_ref;
-    const resultPath = typeof resultRef?.path === "string" ? join18(directory, resultRef.path) : void 0;
+    const resultPath = typeof resultRef?.path === "string" ? join19(directory, resultRef.path) : void 0;
     let fingerprints;
-    if (resultPath !== void 0 && existsSync13(resultPath)) {
-      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync18(resultPath, "utf8")));
+    if (resultPath !== void 0 && existsSync14(resultPath)) {
+      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync19(resultPath, "utf8")));
     }
     fingerprints ??= Array.isArray(execution.finding_fingerprints) ? execution.finding_fingerprints : [];
     for (const legacy of fingerprints) {
@@ -30668,7 +30914,7 @@ function legacyBaselineFromBundle(reference) {
   }
   return {
     kind: "legacy_bundle",
-    ref: relative19(process.cwd(), deltaPath) || deltaPath,
+    ref: relative20(process.cwd(), deltaPath) || deltaPath,
     head_commit: headCommit,
     dirty: null,
     families,
@@ -30783,16 +31029,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside2(root, candidate) {
-  const rootPath = resolve28(root);
-  const candidatePath = resolve28(candidate);
-  const relation = relative20(
-    existsSync14(rootPath) ? realpathSync12(rootPath) : rootPath,
-    existsSync14(candidatePath) ? realpathSync12(candidatePath) : candidatePath
+  const rootPath = resolve29(root);
+  const candidatePath = resolve29(candidate);
+  const relation = relative21(
+    existsSync15(rootPath) ? realpathSync13(rootPath) : rootPath,
+    existsSync15(candidatePath) ? realpathSync13(candidatePath) : candidatePath
   );
-  return relation === "" || !relation.startsWith(`..${sep20}`) && relation !== ".." && !relation.startsWith("/");
+  return relation === "" || !relation.startsWith(`..${sep21}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync19(path, "utf8"));
+  return JSON.parse(readFileSync20(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -30807,11 +31053,11 @@ async function runSemantic(args, io) {
     const proposalsPath = removeOption(args, "--case-proposals", true);
     const runId = removeOption(args, "--run-id", true);
     const challengeNonce = removeOption(args, "--nonce", true);
-    const outputPath = resolve28(removeOption(args, "--output", true));
+    const outputPath = resolve29(removeOption(args, "--output", true));
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync14(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync15(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -30996,19 +31242,19 @@ async function runValidate(args, io, runtimeAttestation) {
   if (kind !== "bundle" && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for bundle validation");
   }
-  if (acceptedEvaluatorPath !== void 0 && !isAbsolute24(acceptedEvaluatorPath)) {
+  if (acceptedEvaluatorPath !== void 0 && !isAbsolute25(acceptedEvaluatorPath)) {
     throw new UsageError("--accepted-evaluator requires an absolute path");
   }
   if (structural && acceptedEvaluatorPath !== void 0) {
     throw new UsageError("--accepted-evaluator is only valid for live bundle validation");
   }
-  if (guardAuthorityPath !== void 0 && !isAbsolute24(guardAuthorityPath)) {
+  if (guardAuthorityPath !== void 0 && !isAbsolute25(guardAuthorityPath)) {
     throw new UsageError("--guard-authority requires an absolute path");
   }
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join19(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join20(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -31054,13 +31300,13 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync14(root) || !statSync7(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve28(root)}`);
+  if (!existsSync15(root) || !statSync8(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve29(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
   if (json) {
-    io.stdout(JSON.stringify({ resolved_root: resolve28(root), ...result }, null, 2));
+    io.stdout(JSON.stringify({ resolved_root: resolve29(root), ...result }, null, 2));
     return result.exitCode;
   }
   if (result.status === "unknown") {
@@ -31069,9 +31315,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join19(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync14(reference)) return 0;
-  const text3 = readFileSync19(reference, "utf8");
+  const reference = join20(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync15(reference)) return 0;
+  const text3 = readFileSync20(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -31208,9 +31454,9 @@ async function runManifest(args, io) {
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join19(resolve28(root), "MANIFEST.sha256");
+  const path = join20(resolve29(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync14(path) || readFileSync19(path, "utf8") !== result.content) {
+    if (!existsSync15(path) || readFileSync20(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -31259,7 +31505,7 @@ async function runCensus(args, io) {
       output_path: output
     });
     writeFileSync8(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
-    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve28(output)}`);
+    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve29(output)}`);
     return 0;
   }
   if (subcommand === "validate") {
@@ -31379,8 +31625,35 @@ async function runSecondPassCommand(args, io, runtimeAttestation, receipts, opti
   }
   return result.exitCode;
 }
+async function runEvalCase(args, io) {
+  const subcommand = args.shift();
+  if (subcommand !== "validate") throw new UsageError("eval-case requires validate");
+  const path = args[0]?.startsWith("--") === false ? args.shift() : void 0;
+  if (path === void 0) throw new UsageError("eval-case validate requires a record path");
+  const repo = removeOption(args, "--repo") ?? process.cwd();
+  const json = removeFlag(args, "--json");
+  assertNoArgs(args);
+  if (!existsSync15(repo) || !statSync8(repo).isDirectory()) {
+    io.stderr(`ERROR: --repo is not a directory: ${resolve29(repo)}`);
+    return 2;
+  }
+  let parsed;
+  try {
+    parsed = readJson3(path);
+  } catch (error) {
+    parsed = void 0;
+    io.stderr(`ERROR: record_shape ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path });
+  if (json) io.stdout(JSON.stringify(result, null, 2));
+  else {
+    for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} refusals=${result.refusals.length} registry_export=${result.registry_export_version ?? "unpinned"}`);
+  }
+  return result.status === "eval_case_valid" ? 0 : 2;
+}
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 function receiptStoreFromEnvironment(environment) {
   return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));
@@ -31392,7 +31665,7 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
   let lifecycleRunEventId = null;
   let terminalRecorded = false;
   try {
-    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "attest"])).has(String(command))) {
+    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "eval-case", "attest"])).has(String(command))) {
       usage(io);
       return 2;
     }
@@ -31404,6 +31677,7 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
     }
     let exitCode;
     if (command === "attest") exitCode = await runAttest(args, io);
+    else if (command === "eval-case") exitCode = await runEvalCase(args, io);
     else {
       const runtimeAttestation = await bindCliRuntime(io);
       if (!runtimeAttestation) exitCode = 2;
@@ -31443,9 +31717,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "github_actions", file: "github-actions-audit.json" },
               { family: "semantic_boundary", file: "semantic-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync14(join19(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join19(bundle, entry.file)) }));
-            const report = record3(readJson3(join19(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join19(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync15(join20(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join20(bundle, entry.file)) }));
+            const report = record3(readJson3(join20(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join20(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
             const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
@@ -31493,9 +31767,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
 function isDirectInvocation(argvPath, moduleUrl) {
   if (!argvPath) return false;
   try {
-    return realpathSync12(argvPath) === realpathSync12(fileURLToPath3(moduleUrl));
+    return realpathSync13(argvPath) === realpathSync13(fileURLToPath3(moduleUrl));
   } catch {
-    const invokedPath = resolve28(argvPath);
+    const invokedPath = resolve29(argvPath);
     return invokedPath === fileURLToPath3(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }

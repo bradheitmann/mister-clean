@@ -42,6 +42,7 @@ import {
   type FileCensus,
 } from "./census.js";
 import { receiptFindingsFromAudit, type ReceiptFamily } from "./closeout/finding-anchors.js";
+import { validateEvalCase } from "./eval-case.js";
 import type { RepositoryObject } from "./closeout/repository-object.js";
 import {
   assembleRunReceipt,
@@ -792,8 +793,44 @@ async function runSecondPassCommand(
   return result.exitCode;
 }
 
+/**
+ * `eval-case validate <file.eval.json> [--repo <root>] [--json]`: read one
+ * durable eval case back and bind every citation against the repository root.
+ * Read-only; exit 0 on `eval_case_valid`, 2 with each refusal otherwise. Like
+ * `attest`, it runs without the runtime attestation: it asserts nothing about
+ * this runtime, only about the record and the repository bytes it cites, and
+ * the charter's Slice Zero command runs it from a source checkout.
+ */
+async function runEvalCase(args: string[], io: CliIO): Promise<number> {
+  const subcommand = args.shift();
+  if (subcommand !== "validate") throw new UsageError("eval-case requires validate");
+  const path = args[0]?.startsWith("--") === false ? (args.shift() as string) : undefined;
+  if (path === undefined) throw new UsageError("eval-case validate requires a record path");
+  const repo = removeOption(args, "--repo") ?? process.cwd();
+  const json = removeFlag(args, "--json");
+  assertNoArgs(args);
+  if (!existsSync(repo) || !statSync(repo).isDirectory()) {
+    io.stderr(`ERROR: --repo is not a directory: ${resolve(repo)}`);
+    return 2;
+  }
+  let parsed: unknown;
+  try {
+    parsed = readJson(path);
+  } catch (error) {
+    parsed = undefined;
+    io.stderr(`ERROR: record_shape ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path });
+  if (json) io.stdout(JSON.stringify(result, null, 2));
+  else {
+    for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} refusals=${result.refusals.length} registry_export=${result.registry_export_version ?? "unpinned"}`);
+  }
+  return result.status === "eval_case_valid" ? 0 : 2;
+}
+
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 
 export function receiptStoreFromEnvironment(environment: NodeJS.ProcessEnv): LocalRunReceiptStore {
@@ -813,7 +850,7 @@ export async function runCli(
   let lifecycleRunEventId: string | null = null;
   let terminalRecorded = false;
   try {
-    if (!new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "attest"]).has(String(command))) {
+    if (!new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "eval-case", "attest"]).has(String(command))) {
       usage(io);
       return 2;
     }
@@ -828,6 +865,7 @@ export async function runCli(
     }
     let exitCode: number;
     if (command === "attest") exitCode = await runAttest(args, io);
+    else if (command === "eval-case") exitCode = await runEvalCase(args, io);
     else {
     const runtimeAttestation = await bindCliRuntime(io);
       if (!runtimeAttestation) exitCode = 2;
