@@ -1,4 +1,4 @@
-# State — mister-clean — 2026-11-02T23:39Z (from `date -u`), written by the project PM (Claude Code, Opus 5.5) at the owner's wind-down
+# State — mister-clean — 2026-11-03T01:25Z (from `date -u`), written by the project PM (Claude Code, Opus 5.5) at the end of the wind-down session
 Proven (with the proof names):
 - Nothing under this charter's Slice Zero yet; proven_on is empty.
 - Dependency advisories cleared, native-gate spawn fix (60e748d), hermetic test fixtures (5b83a44) and discovery-and-retirement (c5a85c9): each independently verified on its exact tip, as recorded in earlier states.
@@ -35,7 +35,7 @@ Not proven / known gaps:
   - O-ABL-1 (the CI wiring above);
   - O-RC-002 (instruction-polarity card, waiting on the evidence owner's second-family check);
   - O-R18-2 (a by-reference false-fail check, waiting for a P05 reconciler item that passes inline).
-  - O-FE1-SCHEMA (seam-sync with reveng): FE-1 reads the project's published telemetry schemas (`reveng.project-operation/1`, `reveng.run-observation/1`, `reveng.host-input-manifest/1`), with raw task-dir reads only where no schema exists. Today mister-clean evals read raw task dirs.
+  - O-FE1-SCHEMA (seam-sync with the main customer project): FE-1 reads a customer project's published telemetry schemas (named in that project's seam record, not here), with raw task-dir reads only where no schema exists. Today mister-clean evals read raw task dirs.
 Exact last-green command(s):
 - charter check --strict (charter b9323cd), exit 0
 - mister-clean (installed release 7.0.2) audit github-actions: pass, 0 findings
@@ -49,6 +49,11 @@ Next three bounded items (in order):
 1. Lane 4: the 7.1.0 release candidate. Classify the version, run full acceptance on a host without the guard (or after the owner's capsule decision), stop before publish.
 2. Model-registry joins: re-bind the flash cards and RC-001 to deepseek-v4.1-flash when export 2026.11.03-1 lands; re-bind `none` cards when the registry adds them; re-pin the customer test each focus window.
 3. O-PERF-2 (bounded/summary planning output) and O-CENSUS-1.
+Housekeeping done at wind-down (2026-11-03):
+- Branches: only `main` plus the two early field-observation branches behind PR #8 and PR #9 remain on origin. Six merged or superseded branches were deleted after confirming each tip has an `archive/*` tag on origin.
+- The PM's local private data was consolidated into two roots (the product state directory and the agent private root) plus a tool cache. It was verified by an independent reviewer. Nothing private is in this repository.
+- New obligation O-DATA-1 (owner request): consolidate eval, case and field-study data from every repository that uses Mister Clean into one store, as a usable data product. Inventory first, then the FE-1 schema, store and importer, then a redacting export. Owner decisions are needed on what is public and on the starter set.
+
 Open owner decisions:
 - Ratify INTENT and COMMON-STANDARD v0.2.
 - Capsule hook disabling for the clean-CI and generated-candidate capsules.
