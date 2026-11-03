@@ -293,15 +293,24 @@ export async function blockedExecution(
   diagnostic = "",
   invokedExecutable: string | null = null,
 ): Promise<NativeGateExecution> {
+  // A subject that changed while the gate was being prepared outranks every
+  // other reason: the evidence must say so, or its own start/end states
+  // contradict it. The reason that was about to be recorded stays in stderr.
+  const subjectChanged = !stableEqual(subjectStartState, subjectEndState);
+  const recordedReason: NativeGateFailureReason = subjectChanged ? "subject_repository_changed" : reason;
+  const recordedState = subjectChanged ? "blocked" : state;
+  const recordedDiagnostic = subjectChanged && reason !== "subject_repository_changed"
+    ? `subject repository changed while the gate was being prepared; superseded reason: ${reason}\n${diagnostic}`
+    : diagnostic;
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
-  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(diagnostic, "utf8"), true);
+  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(recordedDiagnostic, "utf8"), true);
   return {
     gate_id: gate.id,
     kind: gate.kind,
     isolation: "disposable_exact_object_snapshot",
-    state,
-    failure_reason: reason,
+    state: recordedState,
+    failure_reason: recordedReason,
     command: gate.command,
     command_sha256: identity(gate.command),
     resolved_executable: resolvedExecutable,

@@ -24500,15 +24500,20 @@ function resolveGateCwd(repository, cwd) {
   return target;
 }
 async function blockedExecution(gate, reason, object9, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
+  const subjectChanged = !stableEqual(subjectStartState, subjectEndState);
+  const recordedReason = subjectChanged ? "subject_repository_changed" : reason;
+  const recordedState = subjectChanged ? "blocked" : state;
+  const recordedDiagnostic = subjectChanged && reason !== "subject_repository_changed" ? `subject repository changed while the gate was being prepared; superseded reason: ${reason}
+${diagnostic}` : diagnostic;
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
-  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(diagnostic, "utf8"), true);
+  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(recordedDiagnostic, "utf8"), true);
   return {
     gate_id: gate.id,
     kind: gate.kind,
     isolation: "disposable_exact_object_snapshot",
-    state,
-    failure_reason: reason,
+    state: recordedState,
+    failure_reason: recordedReason,
     command: gate.command,
     command_sha256: identity2(gate.command),
     resolved_executable: resolvedExecutable,
