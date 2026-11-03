@@ -1,9 +1,9 @@
 /** Sandboxed, sequential execution of one discovered native-gate catalog. */
 import { randomUUID } from "node:crypto";
 import { spawnSync, type ChildProcess } from "node:child_process";
-import { accessSync, constants, lstatSync, realpathSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, realpathSync } from "node:fs";
 import { lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
@@ -123,6 +123,38 @@ export function executableUnchanged(executable: ResolvedExecutable): boolean {
   }
 }
 
+/**
+ * Toolchain and dependency-cache locators the scrubbed gate environment must
+ * keep. HOME is replaced by an empty snapshot home, so without them rustup
+ * cannot find an installed toolchain and cargo/go cannot reach the dependency
+ * caches that offline builds (CARGO_NET_OFFLINE, GOPROXY=off) depend on. Each
+ * takes the operator's value when set, otherwise the conventional directory
+ * under the operator's real home only when it exists; nothing is invented.
+ */
+const TOOLCHAIN_LOCATORS = [
+  ["RUSTUP_HOME", ".rustup"],
+  ["CARGO_HOME", ".cargo"],
+  ["GOPATH", "go"],
+  ["GOMODCACHE", join("go", "pkg", "mod")],
+] as const;
+
+export function toolchainLocators(
+  environment: NodeJS.ProcessEnv = process.env,
+  operatorHome: string = environment.HOME ?? homedir(),
+): Partial<Record<(typeof TOOLCHAIN_LOCATORS)[number][0], string>> {
+  const locators: Partial<Record<(typeof TOOLCHAIN_LOCATORS)[number][0], string>> = {};
+  for (const [name, conventional] of TOOLCHAIN_LOCATORS) {
+    const explicit = environment[name];
+    if (explicit !== undefined && explicit !== "") {
+      locators[name] = explicit;
+      continue;
+    }
+    const candidate = join(operatorHome, conventional);
+    if (existsSync(candidate)) locators[name] = candidate;
+  }
+  return locators;
+}
+
 export function scrubbedEnvironment(home: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH ?? "",
@@ -141,6 +173,7 @@ export function scrubbedEnvironment(home: string): NodeJS.ProcessEnv {
     BUN_INSTALL_CACHE_DIR: join(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
     GOPROXY: "off",
+    ...toolchainLocators(),
   };
   for (const name of ["LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"] as const) {
     if (process.env[name] !== undefined) env[name] = process.env[name];
