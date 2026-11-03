@@ -132,3 +132,16 @@ bound=5 external=2 refusals=0 registry_export=2026.11.03-1`, exit 0; `src/eval-c
 `src/eval-case.ts`, `src/eval-case.test.ts`, `CS-001.eval.json` and `charter.toml` are byte-identical to `2b2cfdb`, so
 the mutant observations and run 2 stand for them; the full suite was not re-run on the merged tree (PM decision:
 one run suffices, hosted CI arbitrates).
+
+## Freeze: merge with main `d70f722` (PRs #56, #57)
+
+Same procedure: `git merge --no-edit origin/main` conflicted only on the generated `bin/mister-clean.js` and
+`MANIFEST.sha256`; two clean `build:raw` runs under bun 1.4.0 regenerated both with identical hash lists (list sha256
+`8b42b5e02fc5339c2af53d7de0e6689782cc423e6ce9cbbe42ddfabe240d8266`; `bin/mister-clean.js`
+`95a49b2abaaf81847cc23438648a4dda4f4127e45ab45f8f70bfa70eba252ad1`; `MANIFEST.sha256`
+`333adc5bf9339cde4229c489b0ce949697db132f4f3617b57285355849a4d464`); `manifest:package:check` PASS (82 entries);
+`sync:cli:check` verified. On the frozen tip: the charter command through the bin → `eval-case: VALID case=CS-001
+bound=5 external=2 refusals=0 registry_export=2026.11.03-1`, exit 0; `src/eval-case.test.ts` + `src/skill-contract.test.ts`
+→ 48/48 (under the new `vitest.config.ts` per-run temp root); SKILL.md 19,975 bytes, equal to main's; `charter check
+--strict` ok; `audit:public` PASS (83 files). The lane's own files are still byte-identical to `2b2cfdb`. No full suite
+on this merge (PM decision; hosted CI arbitrates).
