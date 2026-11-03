@@ -277,7 +277,7 @@ describe("built control-plane package surface", () => {
     expect(packageJson.packageManager).toMatch(/^pnpm@/);
     expect(packageJson.scripts["pack:check"]).toContain("bun run package:import:check");
     expect(packageJson.scripts["pack:check"]).toContain("pnpm --config.ignore-scripts=true pack --dry-run");
-    expect(packageJson.scripts["package:import:check"]).toBe("node scripts/verify_package_exports.mjs");
+    expect(packageJson.scripts["package:import:check"]).toBe("node scripts/verify_package_exports.ts");
     expect(packageJson.scripts.build).toBe("bun run build:verified");
     expect(packageJson.scripts["build:verified"]).toContain("run_verified_build.ts --candidate=worktree");
     const build = packageJson.scripts["build:raw"] ?? "";

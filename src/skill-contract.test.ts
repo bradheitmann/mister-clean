@@ -518,7 +518,7 @@ describe("dashboard contract", () => {
     ]) {
       expect(packageJson.files).not.toContain(localProjection);
     }
-    const generator = await readFile(join(ROOT, "scripts", "generate_materials.mjs"), "utf8");
+    const generator = await readFile(join(ROOT, "scripts", "generate_materials.ts"), "utf8");
     expect(generator).toContain("localEvidenceAssets");
   });
 });

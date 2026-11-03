@@ -6,6 +6,19 @@ import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+// The repository ships no Bun type package and this lane adds no dependency, so the
+// one Bun runtime API this script calls is declared here, narrowed to the fields used.
+declare const Bun: {
+  build(options: {
+    entrypoints: string[];
+    format: "esm";
+    target: "browser";
+    minify: boolean;
+    sourcemap: "none";
+    write: false;
+  }): Promise<{ success: boolean; logs: unknown[]; outputs: Array<{ text(): Promise<string> }> }>;
+};
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const assetRoot = join(root, "assets", "codebase-state-dashboard");
 const sourcePath = join(assetRoot, "model-scorecard-interactions.ts");
@@ -42,7 +55,7 @@ if (result.outputs.length !== 1) {
 
 const source = readFileSync(sourcePath);
 const sourceSha256 = createHash("sha256").update(source).digest("hex");
-const compiledBody = (await result.outputs[0].text()).replaceAll("\r\n", "\n").trimEnd();
+const compiledBody = (await result.outputs[0]!.text()).replaceAll("\r\n", "\n").trimEnd();
 const compiled = `/* Generated from model-scorecard-interactions.ts · SHA-256 ${sourceSha256}. */\n${compiledBody}\n`;
 
 const startMarker = "/* MISTER_CLEAN_SCORECARD_INTERACTIONS_START */";
@@ -54,7 +67,7 @@ if (start < 0 || end < 0 || end <= start) throw new Error("scorecard template in
 const inlineStart = start + startMarker.length;
 const renderedTemplate = `${template.slice(0, inlineStart)}\n${compiled}${template.slice(end)}`;
 
-const mismatches = [];
+const mismatches: string[] = [];
 if (!existsSync(outputPath) || readFileSync(outputPath, "utf8") !== compiled) mismatches.push(outputPath);
 if (template !== renderedTemplate) mismatches.push(templatePath);
 if (checkOnly) {

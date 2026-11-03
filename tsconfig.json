@@ -24,6 +24,14 @@
     "src/**/*.ts",
     "env.d.ts",
     "customer-tests/**/*.ts",
-    "ablations/**/*.ts"
+    "ablations/**/*.ts",
+    "scripts/sync_cli.ts",
+    "scripts/verify_package_exports.ts",
+    "scripts/build_model_scorecard_interactions.ts",
+    "scripts/generate_materials.ts",
+    "scripts/generate_codebase_history.ts",
+    "scripts/report_snapshot.ts",
+    "scripts/render_model_scorecard.ts",
+    "scripts/render_case_study_report.ts"
   ]
 }

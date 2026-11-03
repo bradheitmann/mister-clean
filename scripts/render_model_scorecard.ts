@@ -4,7 +4,101 @@ import { copyFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { freezeInputs, prepareReportOutput, publishedScorecard, writeReceiptManifest } from "./report_snapshot.mjs";
+import { freezeInputs, prepareReportOutput, publishedScorecard, writeReceiptManifest } from "./report_snapshot.js";
+import type { BindingSummary, EvidenceLink, ReceiptScorecard, ScorecardCoverage } from "./report_snapshot.js";
+
+// The input is a local, untracked JSON projection; these types name only the fields this
+// renderer reads. Fields the code already defaults with `??` are optional.
+interface ScorecardTuple {
+  id: string;
+  model: string;
+  reasoning: string;
+  harness: string;
+  band: string;
+  rating: string;
+  confidence: string;
+  caveat: string;
+  qualificationState?: string;
+  identityStatus?: string;
+  identityProvenance?: string;
+  identityNote?: string;
+  taskClasses: string[];
+  tasks: { assigned: number; terminal: number; useful: number };
+  // Locator strings in the source; replaced by bound receipt links before rendering.
+  evidence: Array<string | EvidenceLink>;
+  score?: unknown;
+  competencies?: unknown;
+}
+
+interface ModelScorecardState {
+  snapshot: {
+    campaign: string;
+    generatedAt: string;
+    scope: string;
+    distributionClassification: string;
+    evidenceBoundary: string;
+    sourceDocument?: string;
+    targetRepository?: string;
+    targetRepositoryRemote?: string;
+    targetRepositoryPath?: string;
+    targetCommit?: string;
+    sourceSha256?: Record<string, string>;
+    receiptManifest?: string;
+    receiptManifestSha256?: string;
+    receiptBindingSummary?: BindingSummary;
+  };
+  tuples: ScorecardTuple[];
+  coverage?: ScorecardCoverage | null;
+  summary: { headline: string; interpretation: string; metrics: Array<{ label: string; value?: number; note: string }> };
+  bands: Record<string, number>;
+  roleLeaders: Array<{
+    role: string;
+    tuple: string;
+    samples: number;
+    confidence: string;
+    rationale: string;
+    band: string;
+    qualificationLabel?: string;
+    caveat: string;
+  }>;
+  comparisons?: Array<{ title: string; state: string; result: string; detail: string }>;
+  gaps?: Array<{ tuple: string; title: string; task: string }>;
+  currentInFlight?: Array<{ tuple: string; role: string; observedResult: string; identityProvenance?: string; countDisposition: string }>;
+  identityAccounting?: {
+    policy?: string;
+    externalIdentityUnboundObservations?: Array<{
+      id: string;
+      model?: string;
+      runtimeIdentity?: string;
+      outcome: string;
+      identityProvenance?: string;
+      identityNote?: string;
+      attributionDisposition: string;
+    }>;
+  };
+  operatingConstraints?: { localInference?: string; rule?: string };
+}
+
+// The subset of the compiled browser module (model-scorecard-interactions.ts) used here. Importing
+// that module's types would pull its DOM library reference into the whole repository program.
+interface ProductionClearance {
+  cleared: boolean;
+  terminalTrials: number;
+  requiredTrials: number;
+  blockers: string[];
+  warnings: string[];
+}
+interface ScorecardInteractions {
+  PRODUCTION_TRIAL_FLOOR: number;
+  evaluateProductionClearance(input: {
+    terminalTrials: number;
+    qualificationState: string;
+    band: string;
+    confidence?: string | undefined;
+    identityStatus?: string | undefined;
+    identityProvenance?: string | undefined;
+  }): ProductionClearance;
+}
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const assetRoot = join(root, "assets", "codebase-state-dashboard");
@@ -21,25 +115,26 @@ const outputPath = join(outputRoot, "model-scorecard-okgo.html");
 const outputInteractionPath = join(outputRoot, "model-scorecard-interactions.js");
 const outputProductMarkPath = join(outputRoot, "product-mark.svg");
 const frozen = freezeInputs([templatePath, statePath, interactionSourcePath, interactionPath, productMarkPath]);
-const template = frozen.bytes.get(templatePath).toString("utf8");
-const interaction = frozen.bytes.get(interactionPath).toString("utf8");
+const template = frozen.bytes.get(templatePath)!.toString("utf8");
+const interaction = frozen.bytes.get(interactionPath)!.toString("utf8");
 const expectedSourceMarker = `SHA-256 ${frozen.hashes["model-scorecard-interactions.ts"]}`;
 if (!interaction.startsWith("/* Generated") || !interaction.includes(expectedSourceMarker)) {
   throw new Error("compiled scorecard interactions are stale; run bun run build:scorecard");
 }
-const interactionModule = await import(`${pathToFileURL(interactionPath).href}?sha256=${frozen.hashes["model-scorecard-interactions.js"]}`);
+const interactionModule = await import(`${pathToFileURL(interactionPath).href}?sha256=${frozen.hashes["model-scorecard-interactions.js"]}`) as ScorecardInteractions;
 const { PRODUCTION_TRIAL_FLOOR, evaluateProductionClearance } = interactionModule;
 if (PRODUCTION_TRIAL_FLOOR !== 50 || typeof evaluateProductionClearance !== "function") {
   throw new Error("compiled scorecard interaction contract is invalid");
 }
 
-const rawState = JSON.parse(frozen.bytes.get(statePath).toString("utf8"));
+const rawState = JSON.parse(frozen.bytes.get(statePath)!.toString("utf8")) as ModelScorecardState;
 const state = publishedScorecard(rawState, frozen.hashes);
 prepareReportOutput(assetRoot, outputRoot);
 if (resolve(interactionPath) !== resolve(outputInteractionPath)) copyFileSync(interactionPath, outputInteractionPath);
 if (resolve(productMarkPath) !== resolve(outputProductMarkPath)) copyFileSync(productMarkPath, outputProductMarkPath);
-const receipt = writeReceiptManifest(outputRoot, state, { repositoryPath: targetRepositoryPath });
-state.tuples = state.tuples.map((tuple) => ({ ...tuple, evidence: receipt.evidenceByTuple[tuple.id] }));
+// Evidence is still the source locator strings here; the next line replaces it with bound links.
+const receipt = writeReceiptManifest(outputRoot, state as unknown as ReceiptScorecard, { repositoryPath: targetRepositoryPath });
+state.tuples = state.tuples.map((tuple) => ({ ...tuple, evidence: receipt.evidenceByTuple[tuple.id]! }));
 state.snapshot.receiptManifest = `./receipts/${receipt.filename}`;
 state.snapshot.receiptManifestSha256 = receipt.digest;
 state.snapshot.receiptBindingSummary = receipt.bindingSummary;
@@ -47,20 +142,20 @@ state.snapshot.receiptBindingSummary = receipt.bindingSummary;
 const baseStyles = template.match(/<style>([\s\S]*?)<\/style>/)?.[1];
 if (!baseStyles) throw new Error("Could not extract scorecard base styles");
 
-const escapeHtml = (value) => String(value ?? "")
+const escapeHtml = (value: unknown) => String(value ?? "")
   .replaceAll("&", "&amp;")
   .replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#39;");
 const integer = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-const date = (value) => new Date(value).toLocaleString("en-US", {
+const date = (value: string) => new Date(value).toLocaleString("en-US", {
   dateStyle: "medium",
   timeStyle: "short",
   timeZone: "America/Denver",
 });
-const safeBand = (value) => ["qualified", "promising", "insufficient", "failed"].includes(value) ? value : "insufficient";
-const qualificationLabels = {
+const safeBand = (value: string) => ["qualified", "promising", "insufficient", "failed"].includes(value) ? value : "insufficient";
+const qualificationLabels: Record<string, string> = {
   untested: "Untested",
   diagnostic_only: "Diagnostic only",
   role_evidence: "Role evidence",
@@ -68,20 +163,20 @@ const qualificationLabels = {
   qualified: "Full-runner qualified",
   disqualified: "Disqualified",
 };
-const bandLabels = {
+const bandLabels: Record<string, string> = {
   qualified: "Full-runner qualified",
   promising: "Trial candidate",
   insufficient: "Role evidence / insufficient",
   failed: "Hard-gate failure",
 };
-const chip = (band, value) => `<span class="chip chip-${safeBand(band)}">${escapeHtml(value)}</span>`;
-const evidenceMarkup = (item) => {
+const chip = (band: string, value: unknown) => `<span class="chip chip-${safeBand(band)}">${escapeHtml(value)}</span>`;
+const evidenceMarkup = (item: string | EvidenceLink) => {
   if (typeof item === "string") return escapeHtml(item);
   return item.href
     ? `<a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a>`
     : escapeHtml(item.label);
 };
-const evidenceText = (item) => typeof item === "string" ? item : item.label;
+const evidenceText = (item: string | EvidenceLink) => typeof item === "string" ? item : item.label;
 
 const evaluatedTuples = state.tuples.map((entry) => ({
   ...entry,
