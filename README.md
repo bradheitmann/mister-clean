@@ -59,9 +59,10 @@ when the current repository makes them relevant.
 
 Install from a verified release archive (the `mister-clean-v<version>-verified-release`
 artifact of the tag's CI run, also attached to the GitHub release), not from a source
-checkout: the archive carries `RELEASE_ATTESTATION.json` and the package `MANIFEST.sha256`,
-which are produced by the release step and never exist in the source tree, even though
-`package.json` `files` names them. Attest the installed root before use
+checkout: the archive carries `RELEASE_ATTESTATION.json`, which the release step produces and
+which never exists in the source tree even though `package.json` `files` names it, and a package
+`MANIFEST.sha256` regenerated for the release (the source tree tracks its own copy, pinned to the
+current build). Attest the installed root before use
 (`node <root>/bin/mister-clean.js attest <root> --json --strict`).
 
 For a closeout expected to span multiple agent turns, the optional
