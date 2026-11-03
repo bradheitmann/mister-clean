@@ -134,30 +134,46 @@ const PLANNING_CONFIG_KEYS = new Set(["schema", "roots", "exclude"]);
  *   paths are the planning roots and the heuristic is off. `[]` declares that the
  *   repository has no planning roots. Nested declared roots reduce to the
  *   outermost one, as heuristic roots do.
- * - `exclude` (optional array of repository-relative path prefixes): discovery
- *   never walks into these paths, in heuristic and declared mode alike, and the
- *   unprojected-planning probe skips them too. A declared root inside an exclude
- *   is an error.
+ * - `exclude` (optional array): planning discovery never walks into these
+ *   repository-relative path prefixes, in heuristic and declared mode alike, and
+ *   the unprojected-planning probe skips them too. A declared root inside an
+ *   exclude is an error. Each entry is either a string (planning-only, the
+ *   original form) or an object `{ "path": "...", "kind": "evidence" | "archive" }`.
+ *   Only `evidence` and `archive` excludes also prune native-gate discovery
+ *   (ruling O-GATE-SCOPE-1, `charter/owner-decisions/2026-11-03-gate-discovery-planning-excludes.md`):
+ *   a manifest under such a root is an artifact of record, not an executable
+ *   surface, and discovery records each one it skips instead of running it.
+ *   String excludes keep their planning-only meaning, so no existing repository
+ *   changes behaviour.
  * - The config file itself is never a planning root, although its name is a
  *   canonical planning file name.
  *
  * Any defect refuses with {@link PlanningConfigInvalidError}; it never falls
  * back to the heuristic. Invalid means: malformed JSON, an unknown schema, an
- * unknown key, a non-array or non-string entry, an absolute path, a `.` / `..` /
- * empty segment, a path that resolves outside the repository, a declared root
- * that does not exist or is a symbolic link, a root that is a harness-definition
- * path or lies inside a nested checkout, or a root inside an exclude.
+ * unknown key, a non-array entry list, an entry that is neither a string nor a
+ * `{ path, kind }` object, an unknown exclude `kind`, an absolute path, a `.` /
+ * `..` / empty segment, a path that resolves outside the repository, a declared
+ * root that does not exist or is a symbolic link, a root that is a
+ * harness-definition path or lies inside a nested checkout, or a root inside an
+ * exclude.
  *
  * {@link loadPlanningConfig} is the one loader: `audit planning`, `prepare`
- * (through {@link discoverPlanningRoots}) and the bundle validator all use it.
+ * (through {@link discoverPlanningRoots}), the bundle validator and native-gate
+ * discovery all use it.
  */
 export interface PlanningConfig {
   readonly path: string;
   readonly sha256: string;
   /** Declared roots, sorted and reduced to the outermost; undefined = heuristic mode. */
   readonly roots: readonly string[] | undefined;
+  /** Every exclude path, whatever its kind: the prefixes planning discovery never walks into. */
   readonly exclude: readonly string[];
+  /** The subset of {@link exclude} declared `evidence` or `archive`: these also prune native-gate discovery. */
+  readonly gateExclude: readonly string[];
 }
+
+/** Exclude kinds that also prune native-gate discovery; a string exclude has no kind. */
+export const PLANNING_GATE_EXCLUDE_KINDS = new Set(["evidence", "archive"]);
 
 /** Provenance a report records for the config that applied, or null. */
 export type PlanningConfigProvenance = { readonly path: string; readonly sha256: string } | null;
@@ -181,27 +197,52 @@ export function isPlanningPathExcluded(relativePath: string, exclude: readonly s
   return exclude.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
 }
 
+interface PlanningConfigEntry {
+  readonly path: string;
+  /** Present only for an object exclude; a string entry (planning-only) has none. */
+  readonly kind?: string;
+}
+
+function planningConfigPath(
+  label: string,
+  entry: string,
+  invalid: (reason: string) => PlanningConfigInvalidError,
+): string {
+  const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
+  if (isAbsolute(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
+    throw invalid(`${label} ${JSON.stringify(entry)} is an absolute path`);
+  }
+  if (entry.includes("\\")) throw invalid(`${label} ${JSON.stringify(entry)} must use "/" separators`);
+  const segments = trimmed.split("/");
+  if (segments.includes("..")) throw invalid(`${label} ${JSON.stringify(entry)} has a ".." segment`);
+  if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
+    throw invalid(`${label} ${JSON.stringify(entry)} must name a path below the repository root`);
+  }
+  return trimmed;
+}
+
 function planningConfigEntries(
   record: Record<string, unknown>,
   key: "exclude" | "roots",
   invalid: (reason: string) => PlanningConfigInvalidError,
-): string[] | undefined {
+): PlanningConfigEntry[] | undefined {
   const value = record[key];
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) throw invalid(`${key} must be an array of repository-relative paths`);
-  return value.map((entry: unknown, index) => {
-    if (typeof entry !== "string") throw invalid(`${key}[${String(index)}] must be a string`);
-    const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
-    if (isAbsolute(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
-      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} is an absolute path`);
+  return value.map((entry: unknown, index): PlanningConfigEntry => {
+    const label = `${key}[${String(index)}]`;
+    if (typeof entry === "string") return { path: planningConfigPath(label, entry, invalid) };
+    if (key !== "exclude" || !entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw invalid(`${label} must be a string${key === "exclude" ? ' or a { "path", "kind" } object' : ""}`);
     }
-    if (entry.includes("\\")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must use "/" separators`);
-    const segments = trimmed.split("/");
-    if (segments.includes("..")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} has a ".." segment`);
-    if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
-      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must name a path below the repository root`);
+    const object = entry as Record<string, unknown>;
+    const unknownKeys = Object.keys(object).filter((name) => name !== "path" && name !== "kind").sort();
+    if (unknownKeys.length) throw invalid(`${label} has unknown key(s) ${JSON.stringify(unknownKeys)}`);
+    if (typeof object.path !== "string") throw invalid(`${label}.path must be a string`);
+    if (typeof object.kind !== "string" || !PLANNING_GATE_EXCLUDE_KINDS.has(object.kind)) {
+      throw invalid(`${label}.kind ${JSON.stringify(object.kind)} is not one of ${JSON.stringify([...PLANNING_GATE_EXCLUDE_KINDS].sort())}`);
     }
-    return trimmed;
+    return { path: planningConfigPath(`${label}.path`, object.path, invalid), kind: object.kind };
   });
 }
 
@@ -239,8 +280,12 @@ export function loadPlanningConfig(repository: string): PlanningConfig | null {
   if (record.schema !== PLANNING_CONFIG_SCHEMA) {
     throw invalid(`unknown schema ${JSON.stringify(record.schema)}; expected ${JSON.stringify(PLANNING_CONFIG_SCHEMA)}`);
   }
-  const declared = planningConfigEntries(record, "roots", invalid);
-  const exclude = [...new Set(planningConfigEntries(record, "exclude", invalid) ?? [])].sort(compareCodePoints);
+  const declared = planningConfigEntries(record, "roots", invalid)?.map((entry) => entry.path);
+  const excludeEntries = planningConfigEntries(record, "exclude", invalid) ?? [];
+  const exclude = [...new Set(excludeEntries.map((entry) => entry.path))].sort(compareCodePoints);
+  const gateExclude = [...new Set(excludeEntries
+    .filter((entry) => entry.kind !== undefined && PLANNING_GATE_EXCLUDE_KINDS.has(entry.kind))
+    .map((entry) => entry.path))].sort(compareCodePoints);
   const repositoryReal = realpathSync(root);
   let roots: string[] | undefined;
   if (declared !== undefined) {
@@ -272,7 +317,7 @@ export function loadPlanningConfig(repository: string): PlanningConfig | null {
       .filter((candidate, index) => !ordered.slice(0, index).some((parent) => candidate.startsWith(`${parent}/`)))
       .sort();
   }
-  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes(bytes), roots, exclude };
+  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes(bytes), roots, exclude, gateExclude };
 }
 
 export { PLANNING_LANE_LIFECYCLES, PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
