@@ -10278,6 +10278,7 @@ function isNestedCheckout(repository, directory) {
 var PLANNING_CONFIG_PATH = ".mister-clean/planning.json";
 var PLANNING_CONFIG_SCHEMA = "mister-clean.planning-config/1";
 var PLANNING_CONFIG_KEYS = /* @__PURE__ */ new Set(["schema", "roots", "exclude"]);
+var PLANNING_GATE_EXCLUDE_KINDS = /* @__PURE__ */ new Set(["evidence", "archive"]);
 var PlanningConfigInvalidError = class extends Error {
   constructor(path, reason) {
     super(`planning_config_invalid: ${path}: ${reason}`);
@@ -10294,23 +10295,37 @@ function isPlanningPathExcluded(relativePath, exclude) {
   const normalized = relativePath.split(sep3).join("/");
   return exclude.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
 }
+function planningConfigPath(label, entry, invalid) {
+  const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
+  if (isAbsolute3(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
+    throw invalid(`${label} ${JSON.stringify(entry)} is an absolute path`);
+  }
+  if (entry.includes("\\")) throw invalid(`${label} ${JSON.stringify(entry)} must use "/" separators`);
+  const segments = trimmed.split("/");
+  if (segments.includes("..")) throw invalid(`${label} ${JSON.stringify(entry)} has a ".." segment`);
+  if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
+    throw invalid(`${label} ${JSON.stringify(entry)} must name a path below the repository root`);
+  }
+  return trimmed;
+}
 function planningConfigEntries(record4, key, invalid) {
   const value = record4[key];
   if (value === void 0) return void 0;
   if (!Array.isArray(value)) throw invalid(`${key} must be an array of repository-relative paths`);
   return value.map((entry, index) => {
-    if (typeof entry !== "string") throw invalid(`${key}[${String(index)}] must be a string`);
-    const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
-    if (isAbsolute3(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
-      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} is an absolute path`);
+    const label = `${key}[${String(index)}]`;
+    if (typeof entry === "string") return { path: planningConfigPath(label, entry, invalid) };
+    if (key !== "exclude" || !entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw invalid(`${label} must be a string${key === "exclude" ? ' or a { "path", "kind" } object' : ""}`);
     }
-    if (entry.includes("\\")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must use "/" separators`);
-    const segments = trimmed.split("/");
-    if (segments.includes("..")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} has a ".." segment`);
-    if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
-      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must name a path below the repository root`);
+    const object10 = entry;
+    const unknownKeys = Object.keys(object10).filter((name) => name !== "path" && name !== "kind").sort();
+    if (unknownKeys.length) throw invalid(`${label} has unknown key(s) ${JSON.stringify(unknownKeys)}`);
+    if (typeof object10.path !== "string") throw invalid(`${label}.path must be a string`);
+    if (typeof object10.kind !== "string" || !PLANNING_GATE_EXCLUDE_KINDS.has(object10.kind)) {
+      throw invalid(`${label}.kind ${JSON.stringify(object10.kind)} is not one of ${JSON.stringify([...PLANNING_GATE_EXCLUDE_KINDS].sort())}`);
     }
-    return trimmed;
+    return { path: planningConfigPath(`${label}.path`, object10.path, invalid), kind: object10.kind };
   });
 }
 function insideRepository(repositoryReal, path) {
@@ -10342,8 +10357,10 @@ function loadPlanningConfig(repository) {
   if (record4.schema !== PLANNING_CONFIG_SCHEMA) {
     throw invalid(`unknown schema ${JSON.stringify(record4.schema)}; expected ${JSON.stringify(PLANNING_CONFIG_SCHEMA)}`);
   }
-  const declared = planningConfigEntries(record4, "roots", invalid);
-  const exclude = [...new Set(planningConfigEntries(record4, "exclude", invalid) ?? [])].sort(compareCodePoints3);
+  const declared = planningConfigEntries(record4, "roots", invalid)?.map((entry) => entry.path);
+  const excludeEntries = planningConfigEntries(record4, "exclude", invalid) ?? [];
+  const exclude = [...new Set(excludeEntries.map((entry) => entry.path))].sort(compareCodePoints3);
+  const gateExclude = [...new Set(excludeEntries.filter((entry) => entry.kind !== void 0 && PLANNING_GATE_EXCLUDE_KINDS.has(entry.kind)).map((entry) => entry.path))].sort(compareCodePoints3);
   const repositoryReal = realpathSync(root);
   let roots;
   if (declared !== void 0) {
@@ -10372,7 +10389,7 @@ function loadPlanningConfig(repository) {
     const ordered = [...new Set(declared)].sort((left, right) => left.split("/").length - right.split("/").length || compareCodePoints3(left, right));
     roots = ordered.filter((candidate, index) => !ordered.slice(0, index).some((parent) => candidate.startsWith(`${parent}/`))).sort();
   }
-  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes2(bytes2), roots, exclude };
+  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes2(bytes2), roots, exclude, gateExclude };
 }
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
   "__fixtures__",
@@ -18041,9 +18058,19 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
 // src/closeout/native-gates.ts
 var DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 var COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
-var DISCOVERY_SCHEMA_VERSION = "1.3";
+var DISCOVERY_SCHEMA_VERSION = "1.4";
+var LEGACY_DISCOVERY_SCHEMA_VERSION = "1.3";
 var COVERAGE_SCHEMA_VERSION = "1.4";
 var SCHEMA_VERSION2 = DISCOVERY_SCHEMA_VERSION;
+var EXCLUDED_CANDIDATE_KIND = "gate_candidate_excluded_by_planning_policy";
+var EXCLUDED_CANDIDATE_MANIFESTS = /* @__PURE__ */ new Map([
+  ["package.json", "package_manifest"],
+  ["Cargo.toml", "cargo_manifest"],
+  ["go.mod", "go_manifest"]
+]);
+function excludedCandidateNote(candidate) {
+  return `gate candidate excluded by planning policy: ${candidate.path}`;
+}
 var DEFAULT_TIMEOUT_MS = 10 * 60 * 1e3;
 var DEFAULT_OUTPUT_BYTES = 1024 * 1024;
 var DEFAULT_TERMINATION_GRACE_MS = 1e3;
@@ -19079,8 +19106,30 @@ function validateGateDefinition(value, label, discoveryRefs, errors) {
   }
   return errors.length === before;
 }
+function validateExcludedCandidate(value, label, errors) {
+  const before = errors.length;
+  const raw = validateExactKeys(value, ["kind", "path", "manifest", "exclude_root"], label, errors);
+  if (!raw) return false;
+  if (raw.kind !== EXCLUDED_CANDIDATE_KIND) errors.push(`${label}.kind is invalid`);
+  if (typeof raw.path !== "string") {
+    errors.push(`${label}.path is invalid`);
+  } else {
+    try {
+      validatePortablePath2(raw.path, label);
+    } catch (error) {
+      errors.push(errorMessage2(error));
+    }
+    const expectedManifest = EXCLUDED_CANDIDATE_MANIFESTS.get(basename7(raw.path));
+    if (expectedManifest === void 0 || raw.manifest !== expectedManifest) errors.push(`${label}.manifest does not match path`);
+    if (typeof raw.exclude_root !== "string" || !isPlanningPathExcluded(raw.path, [raw.exclude_root])) {
+      errors.push(`${label}.exclude_root does not cover path`);
+    }
+  }
+  return errors.length === before;
+}
 function validateDiscoveryIntegrity(discovery) {
   const errors = [];
+  const legacy = record(discovery)?.schema_version === LEGACY_DISCOVERY_SCHEMA_VERSION;
   const raw = validateExactKeys(discovery, [
     "record_type",
     "schema_version",
@@ -19089,11 +19138,28 @@ function validateDiscoveryIntegrity(discovery) {
     "gates",
     "required_gate_ids",
     "execution_coordination_key_sha256",
-    "catalog_sha256"
+    "catalog_sha256",
+    ...legacy ? [] : ["excluded_candidates"]
   ], "discovery", errors);
   if (!raw) return errors;
   if (raw.record_type !== DISCOVERY_RECORD_TYPE) errors.push("discovery.record_type is invalid");
-  if (raw.schema_version !== SCHEMA_VERSION2) errors.push("discovery.schema_version is invalid");
+  if (raw.schema_version !== SCHEMA_VERSION2 && !legacy) errors.push("discovery.schema_version is invalid");
+  if (!legacy) {
+    if (!Array.isArray(raw.excluded_candidates)) {
+      errors.push("discovery.excluded_candidates must be an array");
+    } else {
+      const seen2 = /* @__PURE__ */ new Set();
+      const paths = [];
+      raw.excluded_candidates.forEach((candidate, index) => {
+        if (!validateExcludedCandidate(candidate, `discovery.excluded_candidates[${String(index)}]`, errors)) return;
+        if (seen2.has(candidate.path)) errors.push(`discovery.excluded_candidates has duplicate path ${JSON.stringify(candidate.path)}`);
+        seen2.add(candidate.path);
+        paths.push(candidate.path);
+      });
+      const canonical4 = [...paths].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+      if (!stableEqual(paths, canonical4)) errors.push("discovery.excluded_candidates is not in canonical path order");
+    }
+  }
   validateRepositoryObjectSchema(raw.repository_object, "discovery.repository_object", errors);
   if (typeof raw.execution_coordination_key_sha256 !== "string" || !HEX642.test(raw.execution_coordination_key_sha256)) {
     errors.push("discovery.execution_coordination_key_sha256 is invalid");
@@ -19140,14 +19206,26 @@ function discoverNativeGates(repository, repositoryObject) {
   const paths = trackedPaths2(root);
   const runnerFindings = verificationRunnerSafetyFindings(root, paths);
   const runnerSourcePaths = [...new Set(runnerFindings.map((finding4) => finding4.path))].sort();
-  const sourcePaths = paths.filter((path) => basename7(path) === "package.json" || basename7(path) === "Cargo.toml" || basename7(path) === "go.mod" || LOCKFILE_MANAGERS.has(basename7(path)));
+  const gateExclude = loadPlanningConfig(root)?.gateExclude ?? [];
+  const excludeRootFor = (path) => gateExclude.find((prefix) => isPlanningPathExcluded(path, [prefix]));
+  const excludedCandidates = [];
+  const candidatePaths2 = paths.filter((path) => {
+    const excludeRoot = excludeRootFor(path);
+    if (excludeRoot === void 0) return true;
+    const manifest2 = EXCLUDED_CANDIDATE_MANIFESTS.get(basename7(path));
+    if (manifest2 !== void 0) {
+      excludedCandidates.push({ kind: EXCLUDED_CANDIDATE_KIND, path, manifest: manifest2, exclude_root: excludeRoot });
+    }
+    return false;
+  });
+  const sourcePaths = candidatePaths2.filter((path) => EXCLUDED_CANDIDATE_MANIFESTS.has(basename7(path)) || LOCKFILE_MANAGERS.has(basename7(path)));
   const refs = [
     ...sourcePaths.map((path) => sourceRef(root, path)),
     ...runnerSourcePaths.map((path) => sourceRef(root, path, "runner_source"))
   ].sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
   let gates = [
-    ...discoverNodeGates(root, paths, refs),
-    ...discoverFixedGates(paths, refs)
+    ...discoverNodeGates(root, candidatePaths2, refs),
+    ...discoverFixedGates(candidatePaths2, refs)
   ];
   if (gates.length === 0) {
     gates = [gateDefinition({
@@ -19175,7 +19253,8 @@ function discoverNativeGates(repository, repositoryObject) {
     execution_coordination_key_sha256: repositoryVerificationCoordinationKey(root),
     source_refs: refs,
     gates,
-    required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id)
+    required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id),
+    excluded_candidates: excludedCandidates
   };
   return { ...record4, catalog_sha256: identity2(record4) };
 }
@@ -27972,6 +28051,18 @@ function assemblePrepareReport(context) {
       notes: ["Repository-native test, lint, typecheck, build, or established aggregate gates are not yet fully green on the bound object."]
     });
   }
+  const excludedCandidates = nativeGateDiscovery.excluded_candidates ?? [];
+  if (excludedCandidates.length > 0) {
+    const verification = asObject(asObject(report.dimensions, "closeout-report.dimensions").verification, "closeout-report.dimensions.verification");
+    verification.evidence = [
+      ...Array.isArray(verification.evidence) ? verification.evidence : [],
+      ...excludedCandidates.map((candidate) => ({ ...candidate }))
+    ];
+    verification.notes = [
+      ...Array.isArray(verification.notes) ? verification.notes : [],
+      ...excludedCandidates.map(excludedCandidateNote)
+    ];
+  }
   asObject(report.authorization_basis, "closeout-report.authorization_basis").ref = options.requestRef;
   report.scope = { included: [`repository:${repoId}`], excluded: [], policy_sources: [] };
   report.target_binding = {
@@ -30243,6 +30334,7 @@ function receiptFindingsFromAudit(family, audit, context) {
 }
 
 // src/eval-case.ts
+import { spawnSync as spawnSync7 } from "child_process";
 import { createHash as createHash26 } from "crypto";
 import { existsSync as existsSync14, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
 import { isAbsolute as isAbsolute24, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
@@ -30556,6 +30648,8 @@ var EVAL_CASE_RECORD_TYPE = "mister-clean.eval-case";
 var EVAL_CASE_SCHEMA_VERSION = "1";
 var EVAL_CASE_VALIDATION_RECORD_TYPE = "mister-clean.eval-case-validation";
 var REGISTRY_PIN_PATH = "customer-tests/model-atlas/registry-join.json";
+var TALLY_COLUMNS = ["session", "pair_set", "reviewer_model", "population", "good_passed", "good_n", "bad_passed", "bad_n", "source"];
+var REQUIRE_BOUND_FIELDS = ["verifier", "base_commit"];
 var HEX646 = /^[0-9a-f]{64}$/u;
 var HEX402 = /^[0-9a-f]{40}$/u;
 var CASE_ID = /^[A-Z]{2,4}-[0-9]{3,}$/u;
@@ -30563,6 +30657,7 @@ var CARD_ID = /^[A-Z]{2,4}-[0-9]{3,}$/u;
 var FLOOR = /^([1-9][0-9]*)\/([1-9][0-9]*)$/u;
 var TIMESTAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{3})?Z$/u;
 var REGISTRY_RECORD_ID = /^[a-z0-9][a-z0-9.-]*$/u;
+var COUNT_KEYS = ["sessions", "good_replays", "false_rejects", "populations_at_floor", "floor_breaches", "bad_passes"];
 function object9(value) {
   return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
@@ -30582,6 +30677,9 @@ function count(value) {
 function shape(refusals, citation, detail) {
   refusals.push({ code: "record_shape", citation, detail });
 }
+function localPath(value) {
+  return typeof value === "string" && isRepositoryRelativePath(value) && value !== ".";
+}
 function citationShape(value, path, refusals) {
   const citation = object9(value);
   if (!citation) {
@@ -30590,7 +30688,7 @@ function citationShape(value, path, refusals) {
   }
   if (!exactKeys2(citation, ["path", "sha256"], path, refusals)) return false;
   let ok = true;
-  if (typeof citation.path !== "string" || !isRepositoryRelativePath(citation.path) || citation.path === ".") {
+  if (!localPath(citation.path)) {
     shape(refusals, `${path}.path`, "expected a repository-relative file path");
     ok = false;
   }
@@ -30643,10 +30741,12 @@ function evalCaseShapeRefusals(value) {
         shape(refusals, path, "expected an object");
         continue;
       }
-      if (!exactKeys2(card, ["card_id", "model_registry_ref", "role"], path, refusals)) continue;
+      if (!exactKeys2(card, ["card_id", "path", "sha256", "model_registry_ref", "role"], path, refusals)) continue;
       if (typeof card.card_id !== "string" || !CARD_ID.test(card.card_id)) shape(refusals, `${path}.card_id`, "expected a card id such as AC-003");
       else if (cardIds.has(card.card_id)) shape(refusals, `${path}.card_id`, "duplicate card id");
       else cardIds.add(card.card_id);
+      if (!localPath(card.path)) shape(refusals, `${path}.path`, "expected the card file's repository-relative path");
+      if (typeof card.sha256 !== "string" || !HEX646.test(card.sha256)) shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
       if (typeof card.model_registry_ref !== "string" || parseRegistryRef(card.model_registry_ref) === void 0) {
         shape(refusals, `${path}.model_registry_ref`, "expected <registry card id>@<export version>");
       }
@@ -30689,9 +30789,13 @@ function evalCaseShapeRefusals(value) {
         }
       }
     }
-  } else if (exactKeys2(verifier, ["name", "kind", "sha256"], "$.verifier", refusals)) {
-    if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
-    if (typeof verifier.sha256 !== "string" || !HEX646.test(verifier.sha256)) shape(refusals, "$.verifier.sha256", "expected lowercase SHA-256");
+  } else {
+    const keys = "path" in verifier ? ["name", "kind", "path", "sha256"] : ["name", "kind", "sha256"];
+    if (exactKeys2(verifier, keys, "$.verifier", refusals)) {
+      if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
+      if ("path" in verifier && !localPath(verifier.path)) shape(refusals, "$.verifier.path", "expected a repository-relative file path");
+      if (typeof verifier.sha256 !== "string" || !HEX646.test(verifier.sha256)) shape(refusals, "$.verifier.sha256", "expected lowercase SHA-256");
+    }
   }
   const replayRows = Array.isArray(object9(record4.replay)?.per_reviewer) ? object9(record4.replay)?.per_reviewer : [];
   const rowPairSets = new Set(replayRows.map((row) => object9(row)?.pair_set).filter((value2) => nonEmptyString(value2)));
@@ -30745,8 +30849,7 @@ function evalCaseShapeRefusals(value) {
     const rows = Array.isArray(replay.per_reviewer) ? replay.per_reviewer : void 0;
     if (!rows || rows.length === 0) shape(refusals, "$.replay.per_reviewer", "expected at least one per-reviewer row");
     else {
-      let subjectBreaches = 0;
-      const subjectIds = new Set((cards ?? []).filter((card) => object9(card)?.role === "subject").map((card) => String(object9(card)?.card_id)));
+      const seen = /* @__PURE__ */ new Set();
       for (const [index, value2] of rows.entries()) {
         const path = `$.replay.per_reviewer[${index}]`;
         const row = object9(value2);
@@ -30754,18 +30857,17 @@ function evalCaseShapeRefusals(value) {
           shape(refusals, path, "expected an object");
           continue;
         }
-        if (!exactKeys2(row, ["card_id", "reviewer_model", "pair_set", "sessions", "good_replays", "false_rejects", "populations_at_floor", "floor_breaches", "bad_passes"], path, refusals)) continue;
+        if (!exactKeys2(row, ["card_id", "reviewer_model", "pair_set", ...COUNT_KEYS], path, refusals)) continue;
         if (typeof row.card_id !== "string" || !cardIds.has(row.card_id)) shape(refusals, `${path}.card_id`, "expected the id of one of the record's agent cards");
         if (!nonEmptyString(row.reviewer_model)) shape(refusals, `${path}.reviewer_model`, "required");
         if (!nonEmptyString(row.pair_set)) shape(refusals, `${path}.pair_set`, "required");
-        for (const key of ["sessions", "good_replays", "false_rejects", "populations_at_floor", "floor_breaches", "bad_passes"]) {
-          if (!count(row[key])) shape(refusals, `${path}.${key}`, "expected a non-negative integer");
+        const key = `${String(row.reviewer_model)}\0${String(row.pair_set)}`;
+        if (seen.has(key)) shape(refusals, path, "duplicate reviewer and pair set");
+        seen.add(key);
+        for (const field2 of COUNT_KEYS) {
+          if (!count(row[field2])) shape(refusals, `${path}.${field2}`, "expected a non-negative integer");
         }
         if (count(row.false_rejects) && count(row.good_replays) && row.false_rejects > row.good_replays) shape(refusals, `${path}.false_rejects`, "cannot exceed good_replays");
-        if (count(row.floor_breaches) && typeof row.card_id === "string" && subjectIds.has(row.card_id)) subjectBreaches += row.floor_breaches;
-      }
-      if ((replay.outcome === "met" || replay.outcome === "missed") && replay.outcome === "met" !== subjectBreaches > 0) {
-        shape(refusals, "$.replay.outcome", `outcome ${String(replay.outcome)} disagrees with the subject's floor_breaches (${subjectBreaches})`);
       }
     }
   }
@@ -30786,14 +30888,88 @@ function bindCitation(root, citation, pointer, refusals, bound) {
   const target = join18(root, ...citation.path.split("/"));
   if (!existsSync14(target) || !statSync6(target).isFile() || !containedIn2(root, target)) {
     refusals.push({ code: "path_missing", citation: pointer, detail: `${citation.path} is not a file inside the repository` });
-    return;
+    return false;
   }
   const actual = sha256Of(target);
   if (actual !== citation.sha256) {
     refusals.push({ code: "sha256_mismatch", citation: pointer, detail: `${citation.path}: expected ${citation.sha256}, got ${actual}` });
-    return;
+    return false;
   }
   bound.push(pointer);
+  return true;
+}
+function cardFrontmatter(text3) {
+  const fields = /* @__PURE__ */ new Map();
+  const lines2 = text3.split(/\r?\n/u);
+  if (lines2[0] !== "---") return fields;
+  for (const line of lines2.slice(1)) {
+    if (line === "---") return fields;
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const key = line.slice(0, colon).trim();
+    const value = line.slice(colon + 1).split("#")[0]?.trim() ?? "";
+    if (key.length > 0) fields.set(key, value);
+  }
+  return /* @__PURE__ */ new Map();
+}
+function commitExists(root, sha) {
+  const result = spawnSync7("git", ["--no-optional-locks", "-C", root, "cat-file", "-e", `${sha}^{commit}`], { stdio: "ignore" });
+  return result.status === 0;
+}
+function parseTallies(text3) {
+  const lines2 = text3.split(/\r?\n/u);
+  if (lines2[lines2.length - 1] === "") lines2.pop();
+  if (lines2.length < 2) return "expected a header line and at least one row";
+  const header = lines2[0]?.split("	") ?? [];
+  if (header.length !== TALLY_COLUMNS.length || header.some((column, index) => column !== TALLY_COLUMNS[index])) {
+    return `expected the columns ${TALLY_COLUMNS.join(",")}`;
+  }
+  const rows = [];
+  for (const [index, line] of lines2.slice(1).entries()) {
+    const cells = line.split("	");
+    if (cells.length !== TALLY_COLUMNS.length) return `line ${index + 2}: expected ${TALLY_COLUMNS.length} columns, got ${cells.length}`;
+    const numbers = cells.slice(4, 8).map((cell) => /^[0-9]+$/u.test(cell) ? Number(cell) : Number.NaN);
+    if (numbers.some((value) => !Number.isSafeInteger(value))) return `line ${index + 2}: counts must be non-negative integers`;
+    const [goodPassed, goodN, badPassed, badN] = numbers;
+    if (goodPassed > goodN || badPassed > badN) return `line ${index + 2}: passed counts exceed their replay counts`;
+    if (cells.slice(0, 4).some((cell) => cell.trim().length === 0)) return `line ${index + 2}: session, pair_set, reviewer_model and population are required`;
+    rows.push({
+      session: cells[0],
+      pair_set: cells[1],
+      reviewer_model: cells[2],
+      population: cells[3],
+      good_passed: goodPassed,
+      good_n: goodN,
+      bad_passed: badPassed,
+      bad_n: badN,
+      source: cells[8]
+    });
+  }
+  return rows;
+}
+function recomputeReviewerCounts(rows, floorPasses) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const key = `${row.reviewer_model}\0${row.pair_set}`;
+    const group = groups.get(key) ?? { sessions: /* @__PURE__ */ new Set(), good: 0, rejects: 0, atFloor: 0, breaches: 0, badPasses: 0, reviewer: row.reviewer_model, pairSet: row.pair_set };
+    group.sessions.add(row.session);
+    group.good += row.good_n;
+    group.rejects += row.good_n - row.good_passed;
+    if (row.good_passed === floorPasses) group.atFloor += 1;
+    if (row.good_passed < floorPasses) group.breaches += 1;
+    group.badPasses += row.bad_passed;
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => ({
+    reviewer_model: group.reviewer,
+    pair_set: group.pairSet,
+    sessions: group.sessions.size,
+    good_replays: group.good,
+    false_rejects: group.rejects,
+    populations_at_floor: group.atFloor,
+    floor_breaches: group.breaches,
+    bad_passes: group.badPasses
+  }));
 }
 function pinnedRegistryExportVersion(root) {
   const path = join18(root, ...REGISTRY_PIN_PATH.split("/"));
@@ -30810,34 +30986,104 @@ function pinnedRegistryExportVersion(root) {
 }
 function validateEvalCase(input) {
   const root = resolve27(input.repositoryRoot);
+  const requireBound = [...input.requireBound ?? []];
   const refusals = evalCaseShapeRefusals(input.record);
   const bound = [];
   const external = [];
+  const unverified = [];
+  let recomputed = null;
   const record4 = object9(input.record);
   const caseId = typeof record4?.case_id === "string" ? record4.case_id : null;
   const pin = pinnedRegistryExportVersion(root);
   if (refusals.every((refusal) => refusal.code !== "record_shape")) {
     const evalCase = input.record;
     bindCitation(root, evalCase.field_case, "$.field_case", refusals, bound);
-    if (pin === void 0) {
-      refusals.push({ code: "registry_pin_missing", citation: REGISTRY_PIN_PATH, detail: "the pinned model-registry export version could not be read (artifact.version)" });
-    } else {
-      for (const [index, card] of evalCase.agent_cards.entries()) {
-        const pointer = `$.agent_cards[${index}].model_registry_ref`;
+    for (const [index, card] of evalCase.agent_cards.entries()) {
+      const pointer = `$.agent_cards[${index}]`;
+      if (bindCitation(root, card, pointer, refusals, bound)) {
+        const front = cardFrontmatter(readFileSync18(join18(root, ...card.path.split("/")), "utf8"));
+        const mismatches = [];
+        if (front.get("card_id") !== card.card_id) mismatches.push(`card_id ${front.get("card_id") ?? "(none)"} != ${card.card_id}`);
+        if (front.get("model_registry_ref") !== card.model_registry_ref) mismatches.push(`model_registry_ref ${front.get("model_registry_ref") ?? "(none)"} != ${card.model_registry_ref}`);
+        if (mismatches.length > 0) {
+          bound.splice(bound.indexOf(pointer), 1);
+          refusals.push({ code: "card_ref_mismatch", citation: pointer, detail: `${card.path}: ${mismatches.join("; ")}` });
+        }
+      }
+      const refPointer = `${pointer}.model_registry_ref`;
+      if (pin === void 0) {
+        if (index === 0) refusals.push({ code: "registry_pin_missing", citation: REGISTRY_PIN_PATH, detail: "the pinned model-registry export version could not be read (artifact.version)" });
+      } else {
         const ref = parseRegistryRef(card.model_registry_ref);
         if (ref === void 0 || ref.version !== pin) {
-          refusals.push({ code: "registry_export_mismatch", citation: pointer, detail: `${card.model_registry_ref}: expected export ${pin}` });
-        } else bound.push(pointer);
+          refusals.push({ code: "registry_export_mismatch", citation: refPointer, detail: `${card.model_registry_ref}: expected export ${pin}` });
+        } else bound.push(refPointer);
       }
     }
-    if ("binding" in evalCase.verifier) {
-      if (evalCase.verifier.binding === "external") external.push("$.verifier");
-    } else bound.push("$.verifier");
-    if ("binding" in evalCase.base_commit) {
-      if (evalCase.base_commit.binding === "external") external.push("$.base_commit");
-    } else bound.push("$.base_commit");
-    bindCitation(root, evalCase.replay.rows_source, "$.replay.rows_source", refusals, bound);
+    const verifier = evalCase.verifier;
+    if ("binding" in verifier) {
+      if (verifier.binding === "external") external.push("$.verifier");
+    } else if ("path" in verifier) {
+      bindCitation(root, verifier, "$.verifier", refusals, bound);
+    } else {
+      unverified.push("$.verifier");
+    }
+    const base = evalCase.base_commit;
+    if ("binding" in base) {
+      if (base.binding === "external") external.push("$.base_commit");
+    } else if (commitExists(root, base.sha)) bound.push("$.base_commit");
+    else unverified.push("$.base_commit");
+    if (bindCitation(root, evalCase.replay.rows_source, "$.replay.rows_source", refusals, bound)) {
+      const parsed = parseTallies(readFileSync18(join18(root, ...evalCase.replay.rows_source.path.split("/")), "utf8"));
+      if (typeof parsed === "string") {
+        refusals.push({ code: "rows_source_unparsable", citation: "$.replay.rows_source", detail: `${evalCase.replay.rows_source.path}: ${parsed}` });
+      } else {
+        const floor = evalCase.replay.floor.match(FLOOR);
+        const floorPasses = Number(floor[1]);
+        const floorReplays = Number(floor[2]);
+        for (const row of parsed) {
+          if (row.good_n !== floorReplays) {
+            refusals.push({ code: "replay_floor_mismatch", citation: "$.replay.floor", detail: `${row.session} ${row.population}: ${row.good_n} good replays tallied, floor ${evalCase.replay.floor} needs ${floorReplays}` });
+          }
+        }
+        recomputed = recomputeReviewerCounts(parsed, floorPasses);
+        const totalSessions = new Set(parsed.map((row) => row.session)).size;
+        if (evalCase.replay.sessions !== totalSessions) {
+          refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.sessions", detail: `declared ${evalCase.replay.sessions}, recomputed ${totalSessions}` });
+        }
+        const subjectIds = new Set(evalCase.agent_cards.filter((card) => card.role === "subject").map((card) => card.card_id));
+        let subjectBreaches = 0;
+        const matched = /* @__PURE__ */ new Set();
+        for (const [index, row] of evalCase.replay.per_reviewer.entries()) {
+          const pointer = `$.replay.per_reviewer[${index}]`;
+          const group = recomputed.find((entry) => entry.reviewer_model === row.reviewer_model && entry.pair_set === row.pair_set);
+          if (group === void 0) {
+            refusals.push({ code: "replay_counts_mismatch", citation: pointer, detail: `no tallied rows for reviewer ${row.reviewer_model} in pair set ${row.pair_set}` });
+            continue;
+          }
+          matched.add(group);
+          for (const field2 of COUNT_KEYS) {
+            if (row[field2] !== group[field2]) refusals.push({ code: "replay_counts_mismatch", citation: `${pointer}.${field2}`, detail: `declared ${row[field2]}, recomputed ${group[field2]}` });
+          }
+          if (subjectIds.has(row.card_id)) subjectBreaches += group.floor_breaches;
+        }
+        for (const group of recomputed) {
+          if (!matched.has(group)) refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.per_reviewer", detail: `tallies carry reviewer ${group.reviewer_model} in pair set ${group.pair_set}, not declared` });
+        }
+        if (evalCase.replay.outcome === "met" && subjectBreaches === 0) {
+          refusals.push({ code: "replay_floor_not_met", citation: "$.replay.outcome", detail: `met declared, but the subject's recomputed floor breaches are 0 under floor ${evalCase.replay.floor}` });
+        } else if (evalCase.replay.outcome === "missed" && subjectBreaches > 0) {
+          refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.outcome", detail: `missed declared, but the subject's recomputed floor breaches are ${subjectBreaches}` });
+        }
+      }
+    }
     bindCitation(root, evalCase.derived_from, "$.derived_from", refusals, bound);
+    for (const field2 of requireBound) {
+      const pointer = `$.${field2}`;
+      if (external.includes(pointer) || unverified.includes(pointer)) {
+        refusals.push({ code: "binding_required", citation: pointer, detail: `${external.includes(pointer) ? "external" : "unverified"} citation; --require-bound ${field2} demands one re-verified in this repository` });
+      }
+    }
   }
   return {
     record_type: EVAL_CASE_VALIDATION_RECORD_TYPE,
@@ -30847,8 +31093,11 @@ function validateEvalCase(input) {
     record_path: input.recordPath,
     repository_root: root,
     registry_export_version: pin ?? null,
+    require_bound: requireBound,
     bound,
     external,
+    unverified,
+    replay_recomputed: recomputed,
     refusals
   };
 }
@@ -31818,8 +32067,16 @@ async function runEvalCase(args, io) {
   const path = args[0]?.startsWith("--") === false ? args.shift() : void 0;
   if (path === void 0) throw new UsageError("eval-case validate requires a record path");
   const repo = removeOption(args, "--repo") ?? process.cwd();
+  const requireBoundOption = removeOption(args, "--require-bound");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
+  const requireBound = [];
+  for (const field2 of requireBoundOption === void 0 ? [] : requireBoundOption.split(",")) {
+    if (!REQUIRE_BOUND_FIELDS.includes(field2)) {
+      throw new UsageError(`--require-bound accepts a comma-separated subset of ${REQUIRE_BOUND_FIELDS.join(",")}`);
+    }
+    requireBound.push(field2);
+  }
   if (!existsSync17(repo) || !statSync8(repo).isDirectory()) {
     io.stderr(`ERROR: --repo is not a directory: ${resolve30(repo)}`);
     return 2;
@@ -31831,16 +32088,17 @@ async function runEvalCase(args, io) {
     parsed = void 0;
     io.stderr(`ERROR: record_shape ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path });
+  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path, requireBound });
   if (json) io.stdout(JSON.stringify(result, null, 2));
   else {
     for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
-    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} external=${result.external.length} refusals=${result.refusals.length} registry_export=${result.registry_export_version ?? "unpinned"}`);
+    const list = (items) => items.length === 0 ? "none" : items.join(",");
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} external=${list(result.external)} unverified=${list(result.unverified)} refusals=${result.refusals.length} require_bound=${list(result.require_bound)} registry_export=${result.registry_export_version ?? "unpinned"}`);
   }
   return result.status === "eval_case_valid" ? 0 : 2;
 }
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 function receiptStoreFromEnvironment(environment) {
   return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));

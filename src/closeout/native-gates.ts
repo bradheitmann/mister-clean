@@ -31,6 +31,7 @@ import {
   type ExecutionLeaseReceipt,
   type HeldExecutionLease,
 } from "./execution-lease.js";
+import { isPlanningPathExcluded, loadPlanningConfig } from "./repository.js";
 
 export type NativeGateKind = "established_ci" | "repository_tests" | "lint" | "typecheck" | "build";
 export type NativeGateDisposition = "required" | "not_applicable" | "absent";
@@ -92,14 +93,33 @@ export interface NativeGateDefinition {
   readonly definition_sha256: string;
 }
 
+/**
+ * A tracked manifest that discovery saw and deliberately did not turn into a
+ * gate because `.mister-clean/planning.json` declares its root `evidence` or
+ * `archive` (ruling O-GATE-SCOPE-1). The exclusion is visible, never silent:
+ * every record is part of the catalog and of the closeout report, so an
+ * executable surface under an archive root cannot vanish from the audit.
+ */
+export interface NativeGateExcludedCandidate {
+  readonly kind: "gate_candidate_excluded_by_planning_policy";
+  /** Repository-relative path of the skipped manifest. */
+  readonly path: string;
+  readonly manifest: "package_manifest" | "cargo_manifest" | "go_manifest";
+  /** The `evidence`/`archive` exclude root (as declared) that covers `path`. */
+  readonly exclude_root: string;
+}
+
 export interface NativeGateDiscovery {
   readonly record_type: "mister-clean.native-gate-discovery";
-  readonly schema_version: "1.3";
+  /** `1.3` records predate `excluded_candidates`; fresh discovery always writes `1.4`. */
+  readonly schema_version: "1.3" | "1.4";
   readonly repository_object: RepositoryObject;
   readonly execution_coordination_key_sha256: string;
   readonly source_refs: readonly NativeGateSourceRef[];
   readonly gates: readonly NativeGateDefinition[];
   readonly required_gate_ids: readonly string[];
+  /** Absent only on a legacy `1.3` record. */
+  readonly excluded_candidates?: readonly NativeGateExcludedCandidate[];
   readonly catalog_sha256: string;
 }
 
@@ -219,9 +239,22 @@ export interface VerificationRunnerSafetyFinding {
 
 const DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 export const COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
-export const DISCOVERY_SCHEMA_VERSION = "1.3";
+export const DISCOVERY_SCHEMA_VERSION = "1.4";
+/** Discovery records written before `excluded_candidates` existed; still readable. */
+const LEGACY_DISCOVERY_SCHEMA_VERSION = "1.3";
 export const COVERAGE_SCHEMA_VERSION = "1.4";
 export const SCHEMA_VERSION = DISCOVERY_SCHEMA_VERSION;
+export const EXCLUDED_CANDIDATE_KIND = "gate_candidate_excluded_by_planning_policy";
+const EXCLUDED_CANDIDATE_MANIFESTS = new Map<string, NativeGateExcludedCandidate["manifest"]>([
+  ["package.json", "package_manifest"],
+  ["Cargo.toml", "cargo_manifest"],
+  ["go.mod", "go_manifest"],
+]);
+
+/** The one human line the report prints for a manifest discovery skipped by planning policy. */
+export function excludedCandidateNote(candidate: NativeGateExcludedCandidate): string {
+  return `gate candidate excluded by planning policy: ${candidate.path}`;
+}
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 export const DEFAULT_OUTPUT_BYTES = 1024 * 1024;
 export const DEFAULT_TERMINATION_GRACE_MS = 1_000;
@@ -1439,15 +1472,55 @@ function validateGateDefinition(
   return errors.length === before;
 }
 
+function validateExcludedCandidate(value: unknown, label: string, errors: string[]): value is NativeGateExcludedCandidate {
+  const before = errors.length;
+  const raw = validateExactKeys(value, ["kind", "path", "manifest", "exclude_root"], label, errors);
+  if (!raw) return false;
+  if (raw.kind !== EXCLUDED_CANDIDATE_KIND) errors.push(`${label}.kind is invalid`);
+  if (typeof raw.path !== "string") {
+    errors.push(`${label}.path is invalid`);
+  } else {
+    try {
+      validatePortablePath(raw.path, label);
+    } catch (error) {
+      errors.push(errorMessage(error));
+    }
+    const expectedManifest = EXCLUDED_CANDIDATE_MANIFESTS.get(basename(raw.path));
+    if (expectedManifest === undefined || raw.manifest !== expectedManifest) errors.push(`${label}.manifest does not match path`);
+    if (typeof raw.exclude_root !== "string" || !isPlanningPathExcluded(raw.path, [raw.exclude_root])) {
+      errors.push(`${label}.exclude_root does not cover path`);
+    }
+  }
+  return errors.length === before;
+}
+
 export function validateDiscoveryIntegrity(discovery: NativeGateDiscovery): readonly string[] {
   const errors: string[] = [];
+  const legacy = record(discovery)?.schema_version === LEGACY_DISCOVERY_SCHEMA_VERSION;
   const raw = validateExactKeys(discovery, [
     "record_type", "schema_version", "repository_object", "source_refs", "gates",
     "required_gate_ids", "execution_coordination_key_sha256", "catalog_sha256",
+    ...(legacy ? [] : ["excluded_candidates"]),
   ], "discovery", errors);
   if (!raw) return errors;
   if (raw.record_type !== DISCOVERY_RECORD_TYPE) errors.push("discovery.record_type is invalid");
-  if (raw.schema_version !== SCHEMA_VERSION) errors.push("discovery.schema_version is invalid");
+  if (raw.schema_version !== SCHEMA_VERSION && !legacy) errors.push("discovery.schema_version is invalid");
+  if (!legacy) {
+    if (!Array.isArray(raw.excluded_candidates)) {
+      errors.push("discovery.excluded_candidates must be an array");
+    } else {
+      const seen = new Set<string>();
+      const paths: string[] = [];
+      raw.excluded_candidates.forEach((candidate, index) => {
+        if (!validateExcludedCandidate(candidate, `discovery.excluded_candidates[${String(index)}]`, errors)) return;
+        if (seen.has(candidate.path)) errors.push(`discovery.excluded_candidates has duplicate path ${JSON.stringify(candidate.path)}`);
+        seen.add(candidate.path);
+        paths.push(candidate.path);
+      });
+      const canonical = [...paths].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+      if (!stableEqual(paths, canonical)) errors.push("discovery.excluded_candidates is not in canonical path order");
+    }
+  }
   validateRepositoryObjectSchema(raw.repository_object, "discovery.repository_object", errors);
   if (typeof raw.execution_coordination_key_sha256 !== "string"
     || !HEX64.test(raw.execution_coordination_key_sha256)) {
@@ -1509,10 +1582,24 @@ export function discoverNativeGates(
   const paths = trackedPaths(root);
   const runnerFindings = verificationRunnerSafetyFindings(root, paths);
   const runnerSourcePaths = [...new Set(runnerFindings.map((finding) => finding.path))].sort();
-  const sourcePaths = paths.filter((path) => (
-    basename(path) === "package.json"
-    || basename(path) === "Cargo.toml"
-    || basename(path) === "go.mod"
+  // Ruling O-GATE-SCOPE-1: a manifest under a root the repository declares
+  // `evidence` or `archive` is an artifact of record, not an executable surface.
+  // The same loader that bounds planning discovery decides; string excludes stay
+  // planning-only. Every skipped manifest is recorded, never silently dropped.
+  const gateExclude = loadPlanningConfig(root)?.gateExclude ?? [];
+  const excludeRootFor = (path: string): string | undefined => gateExclude.find((prefix) => isPlanningPathExcluded(path, [prefix]));
+  const excludedCandidates: NativeGateExcludedCandidate[] = [];
+  const candidatePaths = paths.filter((path) => {
+    const excludeRoot = excludeRootFor(path);
+    if (excludeRoot === undefined) return true;
+    const manifest = EXCLUDED_CANDIDATE_MANIFESTS.get(basename(path));
+    if (manifest !== undefined) {
+      excludedCandidates.push({ kind: EXCLUDED_CANDIDATE_KIND, path, manifest, exclude_root: excludeRoot });
+    }
+    return false;
+  });
+  const sourcePaths = candidatePaths.filter((path) => (
+    EXCLUDED_CANDIDATE_MANIFESTS.has(basename(path))
     || LOCKFILE_MANAGERS.has(basename(path))
   ));
   const refs = [
@@ -1520,8 +1607,8 @@ export function discoverNativeGates(
     ...runnerSourcePaths.map((path) => sourceRef(root, path, "runner_source")),
   ].sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
   let gates = [
-    ...discoverNodeGates(root, paths, refs),
-    ...discoverFixedGates(paths, refs),
+    ...discoverNodeGates(root, candidatePaths, refs),
+    ...discoverFixedGates(candidatePaths, refs),
   ];
   if (gates.length === 0) {
     gates = [gateDefinition({
@@ -1550,6 +1637,7 @@ export function discoverNativeGates(
     source_refs: refs,
     gates,
     required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id),
+    excluded_candidates: excludedCandidates,
   } as const;
   return { ...record, catalog_sha256: identity(record) };
 }
