@@ -10275,6 +10275,105 @@ function isNestedCheckout(repository, directory) {
   if (resolve3(directory) === resolve3(repository)) return false;
   return existsSync2(join2(directory, ".git"));
 }
+var PLANNING_CONFIG_PATH = ".mister-clean/planning.json";
+var PLANNING_CONFIG_SCHEMA = "mister-clean.planning-config/1";
+var PLANNING_CONFIG_KEYS = /* @__PURE__ */ new Set(["schema", "roots", "exclude"]);
+var PlanningConfigInvalidError = class extends Error {
+  constructor(path, reason) {
+    super(`planning_config_invalid: ${path}: ${reason}`);
+    this.path = path;
+    this.reason = reason;
+    this.name = "PlanningConfigInvalidError";
+  }
+  code = "planning_config_invalid";
+};
+function planningConfigProvenance(config) {
+  return config ? { path: config.path, sha256: config.sha256 } : null;
+}
+function isPlanningPathExcluded(relativePath, exclude) {
+  const normalized = relativePath.split(sep3).join("/");
+  return exclude.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
+}
+function planningConfigEntries(record4, key, invalid) {
+  const value = record4[key];
+  if (value === void 0) return void 0;
+  if (!Array.isArray(value)) throw invalid(`${key} must be an array of repository-relative paths`);
+  return value.map((entry, index) => {
+    if (typeof entry !== "string") throw invalid(`${key}[${String(index)}] must be a string`);
+    const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
+    if (isAbsolute3(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
+      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} is an absolute path`);
+    }
+    if (entry.includes("\\")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must use "/" separators`);
+    const segments = trimmed.split("/");
+    if (segments.includes("..")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} has a ".." segment`);
+    if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
+      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must name a path below the repository root`);
+    }
+    return trimmed;
+  });
+}
+function insideRepository(repositoryReal, path) {
+  const relation = relative3(repositoryReal, path);
+  return relation !== "" && relation !== ".." && !relation.startsWith(`..${sep3}`) && !isAbsolute3(relation);
+}
+function loadPlanningConfig(repository) {
+  const root = resolve3(repository);
+  const configPath = join2(root, PLANNING_CONFIG_PATH);
+  let stat3;
+  try {
+    stat3 = lstatSync(configPath);
+  } catch {
+    return null;
+  }
+  const invalid = (reason) => new PlanningConfigInvalidError(PLANNING_CONFIG_PATH, reason);
+  if (!stat3.isFile()) throw invalid("not a regular file");
+  const bytes2 = readFileSync(configPath);
+  let parsed;
+  try {
+    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes2));
+  } catch (error) {
+    throw invalid(`malformed JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw invalid("expected a JSON object");
+  const record4 = parsed;
+  const unknownKeys = Object.keys(record4).filter((key) => !PLANNING_CONFIG_KEYS.has(key)).sort();
+  if (unknownKeys.length) throw invalid(`unknown key(s) ${JSON.stringify(unknownKeys)}`);
+  if (record4.schema !== PLANNING_CONFIG_SCHEMA) {
+    throw invalid(`unknown schema ${JSON.stringify(record4.schema)}; expected ${JSON.stringify(PLANNING_CONFIG_SCHEMA)}`);
+  }
+  const declared = planningConfigEntries(record4, "roots", invalid);
+  const exclude = [...new Set(planningConfigEntries(record4, "exclude", invalid) ?? [])].sort(compareCodePoints3);
+  const repositoryReal = realpathSync(root);
+  let roots;
+  if (declared !== void 0) {
+    for (const rootText of declared) {
+      const absolute = join2(root, ...rootText.split("/"));
+      if (isPlanningPathExcluded(rootText, exclude)) throw invalid(`root ${JSON.stringify(rootText)} is inside an exclude`);
+      if (isHarnessDefinitionPath(rootText)) throw invalid(`root ${JSON.stringify(rootText)} is a harness-definition path`);
+      const segments = rootText.split("/");
+      for (let depth = 1; depth <= segments.length; depth += 1) {
+        const ancestor = join2(root, ...segments.slice(0, depth));
+        if (existsSync2(ancestor) && lstatSync(ancestor).isDirectory() && isNestedCheckout(root, ancestor)) {
+          throw invalid(`root ${JSON.stringify(rootText)} is inside a nested checkout`);
+        }
+      }
+      let rootStat;
+      try {
+        rootStat = lstatSync(absolute);
+      } catch {
+        throw invalid(`root ${JSON.stringify(rootText)} does not exist`);
+      }
+      if (rootStat.isSymbolicLink()) throw invalid(`root ${JSON.stringify(rootText)} is a symbolic link`);
+      if (!insideRepository(repositoryReal, realpathSync(absolute))) {
+        throw invalid(`root ${JSON.stringify(rootText)} resolves outside the repository`);
+      }
+    }
+    const ordered = [...new Set(declared)].sort((left, right) => left.split("/").length - right.split("/").length || compareCodePoints3(left, right));
+    roots = ordered.filter((candidate, index) => !ordered.slice(0, index).some((parent) => candidate.startsWith(`${parent}/`))).sort();
+  }
+  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes2(bytes2), roots, exclude };
+}
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
   "__fixtures__",
   ".git",
@@ -10425,11 +10524,14 @@ function childEntries(directory) {
     return [];
   }
 }
-function discoverPlanningRoots(repository) {
+function discoverPlanningRoots(repository, config = loadPlanningConfig(repository)) {
+  if (config?.roots !== void 0) return [...config.roots];
+  const exclude = config?.exclude ?? [];
   const candidates = /* @__PURE__ */ new Set();
   function visit(directory) {
     const relativePath = relative3(repository, directory);
     if (relativePath !== "" && isHarnessDefinitionPath(relativePath)) return;
+    if (relativePath !== "" && isPlanningPathExcluded(relativePath, exclude)) return;
     if (isNestedCheckout(repository, directory)) return;
     const name = directory.split(sep3).at(-1)?.toLocaleLowerCase() ?? "";
     if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
@@ -10438,7 +10540,7 @@ function discoverPlanningRoots(repository) {
     }
     const entries2 = childEntries(directory).filter((entry) => !PLANNING_IGNORED_NAMES.has(entry.name));
     for (const entry of entries2) {
-      if (entry.isFile() && isCanonicalPlanningFileName(entry.name)) {
+      if (entry.isFile() && isCanonicalPlanningFileName(entry.name) && !isPlanningPathExcluded(join2(relativePath, entry.name), [...exclude, PLANNING_CONFIG_PATH])) {
         candidates.add(join2(directory, entry.name));
       }
     }
@@ -13962,13 +14064,14 @@ var PLANNING_CANDIDATE_IGNORED_SEGMENTS = /* @__PURE__ */ new Set(["examples", "
 var ACTIVE_IMPLEMENTATION_STATUS = /^status\s*:\s*[^\n]*(?:implementation\s+)?(?:active|in[ -]progress|pending|underway)\b/imu;
 var IMPLEMENTATION_SEQUENCE_HEADING = /^#{1,6}\s+(?:\d+(?:\.\d+)*\.?\s+)?(?:implementation|migration|remediation|rollout)\s+(?:plan|roadmap|sequence)\b/imu;
 var MAX_PLANNING_CANDIDATE_BYTES = 2 * 1024 * 1024;
-function planningCandidatePaths(root, planningRoots) {
+function planningCandidatePaths(root, planningRoots, exclude) {
   const candidates = [];
   const roots = planningRoots.map((path) => path.split("/").join(sep5));
   const insidePlanningRoot = (path) => roots.some((candidate) => path === candidate || path.startsWith(`${candidate}${sep5}`));
   const append = (path) => {
     const relativePath = relative5(root, path);
     if (!relativePath || insidePlanningRoot(relativePath)) return;
+    if (isPlanningPathExcluded(relativePath, exclude)) return;
     const segments = relativePath.split(sep5).map((segment) => segment.toLocaleLowerCase("und"));
     if (segments.some((segment) => PLANNING_CANDIDATE_IGNORED_SEGMENTS.has(segment))) return;
     if (!isPlanningTextPath(path)) return;
@@ -13977,15 +14080,15 @@ function planningCandidatePaths(root, planningRoots) {
   for (const entry of readdirSync3(root, { withFileTypes: true })) {
     const path = resolve6(root, entry.name);
     if (entry.isFile()) append(path);
-    else if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path) && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
+    else if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path) && !isPlanningPathExcluded(entry.name, exclude) && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
       for (const nested of listEntriesRecursively(path)) if (nested.kind === "file") append(nested.path);
     }
   }
   return [...new Set(candidates)].sort();
 }
-function discoverUnprojectedPlanningCandidates(root, planningRoots, planningSources) {
+function discoverUnprojectedPlanningCandidates(root, planningRoots, planningSources, exclude) {
   const candidates = [];
-  for (const path of planningCandidatePaths(root, planningRoots)) {
+  for (const path of planningCandidatePaths(root, planningRoots, exclude)) {
     try {
       const stat3 = lstatSync3(path);
       if (!stat3.isFile() || stat3.size > MAX_PLANNING_CANDIDATE_BYTES) continue;
@@ -14008,6 +14111,8 @@ function discoverUnprojectedPlanningCandidates(root, planningRoots, planningSour
 function auditPlanningRepository(repository, deadline) {
   const root = resolve6(repository);
   assertDirectory(root);
+  const config = loadPlanningConfig(root);
+  const exclude = config?.exclude ?? [];
   const clock = deadline?.now ?? (() => Date.now());
   const started = clock();
   const deadlineMs = deadline?.deadline_ms;
@@ -14021,7 +14126,7 @@ function auditPlanningRepository(repository, deadline) {
     covered: covered2,
     pending_count: Math.max(0, pending)
   });
-  const planningRoots = discoverPlanningRoots(root);
+  const planningRoots = discoverPlanningRoots(root, config);
   const planned = planningRoots.map((rootText) => {
     const rootPath = resolve6(root, rootText);
     const rootStat = lstatSync3(rootPath);
@@ -14068,14 +14173,17 @@ function auditPlanningRepository(repository, deadline) {
     snapshot = "unbound";
   }
   const base = auditPlanningArtifacts2(sources, planningRoots.length, { repository: root, snapshot });
-  const probes = discoverUnprojectedPlanningCandidates(root, planningRoots, sources);
-  return finalizePlanningAudit([...base.findings, ...probes.findings], snapshot, {
-    artifactCount: base.artifactCount,
-    candidateProbeCount: probes.candidates.length,
-    planningRootCount: base.planningRootCount,
-    structuredArtifactCount: base.structuredArtifactCount,
-    suppressedByTypedNonartifactCount: base.suppressed_by_typed_nonartifact_count
-  });
+  const probes = discoverUnprojectedPlanningCandidates(root, planningRoots, sources, exclude);
+  return {
+    ...finalizePlanningAudit([...base.findings, ...probes.findings], snapshot, {
+      artifactCount: base.artifactCount,
+      candidateProbeCount: probes.candidates.length,
+      planningRootCount: base.planningRootCount,
+      structuredArtifactCount: base.structuredArtifactCount,
+      suppressedByTypedNonartifactCount: base.suppressed_by_typed_nonartifact_count
+    }),
+    planning_config: planningConfigProvenance(config)
+  };
 }
 
 // src/closeout/detector-coverage.ts
@@ -26143,8 +26251,11 @@ var PLANNING_NAMES = /* @__PURE__ */ new Set([
   "issues"
 ]);
 var PLANNING_KINDS = /* @__PURE__ */ new Set(["repo_files", "external_snapshot", "none"]);
-async function discoverPlanningRoots2(repo, files) {
-  const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative));
+async function discoverBundlePlanningRoots(repo, files) {
+  const config = loadPlanningConfig(repo);
+  if (config?.roots !== void 0) return new Set(config.roots);
+  const exclude = [...config?.exclude ?? [], PLANNING_CONFIG_PATH];
+  const rows = (await files.walk(repo)).filter((row) => !isHarnessDefinitionPath(row.relative) && !isPlanningPathExcluded(row.relative, exclude));
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = /* @__PURE__ */ new Map();
   for (const row of directories) {
@@ -26220,7 +26331,16 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
     errors.push(`${path}.systems: required nonempty array`);
     return;
   }
-  const discovered = repo ? await discoverPlanningRoots2(repo, files) : /* @__PURE__ */ new Set();
+  let discovered = /* @__PURE__ */ new Set();
+  if (repo) {
+    try {
+      discovered = await discoverBundlePlanningRoots(repo, files);
+    } catch (error) {
+      if (!(error instanceof PlanningConfigInvalidError)) throw error;
+      errors.push(`${path}: ${error.message}`);
+      return;
+    }
+  }
   const declared = /* @__PURE__ */ new Set();
   const none = systems.filter((item) => object5(item)?.kind === "none");
   if (none.length && systems.length !== 1) errors.push(`${path}.systems: kind=none is only valid as the sole discovered planning system`);
@@ -27220,8 +27340,11 @@ async function collectPrepareTopology(context) {
     targetCommit,
     upstream,
     planningRoots,
+    planningAudit,
     unclassifiedPlanningPaths
   } = context;
+  const planningConfig = planningAudit.planning_config;
+  const planningConfigSources = planningConfig ? [`${planningConfig.path} sha256:${planningConfig.sha256}`] : [];
   let planningSystems;
   if (planningRoots.length) {
     planningSystems = await Promise.all(planningRoots.map(async (rootText, index) => {
@@ -27241,7 +27364,7 @@ async function collectPrepareTopology(context) {
         id: `repository-planning-${index + 1}`,
         kind: "repo_files",
         sources: [rootText],
-        schema_sources: ["repository lane/artifact convention; verify manually"],
+        schema_sources: ["repository lane/artifact convention; verify manually", ...planningConfigSources],
         validators: ["mister-clean audit planning . --json", "mister-clean live planning census"],
         corpus: {
           roots: [rootText],
@@ -27260,7 +27383,7 @@ async function collectPrepareTopology(context) {
         id: "no-repository-planning",
         kind: "none",
         sources: ["independent shallow root scan"],
-        schema_sources: ["no planning schema found"],
+        schema_sources: ["no planning schema found", ...planningConfigSources],
         validators: ["mister-clean planning discovery"],
         corpus: {
           roots: [],
@@ -30184,6 +30307,12 @@ async function runAudit(args, io) {
     try {
       result2 = await nodeCloseoutEngine.auditPlanning(root, { deadline_ms: deadlineMs });
     } catch (error) {
+      if (error instanceof PlanningConfigInvalidError) {
+        const refusal = { code: error.code, path: error.path, reason: error.reason };
+        if (json2) io.stdout(JSON.stringify(refusal, null, 2));
+        io.stderr(`ERROR: ${error.message}`);
+        return 2;
+      }
       if (!(error instanceof PlanningAuditTimeout)) throw error;
       if (json2) io.stdout(JSON.stringify(error.partial, null, 2));
       else {

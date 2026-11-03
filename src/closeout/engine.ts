@@ -22,7 +22,7 @@ import {
   auditPlanningRepository,
   type PlanningAuditDeadline,
   PlanningAuditTimeout,
-  type PlanningAuditResult,
+  type RepositoryPlanningAuditResult,
 } from "./planning.js";
 
 export type PlanningAuditOptions = PlanningAuditDeadline;
@@ -59,7 +59,7 @@ export interface CloseoutEngine {
   validateRecord(kind: CloseoutRecordKind, data: unknown, allowPlaceholders?: boolean): readonly string[];
   validateBundle(path: string, options?: BundleValidationOptions): Promise<BundleValidationResult>;
   detectStack(root: string): Promise<StackDetectionResult>;
-  auditPlanning(root: string, options?: PlanningAuditOptions): Promise<PlanningAuditResult>;
+  auditPlanning(root: string, options?: PlanningAuditOptions): Promise<RepositoryPlanningAuditResult>;
   auditSemantic(root: string, options?: SemanticAuditOptions): Promise<SemanticAuditResult>;
   auditGitHubActions(root: string): Promise<GitHubActionsAuditResult>;
   auditRepositoryBoundaries(root: string): Promise<RepositoryBoundaryAuditResult>;

@@ -115,6 +115,166 @@ export function isNestedCheckout(repository: string, directory: string): boolean
   return existsSync(join(directory, ".git"));
 }
 
+/** Repository-relative location of the repository-level planning config. */
+export const PLANNING_CONFIG_PATH = ".mister-clean/planning.json";
+export const PLANNING_CONFIG_SCHEMA = "mister-clean.planning-config/1";
+const PLANNING_CONFIG_KEYS = new Set(["schema", "roots", "exclude"]);
+
+/**
+ * A validated repository-level planning config (`.mister-clean/planning.json`):
+ *
+ * ```json
+ * { "schema": "mister-clean.planning-config/1",
+ *   "roots": ["plans", "charter/DONE"],
+ *   "exclude": ["reports"] }
+ * ```
+ *
+ * - No file: the discovery heuristic runs unchanged.
+ * - `roots` present (an array, possibly empty): exactly these repository-relative
+ *   paths are the planning roots and the heuristic is off. `[]` declares that the
+ *   repository has no planning roots. Nested declared roots reduce to the
+ *   outermost one, as heuristic roots do.
+ * - `exclude` (optional array of repository-relative path prefixes): discovery
+ *   never walks into these paths, in heuristic and declared mode alike, and the
+ *   unprojected-planning probe skips them too. A declared root inside an exclude
+ *   is an error.
+ * - The config file itself is never a planning root, although its name is a
+ *   canonical planning file name.
+ *
+ * Any defect refuses with {@link PlanningConfigInvalidError}; it never falls
+ * back to the heuristic. Invalid means: malformed JSON, an unknown schema, an
+ * unknown key, a non-array or non-string entry, an absolute path, a `.` / `..` /
+ * empty segment, a path that resolves outside the repository, a declared root
+ * that does not exist or is a symbolic link, a root that is a harness-definition
+ * path or lies inside a nested checkout, or a root inside an exclude.
+ *
+ * {@link loadPlanningConfig} is the one loader: `audit planning`, `prepare`
+ * (through {@link discoverPlanningRoots}) and the bundle validator all use it.
+ */
+export interface PlanningConfig {
+  readonly path: string;
+  readonly sha256: string;
+  /** Declared roots, sorted and reduced to the outermost; undefined = heuristic mode. */
+  readonly roots: readonly string[] | undefined;
+  readonly exclude: readonly string[];
+}
+
+/** Provenance a report records for the config that applied, or null. */
+export type PlanningConfigProvenance = { readonly path: string; readonly sha256: string } | null;
+
+/** Typed refusal for an invalid repository-level planning config. */
+export class PlanningConfigInvalidError extends Error {
+  readonly code = "planning_config_invalid";
+  constructor(readonly path: string, readonly reason: string) {
+    super(`planning_config_invalid: ${path}: ${reason}`);
+    this.name = "PlanningConfigInvalidError";
+  }
+}
+
+export function planningConfigProvenance(config: PlanningConfig | null): PlanningConfigProvenance {
+  return config ? { path: config.path, sha256: config.sha256 } : null;
+}
+
+/** True when a repository-relative path equals an exclude prefix or lies below one. */
+export function isPlanningPathExcluded(relativePath: string, exclude: readonly string[]): boolean {
+  const normalized = relativePath.split(sep).join("/");
+  return exclude.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
+}
+
+function planningConfigEntries(
+  record: Record<string, unknown>,
+  key: "exclude" | "roots",
+  invalid: (reason: string) => PlanningConfigInvalidError,
+): string[] | undefined {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw invalid(`${key} must be an array of repository-relative paths`);
+  return value.map((entry: unknown, index) => {
+    if (typeof entry !== "string") throw invalid(`${key}[${String(index)}] must be a string`);
+    const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
+    if (isAbsolute(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
+      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} is an absolute path`);
+    }
+    if (entry.includes("\\")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must use "/" separators`);
+    const segments = trimmed.split("/");
+    if (segments.includes("..")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} has a ".." segment`);
+    if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
+      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must name a path below the repository root`);
+    }
+    return trimmed;
+  });
+}
+
+function insideRepository(repositoryReal: string, path: string): boolean {
+  const relation = relative(repositoryReal, path);
+  return relation !== "" && relation !== ".." && !relation.startsWith(`..${sep}`) && !isAbsolute(relation);
+}
+
+/**
+ * Load and validate `.mister-clean/planning.json`. Returns null when the file is
+ * absent; throws {@link PlanningConfigInvalidError} for any defect.
+ */
+export function loadPlanningConfig(repository: string): PlanningConfig | null {
+  const root = resolve(repository);
+  const configPath = join(root, PLANNING_CONFIG_PATH);
+  let stat;
+  try {
+    stat = lstatSync(configPath);
+  } catch {
+    return null;
+  }
+  const invalid = (reason: string): PlanningConfigInvalidError => new PlanningConfigInvalidError(PLANNING_CONFIG_PATH, reason);
+  if (!stat.isFile()) throw invalid("not a regular file");
+  const bytes = readFileSync(configPath);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (error) {
+    throw invalid(`malformed JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw invalid("expected a JSON object");
+  const record = parsed as Record<string, unknown>;
+  const unknownKeys = Object.keys(record).filter((key) => !PLANNING_CONFIG_KEYS.has(key)).sort();
+  if (unknownKeys.length) throw invalid(`unknown key(s) ${JSON.stringify(unknownKeys)}`);
+  if (record.schema !== PLANNING_CONFIG_SCHEMA) {
+    throw invalid(`unknown schema ${JSON.stringify(record.schema)}; expected ${JSON.stringify(PLANNING_CONFIG_SCHEMA)}`);
+  }
+  const declared = planningConfigEntries(record, "roots", invalid);
+  const exclude = [...new Set(planningConfigEntries(record, "exclude", invalid) ?? [])].sort(compareCodePoints);
+  const repositoryReal = realpathSync(root);
+  let roots: string[] | undefined;
+  if (declared !== undefined) {
+    for (const rootText of declared) {
+      const absolute = join(root, ...rootText.split("/"));
+      if (isPlanningPathExcluded(rootText, exclude)) throw invalid(`root ${JSON.stringify(rootText)} is inside an exclude`);
+      if (isHarnessDefinitionPath(rootText)) throw invalid(`root ${JSON.stringify(rootText)} is a harness-definition path`);
+      const segments = rootText.split("/");
+      for (let depth = 1; depth <= segments.length; depth += 1) {
+        const ancestor = join(root, ...segments.slice(0, depth));
+        if (existsSync(ancestor) && lstatSync(ancestor).isDirectory() && isNestedCheckout(root, ancestor)) {
+          throw invalid(`root ${JSON.stringify(rootText)} is inside a nested checkout`);
+        }
+      }
+      let rootStat;
+      try {
+        rootStat = lstatSync(absolute);
+      } catch {
+        throw invalid(`root ${JSON.stringify(rootText)} does not exist`);
+      }
+      if (rootStat.isSymbolicLink()) throw invalid(`root ${JSON.stringify(rootText)} is a symbolic link`);
+      if (!insideRepository(repositoryReal, realpathSync(absolute))) {
+        throw invalid(`root ${JSON.stringify(rootText)} resolves outside the repository`);
+      }
+    }
+    const ordered = [...new Set(declared)].sort((left, right) =>
+      left.split("/").length - right.split("/").length || compareCodePoints(left, right));
+    roots = ordered
+      .filter((candidate, index) => !ordered.slice(0, index).some((parent) => candidate.startsWith(`${parent}/`)))
+      .sort();
+  }
+  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes(bytes), roots, exclude };
+}
+
 export { PLANNING_LANE_LIFECYCLES, PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
 import { PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
 
@@ -319,12 +479,25 @@ function childEntries(directory: string) {
   }
 }
 
-export function discoverPlanningRoots(repository: string): string[] {
+/**
+ * Planning roots of `repository`, repository-relative and sorted.
+ *
+ * Honors `.mister-clean/planning.json` (see {@link PlanningConfig}): declared
+ * roots replace the heuristic, and excludes bound the heuristic walk. Throws
+ * {@link PlanningConfigInvalidError} for an invalid config.
+ */
+export function discoverPlanningRoots(
+  repository: string,
+  config: PlanningConfig | null = loadPlanningConfig(repository),
+): string[] {
+  if (config?.roots !== undefined) return [...config.roots];
+  const exclude = config?.exclude ?? [];
   const candidates = new Set<string>();
 
   function visit(directory: string): void {
     const relativePath = relative(repository, directory);
     if (relativePath !== "" && isHarnessDefinitionPath(relativePath)) return;
+    if (relativePath !== "" && isPlanningPathExcluded(relativePath, exclude)) return;
     if (isNestedCheckout(repository, directory)) return;
     const name = directory.split(sep).at(-1)?.toLocaleLowerCase() ?? "";
     if (directory !== repository && PLANNING_DIRECTORY_NAMES.has(name)) {
@@ -340,7 +513,8 @@ export function discoverPlanningRoots(repository: string): string[] {
       // symbolic-link roots and `prepare` would abort on it while `audit
       // planning` merely reported it. Skipping it keeps both entry points in
       // agreement (LE-003).
-      if (entry.isFile() && isCanonicalPlanningFileName(entry.name)) {
+      if (entry.isFile() && isCanonicalPlanningFileName(entry.name)
+        && !isPlanningPathExcluded(join(relativePath, entry.name), [...exclude, PLANNING_CONFIG_PATH])) {
         candidates.add(join(directory, entry.name));
       }
     }

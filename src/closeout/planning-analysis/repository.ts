@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, relative, resolve, sep } from "node:path";
 import { proveCurrentProjectionCommand } from "../repository-inspection.js";
-import { assertDirectory, discoverPlanningRoots, git, isGitAncestor, isNestedCheckout, listEntriesRecursively } from "../repository.js";
+import {
+  assertDirectory, discoverPlanningRoots, git, isGitAncestor, isNestedCheckout, isPlanningPathExcluded,
+  listEntriesRecursively, loadPlanningConfig, planningConfigProvenance, type PlanningConfigProvenance,
+} from "../repository.js";
 import { auditPlanningArtifacts as assessPlanningArtifacts, finalizePlanningAudit, isPlanningTextPath,
   type PlanningSource, type PlanningFinding, type PlanningAuditResult, type PlanningRepositoryObservations } from "./policy.js";
 
@@ -75,7 +78,7 @@ interface PlanningCandidate {
   readonly path: string;
 }
 
-function planningCandidatePaths(root: string, planningRoots: readonly string[]): string[] {
+function planningCandidatePaths(root: string, planningRoots: readonly string[], exclude: readonly string[]): string[] {
   const candidates: string[] = [];
   const roots = planningRoots.map((path) => path.split("/").join(sep));
   const insidePlanningRoot = (path: string): boolean => roots.some((candidate) =>
@@ -83,6 +86,7 @@ function planningCandidatePaths(root: string, planningRoots: readonly string[]):
   const append = (path: string): void => {
     const relativePath = relative(root, path);
     if (!relativePath || insidePlanningRoot(relativePath)) return;
+    if (isPlanningPathExcluded(relativePath, exclude)) return;
     const segments = relativePath.split(sep).map((segment) => segment.toLocaleLowerCase("und"));
     if (segments.some((segment) => PLANNING_CANDIDATE_IGNORED_SEGMENTS.has(segment))) return;
     if (!isPlanningTextPath(path)) return;
@@ -94,6 +98,7 @@ function planningCandidatePaths(root: string, planningRoots: readonly string[]):
     if (entry.isFile()) append(path);
     else if (entry.isDirectory() && !entry.isSymbolicLink()
       && !isNestedCheckout(root, path)
+      && !isPlanningPathExcluded(entry.name, exclude)
       && PLANNING_CANDIDATE_DIRECTORIES.has(entry.name.toLocaleLowerCase("und"))) {
       for (const nested of listEntriesRecursively(path)) if (nested.kind === "file") append(nested.path);
     }
@@ -105,9 +110,10 @@ function discoverUnprojectedPlanningCandidates(
   root: string,
   planningRoots: readonly string[],
   planningSources: readonly PlanningSource[],
+  exclude: readonly string[],
 ): { readonly candidates: readonly PlanningCandidate[]; readonly findings: readonly PlanningFinding[] } {
   const candidates: PlanningCandidate[] = [];
-  for (const path of planningCandidatePaths(root, planningRoots)) {
+  for (const path of planningCandidatePaths(root, planningRoots, exclude)) {
     try {
       const stat = lstatSync(path);
       if (!stat.isFile() || stat.size > MAX_PLANNING_CANDIDATE_BYTES) continue;
@@ -133,12 +139,19 @@ function discoverUnprojectedPlanningCandidates(
   return { candidates, findings };
 }
 
+/** A repository audit also reports which `.mister-clean/planning.json` applied. */
+export interface RepositoryPlanningAuditResult extends PlanningAuditResult {
+  readonly planning_config: PlanningConfigProvenance;
+}
+
 export function auditPlanningRepository(
   repository: string,
   deadline?: PlanningAuditDeadline,
-): PlanningAuditResult {
+): RepositoryPlanningAuditResult {
   const root = resolve(repository);
   assertDirectory(root);
+  const config = loadPlanningConfig(root);
+  const exclude = config?.exclude ?? [];
   const clock = deadline?.now ?? (() => Date.now());
   const started = clock();
   const deadlineMs = deadline?.deadline_ms;
@@ -155,7 +168,7 @@ export function auditPlanningRepository(
     covered,
     pending_count: Math.max(0, pending),
   });
-  const planningRoots = discoverPlanningRoots(root);
+  const planningRoots = discoverPlanningRoots(root, config);
   const planned = planningRoots.map((rootText) => {
     const rootPath = resolve(root, rootText);
     const rootStat = lstatSync(rootPath);
@@ -202,12 +215,15 @@ export function auditPlanningRepository(
     snapshot = "unbound";
   }
   const base = auditPlanningArtifacts(sources, planningRoots.length, { repository: root, snapshot });
-  const probes = discoverUnprojectedPlanningCandidates(root, planningRoots, sources);
-  return finalizePlanningAudit([...base.findings, ...probes.findings], snapshot, {
-    artifactCount: base.artifactCount,
-    candidateProbeCount: probes.candidates.length,
-    planningRootCount: base.planningRootCount,
-    structuredArtifactCount: base.structuredArtifactCount,
-    suppressedByTypedNonartifactCount: base.suppressed_by_typed_nonartifact_count,
-  });
+  const probes = discoverUnprojectedPlanningCandidates(root, planningRoots, sources, exclude);
+  return {
+    ...finalizePlanningAudit([...base.findings, ...probes.findings], snapshot, {
+      artifactCount: base.artifactCount,
+      candidateProbeCount: probes.candidates.length,
+      planningRootCount: base.planningRootCount,
+      structuredArtifactCount: base.structuredArtifactCount,
+      suppressedByTypedNonartifactCount: base.suppressed_by_typed_nonartifact_count,
+    }),
+    planning_config: planningConfigProvenance(config),
+  };
 }
