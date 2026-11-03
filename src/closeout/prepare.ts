@@ -35,6 +35,7 @@ import {
 } from "./action-hygiene.js";
 import {
   discoverNativeGates,
+  excludedCandidateNote,
   nativeGateFailureObservations,
 } from "./native-gates.js";
 import { runNativeGates } from "./native-gate-runner.js";
@@ -1079,6 +1080,21 @@ function assemblePrepareReport(
       }],
       notes: ["Repository-native test, lint, typecheck, build, or established aggregate gates are not yet fully green on the bound object."],
     });
+  }
+  // Ruling O-GATE-SCOPE-1: an exclusion is visible, never silent. Each manifest
+  // discovery skipped under an evidence/archive root is a typed evidence entry
+  // and one human line, appended to whatever the verification dimension holds.
+  const excludedCandidates = nativeGateDiscovery.excluded_candidates ?? [];
+  if (excludedCandidates.length > 0) {
+    const verification = asObject(asObject(report.dimensions, "closeout-report.dimensions").verification, "closeout-report.dimensions.verification");
+    verification.evidence = [
+      ...(Array.isArray(verification.evidence) ? verification.evidence : []),
+      ...excludedCandidates.map((candidate) => ({ ...candidate })),
+    ];
+    verification.notes = [
+      ...(Array.isArray(verification.notes) ? verification.notes : []),
+      ...excludedCandidates.map(excludedCandidateNote),
+    ];
   }
   asObject(report.authorization_basis, "closeout-report.authorization_basis").ref = options.requestRef;
   report.scope = { included: [`repository:${repoId}`], excluded: [], policy_sources: [] };
