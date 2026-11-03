@@ -24,6 +24,9 @@
     "src/**/*.ts",
     "env.d.ts",
     "customer-tests/**/*.ts",
-    "ablations/**/*.ts"
+    "ablations/**/*.ts",
+    "scripts/test-tmp-root.ts",
+    "scripts/test-tmp-root.test.ts",
+    "vitest.config.ts"
   ]
 }
