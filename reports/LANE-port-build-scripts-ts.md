@@ -97,3 +97,18 @@ Baseline replays ran in an own detached worktree at `a1f39eb` (`baseline-pbs`), 
 - O-LANG-1b: the release cluster (seven `.mjs`) waits for the owner-approved workflow edit, as the brief states.
 - `reports/LANE-run-receipts.md` quotes `bun scripts/sync_cli.mjs` as the command run in that past lane; it is a
   historical record and was left as written.
+
+## Freeze addendum (merge of origin/main d70f722)
+
+`0e0a931` merges origin/main `d70f722` (PR #56, PR #57). The one conflict, tsconfig `include`, keeps both sides: the
+eight ported scripts plus `scripts/test-tmp-root.ts`, `scripts/test-tmp-root.test.ts` and `vitest.config.ts`. The
+incoming changes reference none of the eight old `.mjs` paths.
+
+Proof 2 rerun against the new base. Base `d70f722` was built in an own detached worktree (`baseline-pbs2`, since
+closed). Two clean `build:raw` runs on the base and two on the merged branch, all under bun 1.4.0, each gave identical
+hash lists. Base versus branch: 27 of 28 outputs identical; `MANIFEST.sha256` differs only in the `./package.json`
+entry (`e65b8735…` → `b6b8beaa…`), the same single entry as against `a1f39eb`.
+
+On the merged tree: the six checks and `package:import:check` PASS; `tsc --noEmit` exit 0; skill-contract,
+report-snapshot and model-scorecard-interactions 48/48; lang-guard `9 untyped file(s): 2 .js, 7 .mjs`;
+`charter check --strict` ok. The full suite was not rerun at the freeze, at the PM's direction.
