@@ -217,6 +217,38 @@ class (host hook), not candidate. Every other file passed, including
 `run_clean_ci`, `release_path` and the native-gates leftover check that were
 red under heavier load in the two earlier runs.
 
+## After merging main a1f39eb (PR #55, release 7.4.0)
+
+Main advanced a fourth time with the release bump (version, MANIFEST, SKILL.md,
+STATE.md). `git merge --no-edit origin/main` merged cleanly; the rebuilt
+`MANIFEST.sha256` equals the merged one, so the tree stayed clean after the
+build. `bin/mister-clean.js` is unchanged from the previous merge (it does not
+embed the version).
+
+| command | result |
+|---|---|
+| `bun run build:materials` then `pnpm exec tsc --noEmit` | exit 0 |
+| `pnpm run build:raw` twice, `dist/` removed before each | identical hashes: `bin/mister-clean.js` 4a6cd51d…, `dist/public.js` ed0b1f53…, `dist/stdio.js` 1c06f7a4…, `dist/planning.js` d079be0c…, `dist/control-plane.js` b9433691…; `MANIFEST.sha256` bd1597fd… |
+| `bun run manifest:package:check` | PASS (82 entries) |
+| proofs + `planning-config`, `native-gates`, `gate-snapshot-local-excludes`, `gate-evidence-subject-change`, `skill-contract`, `toolchain-pin` (same vitest flags) | 7 files, 103/103 pass |
+| `bun run audit:public` | PASS (83 files) |
+| `charter check --strict` | ok |
+| `SKILL.md` | as on main 7.4.0, 19,975 bytes; this lane did not change it |
+| `pnpm run test:node` | see below |
+
+### Full suite after merging a1f39eb (these exact bytes: c50777e; the report commit after it changes no test input)
+
+```
+Test Files  1 failed | 53 passed (54)
+     Tests  5 failed | 903 passed (908)
+  Duration  765.59s
+```
+
+The five reds are again the five `scripts/verify_generated_candidate.test.ts`
+tests refused by the host-global lang-guard commit hook in their scratch
+capsule (five occurrences in the log). Environment class (host hook), not
+candidate. Every other file passed.
+
 ## Out of scope (recorded obligations)
 
 - Runner-safety findings (`repository:runner-safety`) under evidence/archive
