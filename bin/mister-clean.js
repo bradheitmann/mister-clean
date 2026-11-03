@@ -24597,15 +24597,20 @@ function resolveGateCwd(repository, cwd) {
   return target;
 }
 async function blockedExecution(gate, reason, object9, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
+  const subjectChanged = !stableEqual(subjectStartState, subjectEndState);
+  const recordedReason = subjectChanged ? "subject_repository_changed" : reason;
+  const recordedState = subjectChanged ? "blocked" : state;
+  const recordedDiagnostic = subjectChanged && reason !== "subject_repository_changed" ? `subject repository changed while the gate was being prepared; superseded reason: ${reason}
+${diagnostic}` : diagnostic;
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
-  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(diagnostic, "utf8"), true);
+  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(recordedDiagnostic, "utf8"), true);
   return {
     gate_id: gate.id,
     kind: gate.kind,
     isolation: "disposable_exact_object_snapshot",
-    state,
-    failure_reason: reason,
+    state: recordedState,
+    failure_reason: recordedReason,
     command: gate.command,
     command_sha256: identity2(gate.command),
     resolved_executable: resolvedExecutable,
@@ -30660,16 +30665,20 @@ function flakyFingerprints(history) {
   const groups = /* @__PURE__ */ new Map();
   for (const entry of history) {
     if (entry.subject_sha256 === null) continue;
-    groups.set(entry.subject_sha256, [...groups.get(entry.subject_sha256) ?? [], entry.fingerprints]);
+    groups.set(entry.subject_sha256, [...groups.get(entry.subject_sha256) ?? [], entry]);
   }
-  const flaky = /* @__PURE__ */ new Set();
-  for (const runs of groups.values()) {
-    if (runs.length < 3) continue;
-    const universe = new Set(runs.flat());
-    for (const fingerprint2 of universe) {
-      const presence = runs.map((run) => run.includes(fingerprint2));
-      const turns = presence.filter((value, index) => index > 0 && value !== presence[index - 1]).length;
-      if (turns >= 2) flaky.add(fingerprint2);
+  const flaky = /* @__PURE__ */ new Map();
+  for (const receipts of groups.values()) {
+    for (const family of RECEIPT_FAMILIES) {
+      const runs = receipts.filter((entry) => entry.families.includes(family));
+      if (runs.length < 3) continue;
+      const observed = runs.map((run) => new Set(run.findings.filter((finding4) => finding4.family === family).map((finding4) => finding4.fingerprint)));
+      const universe = new Set(observed.flatMap((fingerprints) => [...fingerprints]));
+      for (const fingerprint2 of universe) {
+        const presence = observed.map((fingerprints) => fingerprints.has(fingerprint2));
+        const turns = presence.filter((value, index) => index > 0 && value !== presence[index - 1]).length;
+        if (turns >= 2) flaky.set(fingerprint2, { family, receipt_ids: runs.map((run) => run.receipt_id) });
+      }
     }
   }
   return flaky;
@@ -30681,18 +30690,21 @@ function classifySecondPass(input) {
   const currentByKey = new Map(input.current.map((item) => [key(item.finding), item]));
   const earlierWholeRepo = new Set(input.earlier.findings.filter((finding4) => finding4.anchor.kind === "whole_repo").map((finding4) => finding4.anchor.content_sha256));
   const earlierDirty = input.earlier.dirty !== false;
-  const flaky = input.flaky ?? /* @__PURE__ */ new Set();
+  const flaky = input.flaky ?? /* @__PURE__ */ new Map();
   const rows = [];
-  const row = (finding4, observed, classification, basis) => ({
-    fingerprint: finding4.fingerprint,
-    legacy_fingerprint: finding4.legacy_fingerprint,
-    family: finding4.family,
-    rule: finding4.rule,
-    path: finding4.path,
-    classification: flaky.has(finding4.fingerprint) ? "flaky" : classification,
-    observed,
-    basis: flaky.has(finding4.fingerprint) ? `alternates across >=3 receipts of one identical subject; underlying: ${classification}` : basis
-  });
+  const row = (finding4, observed, classification, basis) => {
+    const evidence = flaky.get(finding4.fingerprint);
+    return {
+      fingerprint: finding4.fingerprint,
+      legacy_fingerprint: finding4.legacy_fingerprint,
+      family: finding4.family,
+      rule: finding4.rule,
+      path: finding4.path,
+      classification: evidence === void 0 ? classification : "flaky",
+      observed,
+      basis: evidence === void 0 ? basis : `alternates across ${evidence.family} receipts ${evidence.receipt_ids.join(", ")} of one identical subject; underlying: ${classification}`
+    };
+  };
   for (const [joinKey, earlier] of earlierByKey) {
     if (!input.earlier.families.includes(earlier.family)) continue;
     const current = currentByKey.get(joinKey);
@@ -30881,7 +30893,12 @@ function runSecondPass(input) {
   const receiptPath = input.store.write(receipt, capture.repository);
   const history = input.store.forRepository(capture.repository_id).map((entry) => {
     const record4 = input.store.read(entry.receipt_id);
-    return { subject_sha256: record4.subject.repository_object?.sha256 ?? null, fingerprints: record4.findings.map((finding4) => finding4.fingerprint) };
+    return {
+      receipt_id: record4.receipt_id,
+      subject_sha256: record4.subject.repository_object?.sha256 ?? null,
+      families: record4.families,
+      findings: record4.findings.map((finding4) => ({ fingerprint: finding4.fingerprint, family: finding4.family }))
+    };
   });
   const rows = classifySecondPass({ earlier, current: anchored, git: input.git ?? gitPortFor(capture.repository), flaky: flakyFingerprints(history) });
   const counts = Object.fromEntries(SECOND_PASS_CLASSES.map((name) => [name, rows.filter((item) => item.classification === name).length]));

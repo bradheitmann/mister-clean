@@ -432,7 +432,8 @@ each finding from Git, never from opinion: `cleared`, `persisting`,
 `persisting_rewritten`, `persisting_unseen` (a MISS: the bytes were already
 committed at the earlier HEAD), `introduced`, `unresolvable_earlier_bytes`
 (the earlier subject was dirty, so the committed tree cannot prove absence), or
-`flaky` (alternates across three or more receipts of one identical subject).
+`flaky` (alternates across three or more receipts of one identical subject that
+examined the finding's family; receipts of other families contribute no turn).
 A pre-7.3 closeout bundle joins through its legacy fingerprints. Pass
 `--no-subject-hash` to skip the RepositoryObject capture on very large trees.
 

@@ -9,6 +9,7 @@
  *   introduced                 new now, and the earlier HEAD did not hold them
  *   unresolvable_earlier_bytes new now, not at the earlier HEAD, and the earlier subject was dirty
  *   flaky                      alternates across three or more receipts of one identical subject
+ *                              that examined the finding's family
  *
  * A pre-7.3 closeout bundle, which carries only legacy fingerprints, still
  * joins: its findings are read with anchor kind `legacy` and matched on
@@ -137,27 +138,50 @@ function earlierHolds(
   return publicSafetyValueDigestsInText(text).some((match) => match.rule === probe.rule && match.value_sha256 === probe.value_sha256);
 }
 
+/** One earlier receipt as the flaky history sees it: which families it examined and what it found. */
+export interface FlakyHistoryEntry {
+  readonly receipt_id: string;
+  readonly subject_sha256: string | null;
+  readonly families: readonly ReceiptFamily[];
+  readonly findings: readonly { readonly fingerprint: string; readonly family: ReceiptFamily }[];
+}
+
+/** Why a fingerprint is flaky: the receipts of its family, on one identical subject, that it alternated across. */
+export interface FlakyEvidence {
+  readonly family: ReceiptFamily;
+  /** Receipt ids in observation order; every one examined `family`. */
+  readonly receipt_ids: readonly string[];
+}
+
 /**
  * Fingerprints that alternate across three or more receipts of one identical
- * subject (`history` in observation order): the detector, not the repository,
- * changed its mind. Alternation means the presence sequence turns at least
- * twice (present, absent, present); a single turn is a miss that was later
- * seen, or a finding that stopped being reported, and is not flaky.
+ * subject (`history` in observation order) that examined the finding's family:
+ * the detector, not the repository, changed its mind. A receipt that did not
+ * run the family (a single-family AUDIT of another family) could not have seen
+ * the finding and contributes no turn. Alternation means the presence sequence
+ * turns at least twice (present, absent, present); a single turn is a miss that
+ * was later seen, or a finding that stopped being reported, and is not flaky.
+ * A SECOND_PASS receipt examined the families it re-audited and counts like an
+ * audit receipt of those families.
  */
-export function flakyFingerprints(history: readonly { readonly subject_sha256: string | null; readonly fingerprints: readonly string[] }[]): Set<string> {
-  const groups = new Map<string, readonly (readonly string[])[]>();
+export function flakyFingerprints(history: readonly FlakyHistoryEntry[]): Map<string, FlakyEvidence> {
+  const groups = new Map<string, readonly FlakyHistoryEntry[]>();
   for (const entry of history) {
     if (entry.subject_sha256 === null) continue;
-    groups.set(entry.subject_sha256, [...(groups.get(entry.subject_sha256) ?? []), entry.fingerprints]);
+    groups.set(entry.subject_sha256, [...(groups.get(entry.subject_sha256) ?? []), entry]);
   }
-  const flaky = new Set<string>();
-  for (const runs of groups.values()) {
-    if (runs.length < 3) continue;
-    const universe = new Set(runs.flat());
-    for (const fingerprint of universe) {
-      const presence = runs.map((run) => run.includes(fingerprint));
-      const turns = presence.filter((value, index) => index > 0 && value !== presence[index - 1]).length;
-      if (turns >= 2) flaky.add(fingerprint);
+  const flaky = new Map<string, FlakyEvidence>();
+  for (const receipts of groups.values()) {
+    for (const family of RECEIPT_FAMILIES) {
+      const runs = receipts.filter((entry) => entry.families.includes(family));
+      if (runs.length < 3) continue;
+      const observed = runs.map((run) => new Set(run.findings.filter((finding) => finding.family === family).map((finding) => finding.fingerprint)));
+      const universe = new Set(observed.flatMap((fingerprints) => [...fingerprints]));
+      for (const fingerprint of universe) {
+        const presence = observed.map((fingerprints) => fingerprints.has(fingerprint));
+        const turns = presence.filter((value, index) => index > 0 && value !== presence[index - 1]).length;
+        if (turns >= 2) flaky.set(fingerprint, { family, receipt_ids: runs.map((run) => run.receipt_id) });
+      }
     }
   }
   return flaky;
@@ -167,7 +191,7 @@ export interface ClassifyInput {
   readonly earlier: EarlierBaseline;
   readonly current: readonly AnchoredFinding[];
   readonly git: EarlierBytesGitPort;
-  readonly flaky?: ReadonlySet<string>;
+  readonly flaky?: ReadonlyMap<string, FlakyEvidence>;
 }
 
 /** Pure join and classification; Git is reached only through the port. */
@@ -178,18 +202,23 @@ export function classifySecondPass(input: ClassifyInput): SecondPassRow[] {
   const currentByKey = new Map(input.current.map((item) => [key(item.finding), item]));
   const earlierWholeRepo = new Set(input.earlier.findings.filter((finding) => finding.anchor.kind === "whole_repo").map((finding) => finding.anchor.content_sha256));
   const earlierDirty = input.earlier.dirty !== false;
-  const flaky = input.flaky ?? new Set<string>();
+  const flaky = input.flaky ?? new Map<string, FlakyEvidence>();
   const rows: SecondPassRow[] = [];
-  const row = (finding: ReceiptFinding, observed: SecondPassRow["observed"], classification: SecondPassClass, basis: string): SecondPassRow => ({
-    fingerprint: finding.fingerprint,
-    legacy_fingerprint: finding.legacy_fingerprint,
-    family: finding.family,
-    rule: finding.rule,
-    path: finding.path,
-    classification: flaky.has(finding.fingerprint) ? "flaky" : classification,
-    observed,
-    basis: flaky.has(finding.fingerprint) ? `alternates across >=3 receipts of one identical subject; underlying: ${classification}` : basis,
-  });
+  const row = (finding: ReceiptFinding, observed: SecondPassRow["observed"], classification: SecondPassClass, basis: string): SecondPassRow => {
+    const evidence = flaky.get(finding.fingerprint);
+    return {
+      fingerprint: finding.fingerprint,
+      legacy_fingerprint: finding.legacy_fingerprint,
+      family: finding.family,
+      rule: finding.rule,
+      path: finding.path,
+      classification: evidence === undefined ? classification : "flaky",
+      observed,
+      basis: evidence === undefined
+        ? basis
+        : `alternates across ${evidence.family} receipts ${evidence.receipt_ids.join(", ")} of one identical subject; underlying: ${classification}`,
+    };
+  };
   for (const [joinKey, earlier] of earlierByKey) {
     if (!input.earlier.families.includes(earlier.family)) continue;
     const current = currentByKey.get(joinKey);
@@ -444,9 +473,14 @@ export function runSecondPass(input: SecondPassInput): { readonly result: Second
     finished_at: clock().toISOString(),
   });
   const receiptPath = input.store.write(receipt, capture.repository);
-  const history = input.store.forRepository(capture.repository_id).map((entry) => {
+  const history: FlakyHistoryEntry[] = input.store.forRepository(capture.repository_id).map((entry) => {
     const record = input.store.read(entry.receipt_id);
-    return { subject_sha256: record.subject.repository_object?.sha256 ?? null, fingerprints: record.findings.map((finding) => finding.fingerprint) };
+    return {
+      receipt_id: record.receipt_id,
+      subject_sha256: record.subject.repository_object?.sha256 ?? null,
+      families: record.families,
+      findings: record.findings.map((finding) => ({ fingerprint: finding.fingerprint, family: finding.family })),
+    };
   });
   const rows = classifySecondPass({ earlier, current: anchored, git: input.git ?? gitPortFor(capture.repository), flaky: flakyFingerprints(history) });
   const counts = Object.fromEntries(SECOND_PASS_CLASSES.map((name) => [name, rows.filter((item) => item.classification === name).length])) as Record<SecondPassClass, number>;
