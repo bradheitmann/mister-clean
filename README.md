@@ -427,6 +427,10 @@ A pre-7.3 closeout bundle joins through its legacy fingerprints. Pass
 The public distribution contains generalized doctrine and synthetic examples.
 Private case studies, local paths, credentials, project names, and operational
 evidence do not belong in this repository or its Git history.
+`audit public-safety <repo> --json` walks the working tree, so each finding
+carries `provenance` (`tracked`, `untracked`, `ignored`, or `unknown` when Git
+could not say) and the report carries `provenance_counts` and
+`provenance_source`; `--tracked` scans only tracked paths and labels them so.
 
 ## License
 
