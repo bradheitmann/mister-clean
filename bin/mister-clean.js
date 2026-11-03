@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync14, readFileSync as readFileSync19, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
-import { isAbsolute as isAbsolute24, join as join19, relative as relative20, resolve as resolve28, sep as sep20 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync20, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
+import { isAbsolute as isAbsolute24, join as join20, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -30746,6 +30746,27 @@ function runSecondPass(input) {
   return { result, receipt, receipt_path: receiptPath };
 }
 
+// src/toolchain-pin.ts
+import { existsSync as existsSync14, readFileSync as readFileSync19 } from "fs";
+import { join as join19, resolve as resolve28 } from "path";
+var BUN_VERSION_FILE = ".bun-version";
+function runningBunVersion() {
+  return process.versions.bun ?? null;
+}
+function readBunPin(root) {
+  const path = join19(resolve28(root), BUN_VERSION_FILE);
+  if (!existsSync14(path)) return void 0;
+  const version = readFileSync19(path, "utf8").trim();
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
+  return version;
+}
+function checkToolchainPin(root, actual) {
+  const version = readBunPin(root);
+  if (version === void 0) return { ok: true, pinned: false };
+  if (actual !== null && actual !== version) return { ok: false, pinned: true, version, actual };
+  return { ok: true, pinned: true, version, actual };
+}
+
 // src/cli.ts
 var UsageError = class extends Error {
 };
@@ -30783,16 +30804,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside2(root, candidate) {
-  const rootPath = resolve28(root);
-  const candidatePath = resolve28(candidate);
+  const rootPath = resolve29(root);
+  const candidatePath = resolve29(candidate);
   const relation = relative20(
-    existsSync14(rootPath) ? realpathSync12(rootPath) : rootPath,
-    existsSync14(candidatePath) ? realpathSync12(candidatePath) : candidatePath
+    existsSync15(rootPath) ? realpathSync12(rootPath) : rootPath,
+    existsSync15(candidatePath) ? realpathSync12(candidatePath) : candidatePath
   );
   return relation === "" || !relation.startsWith(`..${sep20}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync19(path, "utf8"));
+  return JSON.parse(readFileSync20(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -30807,11 +30828,11 @@ async function runSemantic(args, io) {
     const proposalsPath = removeOption(args, "--case-proposals", true);
     const runId = removeOption(args, "--run-id", true);
     const challengeNonce = removeOption(args, "--nonce", true);
-    const outputPath = resolve28(removeOption(args, "--output", true));
+    const outputPath = resolve29(removeOption(args, "--output", true));
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync14(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync15(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -31008,7 +31029,7 @@ async function runValidate(args, io, runtimeAttestation) {
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join19(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join20(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -31054,13 +31075,13 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync14(root) || !statSync7(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve28(root)}`);
+  if (!existsSync15(root) || !statSync7(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve29(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
   if (json) {
-    io.stdout(JSON.stringify({ resolved_root: resolve28(root), ...result }, null, 2));
+    io.stdout(JSON.stringify({ resolved_root: resolve29(root), ...result }, null, 2));
     return result.exitCode;
   }
   if (result.status === "unknown") {
@@ -31069,9 +31090,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join19(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync14(reference)) return 0;
-  const text3 = readFileSync19(reference, "utf8");
+  const reference = join20(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync15(reference)) return 0;
+  const text3 = readFileSync20(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -31207,10 +31228,17 @@ async function runManifest(args, io) {
   const check = removeFlag(args, "--check");
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
+  if (packageSurface) {
+    const pin = checkToolchainPin(root, runningBunVersion());
+    if (!pin.ok) {
+      io.stderr(`manifest: TOOLCHAIN MISMATCH (bun ${pin.actual}; repository pins ${pin.version} in .bun-version)`);
+      return 2;
+    }
+  }
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join19(resolve28(root), "MANIFEST.sha256");
+  const path = join20(resolve29(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync14(path) || readFileSync19(path, "utf8") !== result.content) {
+    if (!existsSync15(path) || readFileSync20(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -31259,7 +31287,7 @@ async function runCensus(args, io) {
       output_path: output
     });
     writeFileSync8(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
-    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve28(output)}`);
+    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve29(output)}`);
     return 0;
   }
   if (subcommand === "validate") {
@@ -31443,9 +31471,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "github_actions", file: "github-actions-audit.json" },
               { family: "semantic_boundary", file: "semantic-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync14(join19(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join19(bundle, entry.file)) }));
-            const report = record3(readJson3(join19(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join19(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync15(join20(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join20(bundle, entry.file)) }));
+            const report = record3(readJson3(join20(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join20(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
             const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
@@ -31495,7 +31523,7 @@ function isDirectInvocation(argvPath, moduleUrl) {
   try {
     return realpathSync12(argvPath) === realpathSync12(fileURLToPath3(moduleUrl));
   } catch {
-    const invokedPath = resolve28(argvPath);
+    const invokedPath = resolve29(argvPath);
     return invokedPath === fileURLToPath3(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }
