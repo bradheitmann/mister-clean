@@ -10278,6 +10278,7 @@ function isNestedCheckout(repository, directory) {
 var PLANNING_CONFIG_PATH = ".mister-clean/planning.json";
 var PLANNING_CONFIG_SCHEMA = "mister-clean.planning-config/1";
 var PLANNING_CONFIG_KEYS = /* @__PURE__ */ new Set(["schema", "roots", "exclude"]);
+var PLANNING_GATE_EXCLUDE_KINDS = /* @__PURE__ */ new Set(["evidence", "archive"]);
 var PlanningConfigInvalidError = class extends Error {
   constructor(path, reason) {
     super(`planning_config_invalid: ${path}: ${reason}`);
@@ -10294,23 +10295,37 @@ function isPlanningPathExcluded(relativePath, exclude) {
   const normalized = relativePath.split(sep3).join("/");
   return exclude.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
 }
+function planningConfigPath(label, entry, invalid) {
+  const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
+  if (isAbsolute3(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
+    throw invalid(`${label} ${JSON.stringify(entry)} is an absolute path`);
+  }
+  if (entry.includes("\\")) throw invalid(`${label} ${JSON.stringify(entry)} must use "/" separators`);
+  const segments = trimmed.split("/");
+  if (segments.includes("..")) throw invalid(`${label} ${JSON.stringify(entry)} has a ".." segment`);
+  if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
+    throw invalid(`${label} ${JSON.stringify(entry)} must name a path below the repository root`);
+  }
+  return trimmed;
+}
 function planningConfigEntries(record4, key, invalid) {
   const value = record4[key];
   if (value === void 0) return void 0;
   if (!Array.isArray(value)) throw invalid(`${key} must be an array of repository-relative paths`);
   return value.map((entry, index) => {
-    if (typeof entry !== "string") throw invalid(`${key}[${String(index)}] must be a string`);
-    const trimmed = entry.endsWith("/") ? entry.slice(0, -1) : entry;
-    if (isAbsolute3(entry) || entry.startsWith("/") || entry.startsWith("\\") || /^[A-Za-z]:/u.test(entry)) {
-      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} is an absolute path`);
+    const label = `${key}[${String(index)}]`;
+    if (typeof entry === "string") return { path: planningConfigPath(label, entry, invalid) };
+    if (key !== "exclude" || !entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw invalid(`${label} must be a string${key === "exclude" ? ' or a { "path", "kind" } object' : ""}`);
     }
-    if (entry.includes("\\")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must use "/" separators`);
-    const segments = trimmed.split("/");
-    if (segments.includes("..")) throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} has a ".." segment`);
-    if (trimmed === "" || segments.some((segment) => segment === "" || segment === ".")) {
-      throw invalid(`${key}[${String(index)}] ${JSON.stringify(entry)} must name a path below the repository root`);
+    const object9 = entry;
+    const unknownKeys = Object.keys(object9).filter((name) => name !== "path" && name !== "kind").sort();
+    if (unknownKeys.length) throw invalid(`${label} has unknown key(s) ${JSON.stringify(unknownKeys)}`);
+    if (typeof object9.path !== "string") throw invalid(`${label}.path must be a string`);
+    if (typeof object9.kind !== "string" || !PLANNING_GATE_EXCLUDE_KINDS.has(object9.kind)) {
+      throw invalid(`${label}.kind ${JSON.stringify(object9.kind)} is not one of ${JSON.stringify([...PLANNING_GATE_EXCLUDE_KINDS].sort())}`);
     }
-    return trimmed;
+    return { path: planningConfigPath(`${label}.path`, object9.path, invalid), kind: object9.kind };
   });
 }
 function insideRepository(repositoryReal, path) {
@@ -10342,8 +10357,10 @@ function loadPlanningConfig(repository) {
   if (record4.schema !== PLANNING_CONFIG_SCHEMA) {
     throw invalid(`unknown schema ${JSON.stringify(record4.schema)}; expected ${JSON.stringify(PLANNING_CONFIG_SCHEMA)}`);
   }
-  const declared = planningConfigEntries(record4, "roots", invalid);
-  const exclude = [...new Set(planningConfigEntries(record4, "exclude", invalid) ?? [])].sort(compareCodePoints3);
+  const declared = planningConfigEntries(record4, "roots", invalid)?.map((entry) => entry.path);
+  const excludeEntries = planningConfigEntries(record4, "exclude", invalid) ?? [];
+  const exclude = [...new Set(excludeEntries.map((entry) => entry.path))].sort(compareCodePoints3);
+  const gateExclude = [...new Set(excludeEntries.filter((entry) => entry.kind !== void 0 && PLANNING_GATE_EXCLUDE_KINDS.has(entry.kind)).map((entry) => entry.path))].sort(compareCodePoints3);
   const repositoryReal = realpathSync(root);
   let roots;
   if (declared !== void 0) {
@@ -10372,7 +10389,7 @@ function loadPlanningConfig(repository) {
     const ordered = [...new Set(declared)].sort((left, right) => left.split("/").length - right.split("/").length || compareCodePoints3(left, right));
     roots = ordered.filter((candidate, index) => !ordered.slice(0, index).some((parent) => candidate.startsWith(`${parent}/`))).sort();
   }
-  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes2(bytes2), roots, exclude };
+  return { path: PLANNING_CONFIG_PATH, sha256: sha256Bytes2(bytes2), roots, exclude, gateExclude };
 }
 var PLANNING_IGNORED_NAMES = /* @__PURE__ */ new Set([
   "__fixtures__",
@@ -18041,9 +18058,19 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
 // src/closeout/native-gates.ts
 var DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 var COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
-var DISCOVERY_SCHEMA_VERSION = "1.3";
+var DISCOVERY_SCHEMA_VERSION = "1.4";
+var LEGACY_DISCOVERY_SCHEMA_VERSION = "1.3";
 var COVERAGE_SCHEMA_VERSION = "1.4";
 var SCHEMA_VERSION2 = DISCOVERY_SCHEMA_VERSION;
+var EXCLUDED_CANDIDATE_KIND = "gate_candidate_excluded_by_planning_policy";
+var EXCLUDED_CANDIDATE_MANIFESTS = /* @__PURE__ */ new Map([
+  ["package.json", "package_manifest"],
+  ["Cargo.toml", "cargo_manifest"],
+  ["go.mod", "go_manifest"]
+]);
+function excludedCandidateNote(candidate) {
+  return `gate candidate excluded by planning policy: ${candidate.path}`;
+}
 var DEFAULT_TIMEOUT_MS = 10 * 60 * 1e3;
 var DEFAULT_OUTPUT_BYTES = 1024 * 1024;
 var DEFAULT_TERMINATION_GRACE_MS = 1e3;
@@ -19079,8 +19106,30 @@ function validateGateDefinition(value, label, discoveryRefs, errors) {
   }
   return errors.length === before;
 }
+function validateExcludedCandidate(value, label, errors) {
+  const before = errors.length;
+  const raw = validateExactKeys(value, ["kind", "path", "manifest", "exclude_root"], label, errors);
+  if (!raw) return false;
+  if (raw.kind !== EXCLUDED_CANDIDATE_KIND) errors.push(`${label}.kind is invalid`);
+  if (typeof raw.path !== "string") {
+    errors.push(`${label}.path is invalid`);
+  } else {
+    try {
+      validatePortablePath2(raw.path, label);
+    } catch (error) {
+      errors.push(errorMessage2(error));
+    }
+    const expectedManifest = EXCLUDED_CANDIDATE_MANIFESTS.get(basename7(raw.path));
+    if (expectedManifest === void 0 || raw.manifest !== expectedManifest) errors.push(`${label}.manifest does not match path`);
+    if (typeof raw.exclude_root !== "string" || !isPlanningPathExcluded(raw.path, [raw.exclude_root])) {
+      errors.push(`${label}.exclude_root does not cover path`);
+    }
+  }
+  return errors.length === before;
+}
 function validateDiscoveryIntegrity(discovery) {
   const errors = [];
+  const legacy = record(discovery)?.schema_version === LEGACY_DISCOVERY_SCHEMA_VERSION;
   const raw = validateExactKeys(discovery, [
     "record_type",
     "schema_version",
@@ -19089,11 +19138,28 @@ function validateDiscoveryIntegrity(discovery) {
     "gates",
     "required_gate_ids",
     "execution_coordination_key_sha256",
-    "catalog_sha256"
+    "catalog_sha256",
+    ...legacy ? [] : ["excluded_candidates"]
   ], "discovery", errors);
   if (!raw) return errors;
   if (raw.record_type !== DISCOVERY_RECORD_TYPE) errors.push("discovery.record_type is invalid");
-  if (raw.schema_version !== SCHEMA_VERSION2) errors.push("discovery.schema_version is invalid");
+  if (raw.schema_version !== SCHEMA_VERSION2 && !legacy) errors.push("discovery.schema_version is invalid");
+  if (!legacy) {
+    if (!Array.isArray(raw.excluded_candidates)) {
+      errors.push("discovery.excluded_candidates must be an array");
+    } else {
+      const seen2 = /* @__PURE__ */ new Set();
+      const paths = [];
+      raw.excluded_candidates.forEach((candidate, index) => {
+        if (!validateExcludedCandidate(candidate, `discovery.excluded_candidates[${String(index)}]`, errors)) return;
+        if (seen2.has(candidate.path)) errors.push(`discovery.excluded_candidates has duplicate path ${JSON.stringify(candidate.path)}`);
+        seen2.add(candidate.path);
+        paths.push(candidate.path);
+      });
+      const canonical4 = [...paths].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+      if (!stableEqual(paths, canonical4)) errors.push("discovery.excluded_candidates is not in canonical path order");
+    }
+  }
   validateRepositoryObjectSchema(raw.repository_object, "discovery.repository_object", errors);
   if (typeof raw.execution_coordination_key_sha256 !== "string" || !HEX642.test(raw.execution_coordination_key_sha256)) {
     errors.push("discovery.execution_coordination_key_sha256 is invalid");
@@ -19140,14 +19206,26 @@ function discoverNativeGates(repository, repositoryObject) {
   const paths = trackedPaths2(root);
   const runnerFindings = verificationRunnerSafetyFindings(root, paths);
   const runnerSourcePaths = [...new Set(runnerFindings.map((finding4) => finding4.path))].sort();
-  const sourcePaths = paths.filter((path) => basename7(path) === "package.json" || basename7(path) === "Cargo.toml" || basename7(path) === "go.mod" || LOCKFILE_MANAGERS.has(basename7(path)));
+  const gateExclude = loadPlanningConfig(root)?.gateExclude ?? [];
+  const excludeRootFor = (path) => gateExclude.find((prefix) => isPlanningPathExcluded(path, [prefix]));
+  const excludedCandidates = [];
+  const candidatePaths2 = paths.filter((path) => {
+    const excludeRoot = excludeRootFor(path);
+    if (excludeRoot === void 0) return true;
+    const manifest2 = EXCLUDED_CANDIDATE_MANIFESTS.get(basename7(path));
+    if (manifest2 !== void 0) {
+      excludedCandidates.push({ kind: EXCLUDED_CANDIDATE_KIND, path, manifest: manifest2, exclude_root: excludeRoot });
+    }
+    return false;
+  });
+  const sourcePaths = candidatePaths2.filter((path) => EXCLUDED_CANDIDATE_MANIFESTS.has(basename7(path)) || LOCKFILE_MANAGERS.has(basename7(path)));
   const refs = [
     ...sourcePaths.map((path) => sourceRef(root, path)),
     ...runnerSourcePaths.map((path) => sourceRef(root, path, "runner_source"))
   ].sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
   let gates = [
-    ...discoverNodeGates(root, paths, refs),
-    ...discoverFixedGates(paths, refs)
+    ...discoverNodeGates(root, candidatePaths2, refs),
+    ...discoverFixedGates(candidatePaths2, refs)
   ];
   if (gates.length === 0) {
     gates = [gateDefinition({
@@ -19175,7 +19253,8 @@ function discoverNativeGates(repository, repositoryObject) {
     execution_coordination_key_sha256: repositoryVerificationCoordinationKey(root),
     source_refs: refs,
     gates,
-    required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id)
+    required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id),
+    excluded_candidates: excludedCandidates
   };
   return { ...record4, catalog_sha256: identity2(record4) };
 }
@@ -27971,6 +28050,18 @@ function assemblePrepareReport(context) {
       }],
       notes: ["Repository-native test, lint, typecheck, build, or established aggregate gates are not yet fully green on the bound object."]
     });
+  }
+  const excludedCandidates = nativeGateDiscovery.excluded_candidates ?? [];
+  if (excludedCandidates.length > 0) {
+    const verification = asObject(asObject(report.dimensions, "closeout-report.dimensions").verification, "closeout-report.dimensions.verification");
+    verification.evidence = [
+      ...Array.isArray(verification.evidence) ? verification.evidence : [],
+      ...excludedCandidates.map((candidate) => ({ ...candidate }))
+    ];
+    verification.notes = [
+      ...Array.isArray(verification.notes) ? verification.notes : [],
+      ...excludedCandidates.map(excludedCandidateNote)
+    ];
   }
   asObject(report.authorization_basis, "closeout-report.authorization_basis").ref = options.requestRef;
   report.scope = { included: [`repository:${repoId}`], excluded: [], policy_sources: [] };
