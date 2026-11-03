@@ -1,4 +1,4 @@
-# State — mister-clean — 2026-11-03T01:25Z (from `date -u`), written by the project PM (Claude Code, Opus 5.5) at the end of the wind-down session
+# State — mister-clean — 2026-11-03T04:17Z (from `date -u`), written by the project PM (Claude Code) at the 7.2.0 release
 Proven (with the proof names):
 - Nothing under this charter's Slice Zero yet; proven_on is empty.
 - Dependency advisories cleared, native-gate spawn fix (60e748d), hermetic test fixtures (5b83a44) and discovery-and-retirement (c5a85c9): each independently verified on its exact tip, as recorded in earlier states.
@@ -10,49 +10,53 @@ Proven (with the proof names):
 - Planning-audit out-of-memory fix (c8e388c; a Claude reviewer REJECTED the first freeze and ACCEPTED a3253787):
   - no planning, bundle or analysis walk descends into a nested checkout (a directory holding `.git`);
   - on a 14,600-file workspace, in-process peak memory went from 15.8 GB (OOM, exit 134) to 2.0 GB, and the audit now completes.
+- Two customer defects (77a0b7a4; MC/DEV, a second model family, REJECTED 218898be and ACCEPTED 77a0b7a4; merged as 4bddae5 with hosted CI green on the exact tip):
+  - `prepare` on a large repository: `trackedShippablePaths` goes through the bounded Git listing; a regression test lists more than 1 MiB of tracked paths through an index-only fixture;
+  - repository planning config `.mister-clean/planning.json` (`mister-clean.planning-config/1`; `roots`, `exclude`); invalid config is a typed `planning_config_invalid` refusal; honored identically by `audit planning`, `prepare` and the bundle validator; on the 14,600-file workspace with a config: findings 29,137 → 633, output 401 MB → 5.8 MB, 712 s → 15 s.
 - Field-evals:
   - the 2026-10-31 window;
-  - reviewer-control card RC-001 with per-replay evidence and defect attribution (3d5280e). Flash is the stricter reviewer: false rejects 4/36 vs v4-pro 3/115 (p = 0.056), and the planted defect is sufficient in 10/36 vs 68/113 (p = 0.0006).
-  - RC-001 is bound to model-registry card ids (this change).
+  - reviewer-control card RC-001 with per-replay evidence and defect attribution (3d5280e). Flash is the stricter reviewer: false rejects 4/36 vs v4-pro 3/115 (p = 0.056), and the planted defect is sufficient in 10/36 vs 68/113 (p = 0.0006);
+  - instruction-polarity card RC-002 (implicit-constant omission; v4-pro 11/14 vs flash 5/30, p = 0.00013; the k=3 probe is directional only);
+  - every card and the customer test are bound to model-registry export 2026.11.03-1 (PR #44, e542257); both customer-test mutants observed RED.
 - Generic view-ablation A/B comparator, `ablations/view-ab.ts` (`ablation-replay/1`, 634038e): self-test plus a fail-without mutant (observed RED). The project consumed it in its round-18 ablation.
 - Charter: pinned binary b9323cd locally (hooks reinstalled); SPEC 56f03db2 unchanged since 7b12eea.
+- 7.2.0 candidate (this commit, on main 4bddae5): version 7.2.0 in package.json and SKILL.md; MANIFEST.sha256 regenerated from two byte-identical clean builds (dist/public.js 4acf097e…, dist/stdio.js 94cd6f13…, bin 5072720b…); `manifest:package:check` PASS (82 entries); `charter check --strict` ok; prospective-package public-safety PASS (83 files). The release proof is the CI tag run's verified archive, never this checkout.
 Not proven / known gaps:
 - INTENT and COMMON-STANDARD v0.2 await owner ratification.
-- The 7.1.0 candidate (all fixes above) is not released; the installed judge is still 7.0.2. Consumers (for example the governance repo's odin) see the fixes only after the release lane (Lane 4: classify the version, full acceptance, stop before publish). Not started.
+- Release state: v7.1.0 was published 2026-10-19 (49fc8207) as a source release whose lightweight tag never triggered CI, so it has no verified archive and consumers still run 7.0.2. 7.2.0 is every fix merged since v7.1.0 plus the two defect fixes above, released with an annotated tag pushed from git so that CI builds the verified archive. The field-study version is 7.3.0 (run receipts, second pass): its lane was frozen at e7fed741 and REJECTED by MC/DEV on one defect (MANIFEST carried the previous lane's dist hashes; all 19 proofs, 4 mutants and the privacy sweep were green); rework is a rebase onto 4bddae5 and a regenerated MANIFEST.
 - Local full suite on this host: NOT VERIFIED. Hosted CI is the full-suite verdict. Two environment classes:
   - capsule commits refused by the host-global language guard (owner decision pending);
   - socket and process-kill tests failing in the operator agent's shell.
+- `build:scorecard` on this host (bun 1.3.9) emits the same module with a different export order than the committed bytes; the committed bytes are kept because CI's `build:scorecard:check` is the verdict. Toolchain-version drift, not a content change.
 - The formal Mister Clean prepare/closure bundle is not produced (it needs a local full suite).
 - **CI pins charter 7b12eea while local is b9323cd.** The CI bump, and wiring `bun ablations/view-ab.ts --self-test` into CI, both need a workflow edit. The host's security-guidance hook blocked that edit (its warning is about untrusted event input, which neither change uses), and it was deliberately not routed around.
-- **Model-registry joins:**
-  - all 15 field-window agent cards and RC-001 now name registry card ids (export 2026.11.02-3), or `none` where the export has no card (9 cards: nemotron-3.5-super, step-5-preview, inkling, mimo-v2.6-pro, nemotron-3-ultra, muse-wonder);
-  - the customer test is re-pinned to the current export 2026.11.02-3 (fixture vendored with the publisher's clearance; both mutants observed RED);
-  - the registry will retire card deepseek-v4-flash for deepseek-v4.1-flash on route.deepseek.deepseek-flash (its lane flash-identity-1, expected export 2026.11.03-1). The three flash cards and RC-001 are re-bound then.
+- **Model-registry joins:** 9 field-window cards still name `none` because the export has no card for them (nemotron-3.5-super, step-5-preview, inkling, mimo-v2.6-pro, nemotron-3-ultra, muse-wonder); they bind when the registry publishes cards.
 - Obligations:
   - O-STD-1..5, O-PLAN-1, O-RET-2 (self-ratification gap; interim rule: commit the owner's ruling before the retirement record);
-  - O-PERF-2 (`audit planning` emits about 401 MB of JSON on a large workspace; peak RSS 6.35 GB);
+  - O-PERF-2, narrowed: with a planning config the large-workspace `audit planning` output is 5.8 MB; the heuristic path (no config) is still about 401 MB of JSON at 6.35 GB peak RSS;
   - O-CENSUS-1 (`src/census.ts` walk has no nested-checkout check);
   - O-ABL-1 (the CI wiring above);
-  - O-RC-002 (instruction-polarity card, waiting on the evidence owner's second-family check);
-  - O-R18-2 (a by-reference false-fail check, waiting for a P05 reconciler item that passes inline).
+  - O-R18-2 (a by-reference false-fail check, waiting for a P05 reconciler item that passes inline);
   - O-FE1-SCHEMA (seam-sync with the main customer project): FE-1 reads a customer project's published telemetry schemas (named in that project's seam record, not here), with raw task-dir reads only where no schema exists. Today mister-clean evals read raw task dirs.
 Exact last-green command(s):
-- charter check --strict (charter b9323cd), exit 0
-- mister-clean (installed release 7.0.2) audit github-actions: pass, 0 findings
-- bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt: PASS
+- charter check --strict (charter b9323cd), exit 0, on this candidate
+- MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts manifest . --package --check: PASS (82 entries), on this candidate after two byte-identical clean builds
+- bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt: PASS (83 files)
 - bun ablations/view-ab.ts --self-test: ok
-- hosted CI verify, dependency-audit and charter on main 634038e: success
+- hosted CI verify, dependency-audit and charter on 77a0b7a4 (PR #45) and on main 4bddae5: success
+- mister-clean (installed release 7.0.2) audit github-actions: pass, 0 findings
 Exact last-red command(s) and why:
 - local `bun run test` at 1ba6d13: `build:verified` stops at its capsule commit (host-global language guard). Environment; red identically at base.
 - local test:node / test:bun at 1ba6d13: 14 and 9 failures in the environment classes above.
+- `bun run build:raw` on this host stops at a socket test; the remaining steps (tsup, control-plane:build, package:surface:check, sync:cli, manifest:package) were run by hand for this candidate.
 Next three bounded items (in order):
-1. Lane 4: the 7.1.0 release candidate. Classify the version, run full acceptance on a host without the guard (or after the owner's capsule decision), stop before publish.
-2. Model-registry joins: re-bind the flash cards and RC-001 to deepseek-v4.1-flash when export 2026.11.03-1 lands; re-bind `none` cards when the registry adds them; re-pin the customer test each focus window.
-3. O-PERF-2 (bounded/summary planning output) and O-CENSUS-1.
+1. Tag v7.2.0 (annotated, from git), verify the CI archive, install it, and re-run prepare on the large workspace.
+2. 7.3.0: rework e7fed741 (rebase, MANIFEST), re-QA, land, tag; then the self-clean loop on this repository, then the field study across the other repositories.
+3. The data-product slice (O-DATA-1): store, importer, starter-set derivation per charter/owner-decisions/2026-11-03-starter-eval-set.md, redacting export. O-CENSUS-1 remains.
 Housekeeping done at wind-down (2026-11-03):
-- Branches: only `main` plus the two early field-observation branches behind PR #8 and PR #9 remain on origin. Six merged or superseded branches were deleted after confirming each tip has an `archive/*` tag on origin.
+- Branches: only `main` plus the two early field-observation branches behind PR #8 and PR #9 remain on origin. Merged or superseded branches were deleted after confirming each tip has an `archive/*` tag on origin.
 - The PM's local private data was consolidated into two roots (the product state directory and the agent private root) plus a tool cache. It was verified by an independent reviewer. Nothing private is in this repository.
-- New obligation O-DATA-1 (owner request): consolidate eval, case and field-study data from every repository that uses Mister Clean into one store, as a usable data product. Inventory first, then the FE-1 schema, store and importer, then a redacting export. Owner decisions are needed on what is public and on the starter set.
+- New obligation O-DATA-1 (owner request): consolidate eval, case and field-study data from every repository that uses Mister Clean into one store, as a usable data product. Inventory first, then the FE-1 schema, store and importer, then a redacting export. The owner decided the starter set (charter/owner-decisions/2026-11-03-starter-eval-set.md); what else is public is still open.
 
 Open owner decisions:
 - Ratify INTENT and COMMON-STANDARD v0.2.

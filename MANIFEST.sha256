@@ -1,7 +1,7 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
 2578326bd3f86df141bcec362a39dd9e894c96b4e032c0306517ec27a9998555  ./README.md
 1c4bdca67124f577bebe87528e852a44f48d772a71255b68e9780c52b153b803  ./SECURITY.md
-29cdf9c4441c8327e9d9eaca6a6dad78b0eb37505ded79e41eef50ce8b0665ff  ./SKILL.md
+16bc5abe5fe4b12f578747b39c81309f2ff2034e468e6fe097bff55bf7100904  ./SKILL.md
 5e575cbe7a53b8b85aa0b0924eabf338e88669aaf368ae2cbff48a7c6eccf80e  ./THIRD_PARTY_NOTICES.md
 4e66270c944ed7b89ba2c391dec4be7d7a8c18a0fc43fde3128ccea0df68db71  ./agents/openai.yaml
 1335d4e7226703a3060ada7a75f279aa07eefa0d25e6c1118eeb19cfc647b0b9  ./assets/action-manifest.json
@@ -47,15 +47,15 @@ eed988e3e89d825caf37c2db520b760decce9664e29572af20a73af8e521995d  ./dist/control
 20c2f4014c2b14c6076d6b4f63ed0b112df7d08b5abd98e631c0a548db5f5220  ./dist/planning.d.ts
 d079be0c4fbef7e61b643f2cd5991ed856c35d2279f153fcbef32d144eef3303  ./dist/planning.js
 3ae6b5a0a37ccefb99acb0e1413da1780ba64e1b52792e7ab36328eaf83b77ce  ./dist/public.d.ts
-6863252615cffabd0365181ad48e9c27cde9968f6145ae26f16eddfb0889f058  ./dist/public.js
+4acf097ee1263ef7b5a1d4ac13cbd541c8b14feb0de18252c7e25d626e5d8b99  ./dist/public.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
-f7eb06ac7fe3724b17443b7eaf9591bc91f3029a1a50aebd05075a08b793ef25  ./dist/stdio.js
+94cd6f131a4838ddbc618f7884061d0e7b403e0b87e6b528498f60d5d6478e75  ./dist/stdio.js
 e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md
 e77aa854e06035c0a51b8e95779e8121689e493b3536564e8fa2ad9f79927834  ./evals/rotation-campaign.md
 34fcc94c1a7a86f9746a7bb93e1380768f13485260b78af76d0c86eabb656214  ./examples/example-report.md
-e3ee6987c37e6397c6994216841bc4c8fb005ec8b48ac1c172403455b510fa54  ./package.json
+c3e5e9e87bfbde097d8b5b83baa0f4b7c2a7f721b611969d9f06871cdd833932  ./package.json
 42cc071449e75dbe46fac9938ef67d3a44b08c02d452441b7ab6f46f4b0d4bd4  ./references/authorization-and-modes.md
 84ff460cfeac5ab4f2becaf31520bbeb2403b4ab0c876cab20cca166e9671ad1  ./references/behavioral-evals.md
 1479d0d0ca5b3f947f255dca3527203a6a9f8224551bed7d79f745fe4488b69c  ./references/capability-adoption.md
