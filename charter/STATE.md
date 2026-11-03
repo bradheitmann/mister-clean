@@ -1,4 +1,5 @@
 # State — mister-clean — 2026-11-03T06:17Z (from `date -u`), written by the project PM (Claude Code) at the 7.3.0 release
+HEAD: fca67edf224a6877f3d181307392ea1f36336016 (main, v7.3.0) — the object every claim below was verified on; successors compare before trusting a line.
 Proven (with the proof names):
 - Nothing under this charter's Slice Zero yet; proven_on is empty.
 - Dependency advisories cleared, native-gate spawn fix (60e748d), hermetic test fixtures (5b83a44) and discovery-and-retirement (c5a85c9): each independently verified on its exact tip, as recorded in earlier states.
