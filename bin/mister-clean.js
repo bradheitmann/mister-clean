@@ -7361,7 +7361,7 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync16, readFileSync as readFileSync21, realpathSync as realpathSync13, statSync as statSync8, writeFileSync as writeFileSync8 } from "fs";
+import { existsSync as existsSync17, readFileSync as readFileSync21, realpathSync as realpathSync13, statSync as statSync8, writeFileSync as writeFileSync8 } from "fs";
 import { isAbsolute as isAbsolute25, join as join21, relative as relative21, resolve as resolve30, sep as sep21 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
@@ -23957,9 +23957,9 @@ async function generatePackageManifest(root) {
 // src/closeout/native-gate-runner.ts
 import { randomUUID as randomUUID4 } from "crypto";
 import { spawnSync as spawnSync5 } from "child_process";
-import { accessSync as accessSync2, constants as constants4, lstatSync as lstatSync10, realpathSync as realpathSync6 } from "fs";
+import { accessSync as accessSync2, constants as constants4, existsSync as existsSync6, lstatSync as lstatSync10, realpathSync as realpathSync6 } from "fs";
 import { lstat as lstat6, mkdir as mkdir3, realpath as realpath6, rm as rm3, writeFile as writeFile2 } from "fs/promises";
-import { tmpdir as tmpdir4 } from "os";
+import { homedir, tmpdir as tmpdir4 } from "os";
 import { delimiter as delimiter2, isAbsolute as isAbsolute14, join as join9, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
 
 // src/closeout/execution-supervisor.ts
@@ -24377,6 +24377,25 @@ function executableUnchanged(executable) {
     return false;
   }
 }
+var TOOLCHAIN_LOCATORS = [
+  ["RUSTUP_HOME", ".rustup"],
+  ["CARGO_HOME", ".cargo"],
+  ["GOPATH", "go"],
+  ["GOMODCACHE", join9("go", "pkg", "mod")]
+];
+function toolchainLocators(environment = process.env, operatorHome = environment.HOME ?? homedir()) {
+  const locators = {};
+  for (const [name, conventional] of TOOLCHAIN_LOCATORS) {
+    const explicit = environment[name];
+    if (explicit !== void 0 && explicit !== "") {
+      locators[name] = explicit;
+      continue;
+    }
+    const candidate = join9(operatorHome, conventional);
+    if (existsSync6(candidate)) locators[name] = candidate;
+  }
+  return locators;
+}
 function scrubbedEnvironment(home) {
   const env = {
     PATH: process.env.PATH ?? "",
@@ -24394,7 +24413,8 @@ function scrubbedEnvironment(home) {
     YARN_ENABLE_NETWORK: "0",
     BUN_INSTALL_CACHE_DIR: join9(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
-    GOPROXY: "off"
+    GOPROXY: "off",
+    ...toolchainLocators()
   };
   for (const name of ["LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"]) {
     if (process.env[name] !== void 0) env[name] = process.env[name];
@@ -24848,7 +24868,7 @@ async function runNativeGates(repository, discovery, evidenceDirectory, runOptio
 
 // src/closeout/semantic-v2.ts
 import { verify } from "crypto";
-import { existsSync as existsSync6, lstatSync as lstatSync11, readFileSync as readFileSync9, readdirSync as readdirSync7, realpathSync as realpathSync7 } from "fs";
+import { existsSync as existsSync7, lstatSync as lstatSync11, readFileSync as readFileSync9, readdirSync as readdirSync7, realpathSync as realpathSync7 } from "fs";
 import { isAbsolute as isAbsolute15, relative as relative14, resolve as resolve17, sep as sep13 } from "path";
 var HEX_64 = /^[0-9a-f]{64}$/u;
 var ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
@@ -24879,7 +24899,7 @@ function sourceRef2(repository, rawRef) {
     throw new Error(`semantic source reference is not repository-relative: ${rawRef}`);
   }
   const absolute = resolve17(repository, rawPath);
-  if (!isInside2(resolve17(repository), absolute) || !existsSync6(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
+  if (!isInside2(resolve17(repository), absolute) || !existsSync7(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
     throw new Error(`semantic source reference is missing, non-file, symlinked, or outside the repository: ${rawRef}`);
   }
   const lineMatch = /^line-(\d+)$/u.exec(fragment);
@@ -24962,7 +24982,7 @@ function verifyEvidenceRefs(evidenceRoot, refs) {
       continue;
     }
     const absolute = resolve17(root, ref.path);
-    if (!isInside2(root, absolute) || !existsSync6(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
+    if (!isInside2(root, absolute) || !existsSync7(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
       errors.push(`semantic evidence reference is missing, symlinked, or outside the evidence root: ${ref.path}`);
       continue;
     }
@@ -26783,12 +26803,12 @@ async function validateBundleFile(bundlePath, options = {}) {
 
 // src/closeout/prepare.ts
 import { createHash as createHash19 } from "crypto";
-import { existsSync as existsSync8, mkdirSync as mkdirSync2, readFileSync as readFileSync11, writeFileSync as writeFileSync4 } from "fs";
+import { existsSync as existsSync9, mkdirSync as mkdirSync2, readFileSync as readFileSync11, writeFileSync as writeFileSync4 } from "fs";
 import { join as join12, resolve as resolve22 } from "path";
 
 // src/closeout/retirements.ts
 import { createHash as createHash18 } from "crypto";
-import { existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync10, statSync as statSync2 } from "fs";
+import { existsSync as existsSync8, readdirSync as readdirSync8, readFileSync as readFileSync10, statSync as statSync2 } from "fs";
 import { isAbsolute as isAbsolute19, join as join11, normalize as normalize2, resolve as resolve21, sep as sep15 } from "path";
 var RETIREMENT_RECORD_TYPE = "mister-clean.retirement";
 var RETIREMENT_SCHEMA_VERSION = "1.0";
@@ -26817,7 +26837,7 @@ function isUnder(subject, root) {
 }
 function censusInputPaths(repository, directory) {
   const absolute = join11(repository, directory);
-  if (!existsSync7(absolute) || !statSync2(absolute).isDirectory()) return [];
+  if (!existsSync8(absolute) || !statSync2(absolute).isDirectory()) return [];
   return readdirSync8(absolute).filter((name) => name.endsWith(".json")).sort().map((name) => `${directory}/${name}`);
 }
 function readJsonRecord(repository, relativePath, refusals) {
@@ -26892,7 +26912,7 @@ function readRetirements(repository) {
       refusals.push(`${relativePath}: ruling.evidence.path escapes the repository`);
       continue;
     }
-    if (!existsSync7(evidenceAbsolute) || !statSync2(evidenceAbsolute).isFile()) {
+    if (!existsSync8(evidenceAbsolute) || !statSync2(evidenceAbsolute).isFile()) {
       refusals.push(`${relativePath}: ruling.evidence.path ${JSON.stringify(evidencePath)} does not exist`);
       continue;
     }
@@ -27106,7 +27126,7 @@ async function collectPrepareEvidence(options, mode) {
   let leaseTransferred = false;
   try {
     const bundleDirectory = join12(resolve22(options.evidenceHome), "mister-clean", options.runId);
-    if (existsSync8(bundleDirectory)) {
+    if (existsSync9(bundleDirectory)) {
       throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
     }
     mkdirSync2(bundleDirectory, { recursive: true });
@@ -27522,7 +27542,7 @@ async function collectPrepareTopology(context) {
     sha256: sha256File2(join12(bundleDirectory, "process-census.json"))
   };
   const currentCandidates = ["CURRENT-STATE.md", "docs/CURRENT-STATE.md", "_STATUS.md", "README.md"];
-  const currentPath = currentCandidates.find((candidate) => existsSync8(join12(repository, candidate)));
+  const currentPath = currentCandidates.find((candidate) => existsSync9(join12(repository, candidate)));
   let policyRef = null;
   let targetObservation;
   if (upstream) {
@@ -28529,7 +28549,7 @@ function auditRepositoryBoundaries(rootInput) {
 import { randomUUID as randomUUID6 } from "crypto";
 import { execFileSync as execFileSync7 } from "child_process";
 import {
-  existsSync as existsSync9,
+  existsSync as existsSync10,
   mkdirSync as mkdirSync4,
   realpathSync as realpathSync9,
   rmSync as rmSync4,
@@ -29348,7 +29368,7 @@ function ensureCleanWorkingTree(repository) {
 }
 function verifyLock(context, id) {
   const path = lockPath(context);
-  if (!existsSync9(path)) throw new Error("no open Mister Clean action lock exists");
+  if (!existsSync10(path)) throw new Error("no open Mister Clean action lock exists");
   const lock = readJson2(path);
   if (lock.action_id !== id) throw new Error(`action lock belongs to ${JSON.stringify(lock.action_id)}, not ${JSON.stringify(id)}`);
   return lock;
@@ -29416,7 +29436,7 @@ async function beginAction(options) {
     throw new Error("the public action lifecycle currently supports CLOSE bundles; GUARD uses its exact-tree commit barrier");
   }
   await requireValidBundle(context, options.runtimeAttestation, true);
-  if (existsSync9(lockPath(context))) throw new Error("another Mister Clean action already owns this evidence home");
+  if (existsSync10(lockPath(context))) throw new Error("another Mister Clean action already owns this evidence home");
   const actions = array4(context.manifest.actions, "$.manifest.actions").map((raw, index) => object6(raw, `$.manifest.actions[${index}]`));
   if (actions.some((row) => row.id === options.id)) throw new Error(`action id already exists: ${options.id}`);
   if (actions.some((row) => row.status === "planned")) throw new Error("an action is already planned; finish it before beginning another");
@@ -29442,7 +29462,7 @@ async function beginAction(options) {
   writeExclusive(lockPath(context), lock);
   const actionRoot = join15(context.base, "action-evidence", options.id);
   try {
-    if (existsSync9(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
+    if (existsSync10(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
     mkdirSync4(actionRoot, { recursive: true, mode: 448 });
     const branch = currentBranch(context.repository);
     const beforeHygiene = captureActionHygiene(context.repository, { now });
@@ -29914,12 +29934,12 @@ var nodeCloseoutEngine = {
 };
 
 // src/mister-clean-invocation-journal.ts
-import { appendFileSync, existsSync as existsSync10, mkdirSync as mkdirSync5, readFileSync as readFileSync15 } from "fs";
+import { appendFileSync, existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync15 } from "fs";
 import { createHash as createHash23, randomUUID as randomUUID7 } from "crypto";
 import { dirname as dirname14, isAbsolute as isAbsolute22 } from "path";
 function readMisterCleanInvocationJournal(path) {
   if (!isAbsolute22(path)) throw new Error("Mister Clean invocation journal path must be absolute");
-  if (!existsSync10(path)) return [];
+  if (!existsSync11(path)) return [];
   const contents = readFileSync15(path, "utf8");
   if (contents.length === 0) return [];
   if (contents.length > 0 && !contents.endsWith("\n")) throw new Error("Mister Clean invocation journal must end with a canonical JSONL newline");
@@ -30035,7 +30055,7 @@ function journalFromEnvironment(environment) {
 // src/closeout/finding-anchors.ts
 import { createHash as createHash24 } from "crypto";
 import { spawnSync as spawnSync6 } from "child_process";
-import { existsSync as existsSync11, readFileSync as readFileSync16, statSync as statSync5 } from "fs";
+import { existsSync as existsSync12, readFileSync as readFileSync16, statSync as statSync5 } from "fs";
 import { join as join16 } from "path";
 var RECEIPT_FAMILIES = [
   "planning_graph",
@@ -30073,7 +30093,7 @@ function workingTreeBlobOids(repository, paths) {
   const regular = [...new Set(paths)].filter((path) => {
     const absolute = join16(repository, path);
     try {
-      return existsSync11(absolute) && statSync5(absolute).isFile();
+      return existsSync12(absolute) && statSync5(absolute).isFile();
     } catch {
       return false;
     }
@@ -30224,11 +30244,11 @@ function receiptFindingsFromAudit(family, audit, context) {
 
 // src/eval-case.ts
 import { createHash as createHash26 } from "crypto";
-import { existsSync as existsSync13, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
+import { existsSync as existsSync14, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
 import { isAbsolute as isAbsolute24, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
-import { appendFileSync as appendFileSync2, existsSync as existsSync12, mkdirSync as mkdirSync6, readFileSync as readFileSync17, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync17, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
 import { createHash as createHash25, randomUUID as randomUUID8 } from "crypto";
 import { dirname as dirname15, isAbsolute as isAbsolute23, join as join17, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
 var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
@@ -30463,7 +30483,7 @@ var LocalRunReceiptStore = class {
   /** Read one receipt by id or by path; refuses anything that does not validate. */
   read(reference) {
     const path = reference.startsWith("mc-receipt:") ? this.#pathForId(reference) : resolve26(reference);
-    if (path === void 0 || !existsSync12(path)) throw new RunReceiptInvalidError([`receipt not found: ${reference}`]);
+    if (path === void 0 || !existsSync13(path)) throw new RunReceiptInvalidError([`receipt not found: ${reference}`]);
     let parsed;
     try {
       parsed = JSON.parse(readFileSync17(path, "utf8"));
@@ -30476,7 +30496,7 @@ var LocalRunReceiptStore = class {
   }
   index() {
     const path = join17(this.#root, RECEIPT_INDEX_FILE);
-    if (!existsSync12(path)) return [];
+    if (!existsSync13(path)) return [];
     const contents = readFileSync17(path, "utf8");
     if (contents.length === 0) return [];
     if (!contents.endsWith("\n")) throw new RunReceiptInvalidError(["receipt index must end with a newline"]);
@@ -30764,7 +30784,7 @@ function containedIn2(root, candidate) {
 }
 function bindCitation(root, citation, pointer, refusals, bound) {
   const target = join18(root, ...citation.path.split("/"));
-  if (!existsSync13(target) || !statSync6(target).isFile() || !containedIn2(root, target)) {
+  if (!existsSync14(target) || !statSync6(target).isFile() || !containedIn2(root, target)) {
     refusals.push({ code: "path_missing", citation: pointer, detail: `${citation.path} is not a file inside the repository` });
     return;
   }
@@ -30777,7 +30797,7 @@ function bindCitation(root, citation, pointer, refusals, bound) {
 }
 function pinnedRegistryExportVersion(root) {
   const path = join18(root, ...REGISTRY_PIN_PATH.split("/"));
-  if (!existsSync13(path)) return void 0;
+  if (!existsSync14(path)) return void 0;
   let parsed;
   try {
     parsed = JSON.parse(readFileSync18(path, "utf8"));
@@ -30834,7 +30854,7 @@ function validateEvalCase(input) {
 }
 
 // src/closeout/second-pass.ts
-import { existsSync as existsSync14, readFileSync as readFileSync19, realpathSync as realpathSync12, statSync as statSync7 } from "fs";
+import { existsSync as existsSync15, readFileSync as readFileSync19, realpathSync as realpathSync12, statSync as statSync7 } from "fs";
 import { dirname as dirname16, join as join19, relative as relative20, resolve as resolve28, sep as sep20 } from "path";
 var SECOND_PASS_CLASSES = [
   "cleared",
@@ -30948,7 +30968,7 @@ function classifySecondPass(input) {
   return rows.sort((left, right) => left.family.localeCompare(right.family) || left.path.localeCompare(right.path) || left.fingerprint.localeCompare(right.fingerprint));
 }
 function captureReceiptSubject(root, options = {}) {
-  if (!existsSync14(resolve28(root)) || !statSync7(resolve28(root)).isDirectory()) return void 0;
+  if (!existsSync15(resolve28(root)) || !statSync7(resolve28(root)).isDirectory()) return void 0;
   const resolved = realpathSync12(resolve28(root));
   const toplevel = runGit2(resolved, ["rev-parse", "--show-toplevel"], [0, 128]);
   if (toplevel.status !== 0 || toplevel.stdout.length === 0) return void 0;
@@ -31010,10 +31030,10 @@ function runReadOnlyFamilies(capture, root, families, options = {}) {
 var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
 function legacyBaselineFromBundle(reference) {
   const path = resolve28(reference);
-  if (!existsSync14(path)) return void 0;
+  if (!existsSync15(path)) return void 0;
   const directory = statSync7(path).isDirectory() ? path : dirname16(path);
   const deltaPath = join19(directory, "regression-delta.json");
-  if (!existsSync14(deltaPath)) return void 0;
+  if (!existsSync15(deltaPath)) return void 0;
   const delta = JSON.parse(readFileSync19(deltaPath, "utf8"));
   const coverage = delta.detector_coverage;
   const executions = Array.isArray(coverage?.executions) ? coverage.executions : void 0;
@@ -31030,7 +31050,7 @@ function legacyBaselineFromBundle(reference) {
     const resultRef = execution.result_ref;
     const resultPath = typeof resultRef?.path === "string" ? join19(directory, resultRef.path) : void 0;
     let fingerprints;
-    if (resultPath !== void 0 && existsSync14(resultPath)) {
+    if (resultPath !== void 0 && existsSync15(resultPath)) {
       fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync19(resultPath, "utf8")));
     }
     fingerprints ??= Array.isArray(execution.finding_fingerprints) ? execution.finding_fingerprints : [];
@@ -31132,7 +31152,7 @@ function runSecondPass(input) {
 }
 
 // src/toolchain-pin.ts
-import { existsSync as existsSync15, readFileSync as readFileSync20 } from "fs";
+import { existsSync as existsSync16, readFileSync as readFileSync20 } from "fs";
 import { join as join20, resolve as resolve29 } from "path";
 var BUN_VERSION_FILE = ".bun-version";
 function runningBunVersion() {
@@ -31140,7 +31160,7 @@ function runningBunVersion() {
 }
 function readBunPin(root) {
   const path = join20(resolve29(root), BUN_VERSION_FILE);
-  if (!existsSync15(path)) return void 0;
+  if (!existsSync16(path)) return void 0;
   const version = readFileSync20(path, "utf8").trim();
   if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
   return version;
@@ -31192,8 +31212,8 @@ function inside2(root, candidate) {
   const rootPath = resolve30(root);
   const candidatePath = resolve30(candidate);
   const relation = relative21(
-    existsSync16(rootPath) ? realpathSync13(rootPath) : rootPath,
-    existsSync16(candidatePath) ? realpathSync13(candidatePath) : candidatePath
+    existsSync17(rootPath) ? realpathSync13(rootPath) : rootPath,
+    existsSync17(candidatePath) ? realpathSync13(candidatePath) : candidatePath
   );
   return relation === "" || !relation.startsWith(`..${sep21}`) && relation !== ".." && !relation.startsWith("/");
 }
@@ -31217,7 +31237,7 @@ async function runSemantic(args, io) {
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync16(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync17(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -31460,7 +31480,7 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync16(root) || !statSync8(root).isDirectory()) {
+  if (!existsSync17(root) || !statSync8(root).isDirectory()) {
     io.stderr(`ERROR: not a directory: ${resolve30(root)}`);
     return 2;
   }
@@ -31476,7 +31496,7 @@ async function runDetect(args, io) {
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
   const reference = join21(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync16(reference)) return 0;
+  if (!existsSync17(reference)) return 0;
   const text3 = readFileSync21(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
@@ -31623,7 +31643,7 @@ async function runManifest(args, io) {
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
   const path = join21(resolve30(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync16(path) || readFileSync21(path, "utf8") !== result.content) {
+    if (!existsSync17(path) || readFileSync21(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -31800,7 +31820,7 @@ async function runEvalCase(args, io) {
   const repo = removeOption(args, "--repo") ?? process.cwd();
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync16(repo) || !statSync8(repo).isDirectory()) {
+  if (!existsSync17(repo) || !statSync8(repo).isDirectory()) {
     io.stderr(`ERROR: --repo is not a directory: ${resolve30(repo)}`);
     return 2;
   }
@@ -31884,7 +31904,7 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "github_actions", file: "github-actions-audit.json" },
               { family: "semantic_boundary", file: "semantic-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync16(join21(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join21(bundle, entry.file)) }));
+            const results = families.filter((entry) => existsSync17(join21(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join21(bundle, entry.file)) }));
             const report = record3(readJson3(join21(bundle, "closeout-report.json")));
             const delta = record3(readJson3(join21(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
