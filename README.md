@@ -446,7 +446,12 @@ listing each citation that did not: `path_missing`, `sha256_mismatch`,
 `base_commit_unbound`, `registry_pin_missing` or `record_shape`. A verifier or
 base commit written as `binding: "unbound"` with a reason is an honest record
 and still a refusal: a replay without a constant verifier is a case study, not
-an eval result. Like `attest`, this verb runs without the runtime attestation,
+an eval result. When the constant lives in another repository seam, the record
+cites it as `binding: "external"` with the seam, the evidence owner's location,
+and the digests (a verifier's evaluator pin and its components; one base commit
+per control-pair set with `session_map` `recorded` or `inferred`); the validator
+checks the citation's shape and reports it under `external`, never re-hashing
+bytes it cannot read. Like `attest`, this verb runs without the runtime attestation,
 because it asserts nothing about the runtime, only about the record and the
 repository bytes it cites.
 

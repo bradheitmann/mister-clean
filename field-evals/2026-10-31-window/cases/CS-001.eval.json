@@ -20,15 +20,44 @@
     }
   ],
   "verifier": {
-    "name": "control-pair qualification gate (a good control must pass 2 of 3) plus its mutant check",
-    "kind": "gate script",
-    "binding": "unbound",
-    "reason": "RC-001 records the gate's rule and that stored verdicts were reproduced by the source project's own scoring code (149 of 149), but neither the gate script's bytes nor its sha256 appear in this repository; the session-to-source map with each session's control-pair sha256 lives under the private data root (field-evals/2026-11-01-reviewer-controls/README.md, rules)."
+    "name": "evaluator pin of the control-pair qualification gate (a good control must pass 2 of 3); no constant gate script existed, the per-session drivers differ, so the constant is the pinned evaluator source",
+    "kind": "evaluator source pin (validator source plus review source), with the receipt tool's countercases as the mutant-check analogue",
+    "binding": "external",
+    "repository": "specification-pipeline (the Rust spec-compiler source project; named generically per the field-evals ledger rules)",
+    "location": "evidence owner A/EXEC-PM provenance note of 2026-11-03, citing the source project's tracked WAVES snapshot of 2026-11-03 at lines 4634, 4711-4712 and 4886-4887 and its profile-openrouter-2 done list at lines 108 and 118-120; digests recomputed at both base commits",
+    "sha256": "ca5ca4da37b80008d28b9cabbfcbed4d68e01f00702d1182a44b9ac6bc5c2a4c",
+    "components": [
+      {
+        "name": "validator_source (runner.rs plus runner/**)",
+        "sha256": "ca5ca4da37b80008d28b9cabbfcbed4d68e01f00702d1182a44b9ac6bc5c2a4c"
+      },
+      {
+        "name": "review_source (runner/review.rs)",
+        "sha256": "2b7a1560ac837b67c9a77a6db45a5a0ecdc3464df39dd535ec68af45d5877a35"
+      },
+      {
+        "name": "mutant_check analogue (receipt tool countercases, receipt-tool main.rs at 2d235a3d)",
+        "sha256": "df37fb1c2472a0957775a5cb9c903db3c5255e814907cc35bf1b579182b22a58"
+      }
+    ]
   },
   "base_commit": {
-    "repository": "the source project: a Rust spec-compiler project, unnamed in this repository (field-evals/2026-10-31-window/README.md)",
-    "binding": "unbound",
-    "reason": "RC-001 and the reviewer-controls ledger remove the source project's paths and run ids and record no commit; CS-001's replication plan names the commit before the worker's change without a sha."
+    "repository": "specification-pipeline (the Rust spec-compiler source project; named generically per the field-evals ledger rules)",
+    "binding": "external",
+    "location": "evidence owner A/EXEC-PM provenance note of 2026-11-03, citing the source project's tracked WAVES snapshot of 2026-11-03 at lines 4657 and 4711-4712 (set A) and 4864, 4870, 4873-4874 and 5132 (set B); the same 24 control files at both commits, only host-profile files differ",
+    "session_map": "inferred",
+    "commits": [
+      {
+        "pair_set": "A",
+        "sessions": "S-01 to S-02 (session-to-source map inferred one-to-one from the tallies; not recorded by the source project)",
+        "sha": "10acd2766333829e77bfaddf1cff8a57e316ba0b"
+      },
+      {
+        "pair_set": "B",
+        "sessions": "S-03 to S-13 (session-to-source map inferred one-to-one from the tallies; not recorded by the source project)",
+        "sha": "9a5d527afce542ca8a21d97ae8ccef33e706aaa1"
+      }
+    ]
   },
   "replay": {
     "floor": "2/3",

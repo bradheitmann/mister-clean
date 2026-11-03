@@ -105,7 +105,38 @@ describe("eval-case validate", () => {
     const text = capture();
     expect(await runCli(["eval-case", "validate", join(root, "CS-900.eval.json"), "--repo", root], text.io)).toBe(2);
     expect(text.stderr).toEqual([expect.stringMatching(/^ERROR: sha256_mismatch \$\.derived_from: /u)]);
-    expect(text.stdout).toEqual([`eval-case: REFUSED case=CS-900 bound=6 refusals=1 registry_export=${PIN}`]);
+    expect(text.stdout).toEqual([`eval-case: REFUSED case=CS-900 bound=6 external=0 refusals=1 registry_export=${PIN}`]);
+  });
+
+  it("external citations: an evaluator pin and per-pair-set base commits are accepted as external, and a pair set without a commit is refused", async () => {
+    const { root, record } = fixtureRepository();
+    const externalRecord: EvalCase = {
+      ...record,
+      verifier: {
+        name: "evaluator pin", kind: "validator source plus review source", binding: "external", repository: "fixture-seam",
+        location: "evidence owner note, lines 10-12", sha256: "c".repeat(64),
+        components: [{ name: "validator_source", sha256: "c".repeat(64) }, { name: "mutant_check", sha256: "d".repeat(64) }],
+      },
+      base_commit: {
+        repository: "fixture-seam", binding: "external", location: "evidence owner note, line 14", session_map: "inferred",
+        commits: [{ pair_set: "B", sessions: "S-01 to S-03", sha: "e".repeat(40) }],
+      },
+    };
+    const accepted = await validate(root, externalRecord);
+    expect(accepted.code).toBe(0);
+    expect(accepted.result.status).toBe("eval_case_valid");
+    expect(accepted.result.external).toEqual(["$.verifier", "$.base_commit"]);
+    expect(accepted.result.bound).not.toContain("$.verifier");
+    expect(accepted.result.bound).not.toContain("$.base_commit");
+
+    const missingPairSet = await validate(root, {
+      ...externalRecord,
+      base_commit: { ...externalRecord.base_commit, commits: [{ pair_set: "A", sessions: "S-01 to S-03", sha: "e".repeat(40) }] },
+    });
+    expect(missingPairSet.code).toBe(2);
+    expect(missingPairSet.result.refusals).toEqual([
+      { code: "record_shape", citation: "$.base_commit.commits", detail: "no base commit for pair set B" },
+    ]);
   });
 
   it("proof 2: exactly two agent cards; one or three cards is refused as agent_cards_count", async () => {

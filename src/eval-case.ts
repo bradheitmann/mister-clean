@@ -41,12 +41,50 @@ export interface EvalCaseAgentCard {
   readonly role: AgentCardRole;
 }
 
+/** One named digest of an external artifact, supplied by the evidence owner. */
+export interface ExternalDigest {
+  readonly name: string;
+  readonly sha256: string;
+}
+
+/**
+ * A verifier is bound by digest (`sha256`), bound by an external citation
+ * (`binding: "external"`: the bytes live in another repository seam; the
+ * digests were supplied by the evidence owner and are recorded, not re-hashed
+ * here), or honestly unbound (a refusal).
+ */
 export type EvalCaseVerifier =
   | { readonly name: string; readonly kind: string; readonly sha256: string }
+  | {
+    readonly name: string;
+    readonly kind: string;
+    readonly binding: "external";
+    readonly repository: string;
+    /** Where the evidence owner's record of these digests can be found. */
+    readonly location: string;
+    /** The digest of the constant evaluator itself. */
+    readonly sha256: string;
+    readonly components: readonly ExternalDigest[];
+  }
   | { readonly name: string; readonly kind: string; readonly binding: "unbound"; readonly reason: string };
+
+/** One base commit per control-pair set; sessions names the S-nn range it covers. */
+export interface PairSetCommit {
+  readonly pair_set: string;
+  readonly sessions: string;
+  readonly sha: string;
+}
 
 export type EvalCaseBaseCommit =
   | { readonly repository: string; readonly sha: string }
+  | {
+    readonly repository: string;
+    readonly binding: "external";
+    readonly location: string;
+    /** Whether the session-to-source map was recorded by the source project or inferred from the tallies. */
+    readonly session_map: "recorded" | "inferred";
+    readonly commits: readonly PairSetCommit[];
+  }
   | { readonly repository: string; readonly binding: "unbound"; readonly reason: string };
 
 /** One row of the replay card's per-reviewer table (RC-001 column names). */
@@ -112,8 +150,10 @@ export interface EvalCaseValidationResult {
   readonly record_path: string;
   readonly repository_root: string;
   readonly registry_export_version: string | null;
-  /** Citations that bound, in record order. */
+  /** Citations that bound against this repository's bytes or the pinned export, in record order. */
   readonly bound: readonly string[];
+  /** Citations accepted as external: digests recorded from the evidence owner, not re-hashed here. */
+  readonly external: readonly string[];
   readonly refusals: readonly EvalCaseRefusal[];
 }
 
@@ -235,11 +275,37 @@ export function evalCaseShapeRefusals(value: unknown): EvalCaseRefusal[] {
       // The slice requires a constant verifier: a stated unknown is honest, and refused.
       refusals.push({ code: "verifier_unbound", citation: "$.verifier", detail: nonEmptyString(verifier.reason) ? verifier.reason : "verifier bytes are not bound" });
     }
+  } else if (verifier.binding === "external") {
+    if (exactKeys(verifier, ["name", "kind", "binding", "repository", "location", "sha256", "components"], "$.verifier", refusals)) {
+      if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
+      if (!nonEmptyString(verifier.repository)) shape(refusals, "$.verifier.repository", "expected a repository seam id or name");
+      if (!nonEmptyString(verifier.location)) shape(refusals, "$.verifier.location", "an external verifier must say where the evidence owner recorded its digests");
+      if (typeof verifier.sha256 !== "string" || !HEX64.test(verifier.sha256)) shape(refusals, "$.verifier.sha256", "expected lowercase SHA-256");
+      const components = Array.isArray(verifier.components) ? verifier.components : undefined;
+      if (!components || components.length === 0) shape(refusals, "$.verifier.components", "expected at least one named digest");
+      else {
+        const names = new Set<string>();
+        for (const [index, value] of components.entries()) {
+          const path = `$.verifier.components[${index}]`;
+          const component = object(value);
+          if (!component || !exactKeys(component, ["name", "sha256"], path, refusals)) {
+            if (!component) shape(refusals, path, "expected an object with name and sha256");
+            continue;
+          }
+          if (!nonEmptyString(component.name)) shape(refusals, `${path}.name`, "required");
+          else if (names.has(component.name)) shape(refusals, `${path}.name`, "duplicate component name");
+          else names.add(component.name);
+          if (typeof component.sha256 !== "string" || !HEX64.test(component.sha256)) shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
+        }
+      }
+    }
   } else if (exactKeys(verifier, ["name", "kind", "sha256"], "$.verifier", refusals)) {
     if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
     if (typeof verifier.sha256 !== "string" || !HEX64.test(verifier.sha256)) shape(refusals, "$.verifier.sha256", "expected lowercase SHA-256");
   }
 
+  const replayRows = Array.isArray(object(record.replay)?.per_reviewer) ? object(record.replay)?.per_reviewer as unknown[] : [];
+  const rowPairSets = new Set(replayRows.map((row) => object(row)?.pair_set).filter((value): value is string => nonEmptyString(value)));
   const base = object(record.base_commit);
   if (!base) shape(refusals, "$.base_commit", "expected an object");
   else if (base.binding === "unbound") {
@@ -247,6 +313,34 @@ export function evalCaseShapeRefusals(value: unknown): EvalCaseRefusal[] {
       if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
       if (!nonEmptyString(base.reason)) shape(refusals, "$.base_commit.reason", "an unbound base commit must state why");
       refusals.push({ code: "base_commit_unbound", citation: "$.base_commit", detail: nonEmptyString(base.reason) ? base.reason : "base commit is not bound" });
+    }
+  } else if (base.binding === "external") {
+    if (exactKeys(base, ["repository", "binding", "location", "session_map", "commits"], "$.base_commit", refusals)) {
+      if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
+      if (!nonEmptyString(base.location)) shape(refusals, "$.base_commit.location", "an external base commit must say where the evidence owner recorded it");
+      if (base.session_map !== "recorded" && base.session_map !== "inferred") shape(refusals, "$.base_commit.session_map", "expected recorded or inferred");
+      const commits = Array.isArray(base.commits) ? base.commits : undefined;
+      if (!commits || commits.length === 0) shape(refusals, "$.base_commit.commits", "expected one commit per control-pair set");
+      else {
+        const pairSets = new Set<string>();
+        for (const [index, value] of commits.entries()) {
+          const path = `$.base_commit.commits[${index}]`;
+          const commit = object(value);
+          if (!commit || !exactKeys(commit, ["pair_set", "sessions", "sha"], path, refusals)) {
+            if (!commit) shape(refusals, path, "expected an object with pair_set, sessions and sha");
+            continue;
+          }
+          if (!nonEmptyString(commit.pair_set)) shape(refusals, `${path}.pair_set`, "required");
+          else if (pairSets.has(commit.pair_set)) shape(refusals, `${path}.pair_set`, "duplicate pair set");
+          else pairSets.add(commit.pair_set);
+          if (!nonEmptyString(commit.sessions)) shape(refusals, `${path}.sessions`, "expected the S-nn range this commit covers");
+          if (typeof commit.sha !== "string" || !HEX40.test(commit.sha)) shape(refusals, `${path}.sha`, "expected a 40-hex commit sha");
+        }
+        // Every pair set the replay reports must have its base commit.
+        for (const pairSet of rowPairSets) {
+          if (!pairSets.has(pairSet)) shape(refusals, "$.base_commit.commits", `no base commit for pair set ${pairSet}`);
+        }
+      }
     }
   } else if (exactKeys(base, ["repository", "sha"], "$.base_commit", refusals)) {
     if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
@@ -347,6 +441,7 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
   const root = resolve(input.repositoryRoot);
   const refusals = evalCaseShapeRefusals(input.record);
   const bound: string[] = [];
+  const external: string[] = [];
   const record = object(input.record);
   const caseId = typeof record?.case_id === "string" ? record.case_id : null;
   const pin = pinnedRegistryExportVersion(root);
@@ -368,8 +463,12 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
         } else bound.push(pointer);
       }
     }
-    if ("sha256" in evalCase.verifier) bound.push("$.verifier");
-    if ("sha" in evalCase.base_commit) bound.push("$.base_commit");
+    if ("binding" in evalCase.verifier) {
+      if (evalCase.verifier.binding === "external") external.push("$.verifier");
+    } else bound.push("$.verifier");
+    if ("binding" in evalCase.base_commit) {
+      if (evalCase.base_commit.binding === "external") external.push("$.base_commit");
+    } else bound.push("$.base_commit");
     bindCitation(root, evalCase.replay.rows_source, "$.replay.rows_source", refusals, bound);
     bindCitation(root, evalCase.derived_from, "$.derived_from", refusals, bound);
   }
@@ -383,6 +482,7 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
     repository_root: root,
     registry_export_version: pin ?? null,
     bound,
+    external,
     refusals,
   };
 }

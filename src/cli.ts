@@ -824,7 +824,7 @@ async function runEvalCase(args: string[], io: CliIO): Promise<number> {
   if (json) io.stdout(JSON.stringify(result, null, 2));
   else {
     for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
-    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} refusals=${result.refusals.length} registry_export=${result.registry_export_version ?? "unpinned"}`);
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} external=${result.external.length} refusals=${result.refusals.length} registry_export=${result.registry_export_version ?? "unpinned"}`);
   }
   return result.status === "eval_case_valid" ? 0 : 2;
 }
