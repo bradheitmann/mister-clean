@@ -10,11 +10,15 @@
   "agent_cards": [
     {
       "card_id": "AC-003",
+      "path": "field-evals/2026-10-31-window/cards/AC-003-pi-deepseek-flash-high.md",
+      "sha256": "d4a447a23ab2628f0239763dbea618fbb5dfe4475e1af0a63b0ed8d93e1c060f",
       "model_registry_ref": "deepseek-v4.1-flash@2026.11.03-1",
       "role": "subject"
     },
     {
       "card_id": "AC-006",
+      "path": "field-evals/2026-10-31-window/cards/AC-006-pi-deepseek-v4-pro-high.md",
+      "sha256": "28134f920cafbc6cd7e7c46237c73e7ec5ad2ef83fc7e11ac8e614b0fe8679a3",
       "model_registry_ref": "deepseek-v4-pro@2026.11.03-1",
       "role": "control"
     }

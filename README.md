@@ -427,34 +427,47 @@ A pre-7.3 closeout bundle joins through its legacy fingerprints. Pass
 
 A durable eval case (`mister-clean.eval-case/1`, `src/eval-case.ts`) is the
 machine-readable record of one field failure that was replayed with its control
-agent: it cites the narrative case file, the card the replay was derived from
-and the tallies its counts come from (each by repository-relative path plus
-sha256), exactly two agent cards as `<registry card id>@<export version>` (one
-`subject`, one `control`), the constant verifier by sha256, and the base commit.
-Registry refs must name the export pinned by the customer test
+agent: it cites the narrative case file, the card the replay was derived from,
+the tallies its counts come from and exactly two agent cards (one `subject`,
+one `control`), each by repository-relative path plus sha256, plus the constant
+verifier and the base commit. Each card entry also names the card's
+`<registry card id>@<export version>`, which must equal the card file's own
+frontmatter and name the export pinned by the customer test
 (`customer-tests/model-atlas/registry-join.json`, `artifact.version`); the
 validator reads that pin rather than keeping a second copy.
 
 ```sh
-mister-clean eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo .
+mister-clean eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo . --require-bound verifier,base_commit
 mister-clean eval-case validate path/to/case.eval.json --repo path/to/checkout --json
 ```
 
-The validator is read-only and writes nothing. It exits 0 with a typed
-`eval_case_valid` result when every citation binds, and 2 with a typed refusal
-listing each citation that did not: `path_missing`, `sha256_mismatch`,
+The validator is read-only and writes nothing. It re-verifies what it can:
+file bytes are re-hashed, a card file's frontmatter `card_id` and
+`model_registry_ref` are compared with the record's, a base commit sha must be
+a commit object in the checkout, and the replay table (per-reviewer counts,
+session count, the `k/n` floor and the `met`/`missed` outcome) is recomputed
+from the cited tallies TSV and must equal the record's claims. It exits 0 with
+a typed `eval_case_valid` result, and 2 with a typed refusal naming each
+citation that failed: `path_missing`, `sha256_mismatch`, `card_ref_mismatch`,
 `registry_export_mismatch`, `agent_cards_count`, `verifier_unbound`,
-`base_commit_unbound`, `registry_pin_missing` or `record_shape`. A verifier or
-base commit written as `binding: "unbound"` with a reason is an honest record
-and still a refusal: a replay without a constant verifier is a case study, not
-an eval result. When the constant lives in another repository seam, the record
-cites it as `binding: "external"` with the seam, the evidence owner's location,
-and the digests (a verifier's evaluator pin and its components; one base commit
-per control-pair set with `session_map` `recorded` or `inferred`); the validator
-checks the citation's shape and reports it under `external`, never re-hashing
-bytes it cannot read. Like `attest`, this verb runs without the runtime attestation,
-because it asserts nothing about the runtime, only about the record and the
-repository bytes it cites.
+`base_commit_unbound`, `rows_source_unparsable`, `replay_floor_mismatch`,
+`replay_counts_mismatch`, `replay_floor_not_met`, `binding_required`,
+`registry_pin_missing` or `record_shape`.
+
+Three classes of citation are never conflated, and the text line names every
+member of the last two: `bound` (re-verified in this checkout), `external`
+(`binding: "external"`: the bytes live in another repository seam; the record
+carries the seam, the evidence owner's location and the digests, one base
+commit per control-pair set with `session_map` `recorded` or `inferred`; nothing
+here re-hashes them) and `unverified` (a bare verifier digest with no local
+file, or a commit sha absent from the checkout). `--require-bound
+verifier,base_commit` turns an external or unverified verifier or base commit
+into a `binding_required` refusal; the charter's Slice Zero command uses it, so
+`proven_on` can only be set from a record whose verifier and commit were
+re-verified here. A verifier or base commit written as `binding: "unbound"` with
+a reason is an honest record and always a refusal. Like `attest`, this verb runs
+without the runtime attestation, because it asserts nothing about the runtime,
+only about the record and the repository bytes it cites.
 
 ## Public-safety boundary
 

@@ -42,7 +42,7 @@ import {
   type FileCensus,
 } from "./census.js";
 import { receiptFindingsFromAudit, type ReceiptFamily } from "./closeout/finding-anchors.js";
-import { validateEvalCase } from "./eval-case.js";
+import { REQUIRE_BOUND_FIELDS, type RequireBoundField, validateEvalCase } from "./eval-case.js";
 import type { RepositoryObject } from "./closeout/repository-object.js";
 import {
   assembleRunReceipt,
@@ -815,8 +815,16 @@ async function runEvalCase(args: string[], io: CliIO): Promise<number> {
   const path = args[0]?.startsWith("--") === false ? (args.shift() as string) : undefined;
   if (path === undefined) throw new UsageError("eval-case validate requires a record path");
   const repo = removeOption(args, "--repo") ?? process.cwd();
+  const requireBoundOption = removeOption(args, "--require-bound");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
+  const requireBound: RequireBoundField[] = [];
+  for (const field of requireBoundOption === undefined ? [] : requireBoundOption.split(",")) {
+    if (!REQUIRE_BOUND_FIELDS.includes(field as RequireBoundField)) {
+      throw new UsageError(`--require-bound accepts a comma-separated subset of ${REQUIRE_BOUND_FIELDS.join(",")}`);
+    }
+    requireBound.push(field as RequireBoundField);
+  }
   if (!existsSync(repo) || !statSync(repo).isDirectory()) {
     io.stderr(`ERROR: --repo is not a directory: ${resolve(repo)}`);
     return 2;
@@ -828,17 +836,19 @@ async function runEvalCase(args: string[], io: CliIO): Promise<number> {
     parsed = undefined;
     io.stderr(`ERROR: record_shape ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path });
+  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path, requireBound });
   if (json) io.stdout(JSON.stringify(result, null, 2));
   else {
     for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
-    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} external=${result.external.length} refusals=${result.refusals.length} registry_export=${result.registry_export_version ?? "unpinned"}`);
+    // Name every citation that was not re-verified here; a count alone hides what was taken on trust.
+    const list = (items: readonly string[]): string => (items.length === 0 ? "none" : items.join(","));
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} external=${list(result.external)} unverified=${list(result.unverified)} refusals=${result.refusals.length} require_bound=${list(result.require_bound)} registry_export=${result.registry_export_version ?? "unpinned"}`);
   }
   return result.status === "eval_case_valid" ? 0 : 2;
 }
 
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 
 export function receiptStoreFromEnvironment(environment: NodeJS.ProcessEnv): LocalRunReceiptStore {
