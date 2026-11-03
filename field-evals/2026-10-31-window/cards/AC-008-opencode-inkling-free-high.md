@@ -6,7 +6,7 @@ reasoning_label: high
 identity_status: title_only
 evidence_class: field
 window: 2026-10-31T02:37Z/open
-model_registry_ref: none@2026.11.02-3   # no card or route for this model in the export
+model_registry_ref: none@2026.11.03-1   # no card or route for this model in the export
 ---
 
 # AC-008 — opencode / inkling (free) / high

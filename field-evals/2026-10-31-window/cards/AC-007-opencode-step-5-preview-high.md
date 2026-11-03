@@ -6,7 +6,7 @@ reasoning_label: high
 identity_status: title_only   # model/reasoning read from the pane title or footer; not bound to a runtime receipt
 evidence_class: field         # naturalistic; never averaged into a controlled score
 window: 2026-10-31T02:37Z/open
-model_registry_ref: none@2026.11.02-3   # no card or route for this model in the export
+model_registry_ref: none@2026.11.03-1   # no card or route for this model in the export
 ---
 
 # AC-007 — opencode / step-5-preview / high

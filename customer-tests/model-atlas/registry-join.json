@@ -6,11 +6,11 @@
   "created": "2026-11-01",
   "artifact": {
     "name": "model-atlas.export/1",
-    "version": "2026.11.02-3",
-    "sha256": "77879250ea316ba3f203bb3c3b3899eb3eef0b42a5304449f6d8616f6447b7e7",
-    "fetch": "exports/model-atlas.export-2026.11.02-3.json"
+    "version": "2026.11.03-1",
+    "sha256": "ebafb2ebdf0ee911bf7e6c136a58e2b50a9c1d82eaf64813c5aa8e6830d9c89e",
+    "fetch": "exports/model-atlas.export-2026.11.03-1.json"
   },
-  "fixture": "customer-tests/model-atlas/fixtures/model-atlas.export-2026.11.02-3.json",
+  "fixture": "customer-tests/model-atlas/fixtures/model-atlas.export-2026.11.03-1.json",
   "run": {
     "argv": [
       "bun",
@@ -36,5 +36,5 @@
   ],
   "expect": "pass",
   "writes": "none",
-  "updated": "2026-11-02"
+  "updated": "2026-11-03"
 }

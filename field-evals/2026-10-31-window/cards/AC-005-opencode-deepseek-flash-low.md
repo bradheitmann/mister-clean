@@ -6,7 +6,7 @@ reasoning_label: low
 identity_status: title_only   # model/reasoning read from the pane title or footer; not bound to a runtime receipt
 evidence_class: field         # naturalistic; never averaged into a controlled score
 window: 2026-10-31T02:37Z/open
-model_registry_ref: deepseek-v4-flash@2026.11.02-3   # card only; route not bound (identity title_only)
+model_registry_ref: deepseek-v4.1-flash@2026.11.03-1   # card only; route not bound (identity title_only)
 ---
 
 # AC-005 — opencode / deepseek-flash / low

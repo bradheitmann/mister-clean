@@ -1,0 +1,10 @@
+worker_provider_model	registry_card_ref	p02_attempts	card_missing_schema_version	no_result_truncated	runs
+deepseek-v4-pro	deepseek-v4-pro@2026.11.03-1	14	11	0	3
+deepseek-flash	deepseek-v4.1-flash@2026.11.03-1	6	2	0	2
+nvidia/nemotron-3.5-super-vl:free	none@2026.11.03-1	5	2	0	1
+xiaomi/mimo-v2.6-pro	none@2026.11.03-1	2	1	0	1
+z-ai/glm-5.3-flash	none@2026.11.03-1	4	0	0	1
+anthropic/claude-haiku-5.5	none@2026.11.03-1	6	0	1	1
+openai/gpt-6-luna	none@2026.11.03-1	2	0	0	1
+deepseek-v4.1-flash	deepseek-v4.1-flash@2026.11.03-1	1	0	0	1
+qwen/qwen3.8-27b	qwen3.8-27b@2026.11.03-1	4	0	2	1
