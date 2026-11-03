@@ -8,8 +8,12 @@ Branch `fix/prepare-large-repo-and-planning-config`, from main 87c8d73.
   in `gitNullPaths`) was already on main. This lane adds the missing regression
   test on `prepare`'s own path: `src/closeout/tracked-shippable-paths.test.ts`
   builds a fixture repository whose `git ls-files --cached -z` output is
-  1,108,800 bytes (1,600 files of about 690-byte paths) and asserts that
-  `trackedShippablePaths` returns every path.
+  1,084,800 bytes (1,200 entries of about 900-byte paths) and asserts that
+  `trackedShippablePaths` returns every path. The fixture is index-only: the
+  entries go into the index with one `git update-index --index-info` and are
+  marked skip-worktree with one `git update-index --stdin`, so no worktree
+  files are created or removed. Teardown is one `rmSync` of a tree holding
+  only `.git`.
 - **Defect 2 (heuristic-only planning discovery).** New
   `.mister-clean/planning.json` (`mister-clean.planning-config/1`, keys
   `schema`, `roots`, `exclude`), loaded and validated by one function,
@@ -48,9 +52,30 @@ Branch `fix/prepare-large-repo-and-planning-config`, from main 87c8d73.
 | 3 | "proof 3" (`roots: []`: no roots, 0 artifacts, CLI JSON `planning_config`) | `[]` treated as absent | RED: 4 roots, expected `[]` |
 | 4 | "proof 4" (10 cases: `../x`, absolute, unknown key, missing root, root under exclude, malformed JSON, unknown schema, non-string, harness root, nested-checkout root) | default config load swallows errors (heuristic fallback) | RED: 10/10 failed |
 | 5 | "proof 5" (parity, 3 fixtures: none, exclude-only, declared) | bundle discovery ignores the config | RED: exclude-only and declared failed; no-config passed (expected) |
-| 6 | `tracked-shippable-paths.test.ts` | `maxBuffer` removed from `gitNullPaths` | RED: `GitOutputTooLargeError: git ls-files --cached -z produced at least 1108800 bytes` (the ENOBUFS, typed) |
+| 6 | `tracked-shippable-paths.test.ts` | `maxBuffer` removed from `gitNullPaths` | RED: `GitOutputTooLargeError: git ls-files --cached -z produced at least 1084800 bytes` (the ENOBUFS, typed); re-observed on the index-only fixture |
 
 All 18 tests are green after the mutants were restored.
+
+### Fixture timing for proof 6 (QA defect D1)
+
+The first fixture wrote 1,600 files and its teardown ran over vitest's 10 s
+hook budget under load. The index-only fixture, measured on this host at load
+average 8-11 (`nice -n 10`, default vitest timeouts):
+
+| phase | runs (ms) |
+|---|---|
+| `git init` (shared `createFixtureRepository`) | 4,930 / 11,472 / 14,684; 10-30 when the host is quiet |
+| `hash-object` + two `update-index` + two `ls-files` | 390 / 3,200 / 3,400 |
+| teardown `rmSync` | 222 / 297 / 535 (was about 11,000 and up with 1,600 files) |
+| whole test body, five vitest runs | 3,092 / 5,461 / 12,002 / 12,721 / 15,900 |
+
+The fixture's own work is 0.4-3.5 s, and teardown is well inside the hook
+budget. The 5 s target is not met on this host because `git init` alone
+takes 4-17 s under this load (`GIT_TRACE_PERFORMANCE` attributes the whole
+time to the one `init` command, at 0% CPU, and the same command takes 10-30 ms
+when the host is quiet). That cost is paid by every test that uses the shared
+fixture helper and is not specific to this test. `test:node` runs with
+`--testTimeout=120000`, under which the test passes.
 
 ## Real-repo acceptance (throwaway local clone of the large workspace)
 
@@ -78,6 +103,19 @@ printed: `findings` and `raw_finding_count` were both 29,137 here.
   `control-plane:build`, `package:surface:check` (pass), `sync:cli`,
   `manifest:package`.
 - `bun run manifest:package:check`: PASS; `bun run sync:cli:check`: pass
+- Rebuild after QA defect D2 (stale `dist/` bytes at 218898be: the first
+  hand-run build had generated `src/generated-materials.ts` while
+  `build:scorecard`'s reordered dashboard assets were on disk, so the public
+  and stdio bundles embedded the wrong dashboard HTML). Fix: restore the
+  committed assets, `bun run build:materials` (check passes), remove `dist/`,
+  run `tsup`, `control-plane:build`, `package:surface:check`, `sync:cli`,
+  `manifest:package`; then remove `dist/` and run the same list a second
+  time. Both builds produced identical `MANIFEST.sha256` and identical hashes:
+  `bin/mister-clean.js` 5072720b…, `dist/public.js` 68632526…,
+  `dist/stdio.js` f7eb06ac…, `dist/planning.js` d079be0c…,
+  `dist/control-plane.js` b9433691…. Against main, the manifest now differs
+  only in `README.md` and `bin/mister-clean.js`; `manifest:package:check`
+  PASS.
 - `charter check --strict` (pinned b9323cd): ok
 - `MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts audit planning <clone> --json`: before and after, as above
 
