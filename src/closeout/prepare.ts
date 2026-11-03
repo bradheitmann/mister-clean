@@ -56,6 +56,7 @@ import {
 import type { FileRuntimeAttestationBinding } from "../runtime-binding.js";
 import { captureFileCensus } from "../census.js";
 import { auditGitHubActionsRepository } from "./github-actions.js";
+import { auditLanguagePolicy } from "./language-policy.js";
 type JsonObject = Record<string, unknown>;
 export interface PrepareCloseoutOptions {
   readonly repo: string;
@@ -280,6 +281,14 @@ async function collectPrepareEvidence(
       path: "github-actions-audit.json",
       sha256: sha256File(join(bundleDirectory, "github-actions-audit.json")),
     };
+    // Declared language policy: evidence beside the other audits and a family in
+    // the run receipt. Absent policy writes a positive not_applicable result; a
+    // malformed policy refuses the run (LanguagePolicyInvalidError).
+    writeJson(join(bundleDirectory, "language-policy-audit.json"), {
+      ...auditLanguagePolicy(repository),
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject,
+    });
     const semanticInputRefs: Array<{
       kind: "semantic_evidence_package" | "semantic_probe_manifest" | "semantic_trust_policy";
       path: string;
