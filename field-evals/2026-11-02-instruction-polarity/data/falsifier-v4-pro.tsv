@@ -3,3 +3,5 @@ implicit	c1	as served	true	19666	stop
 implicit	c2	as served	false	27638	stop
 explicit	p1	plus one positive literal line	true	23667	stop
 explicit	p2	plus one positive literal line	true	16602	stop
+implicit	c3	as served	true	21015	stop
+explicit	p3	plus one positive literal line	true	27460	stop

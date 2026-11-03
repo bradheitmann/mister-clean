@@ -36,10 +36,11 @@ So instruction wording cannot explain the variation, and the measure is the arti
 
 ## Probe (`data/falsifier-v4-pro.tsv`)
 - Setup: deepseek-v4-pro on one real assembled prompt, JSON-object mode, max 32,768 output tokens.
-- Implicit (as served): 1 of 2 runs omitted the field.
-- One positive literal line added ("the object starts with `"schema_version": …`"): 0 of 2 omitted it.
-- All four runs finished with `stop`. Output ran 16,602 to 27,638 tokens.
-- **This is directional support that an explicit positive line helps, not proof** (n = 2 per arm).
+- Implicit (as served): 1 of 3 runs omitted the field.
+- One positive literal line added ("the object starts with `"schema_version": …`"): 0 of 3 omitted it.
+- All six runs finished with `stop`. Output ran 16,602 to 27,638 tokens.
+- **This is directional support that an explicit positive line helps, not proof** (n = 3 per arm; one-sided Fisher exact p = 0.5).
+- The same model wrapped its output in three different envelopes across the six runs (`artifacts`, `outputs`, `files`). An extractor that reads only one envelope under-counts, and one did here before a manual check. Score this kind of field from every envelope shape, or normalise the shape first.
 
 ## Reading
 1. Omitting an implicitly named constant is a property of the model, not of instruction polarity: one model at 79%, five models at 0% under the same bytes.
@@ -49,7 +50,7 @@ So instruction wording cannot explain the variation, and the measure is the arti
 ## Provenance and checks
 - Observational table and probe: the tier-ladder PM's instruction-polarity round.
 - Second-family check: an independent analyst (a different model family) re-derived the per-model table, the instruction hashes and the probe rows from the raw files, and agrees.
-- Gap: a k = 3-per-arm extension of the probe was not run, and is recorded as optional by its owner.
+- The probe was extended to k = 3 per arm on 2026-11-03 by its owner, at the same assembly.
 
 ## Caveats
 - Small n for several models (1–6 attempts). Only deepseek-v4-pro's rate is well supported.
@@ -57,4 +58,4 @@ So instruction wording cannot explain the variation, and the measure is the arti
 - One instruction and one artifact type. Do not generalise to other constants without measuring.
 
 ## Refresh rule
-Add rows when new runs of this phase land, keeping the instruction hashes as a column if they change. Re-test proposal "explicit positive line" at k ≥ 3 per arm before treating it as established.
+Add rows when new runs of this phase land, keeping the instruction hashes as a column if they change. Treat the explicit-positive-line mitigation as established only after a larger probe (k ≥ 10 per arm, or more models).
