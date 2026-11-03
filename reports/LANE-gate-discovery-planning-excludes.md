@@ -134,6 +134,57 @@ discovery record is validated by exact keys and bound by `catalog_sha256`; an
 absent key would make two different byte shapes mean the same catalog, which
 is the ambiguity the exact-key rule exists to refuse.
 
+### Full suite after merging 56c00cc (tip 3bcf82f bytes plus the regenerated manifest)
+
+```
+Test Files  4 failed | 48 passed (52)
+     Tests  9 failed | 889 passed (898)
+  Duration  1226.06s
+```
+
+Every red is a class already recorded by prior lanes (`reports/LANE-public-safety-provenance.md`, `charter/STATE.md`); none is a candidate defect:
+
+| Red | Test(s) | Class | Evidence |
+|---|---|---|---|
+| 1–5 | `scripts/verify_generated_candidate.test.ts` (5) | environment: capsule commit refused | `git commit` in the scratch capsule refused by the host-global lang-guard hook ("this commit adds untyped code: … bin/mister-clean.js"); same five as the first run. |
+| 6–7 | `scripts/run_clean_ci.test.ts` (2) | environment: capsule commit refused | `supervised command exited 128: pnpm` in the cold-clone capsule, downstream of the same hook. Known class. |
+| 8 | `scripts/release_path.test.mjs` real build in external capsule | environment: budget under load | `Hook timed out in 10000ms` with three other lanes' suites running. Known class. |
+| 9 | `src/closeout/native-gates.test.ts` no-progress timeout | environment: shared `$TMPDIR` | the leftover check found another lane's `mister-clean-native-gate-snapshot-*` (a `bundle.test.ts` run from a sibling worktree was live); passed solo and in the first full run. |
+
+## After merging main 8344246 (PR #52, snapshot carries local excludes)
+
+Main advanced again during the run above. `git merge --no-edit origin/main`:
+`src/closeout/native-gates.ts` auto-merged cleanly (the two changes touch
+different functions); `MANIFEST.sha256` taken from main and regenerated.
+
+| command | result |
+|---|---|
+| `bun run build:materials` then `pnpm exec tsc --noEmit` | exit 0 |
+| `pnpm run build:raw` twice, `dist/` removed before each | identical hashes: `bin/mister-clean.js` 8a835c0d…, `dist/public.js` 1e160172…, `dist/stdio.js` e6ae7768…, `dist/planning.js` d079be0c…, `dist/control-plane.js` b9433691…; `MANIFEST.sha256` 8297ed96… |
+| `bun run manifest:package:check` | PASS (82 entries) |
+| proofs + `planning-config`, `native-gates`, `gate-snapshot-local-excludes`, `skill-contract`, `toolchain-pin` (same vitest flags) | 6 files, 100/100 pass |
+| `bun run audit:public` | PASS (83 files) |
+| `charter check --strict` | ok |
+| `SKILL.md` | unchanged, 19,975 bytes |
+| `pnpm run test:node` | see below |
+
+### Full suite after merging 8344246 (these exact bytes: 6bf7f2b plus the regenerated manifest)
+
+```
+Test Files  3 failed | 50 passed (53)
+     Tests  9 failed | 892 passed (901)
+  Duration  1742.12s
+```
+
+| Red | Test(s) | Class | Evidence |
+|---|---|---|---|
+| 1–5 | `scripts/verify_generated_candidate.test.ts` (5) | environment: capsule commit refused | the host-global lang-guard hook refuses the capsule's `git commit` ("this commit adds untyped code"), five occurrences in the log. |
+| 6–8 | `scripts/run_clean_ci.test.ts` (3: cold clone, bounded Node-matrix timeout, rejected supervised run) | environment: capsule commit refused | all three see `supervised command exited 128: pnpm` from the cold-clone capsule, downstream of the same hook (the third expected exit 1 and got 128). Known class. |
+| 9 | `scripts/release_path.test.mjs` real build in external capsule | environment: budget under load | `Test timed out in 120000ms` then `Hook timed out in 10000ms`; the file took 556 s with sibling lanes' suites running. Known class. |
+
+No closeout, planning, native-gate, bundle, prepare, receipt, skill-contract
+or toolchain test is red; the native-gates leftover check passed in this run.
+
 ## Out of scope (recorded obligations)
 
 - Runner-safety findings (`repository:runner-safety`) under evidence/archive
