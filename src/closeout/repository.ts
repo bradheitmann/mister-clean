@@ -427,6 +427,20 @@ function gitNullPaths(repository: string, args: readonly string[]): string[] {
   return result.stdout.split("\0").filter((path) => path.length > 0);
 }
 
+/** Every index entry (`git ls-files -z`), relative to `repository`, through the shared output bound. */
+export function trackedPaths(repository: string): string[] {
+  return gitNullPaths(repository, ["ls-files", "-z"]);
+}
+
+/**
+ * Every ignored file under the standard excludes (`git ls-files -z --others
+ * --ignored --exclude-standard`), relative to `repository`, through the shared
+ * output bound. Files inside an ignored directory are listed one by one.
+ */
+export function ignoredPaths(repository: string): string[] {
+  return gitNullPaths(repository, ["ls-files", "-z", "--others", "--ignored", "--exclude-standard"]);
+}
+
 /** Exact extant Git-tracked worktree surface; candidate deletions are not shippable bytes. */
 export function trackedShippablePaths(repository: string): string[] {
   const deleted = new Set(gitNullPaths(repository, ["ls-files", "--deleted", "-z"]));

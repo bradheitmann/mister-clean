@@ -16,7 +16,7 @@ import {
 import { basename, relative, resolve, sep } from "node:path";
 
 import { generateAttestedPackageManifest } from "../attestation.js";
-import { runGit } from "./repository.js";
+import { GitOutputTooLargeError, ignoredPaths, runGit, trackedPaths } from "./repository.js";
 import { foldCase } from "./normalization.js";
 
 export const STACK_MARKERS = {
@@ -101,11 +101,43 @@ async function findMarker(marker: string, root: string, tracked: readonly string
   return candidates[0];
 }
 
+/**
+ * Where the offending bytes live relative to Git: `tracked` is a publication
+ * leak, `untracked` an unstaged one, `ignored` a local hazard. `unknown` is
+ * reported only when Git could not say; it is never a guess.
+ */
+export type PublicSafetyProvenance = "tracked" | "untracked" | "ignored" | "unknown";
+
+/** How the provenances in one scan result were derived. */
+export type PublicSafetyProvenanceSource =
+  /** Membership in `git ls-files -z` and `git ls-files -z --others --ignored --exclude-standard`. */
+  | "git"
+  /** The caller declared the surface as tracked (`tracked_shippable`), so every path is tracked by construction. */
+  | "scope"
+  /** No Git answer: every finding is `unknown` and `provenance_unavailable_reason` says why. */
+  | "unavailable";
+
+export type PublicSafetyProvenanceUnavailableReason =
+  | "not_a_git_repository"
+  | "git_unavailable"
+  | "git_output_too_large"
+  | "git_listing_failed"
+  /** An exact caller-supplied surface with no Git semantics (`scanSelectedPublicSafetySync`). */
+  | "selected_surface";
+
+export interface PublicSafetyProvenanceCounts {
+  readonly tracked: number;
+  readonly untracked: number;
+  readonly ignored: number;
+  readonly unknown: number;
+}
+
 export interface PublicSafetyFinding {
-  /** Redacted, stable identity. It never contains the matched source text. */
+  /** Redacted, stable identity (rule, path, line). It never contains the matched source text and never the provenance. */
   readonly fingerprint: string;
   readonly line: number;
   readonly path: string;
+  readonly provenance: PublicSafetyProvenance;
   readonly rule: string;
   /** SHA-256 of the matched value: enough to recognise one planted fixture string, never the text. */
   readonly value_sha256: string;
@@ -129,6 +161,11 @@ export interface PublicSafetyScanResult {
   readonly findings: readonly PublicSafetyFinding[];
   /** SHA-256 of the exact frozen denylist bytes, when one configured this run. */
   readonly input_sha256?: string;
+  /** Findings per provenance; the four counts sum to `findings.length`. */
+  readonly provenance_counts: PublicSafetyProvenanceCounts;
+  readonly provenance_source: PublicSafetyProvenanceSource;
+  /** Present exactly when `provenance_source` is `unavailable`. A closed set: never Git's message text. */
+  readonly provenance_unavailable_reason?: PublicSafetyProvenanceUnavailableReason;
   /** Present when the caller supplied the precise tracked/shippable surface. */
   readonly scope?: "tracked_shippable";
   readonly status: "pass" | "fail";
@@ -403,13 +440,66 @@ export function publicSafetyValueDigestsInText(text: string): readonly { readonl
   return digests;
 }
 
-function publicSafetyFinding(path: string, line: number, rule: string, matched: string): PublicSafetyFinding {
+function publicSafetyFinding(
+  path: string,
+  line: number,
+  rule: string,
+  matched: string,
+  provenance: PublicSafetyProvenance,
+): PublicSafetyFinding {
   return {
     fingerprint: publicSafetyFingerprint({ path, line, rule }),
     path,
     line,
+    provenance,
     rule,
     value_sha256: createHash("sha256").update(matched, "utf8").digest("hex"),
+  };
+}
+
+/**
+ * Provenance for one scan: derived once, then applied per repository-relative
+ * path. `source` and `unavailable_reason` are copied onto the scan result.
+ */
+interface ProvenanceResolver {
+  readonly of: (path: string) => PublicSafetyProvenance;
+  readonly source: PublicSafetyProvenanceSource;
+  readonly unavailable_reason?: PublicSafetyProvenanceUnavailableReason;
+}
+
+const SCOPE_TRACKED_PROVENANCE: ProvenanceResolver = { of: () => "tracked", source: "scope" };
+
+function unavailableProvenance(reason: PublicSafetyProvenanceUnavailableReason): ProvenanceResolver {
+  return { of: () => "unknown", source: "unavailable", unavailable_reason: reason };
+}
+
+/** Classify a Git listing failure into the closed reason set; no message text leaves this function. */
+function provenanceUnavailableReason(error: unknown): PublicSafetyProvenanceUnavailableReason {
+  if (error instanceof GitOutputTooLargeError) return "git_output_too_large";
+  const code = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "";
+  if (code === "ENOENT") return "git_unavailable";
+  if (error instanceof Error && /not a git repository/iu.test(error.message)) return "not_a_git_repository";
+  return "git_listing_failed";
+}
+
+/**
+ * Ask Git once which paths under `root` are tracked and which are ignored;
+ * everything else the walk visits is untracked. Both listings run through the
+ * bounded Git helper, so a huge index is a typed refusal (reported as
+ * `unknown` with its reason), never an ENOBUFS crash and never a guess.
+ */
+function gitProvenance(root: string): ProvenanceResolver {
+  let tracked: ReadonlySet<string>;
+  let ignored: ReadonlySet<string>;
+  try {
+    tracked = new Set(trackedPaths(root));
+    ignored = new Set(ignoredPaths(root));
+  } catch (error) {
+    return unavailableProvenance(provenanceUnavailableReason(error));
+  }
+  return {
+    of: (path) => (tracked.has(path) ? "tracked" : ignored.has(path) ? "ignored" : "untracked"),
+    source: "git",
   };
 }
 
@@ -424,40 +514,59 @@ export async function scanPublicSafety(
   return scanPublicSafetySync(root, customTerms);
 }
 
-/** Synchronous form for closeout preparation, which is intentionally sync. */
+/**
+ * Synchronous form for closeout preparation, which is intentionally sync. The
+ * walk visits ignored and untracked files too, so each finding says which it is.
+ */
 export function scanPublicSafetySync(
   root: string,
   customTerms: readonly string[] = [],
 ): PublicSafetyScanResult {
-  return scanPublicSafetyFilesSync(walkFilesSync(root, PUBLIC_SAFETY_EXCLUDED_PARTS), customTerms);
+  return scanPublicSafetyFilesSync(walkFilesSync(root, PUBLIC_SAFETY_EXCLUDED_PARTS), customTerms, gitProvenance(resolve(root)));
 }
 
 /**
  * Scan exactly the caller-selected tracked/shippable paths. This deliberately
- * does not walk untracked agent logs, evidence caches, or ignored worktrees.
+ * does not walk untracked agent logs, evidence caches, or ignored worktrees,
+ * so every finding is `tracked` by construction of the scope.
  */
 export function scanTrackedPublicSafetySync(
   root: string,
   trackedPaths: readonly string[],
   customTerms: readonly string[] = [],
 ): PublicSafetyScanResult {
-  const selected = scanSelectedPublicSafetySync(root, trackedPaths, customTerms);
+  const selected = scanSelectedPublicSafetyFilesSync(root, trackedPaths, customTerms, SCOPE_TRACKED_PROVENANCE);
   return {
     findings: selected.findings,
     unassessed: selected.unassessed,
     exitCode: selected.exitCode,
     status: selected.status,
+    provenance_counts: selected.provenance_counts,
+    provenance_source: selected.provenance_source,
     scope: "tracked_shippable",
     tracked_path_count: selected.selected_path_count,
     tracked_paths_sha256: selected.selected_paths_sha256,
   };
 }
 
-/** Scan an exact caller-supplied surface without assuming Git or package semantics. */
+/**
+ * Scan an exact caller-supplied surface without assuming Git or package
+ * semantics. Nothing here knows whether a selected path is tracked, so every
+ * finding is `unknown` with reason `selected_surface`.
+ */
 export function scanSelectedPublicSafetySync(
   root: string,
   selectedPaths: readonly string[],
   customTerms: readonly string[] = [],
+): SelectedPublicSafetyScanResult {
+  return scanSelectedPublicSafetyFilesSync(root, selectedPaths, customTerms, unavailableProvenance("selected_surface"));
+}
+
+function scanSelectedPublicSafetyFilesSync(
+  root: string,
+  selectedPaths: readonly string[],
+  customTerms: readonly string[],
+  provenance: ProvenanceResolver,
 ): SelectedPublicSafetyScanResult {
   const absoluteRoot = resolve(root);
   const files: WalkedPath[] = [];
@@ -486,21 +595,29 @@ export function scanSelectedPublicSafetySync(
     }
   }
   return {
-    ...scanPublicSafetyFilesSync(files, customTerms, unassessed),
+    ...scanPublicSafetyFilesSync(files, customTerms, provenance, unassessed),
     selected_path_count: canonicalPaths.length,
     selected_paths_sha256: selectedPathSetSha256(canonicalPaths),
   };
 }
 
+function provenanceCounts(findings: readonly PublicSafetyFinding[]): PublicSafetyProvenanceCounts {
+  const counts = { tracked: 0, untracked: 0, ignored: 0, unknown: 0 };
+  for (const finding of findings) counts[finding.provenance] += 1;
+  return counts;
+}
+
 function scanPublicSafetyFilesSync(
   files: readonly WalkedPath[],
   customTerms: readonly string[],
+  provenance: ProvenanceResolver,
   initialUnassessed: readonly PublicSafetyUnassessed[] = [],
 ): PublicSafetyScanResult {
   const findings: PublicSafetyFinding[] = [];
   const unassessed = [...initialUnassessed];
 
   for (const file of files) {
+    const fileProvenance = provenance.of(file.relative);
     let text: string;
     try {
       if (file.symlink) {
@@ -526,21 +643,26 @@ function scanPublicSafetyFilesSync(
       for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
         const match = expression.exec(line);
         if (match && !isPublicThirdPartyLegalIdentifier(file.relative, line, rule)) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, rule, match[0] ?? line.trim()));
+          findings.push(publicSafetyFinding(file.relative, index + 1, rule, match[0] ?? line.trim(), fileProvenance));
         }
       }
       const folded = foldCase(line);
       for (const [termIndex, term] of customTerms.entries()) {
         if (folded.includes(foldCase(term))) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`, term));
+          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`, term, fileProvenance));
         }
       }
     }
   }
 
+  const provenanceFields = {
+    provenance_counts: provenanceCounts(findings),
+    provenance_source: provenance.source,
+    ...(provenance.unavailable_reason === undefined ? {} : { provenance_unavailable_reason: provenance.unavailable_reason }),
+  };
   return findings.length === 0 && unassessed.length === 0
-    ? { findings, unassessed, exitCode: 0, status: "pass" }
-    : { findings, unassessed, exitCode: 1, status: "fail" };
+    ? { findings, unassessed, exitCode: 0, status: "pass", ...provenanceFields }
+    : { findings, unassessed, exitCode: 1, status: "fail", ...provenanceFields };
 }
 
 /**
