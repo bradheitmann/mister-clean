@@ -1,7 +1,7 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
-9ce055f919e090bba58e89d2fb4173102ec8d10ab34e566b7dcc22fb98cd9996  ./README.md
+be5c37841660a7f4f32e2f4ce806486e09750acc8ddab74ebbd958bf99a39ef9  ./README.md
 1c4bdca67124f577bebe87528e852a44f48d772a71255b68e9780c52b153b803  ./SECURITY.md
-2e2cb4938daf187060f48129704963a860aa9217a178756aae2177e96174325b  ./SKILL.md
+24f6ac6e0783688f382864fc36d801f370779ef20e6de7fb74340f572d0faf6e  ./SKILL.md
 5e575cbe7a53b8b85aa0b0924eabf338e88669aaf368ae2cbff48a7c6eccf80e  ./THIRD_PARTY_NOTICES.md
 4e66270c944ed7b89ba2c391dec4be7d7a8c18a0fc43fde3128ccea0df68db71  ./agents/openai.yaml
 1335d4e7226703a3060ada7a75f279aa07eefa0d25e6c1118eeb19cfc647b0b9  ./assets/action-manifest.json
@@ -28,7 +28,7 @@ b97a3d54909032f9f5dccba9a3b36dfc08fc065a0abd7af7a41ea4dd887180d9  ./assets/codeb
 b32333bbd5e144d2e2c736df9ce0cd977f73ed50d53c57bcee7051e9ad8c7ce6  ./assets/codebase-state-dashboard/product-mark.svg
 2b280962cfe5fdaf4513877c3d65184c8f71ddadb75f000f8b52b7a40bf57ada  ./assets/codebase-state-dashboard/tsconfig.scorecard.json
 ad4137f8e86b7ff051d650ee37a6c33757154a5698c798526ce0fa47b9d91e46  ./assets/regression-delta.json
-8275dd8167e2f64ff87d4501b2d7b9b222c7f2e998a26c4b592d9dee35a1ebd7  ./bin/mister-clean.js
+69693b43b70f201b3ab2ff596dc595d9af5148c739c3e5e68d12ed320d05c97a  ./bin/mister-clean.js
 a512a7f3940e1d875ebe4485a8e676e557c6279305b9d55c3529c6ddcd5752cf  ./dist/control-plane.d.ts
 b94336915979cd3a7420574b03d4f5d03dbd6c54a15de5961d0609a0e9dac7d5  ./dist/control-plane.js
 20afd4527ea2b6486b48ff858e84a93c847f7fbfb5ea3022e79585657272c2f8  ./dist/control-plane/assets/CormorantGaramond-Medium-B9HO_40Y.ttf
@@ -47,15 +47,15 @@ eed988e3e89d825caf37c2db520b760decce9664e29572af20a73af8e521995d  ./dist/control
 20c2f4014c2b14c6076d6b4f63ed0b112df7d08b5abd98e631c0a548db5f5220  ./dist/planning.d.ts
 d079be0c4fbef7e61b643f2cd5991ed856c35d2279f153fcbef32d144eef3303  ./dist/planning.js
 3ae6b5a0a37ccefb99acb0e1413da1780ba64e1b52792e7ab36328eaf83b77ce  ./dist/public.d.ts
-6c1fa211d48e67a428ab005c949945418dd790835a42ac0a05b51f5b7653f22d  ./dist/public.js
+ed0b1f5333bf5a44ea247a18f51f9f5431692bc64d89d21122081457dbbcaf69  ./dist/public.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
-b65d5ed514d39fee8ec75842178b9e6995006d54b5585b0ae8adbc6ba00042bb  ./dist/stdio.js
+1c06f7a419a98233483cffa2d3caa5e695a962b21667a7204f1feadfd1b03a53  ./dist/stdio.js
 e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md
 e77aa854e06035c0a51b8e95779e8121689e493b3536564e8fa2ad9f79927834  ./evals/rotation-campaign.md
 34fcc94c1a7a86f9746a7bb93e1380768f13485260b78af76d0c86eabb656214  ./examples/example-report.md
-8e1a09c7cb1a9624fb8f56ad7421fc67edd009892f485e48b30079a3473cf6ef  ./package.json
+e65b87351177ad766341b4120700b5f64417525ba4de344d7b5a246a82792616  ./package.json
 42cc071449e75dbe46fac9938ef67d3a44b08c02d452441b7ab6f46f4b0d4bd4  ./references/authorization-and-modes.md
 84ff460cfeac5ab4f2becaf31520bbeb2403b4ab0c876cab20cca166e9671ad1  ./references/behavioral-evals.md
 1479d0d0ca5b3f947f255dca3527203a6a9f8224551bed7d79f745fe4488b69c  ./references/capability-adoption.md
@@ -75,7 +75,7 @@ a75458b2c8600f0d2c3857e56fe04e588deeecfe4781f8636407c9e5d3ac756f  ./references/p
 894f878afd2df43372a44675837c03d309493dbdaec5bb9f8912b07fc7ff0e83  ./references/successor-readiness.md
 24717eb2c3e0d52428fdd0663150e6759be3a3b25075ac5077ec8960355868b7  ./references/tool-liveness.md
 561add51cce082012a9f6c2e29a11e5c570338bca442d48be60c182d20eb356c  ./references/verification-and-claims.md
-d0445c6a26bc6b719d9e86678dc85b986abcb0c51328b62bcb781d3fd926e5b0  ./references/verification-doctrine.md
+7b717dae2bf106ce3c9c90c6562e8d1b33d3ad4a0d1f19bfd526f6c26f4bd215  ./references/verification-doctrine.md
 d16a2e5468b5ac6dc0d660a9440749fd5a6534a2a345306dc05d22fd2c092518  ./references/write-lane-isolation.md
 aa3d91e08e67b69b53900dd5e4a7c6fc4a05354b3d319ed30e39dca9daaab7fe  ./templates/hygiene-report.md
 7d1d43adbb752a54a644d98ecba1a0e6fb3cf851c14e0cae77a0b9713a355837  ./templates/orchestration-goal.md

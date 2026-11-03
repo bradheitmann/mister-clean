@@ -418,7 +418,8 @@ each finding from Git, never from opinion: `cleared`, `persisting`,
 `persisting_rewritten`, `persisting_unseen` (a MISS: the bytes were already
 committed at the earlier HEAD), `introduced`, `unresolvable_earlier_bytes`
 (the earlier subject was dirty, so the committed tree cannot prove absence), or
-`flaky` (alternates across three or more receipts of one identical subject).
+`flaky` (alternates across three or more receipts of one identical subject that
+examined the finding's family; receipts of other families contribute no turn).
 A pre-7.3 closeout bundle joins through its legacy fingerprints. Pass
 `--no-subject-hash` to skip the RepositoryObject capture on very large trees.
 
@@ -460,6 +461,10 @@ repository bytes it cites.
 The public distribution contains generalized doctrine and synthetic examples.
 Private case studies, local paths, credentials, project names, and operational
 evidence do not belong in this repository or its Git history.
+`audit public-safety <repo> --json` walks the working tree, so each finding
+carries `provenance` (`tracked`, `untracked`, `ignored`, or `unknown` when Git
+could not say) and the report carries `provenance_counts` and
+`provenance_source`; `--tracked` scans only tracked paths and labels them so.
 
 ## License
 

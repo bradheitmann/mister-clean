@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync15, readFileSync as readFileSync20, realpathSync as realpathSync13, statSync as statSync8, writeFileSync as writeFileSync8 } from "fs";
-import { isAbsolute as isAbsolute25, join as join20, relative as relative21, resolve as resolve29, sep as sep21 } from "path";
+import { existsSync as existsSync16, readFileSync as readFileSync21, realpathSync as realpathSync13, statSync as statSync8, writeFileSync as writeFileSync8 } from "fs";
+import { isAbsolute as isAbsolute25, join as join21, relative as relative21, resolve as resolve30, sep as sep21 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -10449,6 +10449,12 @@ function gitNullPaths(repository, args) {
   }
   return result.stdout.split("\0").filter((path) => path.length > 0);
 }
+function trackedPaths(repository) {
+  return gitNullPaths(repository, ["ls-files", "-z"]);
+}
+function ignoredPaths(repository) {
+  return gitNullPaths(repository, ["ls-files", "-z", "--others", "--ignored", "--exclude-standard"]);
+}
 function trackedShippablePaths(repository) {
   const deleted = new Set(gitNullPaths(repository, ["ls-files", "--deleted", "-z"]));
   return [...new Set(gitNullPaths(repository, ["ls-files", "--cached", "-z"]))].filter((path) => !deleted.has(path)).sort(compareCodePoints3);
@@ -10842,10 +10848,10 @@ function assertFilesystemCoverage(repository, entries2) {
 }
 function surfaceSnapshot(repository) {
   const tracked = parseTracked(gitBytes(repository, ["ls-files", "--cached", "--stage", "--full-name", "-z"]));
-  const trackedPaths2 = new Set(tracked.map((entry) => entry.path));
+  const trackedPaths3 = new Set(tracked.map((entry) => entry.path));
   const untracked = parseUntracked(
     gitBytes(repository, ["ls-files", "--others", "--exclude-standard", "--full-name", "-z"]),
-    trackedPaths2
+    trackedPaths3
   );
   const entries2 = [...tracked, ...untracked].sort((left, right) => Buffer.compare(left.pathBytes, right.pathBytes));
   if (!Number.isSafeInteger(entries2.length)) throw new Error("repository surface exceeds the safe entry-count range");
@@ -17560,7 +17566,8 @@ import {
   mkdtemp,
   readdir as readdir3,
   readlink,
-  rm
+  rm,
+  writeFile
 } from "fs/promises";
 import { tmpdir as tmpdir2 } from "os";
 import { basename as basename7, dirname as dirname7, isAbsolute as isAbsolute9, join as join6, relative as relative9, resolve as resolve11, sep as sep9 } from "path";
@@ -18429,6 +18436,20 @@ async function copySubjectWorktree(subject, snapshot) {
     });
   }
 }
+async function copyLocalExcludeRules(subject, snapshot, timeoutMs) {
+  const gitPath = (repository) => gitLine3(repository, ["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], timeoutMs);
+  const source = gitPath(subject);
+  let rules;
+  try {
+    rules = readFileSync6(source);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  const target = gitPath(snapshot);
+  await mkdir(dirname7(target), { recursive: true });
+  await writeFile(target, rules);
+}
 async function createExecutionSnapshot(subject, expected, options = {}) {
   const gitTimeoutMs = options.git_timeout_ms ?? SNAPSHOT_GIT_TIMEOUT_MS;
   assertPositiveInteger("git_timeout_ms", gitTimeoutMs);
@@ -18443,6 +18464,7 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
       throw new Error(`unsupported Git object format ${JSON.stringify(objectFormat)}`);
     }
     gitBytes3(repository, ["init", "--quiet", `--object-format=${objectFormat}`], gitTimeoutMs);
+    await copyLocalExcludeRules(subject, repository, gitTimeoutMs);
     gitBytes3(repository, ["fetch", "--quiet", "--no-tags", subject, expected.head_commit], gitTimeoutMs);
     gitBytes3(repository, ["checkout", "--quiet", "--detach", expected.head_commit], gitTimeoutMs);
     restoreReachabilityRefs(subject, repository, gitTimeoutMs);
@@ -18463,7 +18485,9 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
     await copySubjectWorktree(subject, repository);
     const repositoryObject = captureRepositoryObject(repository);
     if (!stableEqual(repositoryObject, expected)) {
-      throw new Error("disposable native-gate snapshot does not reproduce the exact subject repository object");
+      throw new Error(
+        `disposable native-gate snapshot does not reproduce the exact subject repository object (subject ${expected.sha256} entries=${expected.entry_count}; snapshot ${repositoryObject.sha256} entries=${repositoryObject.entry_count})`
+      );
     }
     return {
       container,
@@ -18476,7 +18500,7 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
     throw error;
   }
 }
-function trackedPaths(repository) {
+function trackedPaths2(repository) {
   const result = spawnSync4(
     "git",
     ["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"],
@@ -19113,7 +19137,7 @@ function discoverNativeGates(repository, repositoryObject) {
   if (!stableEqual(observed, repositoryObject)) {
     throw new Error("native gate discovery repository object does not match the supplied object");
   }
-  const paths = trackedPaths(root);
+  const paths = trackedPaths2(root);
   const runnerFindings = verificationRunnerSafetyFindings(root, paths);
   const runnerSourcePaths = [...new Set(runnerFindings.map((finding4) => finding4.path))].sort();
   const sourcePaths = paths.filter((path) => basename7(path) === "package.json" || basename7(path) === "Cargo.toml" || basename7(path) === "go.mod" || LOCKFILE_MANAGERS.has(basename7(path)));
@@ -23764,34 +23788,62 @@ function publicSafetyValueDigestsInText(text3) {
   }
   return digests;
 }
-function publicSafetyFinding(path, line, rule, matched) {
+function publicSafetyFinding(path, line, rule, matched, provenance) {
   return {
     fingerprint: publicSafetyFingerprint({ path, line, rule }),
     path,
     line,
+    provenance,
     rule,
     value_sha256: createHash17("sha256").update(matched, "utf8").digest("hex")
+  };
+}
+var SCOPE_TRACKED_PROVENANCE = { of: () => "tracked", source: "scope" };
+function unavailableProvenance(reason) {
+  return { of: () => "unknown", source: "unavailable", unavailable_reason: reason };
+}
+function provenanceUnavailableReason(error) {
+  if (error instanceof GitOutputTooLargeError) return "git_output_too_large";
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  if (code === "ENOENT") return "git_unavailable";
+  if (error instanceof Error && /not a git repository/iu.test(error.message)) return "not_a_git_repository";
+  return "git_listing_failed";
+}
+function gitProvenance(root) {
+  let tracked;
+  let ignored2;
+  try {
+    tracked = new Set(trackedPaths(root));
+    ignored2 = new Set(ignoredPaths(root));
+  } catch (error) {
+    return unavailableProvenance(provenanceUnavailableReason(error));
+  }
+  return {
+    of: (path) => tracked.has(path) ? "tracked" : ignored2.has(path) ? "ignored" : "untracked",
+    source: "git"
   };
 }
 async function scanPublicSafety(root, customTerms = []) {
   return scanPublicSafetySync(root, customTerms);
 }
 function scanPublicSafetySync(root, customTerms = []) {
-  return scanPublicSafetyFilesSync(walkFilesSync(root, PUBLIC_SAFETY_EXCLUDED_PARTS), customTerms);
+  return scanPublicSafetyFilesSync(walkFilesSync(root, PUBLIC_SAFETY_EXCLUDED_PARTS), customTerms, gitProvenance(resolve15(root)));
 }
-function scanTrackedPublicSafetySync(root, trackedPaths2, customTerms = []) {
-  const selected = scanSelectedPublicSafetySync(root, trackedPaths2, customTerms);
+function scanTrackedPublicSafetySync(root, trackedPaths3, customTerms = []) {
+  const selected = scanSelectedPublicSafetyFilesSync(root, trackedPaths3, customTerms, SCOPE_TRACKED_PROVENANCE);
   return {
     findings: selected.findings,
     unassessed: selected.unassessed,
     exitCode: selected.exitCode,
     status: selected.status,
+    provenance_counts: selected.provenance_counts,
+    provenance_source: selected.provenance_source,
     scope: "tracked_shippable",
     tracked_path_count: selected.selected_path_count,
     tracked_paths_sha256: selected.selected_paths_sha256
   };
 }
-function scanSelectedPublicSafetySync(root, selectedPaths, customTerms = []) {
+function scanSelectedPublicSafetyFilesSync(root, selectedPaths, customTerms, provenance) {
   const absoluteRoot = resolve15(root);
   const files = [];
   const canonicalPaths = [...new Set(selectedPaths)].sort(compareCodePoints5);
@@ -23819,15 +23871,21 @@ function scanSelectedPublicSafetySync(root, selectedPaths, customTerms = []) {
     }
   }
   return {
-    ...scanPublicSafetyFilesSync(files, customTerms, unassessed),
+    ...scanPublicSafetyFilesSync(files, customTerms, provenance, unassessed),
     selected_path_count: canonicalPaths.length,
     selected_paths_sha256: selectedPathSetSha256(canonicalPaths)
   };
 }
-function scanPublicSafetyFilesSync(files, customTerms, initialUnassessed = []) {
+function provenanceCounts(findings) {
+  const counts = { tracked: 0, untracked: 0, ignored: 0, unknown: 0 };
+  for (const finding4 of findings) counts[finding4.provenance] += 1;
+  return counts;
+}
+function scanPublicSafetyFilesSync(files, customTerms, provenance, initialUnassessed = []) {
   const findings = [];
   const unassessed = [...initialUnassessed];
   for (const file of files) {
+    const fileProvenance = provenance.of(file.relative);
     let text3;
     try {
       if (file.symlink) {
@@ -23852,18 +23910,23 @@ function scanPublicSafetyFilesSync(files, customTerms, initialUnassessed = []) {
       for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
         const match = expression.exec(line);
         if (match && !isPublicThirdPartyLegalIdentifier(file.relative, line, rule)) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, rule, match[0] ?? line.trim()));
+          findings.push(publicSafetyFinding(file.relative, index + 1, rule, match[0] ?? line.trim(), fileProvenance));
         }
       }
       const folded = foldCase(line);
       for (const [termIndex, term] of customTerms.entries()) {
         if (folded.includes(foldCase(term))) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`, term));
+          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`, term, fileProvenance));
         }
       }
     }
   }
-  return findings.length === 0 && unassessed.length === 0 ? { findings, unassessed, exitCode: 0, status: "pass" } : { findings, unassessed, exitCode: 1, status: "fail" };
+  const provenanceFields = {
+    provenance_counts: provenanceCounts(findings),
+    provenance_source: provenance.source,
+    ...provenance.unavailable_reason === void 0 ? {} : { provenance_unavailable_reason: provenance.unavailable_reason }
+  };
+  return findings.length === 0 && unassessed.length === 0 ? { findings, unassessed, exitCode: 0, status: "pass", ...provenanceFields } : { findings, unassessed, exitCode: 1, status: "fail", ...provenanceFields };
 }
 async function generateManifest(root) {
   const absoluteRoot = resolve15(root);
@@ -24455,15 +24518,20 @@ function resolveGateCwd(repository, cwd) {
   return target;
 }
 async function blockedExecution(gate, reason, object10, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
+  const subjectChanged = !stableEqual(subjectStartState, subjectEndState);
+  const recordedReason = subjectChanged ? "subject_repository_changed" : reason;
+  const recordedState = subjectChanged ? "blocked" : state;
+  const recordedDiagnostic = subjectChanged && reason !== "subject_repository_changed" ? `subject repository changed while the gate was being prepared; superseded reason: ${reason}
+${diagnostic}` : diagnostic;
   const started = now().toISOString();
   const stdoutRef = await writeOutput(evidenceRoot, gate.id, "stdout", Buffer.alloc(0), true);
-  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(diagnostic, "utf8"), true);
+  const stderrRef = await writeOutput(evidenceRoot, gate.id, "stderr", Buffer.from(recordedDiagnostic, "utf8"), true);
   return {
     gate_id: gate.id,
     kind: gate.kind,
     isolation: "disposable_exact_object_snapshot",
-    state,
-    failure_reason: reason,
+    state: recordedState,
+    failure_reason: recordedReason,
     command: gate.command,
     command_sha256: identity2(gate.command),
     resolved_executable: resolvedExecutable,
@@ -26042,8 +26110,8 @@ async function loadLiveRegressionBoundary(report, bundlePath, repo, files, error
   return { closingRepositoryObject, coverage };
 }
 async function validateLiveDetectors(report, bundlePath, repo, coverage, files, git2, errors) {
-  const trackedPaths2 = (await git2.run(repo, ["ls-files", "-z"])).stdout.split("\0").filter(Boolean);
-  const liveRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths2.length });
+  const trackedPaths3 = (await git2.run(repo, ["ls-files", "-z"])).stdout.split("\0").filter(Boolean);
+  const liveRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths3.length });
   if (!stableEqual2(coverage?.run_policy, liveRunPolicy)) {
     errors.push("$.live_detector_coverage.run_policy: recorded applicability differs from the live tracked shippable surface");
   }
@@ -26099,10 +26167,10 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
     ["semantic_boundary", findingFingerprintsFromAudit("semantic_boundary", semanticLive)]
   ];
   if (liveRequiredDetectorIds.includes("public_safety")) {
-    const publicSafetyResult = scanTrackedPublicSafetySync(repo, trackedPaths2, await loadDenylist(publicSafetyDenylist));
+    const publicSafetyResult = scanTrackedPublicSafetySync(repo, trackedPaths3, await loadDenylist(publicSafetyDenylist));
     const policyTrackedPathCount = object5(object5(coverage?.run_policy)?.public_safety)?.tracked_path_count;
-    if (policyTrackedPathCount !== trackedPaths2.length) {
-      errors.push(`$.live_detector_coverage.public_safety: tracked path count drifted from bound policy (${String(policyTrackedPathCount)} -> ${trackedPaths2.length})`);
+    if (policyTrackedPathCount !== trackedPaths3.length) {
+      errors.push(`$.live_detector_coverage.public_safety: tracked path count drifted from bound policy (${String(policyTrackedPathCount)} -> ${trackedPaths3.length})`);
     }
     liveDetectorFindings.splice(1, 0, [
       "public_safety",
@@ -27109,10 +27177,10 @@ async function collectPrepareEvidence(options, mode) {
         sha256: sha256File2(inputPath)
       };
     }
-    const trackedPaths2 = trackedShippablePaths(repository);
-    const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths2.length });
+    const trackedPaths3 = trackedShippablePaths(repository);
+    const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths3.length });
     const publicSafetyAudit = detectorRunPolicy.public_safety.disposition === "required" ? {
-      ...scanTrackedPublicSafetySync(repository, trackedPaths2, loadDenylistSync(publicSafetyDenylistPath)),
+      ...scanTrackedPublicSafetySync(repository, trackedPaths3, loadDenylistSync(publicSafetyDenylistPath)),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject,
       ...publicSafetyInputRef === void 0 ? {} : { input_sha256: publicSafetyInputRef.sha256 }
@@ -30811,16 +30879,20 @@ function flakyFingerprints(history) {
   const groups = /* @__PURE__ */ new Map();
   for (const entry of history) {
     if (entry.subject_sha256 === null) continue;
-    groups.set(entry.subject_sha256, [...groups.get(entry.subject_sha256) ?? [], entry.fingerprints]);
+    groups.set(entry.subject_sha256, [...groups.get(entry.subject_sha256) ?? [], entry]);
   }
-  const flaky = /* @__PURE__ */ new Set();
-  for (const runs of groups.values()) {
-    if (runs.length < 3) continue;
-    const universe = new Set(runs.flat());
-    for (const fingerprint2 of universe) {
-      const presence = runs.map((run) => run.includes(fingerprint2));
-      const turns = presence.filter((value, index) => index > 0 && value !== presence[index - 1]).length;
-      if (turns >= 2) flaky.add(fingerprint2);
+  const flaky = /* @__PURE__ */ new Map();
+  for (const receipts of groups.values()) {
+    for (const family of RECEIPT_FAMILIES) {
+      const runs = receipts.filter((entry) => entry.families.includes(family));
+      if (runs.length < 3) continue;
+      const observed = runs.map((run) => new Set(run.findings.filter((finding4) => finding4.family === family).map((finding4) => finding4.fingerprint)));
+      const universe = new Set(observed.flatMap((fingerprints) => [...fingerprints]));
+      for (const fingerprint2 of universe) {
+        const presence = observed.map((fingerprints) => fingerprints.has(fingerprint2));
+        const turns = presence.filter((value, index) => index > 0 && value !== presence[index - 1]).length;
+        if (turns >= 2) flaky.set(fingerprint2, { family, receipt_ids: runs.map((run) => run.receipt_id) });
+      }
     }
   }
   return flaky;
@@ -30832,18 +30904,21 @@ function classifySecondPass(input) {
   const currentByKey = new Map(input.current.map((item) => [key(item.finding), item]));
   const earlierWholeRepo = new Set(input.earlier.findings.filter((finding4) => finding4.anchor.kind === "whole_repo").map((finding4) => finding4.anchor.content_sha256));
   const earlierDirty = input.earlier.dirty !== false;
-  const flaky = input.flaky ?? /* @__PURE__ */ new Set();
+  const flaky = input.flaky ?? /* @__PURE__ */ new Map();
   const rows = [];
-  const row = (finding4, observed, classification, basis) => ({
-    fingerprint: finding4.fingerprint,
-    legacy_fingerprint: finding4.legacy_fingerprint,
-    family: finding4.family,
-    rule: finding4.rule,
-    path: finding4.path,
-    classification: flaky.has(finding4.fingerprint) ? "flaky" : classification,
-    observed,
-    basis: flaky.has(finding4.fingerprint) ? `alternates across >=3 receipts of one identical subject; underlying: ${classification}` : basis
-  });
+  const row = (finding4, observed, classification, basis) => {
+    const evidence = flaky.get(finding4.fingerprint);
+    return {
+      fingerprint: finding4.fingerprint,
+      legacy_fingerprint: finding4.legacy_fingerprint,
+      family: finding4.family,
+      rule: finding4.rule,
+      path: finding4.path,
+      classification: evidence === void 0 ? classification : "flaky",
+      observed,
+      basis: evidence === void 0 ? basis : `alternates across ${evidence.family} receipts ${evidence.receipt_ids.join(", ")} of one identical subject; underlying: ${classification}`
+    };
+  };
   for (const [joinKey, earlier] of earlierByKey) {
     if (!input.earlier.families.includes(earlier.family)) continue;
     const current = currentByKey.get(joinKey);
@@ -31032,7 +31107,12 @@ function runSecondPass(input) {
   const receiptPath = input.store.write(receipt, capture.repository);
   const history = input.store.forRepository(capture.repository_id).map((entry) => {
     const record4 = input.store.read(entry.receipt_id);
-    return { subject_sha256: record4.subject.repository_object?.sha256 ?? null, fingerprints: record4.findings.map((finding4) => finding4.fingerprint) };
+    return {
+      receipt_id: record4.receipt_id,
+      subject_sha256: record4.subject.repository_object?.sha256 ?? null,
+      families: record4.families,
+      findings: record4.findings.map((finding4) => ({ fingerprint: finding4.fingerprint, family: finding4.family }))
+    };
   });
   const rows = classifySecondPass({ earlier, current: anchored, git: input.git ?? gitPortFor(capture.repository), flaky: flakyFingerprints(history) });
   const counts = Object.fromEntries(SECOND_PASS_CLASSES.map((name) => [name, rows.filter((item) => item.classification === name).length]));
@@ -31049,6 +31129,27 @@ function runSecondPass(input) {
     exitCode: anchored.length > 0 ? 1 : 0
   };
   return { result, receipt, receipt_path: receiptPath };
+}
+
+// src/toolchain-pin.ts
+import { existsSync as existsSync15, readFileSync as readFileSync20 } from "fs";
+import { join as join20, resolve as resolve29 } from "path";
+var BUN_VERSION_FILE = ".bun-version";
+function runningBunVersion() {
+  return process.versions.bun ?? null;
+}
+function readBunPin(root) {
+  const path = join20(resolve29(root), BUN_VERSION_FILE);
+  if (!existsSync15(path)) return void 0;
+  const version = readFileSync20(path, "utf8").trim();
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
+  return version;
+}
+function checkToolchainPin(root, actual) {
+  const version = readBunPin(root);
+  if (version === void 0) return { ok: true, pinned: false };
+  if (actual !== null && actual !== version) return { ok: false, pinned: true, version, actual };
+  return { ok: true, pinned: true, version, actual };
 }
 
 // src/cli.ts
@@ -31088,16 +31189,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside2(root, candidate) {
-  const rootPath = resolve29(root);
-  const candidatePath = resolve29(candidate);
+  const rootPath = resolve30(root);
+  const candidatePath = resolve30(candidate);
   const relation = relative21(
-    existsSync15(rootPath) ? realpathSync13(rootPath) : rootPath,
-    existsSync15(candidatePath) ? realpathSync13(candidatePath) : candidatePath
+    existsSync16(rootPath) ? realpathSync13(rootPath) : rootPath,
+    existsSync16(candidatePath) ? realpathSync13(candidatePath) : candidatePath
   );
   return relation === "" || !relation.startsWith(`..${sep21}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync20(path, "utf8"));
+  return JSON.parse(readFileSync21(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -31112,11 +31213,11 @@ async function runSemantic(args, io) {
     const proposalsPath = removeOption(args, "--case-proposals", true);
     const runId = removeOption(args, "--run-id", true);
     const challengeNonce = removeOption(args, "--nonce", true);
-    const outputPath = resolve29(removeOption(args, "--output", true));
+    const outputPath = resolve30(removeOption(args, "--output", true));
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync15(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync16(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -31313,7 +31414,7 @@ async function runValidate(args, io, runtimeAttestation) {
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join20(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join21(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -31359,13 +31460,13 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync15(root) || !statSync8(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve29(root)}`);
+  if (!existsSync16(root) || !statSync8(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve30(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
   if (json) {
-    io.stdout(JSON.stringify({ resolved_root: resolve29(root), ...result }, null, 2));
+    io.stdout(JSON.stringify({ resolved_root: resolve30(root), ...result }, null, 2));
     return result.exitCode;
   }
   if (result.status === "unknown") {
@@ -31374,9 +31475,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join20(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync15(reference)) return 0;
-  const text3 = readFileSync20(reference, "utf8");
+  const reference = join21(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync16(reference)) return 0;
+  const text3 = readFileSync21(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -31512,10 +31613,17 @@ async function runManifest(args, io) {
   const check = removeFlag(args, "--check");
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
+  if (packageSurface) {
+    const pin = checkToolchainPin(root, runningBunVersion());
+    if (!pin.ok) {
+      io.stderr(`manifest: TOOLCHAIN MISMATCH (bun ${pin.actual}; repository pins ${pin.version} in .bun-version)`);
+      return 2;
+    }
+  }
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join20(resolve29(root), "MANIFEST.sha256");
+  const path = join21(resolve30(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync15(path) || readFileSync20(path, "utf8") !== result.content) {
+    if (!existsSync16(path) || readFileSync21(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -31564,7 +31672,7 @@ async function runCensus(args, io) {
       output_path: output
     });
     writeFileSync8(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
-    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve29(output)}`);
+    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve30(output)}`);
     return 0;
   }
   if (subcommand === "validate") {
@@ -31692,8 +31800,8 @@ async function runEvalCase(args, io) {
   const repo = removeOption(args, "--repo") ?? process.cwd();
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync15(repo) || !statSync8(repo).isDirectory()) {
-    io.stderr(`ERROR: --repo is not a directory: ${resolve29(repo)}`);
+  if (!existsSync16(repo) || !statSync8(repo).isDirectory()) {
+    io.stderr(`ERROR: --repo is not a directory: ${resolve30(repo)}`);
     return 2;
   }
   let parsed;
@@ -31776,9 +31884,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "github_actions", file: "github-actions-audit.json" },
               { family: "semantic_boundary", file: "semantic-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync15(join20(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join20(bundle, entry.file)) }));
-            const report = record3(readJson3(join20(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join20(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync16(join21(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join21(bundle, entry.file)) }));
+            const report = record3(readJson3(join21(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join21(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
             const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
@@ -31828,7 +31936,7 @@ function isDirectInvocation(argvPath, moduleUrl) {
   try {
     return realpathSync13(argvPath) === realpathSync13(fileURLToPath3(moduleUrl));
   } catch {
-    const invokedPath = resolve29(argvPath);
+    const invokedPath = resolve30(argvPath);
     return invokedPath === fileURLToPath3(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }

@@ -58,6 +58,7 @@ import {
   type ReceiptMode,
   type ReceiptVerdict,
 } from "./run-receipt.js";
+import { checkToolchainPin, runningBunVersion } from "./toolchain-pin.js";
 
 export interface CliIO {
   readonly stdout: (line: string) => void;
@@ -570,6 +571,13 @@ async function runManifest(args: string[], io: CliIO): Promise<number> {
   const check = removeFlag(args, "--check");
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
+  if (packageSurface) {
+    const pin = checkToolchainPin(root, runningBunVersion());
+    if (!pin.ok) {
+      io.stderr(`manifest: TOOLCHAIN MISMATCH (bun ${pin.actual}; repository pins ${pin.version} in .bun-version)`);
+      return 2;
+    }
+  }
   const result = packageSurface
     ? await nodeCloseoutEngine.generatePackageManifest(root)
     : await nodeCloseoutEngine.generateManifest(root);
