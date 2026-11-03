@@ -327,6 +327,9 @@ capsule. Recapture the source and capsule object around materialization; neither
 dependency installation nor build output may change candidate identity. Retain
 one cold-clone positive and one negative in which source-only ignored output
 cannot rescue a missing build product. An undeclared warm-up is not evidence.
+A detector that walks the working tree reports each finding's provenance
+(`tracked`, `untracked`, `ignored`, or `unknown` with the reason Git could not
+answer) so a publication leak is never confused with a local hazard.
 
 ## 25. Search custody is a root-qualified topology contract
 

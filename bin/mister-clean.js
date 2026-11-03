@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync14, readFileSync as readFileSync19, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
-import { isAbsolute as isAbsolute24, join as join19, relative as relative20, resolve as resolve28, sep as sep20 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync20, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
+import { isAbsolute as isAbsolute24, join as join20, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -10449,6 +10449,12 @@ function gitNullPaths(repository, args) {
   }
   return result.stdout.split("\0").filter((path) => path.length > 0);
 }
+function trackedPaths(repository) {
+  return gitNullPaths(repository, ["ls-files", "-z"]);
+}
+function ignoredPaths(repository) {
+  return gitNullPaths(repository, ["ls-files", "-z", "--others", "--ignored", "--exclude-standard"]);
+}
 function trackedShippablePaths(repository) {
   const deleted = new Set(gitNullPaths(repository, ["ls-files", "--deleted", "-z"]));
   return [...new Set(gitNullPaths(repository, ["ls-files", "--cached", "-z"]))].filter((path) => !deleted.has(path)).sort(compareCodePoints3);
@@ -10842,10 +10848,10 @@ function assertFilesystemCoverage(repository, entries2) {
 }
 function surfaceSnapshot(repository) {
   const tracked = parseTracked(gitBytes(repository, ["ls-files", "--cached", "--stage", "--full-name", "-z"]));
-  const trackedPaths2 = new Set(tracked.map((entry) => entry.path));
+  const trackedPaths3 = new Set(tracked.map((entry) => entry.path));
   const untracked = parseUntracked(
     gitBytes(repository, ["ls-files", "--others", "--exclude-standard", "--full-name", "-z"]),
-    trackedPaths2
+    trackedPaths3
   );
   const entries2 = [...tracked, ...untracked].sort((left, right) => Buffer.compare(left.pathBytes, right.pathBytes));
   if (!Number.isSafeInteger(entries2.length)) throw new Error("repository surface exceeds the safe entry-count range");
@@ -18476,7 +18482,7 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
     throw error;
   }
 }
-function trackedPaths(repository) {
+function trackedPaths2(repository) {
   const result = spawnSync4(
     "git",
     ["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"],
@@ -19113,7 +19119,7 @@ function discoverNativeGates(repository, repositoryObject) {
   if (!stableEqual(observed, repositoryObject)) {
     throw new Error("native gate discovery repository object does not match the supplied object");
   }
-  const paths = trackedPaths(root);
+  const paths = trackedPaths2(root);
   const runnerFindings = verificationRunnerSafetyFindings(root, paths);
   const runnerSourcePaths = [...new Set(runnerFindings.map((finding4) => finding4.path))].sort();
   const sourcePaths = paths.filter((path) => basename7(path) === "package.json" || basename7(path) === "Cargo.toml" || basename7(path) === "go.mod" || LOCKFILE_MANAGERS.has(basename7(path)));
@@ -23764,34 +23770,62 @@ function publicSafetyValueDigestsInText(text3) {
   }
   return digests;
 }
-function publicSafetyFinding(path, line, rule, matched) {
+function publicSafetyFinding(path, line, rule, matched, provenance) {
   return {
     fingerprint: publicSafetyFingerprint({ path, line, rule }),
     path,
     line,
+    provenance,
     rule,
     value_sha256: createHash17("sha256").update(matched, "utf8").digest("hex")
+  };
+}
+var SCOPE_TRACKED_PROVENANCE = { of: () => "tracked", source: "scope" };
+function unavailableProvenance(reason) {
+  return { of: () => "unknown", source: "unavailable", unavailable_reason: reason };
+}
+function provenanceUnavailableReason(error) {
+  if (error instanceof GitOutputTooLargeError) return "git_output_too_large";
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  if (code === "ENOENT") return "git_unavailable";
+  if (error instanceof Error && /not a git repository/iu.test(error.message)) return "not_a_git_repository";
+  return "git_listing_failed";
+}
+function gitProvenance(root) {
+  let tracked;
+  let ignored2;
+  try {
+    tracked = new Set(trackedPaths(root));
+    ignored2 = new Set(ignoredPaths(root));
+  } catch (error) {
+    return unavailableProvenance(provenanceUnavailableReason(error));
+  }
+  return {
+    of: (path) => tracked.has(path) ? "tracked" : ignored2.has(path) ? "ignored" : "untracked",
+    source: "git"
   };
 }
 async function scanPublicSafety(root, customTerms = []) {
   return scanPublicSafetySync(root, customTerms);
 }
 function scanPublicSafetySync(root, customTerms = []) {
-  return scanPublicSafetyFilesSync(walkFilesSync(root, PUBLIC_SAFETY_EXCLUDED_PARTS), customTerms);
+  return scanPublicSafetyFilesSync(walkFilesSync(root, PUBLIC_SAFETY_EXCLUDED_PARTS), customTerms, gitProvenance(resolve15(root)));
 }
-function scanTrackedPublicSafetySync(root, trackedPaths2, customTerms = []) {
-  const selected = scanSelectedPublicSafetySync(root, trackedPaths2, customTerms);
+function scanTrackedPublicSafetySync(root, trackedPaths3, customTerms = []) {
+  const selected = scanSelectedPublicSafetyFilesSync(root, trackedPaths3, customTerms, SCOPE_TRACKED_PROVENANCE);
   return {
     findings: selected.findings,
     unassessed: selected.unassessed,
     exitCode: selected.exitCode,
     status: selected.status,
+    provenance_counts: selected.provenance_counts,
+    provenance_source: selected.provenance_source,
     scope: "tracked_shippable",
     tracked_path_count: selected.selected_path_count,
     tracked_paths_sha256: selected.selected_paths_sha256
   };
 }
-function scanSelectedPublicSafetySync(root, selectedPaths, customTerms = []) {
+function scanSelectedPublicSafetyFilesSync(root, selectedPaths, customTerms, provenance) {
   const absoluteRoot = resolve15(root);
   const files = [];
   const canonicalPaths = [...new Set(selectedPaths)].sort(compareCodePoints5);
@@ -23819,15 +23853,21 @@ function scanSelectedPublicSafetySync(root, selectedPaths, customTerms = []) {
     }
   }
   return {
-    ...scanPublicSafetyFilesSync(files, customTerms, unassessed),
+    ...scanPublicSafetyFilesSync(files, customTerms, provenance, unassessed),
     selected_path_count: canonicalPaths.length,
     selected_paths_sha256: selectedPathSetSha256(canonicalPaths)
   };
 }
-function scanPublicSafetyFilesSync(files, customTerms, initialUnassessed = []) {
+function provenanceCounts(findings) {
+  const counts = { tracked: 0, untracked: 0, ignored: 0, unknown: 0 };
+  for (const finding4 of findings) counts[finding4.provenance] += 1;
+  return counts;
+}
+function scanPublicSafetyFilesSync(files, customTerms, provenance, initialUnassessed = []) {
   const findings = [];
   const unassessed = [...initialUnassessed];
   for (const file of files) {
+    const fileProvenance = provenance.of(file.relative);
     let text3;
     try {
       if (file.symlink) {
@@ -23852,18 +23892,23 @@ function scanPublicSafetyFilesSync(files, customTerms, initialUnassessed = []) {
       for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
         const match = expression.exec(line);
         if (match && !isPublicThirdPartyLegalIdentifier(file.relative, line, rule)) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, rule, match[0] ?? line.trim()));
+          findings.push(publicSafetyFinding(file.relative, index + 1, rule, match[0] ?? line.trim(), fileProvenance));
         }
       }
       const folded = foldCase(line);
       for (const [termIndex, term] of customTerms.entries()) {
         if (folded.includes(foldCase(term))) {
-          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`, term));
+          findings.push(publicSafetyFinding(file.relative, index + 1, `custom-denylist-${termIndex + 1}`, term, fileProvenance));
         }
       }
     }
   }
-  return findings.length === 0 && unassessed.length === 0 ? { findings, unassessed, exitCode: 0, status: "pass" } : { findings, unassessed, exitCode: 1, status: "fail" };
+  const provenanceFields = {
+    provenance_counts: provenanceCounts(findings),
+    provenance_source: provenance.source,
+    ...provenance.unavailable_reason === void 0 ? {} : { provenance_unavailable_reason: provenance.unavailable_reason }
+  };
+  return findings.length === 0 && unassessed.length === 0 ? { findings, unassessed, exitCode: 0, status: "pass", ...provenanceFields } : { findings, unassessed, exitCode: 1, status: "fail", ...provenanceFields };
 }
 async function generateManifest(root) {
   const absoluteRoot = resolve15(root);
@@ -26042,8 +26087,8 @@ async function loadLiveRegressionBoundary(report, bundlePath, repo, files, error
   return { closingRepositoryObject, coverage };
 }
 async function validateLiveDetectors(report, bundlePath, repo, coverage, files, git2, errors) {
-  const trackedPaths2 = (await git2.run(repo, ["ls-files", "-z"])).stdout.split("\0").filter(Boolean);
-  const liveRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths2.length });
+  const trackedPaths3 = (await git2.run(repo, ["ls-files", "-z"])).stdout.split("\0").filter(Boolean);
+  const liveRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths3.length });
   if (!stableEqual2(coverage?.run_policy, liveRunPolicy)) {
     errors.push("$.live_detector_coverage.run_policy: recorded applicability differs from the live tracked shippable surface");
   }
@@ -26099,10 +26144,10 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
     ["semantic_boundary", findingFingerprintsFromAudit("semantic_boundary", semanticLive)]
   ];
   if (liveRequiredDetectorIds.includes("public_safety")) {
-    const publicSafetyResult = scanTrackedPublicSafetySync(repo, trackedPaths2, await loadDenylist(publicSafetyDenylist));
+    const publicSafetyResult = scanTrackedPublicSafetySync(repo, trackedPaths3, await loadDenylist(publicSafetyDenylist));
     const policyTrackedPathCount = object5(object5(coverage?.run_policy)?.public_safety)?.tracked_path_count;
-    if (policyTrackedPathCount !== trackedPaths2.length) {
-      errors.push(`$.live_detector_coverage.public_safety: tracked path count drifted from bound policy (${String(policyTrackedPathCount)} -> ${trackedPaths2.length})`);
+    if (policyTrackedPathCount !== trackedPaths3.length) {
+      errors.push(`$.live_detector_coverage.public_safety: tracked path count drifted from bound policy (${String(policyTrackedPathCount)} -> ${trackedPaths3.length})`);
     }
     liveDetectorFindings.splice(1, 0, [
       "public_safety",
@@ -27109,10 +27154,10 @@ async function collectPrepareEvidence(options, mode) {
         sha256: sha256File2(inputPath)
       };
     }
-    const trackedPaths2 = trackedShippablePaths(repository);
-    const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths2.length });
+    const trackedPaths3 = trackedShippablePaths(repository);
+    const detectorRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths3.length });
     const publicSafetyAudit = detectorRunPolicy.public_safety.disposition === "required" ? {
-      ...scanTrackedPublicSafetySync(repository, trackedPaths2, loadDenylistSync(publicSafetyDenylistPath)),
+      ...scanTrackedPublicSafetySync(repository, trackedPaths3, loadDenylistSync(publicSafetyDenylistPath)),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject,
       ...publicSafetyInputRef === void 0 ? {} : { input_sha256: publicSafetyInputRef.sha256 }
@@ -30758,6 +30803,27 @@ function runSecondPass(input) {
   return { result, receipt, receipt_path: receiptPath };
 }
 
+// src/toolchain-pin.ts
+import { existsSync as existsSync14, readFileSync as readFileSync19 } from "fs";
+import { join as join19, resolve as resolve28 } from "path";
+var BUN_VERSION_FILE = ".bun-version";
+function runningBunVersion() {
+  return process.versions.bun ?? null;
+}
+function readBunPin(root) {
+  const path = join19(resolve28(root), BUN_VERSION_FILE);
+  if (!existsSync14(path)) return void 0;
+  const version = readFileSync19(path, "utf8").trim();
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
+  return version;
+}
+function checkToolchainPin(root, actual) {
+  const version = readBunPin(root);
+  if (version === void 0) return { ok: true, pinned: false };
+  if (actual !== null && actual !== version) return { ok: false, pinned: true, version, actual };
+  return { ok: true, pinned: true, version, actual };
+}
+
 // src/cli.ts
 var UsageError = class extends Error {
 };
@@ -30795,16 +30861,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside2(root, candidate) {
-  const rootPath = resolve28(root);
-  const candidatePath = resolve28(candidate);
+  const rootPath = resolve29(root);
+  const candidatePath = resolve29(candidate);
   const relation = relative20(
-    existsSync14(rootPath) ? realpathSync12(rootPath) : rootPath,
-    existsSync14(candidatePath) ? realpathSync12(candidatePath) : candidatePath
+    existsSync15(rootPath) ? realpathSync12(rootPath) : rootPath,
+    existsSync15(candidatePath) ? realpathSync12(candidatePath) : candidatePath
   );
   return relation === "" || !relation.startsWith(`..${sep20}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync19(path, "utf8"));
+  return JSON.parse(readFileSync20(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -30819,11 +30885,11 @@ async function runSemantic(args, io) {
     const proposalsPath = removeOption(args, "--case-proposals", true);
     const runId = removeOption(args, "--run-id", true);
     const challengeNonce = removeOption(args, "--nonce", true);
-    const outputPath = resolve28(removeOption(args, "--output", true));
+    const outputPath = resolve29(removeOption(args, "--output", true));
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync14(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync15(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -31020,7 +31086,7 @@ async function runValidate(args, io, runtimeAttestation) {
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join19(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join20(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -31066,13 +31132,13 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync14(root) || !statSync7(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve28(root)}`);
+  if (!existsSync15(root) || !statSync7(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve29(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
   if (json) {
-    io.stdout(JSON.stringify({ resolved_root: resolve28(root), ...result }, null, 2));
+    io.stdout(JSON.stringify({ resolved_root: resolve29(root), ...result }, null, 2));
     return result.exitCode;
   }
   if (result.status === "unknown") {
@@ -31081,9 +31147,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join19(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync14(reference)) return 0;
-  const text3 = readFileSync19(reference, "utf8");
+  const reference = join20(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync15(reference)) return 0;
+  const text3 = readFileSync20(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -31219,10 +31285,17 @@ async function runManifest(args, io) {
   const check = removeFlag(args, "--check");
   const packageSurface = removeFlag(args, "--package");
   assertNoArgs(args);
+  if (packageSurface) {
+    const pin = checkToolchainPin(root, runningBunVersion());
+    if (!pin.ok) {
+      io.stderr(`manifest: TOOLCHAIN MISMATCH (bun ${pin.actual}; repository pins ${pin.version} in .bun-version)`);
+      return 2;
+    }
+  }
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join19(resolve28(root), "MANIFEST.sha256");
+  const path = join20(resolve29(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync14(path) || readFileSync19(path, "utf8") !== result.content) {
+    if (!existsSync15(path) || readFileSync20(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -31271,7 +31344,7 @@ async function runCensus(args, io) {
       output_path: output
     });
     writeFileSync8(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
-    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve28(output)}`);
+    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve29(output)}`);
     return 0;
   }
   if (subcommand === "validate") {
@@ -31455,9 +31528,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "github_actions", file: "github-actions-audit.json" },
               { family: "semantic_boundary", file: "semantic-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync14(join19(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join19(bundle, entry.file)) }));
-            const report = record3(readJson3(join19(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join19(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync15(join20(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join20(bundle, entry.file)) }));
+            const report = record3(readJson3(join20(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join20(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
             const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
@@ -31507,7 +31580,7 @@ function isDirectInvocation(argvPath, moduleUrl) {
   try {
     return realpathSync12(argvPath) === realpathSync12(fileURLToPath3(moduleUrl));
   } catch {
-    const invokedPath = resolve28(argvPath);
+    const invokedPath = resolve29(argvPath);
     return invokedPath === fileURLToPath3(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }
