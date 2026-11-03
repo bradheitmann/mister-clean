@@ -41,6 +41,22 @@ import {
   validateFileCensus,
   type FileCensus,
 } from "./census.js";
+import { receiptFindingsFromAudit, type ReceiptFamily } from "./closeout/finding-anchors.js";
+import type { RepositoryObject } from "./closeout/repository-object.js";
+import {
+  assembleRunReceipt,
+  captureReceiptSubject,
+  runSecondPass,
+  SECOND_PASS_CLASSES,
+} from "./closeout/second-pass.js";
+import {
+  agentFromEnvironment,
+  LocalRunReceiptStore,
+  receiptRootFromEnvironment,
+  type ReceiptAgent,
+  type ReceiptMode,
+  type ReceiptVerdict,
+} from "./run-receipt.js";
 
 export interface CliIO {
   readonly stdout: (line: string) => void;
@@ -181,10 +197,19 @@ async function runSemantic(args: string[], io: CliIO): Promise<number> {
   return result.verdict === "attested_satisfied" ? 0 : 1;
 }
 
+/** What a receipt-writing caller learns from one audit or prepare run. */
+interface AuditResultSink {
+  (input: { readonly root: string; readonly family: ReceiptFamily; readonly result: unknown }): void;
+}
+interface PreparedSink {
+  (input: { readonly repo: string; readonly bundleDirectory: string; readonly mode: "CLOSE" | "GUARD" }): void;
+}
+
 async function runPrepare(
   args: string[],
   io: CliIO,
   runtimeAttestation: FileRuntimeAttestationBinding,
+  onPrepared?: PreparedSink,
 ): Promise<number> {
   const repo = removeOption(args, "--repo", true) as string;
   const evidenceHome = removeOption(args, "--evidence-home", true) as string;
@@ -234,6 +259,7 @@ async function runPrepare(
     runtimeAttestation,
   });
   io.stdout(prepared.bundleDirectory);
+  onPrepared?.({ repo, bundleDirectory: prepared.bundleDirectory, mode: (rawMode ?? "CLOSE") as "CLOSE" | "GUARD" });
   return 0;
 }
 
@@ -412,7 +438,7 @@ async function runDetect(args: string[], io: CliIO): Promise<number> {
   return 0;
 }
 
-async function runAudit(args: string[], io: CliIO): Promise<number> {
+async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): Promise<number> {
   const kind = args.shift();
   if (!new Set(["github-actions", "planning", "public-safety", "repository-boundaries", "semantic"]).has(String(kind))) {
     throw new UsageError("audit requires github-actions, planning, public-safety, repository-boundaries, or semantic");
@@ -454,6 +480,7 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
       }
       io.stdout(`planning: ${result.status.toLocaleUpperCase("und")} artifacts=${result.artifactCount} structured=${result.structuredArtifactCount} findings=${result.findings.length}`);
     }
+    onResult?.({ root, family: "planning_graph", result });
     return result.exitCode;
   }
   if (kind === "semantic") {
@@ -483,6 +510,7 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
       }
       io.stdout(`semantic: ${result.status.toLocaleUpperCase("und")} candidates=${result.candidate_probe_count} executed=${result.executed_probe_count} findings=${result.findings.length}`);
     }
+    onResult?.({ root, family: "semantic_boundary", result });
     return result.exitCode;
   }
   if (kind === "github-actions") {
@@ -496,6 +524,7 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
       }
       io.stdout(`github-actions: ${result.status.toLocaleUpperCase("und")} workflows=${result.workflow_count} sensitive=${result.sensitive_workflow_count} findings=${result.findings.length}`);
     }
+    onResult?.({ root, family: "github_actions", result });
     return result.exitCode;
   }
   if (kind === "repository-boundaries") {
@@ -509,6 +538,7 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
       }
       io.stdout(`repository-boundaries: ${result.status.toLocaleUpperCase("und")} parsers=${result.parser_surfaces.length} contracts=${result.external_contract_count} findings=${result.findings.length}`);
     }
+    onResult?.({ root, family: "repository_boundaries", result });
     return result.exitCode;
   }
   const json = removeFlag(args, "--json");
@@ -524,11 +554,13 @@ async function runAudit(args: string[], io: CliIO): Promise<number> {
     : await nodeCloseoutEngine.scanPublicSafety(root, denylist);
   if (json) {
     io.stdout(JSON.stringify(result, null, 2));
+    onResult?.({ root, family: "public_safety", result });
     return result.exitCode;
   }
   for (const finding of result.findings) io.stdout(`${finding.path}:${finding.line}: ${finding.rule}`);
   if (result.status === "fail") io.stderr(`public-safety: FAIL (${result.findings.length} finding(s))`);
   else io.stdout("public-safety: PASS");
+  onResult?.({ root, family: "public_safety", result });
   return result.exitCode;
 }
 
@@ -657,8 +689,115 @@ async function bindCliRuntime(io: CliIO): Promise<FileRuntimeAttestationBinding 
   }
 }
 
+/** Receipt-run options every receipt-writing command accepts; stripped before family parsing. */
+interface ReceiptRunOptions {
+  readonly agent: ReceiptAgent;
+  readonly subjectHash: boolean;
+}
+
+function takeReceiptRunOptions(args: string[]): ReceiptRunOptions {
+  const agentCard = removeOption(args, "--agent-card");
+  const subjectHash = !removeFlag(args, "--no-subject-hash");
+  return { agent: agentFromEnvironment(agentCard, process.env), subjectHash };
+}
+
+interface WriteReceiptInput {
+  readonly root: string;
+  readonly mode: ReceiptMode;
+  readonly results: readonly { readonly family: ReceiptFamily; readonly result: unknown }[];
+  readonly verdict: ReceiptVerdict;
+  readonly exitCode: number;
+  readonly observedAt: string;
+  readonly runtimeAttestation: FileRuntimeAttestationBinding;
+  readonly options: ReceiptRunOptions;
+  readonly invocationId: string | null;
+  /** A prepare run already bound its subject; reuse it instead of a second capture. */
+  readonly subjectFromBundle?: RepositoryObject;
+  readonly pathsRelativeToToplevel?: boolean;
+}
+
+/**
+ * Write one run receipt for a finished audit or prepare. A root that is not a
+ * Git worktree cannot carry a repository identity and is reported as skipped;
+ * a refused receipt (root inside the repository, private content) fails the run.
+ */
+function writeRunReceipt(io: CliIO, receipts: LocalRunReceiptStore, input: WriteReceiptInput): void {
+  const captured = captureReceiptSubject(input.root, { subject_hash: subjectHashFor(input) });
+  if (captured === undefined) {
+    io.stderr("receipt: SKIPPED reason=not_a_git_worktree");
+    return;
+  }
+  const capture = {
+    ...captured,
+    ...(input.pathsRelativeToToplevel ? { path_prefix: "" } : {}),
+    subject: input.subjectFromBundle !== undefined && input.subjectFromBundle.head_commit === captured.subject.head_commit
+      ? { ...captured.subject, repository_object: input.subjectFromBundle }
+      : captured.subject,
+  };
+  receipts.assertOutsideRepository(capture.repository);
+  const context = { repository: capture.repository, path_prefix: capture.path_prefix };
+  const findings = input.results.flatMap((entry) => receiptFindingsFromAudit(entry.family, entry.result, context).map((item) => item.finding));
+  const receipt = assembleRunReceipt({
+    capture,
+    mode: input.mode,
+    invocation_id: input.invocationId,
+    runtimeAttestation: input.runtimeAttestation,
+    agent: input.options.agent,
+    families: input.results.map((entry) => entry.family),
+    findings,
+    verdict: input.verdict,
+    exit_code: input.exitCode,
+    observed_at: input.observedAt,
+    finished_at: new Date().toISOString(),
+  });
+  receipts.write(receipt, capture.repository);
+  io.stderr(`receipt: WROTE id=${receipt.receipt_id} mode=${receipt.mode} families=${receipt.families.join(",")} findings=${receipt.findings.length}`);
+}
+
+function subjectHashFor(input: WriteReceiptInput): boolean {
+  return input.subjectFromBundle !== undefined ? false : input.options.subjectHash;
+}
+
+async function runSecondPassCommand(
+  args: string[],
+  io: CliIO,
+  runtimeAttestation: FileRuntimeAttestationBinding,
+  receipts: LocalRunReceiptStore | undefined,
+  options: ReceiptRunOptions,
+  invocationId: string | null,
+): Promise<number> {
+  const root = args[0]?.startsWith("--") === false ? (args.shift() as string) : process.cwd();
+  const against = removeOption(args, "--against");
+  const denylistPath = removeOption(args, "--denylist-file");
+  const json = removeFlag(args, "--json");
+  assertNoArgs(args);
+  if (receipts === undefined) throw new UsageError("second-pass requires a receipt store (set HOME, XDG_STATE_HOME or MISTER_CLEAN_RECEIPT_ROOT)");
+  const { result, receipt } = runSecondPass({
+    store: receipts,
+    root,
+    ...(against === undefined ? {} : { against }),
+    ...(denylistPath === undefined ? {} : { denylistPath }),
+    runtimeAttestation,
+    agent: options.agent,
+    invocation_id: invocationId,
+    subject_hash: options.subjectHash,
+  });
+  io.stderr(`receipt: WROTE id=${receipt.receipt_id} mode=SECOND_PASS families=${receipt.families.join(",")} findings=${receipt.findings.length}`);
+  if (json) io.stdout(JSON.stringify(result, null, 2));
+  else {
+    for (const row of result.rows) io.stdout(`${row.classification}\t${row.family}\t${row.rule}\t${row.path}\t${row.basis}`);
+    const summary = SECOND_PASS_CLASSES.map((name) => `${name}=${result.counts[name]}`).join(" ");
+    io.stdout(`second-pass: MISSES=${result.miss_count} against=${result.against.kind}:${result.against.head_commit.slice(0, 12)} ${summary}`);
+  }
+  return result.exitCode;
+}
+
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+}
+
+export function receiptStoreFromEnvironment(environment: NodeJS.ProcessEnv): LocalRunReceiptStore {
+  return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));
 }
 
 export async function runCli(
@@ -666,6 +805,7 @@ export async function runCli(
   io: CliIO = defaultIO(),
   lifecycle: MisterCleanRunLifecycle | undefined = undefined,
   journal: MisterCleanInvocationJournal | undefined = undefined,
+  receipts: LocalRunReceiptStore | undefined = undefined,
 ): Promise<number> {
   const args = [...argv];
   const command = args.shift();
@@ -673,7 +813,7 @@ export async function runCli(
   let lifecycleRunEventId: string | null = null;
   let terminalRecorded = false;
   try {
-    if (!new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "attest"]).has(String(command))) {
+    if (!new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "attest"]).has(String(command))) {
       usage(io);
       return 2;
     }
@@ -691,11 +831,66 @@ export async function runCli(
     else {
     const runtimeAttestation = await bindCliRuntime(io);
       if (!runtimeAttestation) exitCode = 2;
-      else if (command === "prepare") exitCode = await runPrepare(args, io, runtimeAttestation);
+      else if (command === "prepare" || command === "audit" || command === "second-pass") {
+        // Receipt-writing commands. Identity enters only through an explicit
+        // card; the receipt is written after the run, outside the repository.
+        const receiptOptions = takeReceiptRunOptions(args);
+        const observedAt = new Date().toISOString();
+        if (command === "second-pass") {
+          exitCode = await runSecondPassCommand(args, io, runtimeAttestation, receipts, receiptOptions, invocationId ?? null);
+        } else if (command === "audit") {
+          let observed: { readonly root: string; readonly family: ReceiptFamily; readonly result: unknown } | undefined;
+          exitCode = await runAudit(args, io, (entry) => { observed = entry; });
+          if (receipts !== undefined && observed !== undefined) {
+            writeRunReceipt(io, receipts, {
+              root: observed.root,
+              mode: "AUDIT",
+              results: [{ family: observed.family, result: observed.result }],
+              verdict: "AUDIT_ONLY",
+              exitCode,
+              observedAt,
+              runtimeAttestation,
+              options: receiptOptions,
+              invocationId: invocationId ?? null,
+            });
+          }
+        } else {
+          let prepared: { readonly repo: string; readonly bundleDirectory: string; readonly mode: "CLOSE" | "GUARD" } | undefined;
+          exitCode = await runPrepare(args, io, runtimeAttestation, (entry) => { prepared = entry; });
+          if (receipts !== undefined && prepared !== undefined) {
+            const bundle = prepared.bundleDirectory;
+            const families: { readonly family: ReceiptFamily; readonly file: string }[] = [
+              { family: "planning_graph", file: "planning-audit.json" },
+              { family: "public_safety", file: "public-safety-audit.json" },
+              { family: "github_actions", file: "github-actions-audit.json" },
+              { family: "semantic_boundary", file: "semantic-audit.json" },
+            ];
+            const results = families
+              .filter((entry) => existsSync(join(bundle, entry.file)))
+              .map((entry) => ({ family: entry.family, result: readJson(join(bundle, entry.file)) }));
+            const report = record(readJson(join(bundle, "closeout-report.json")));
+            const delta = record(readJson(join(bundle, "regression-delta.json")));
+            const baselineObject = record(delta?.baseline_repository_object);
+            const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
+            writeRunReceipt(io, receipts, {
+              root: prepared.repo,
+              mode: "CLOSE",
+              results,
+              verdict,
+              exitCode,
+              observedAt,
+              runtimeAttestation,
+              options: receiptOptions,
+              invocationId: invocationId ?? null,
+              ...(baselineObject === undefined ? {} : { subjectFromBundle: baselineObject as unknown as RepositoryObject }),
+              pathsRelativeToToplevel: true,
+            });
+          }
+        }
+      }
       else if (command === "action") exitCode = await runAction(args, io, runtimeAttestation);
       else if (command === "validate") exitCode = await runValidate(args, io, runtimeAttestation);
       else if (command === "detect") exitCode = await runDetect(args, io);
-      else if (command === "audit") exitCode = await runAudit(args, io);
       else if (command === "inspect") exitCode = await runInspect(args, io);
       else if (command === "census") exitCode = await runCensus(args, io);
       else if (command === "manifest") exitCode = await runManifest(args, io);
@@ -732,7 +927,13 @@ if (isDirectInvocation(process.argv[1], import.meta.url)) {
   const directCommand = directArgs[0];
   const isHelpOrVersion = directCommand === undefined || directCommand === "--help" || directCommand === "help" || directCommand === "--version" || directCommand === "version";
   try {
-    process.exitCode = await runCli(directArgs, defaultIO(), undefined, isHelpOrVersion ? undefined : journalFromEnvironment(process.env));
+    process.exitCode = await runCli(
+      directArgs,
+      defaultIO(),
+      undefined,
+      isHelpOrVersion ? undefined : journalFromEnvironment(process.env),
+      isHelpOrVersion ? undefined : receiptStoreFromEnvironment(process.env),
+    );
   } catch (error) {
     process.stderr.write(`ERROR: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;

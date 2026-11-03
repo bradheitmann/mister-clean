@@ -382,6 +382,38 @@ options are not inherited. Never repack between verification and publication.
 Exactly one authorized publication lane may operate for a package name and
 version.
 
+## Receipts and second pass
+
+Every `audit`, `prepare` and `second-pass` run writes one run receipt
+(`mister-clean.run-receipt/1`) under the machine-local state root, beside the
+invocation journal: `$XDG_STATE_HOME/mister-clean/receipts/<repository_id_sha256>/`
+plus `receipts.index.jsonl`, mode 0600. `MISTER_CLEAN_RECEIPT_ROOT` overrides
+the root; a root inside the audited repository is refused. A receipt holds the
+repository identity, the exact subject (RepositoryObject 1.0 plus HEAD tree), a
+dirty flag, and every finding keyed by a content anchor (matched-value digest,
+trimmed line text, normalized detail, or whole-repository contract hash) so the
+fingerprint survives line shifts. Receipts carry repository-relative paths and
+digests only; a receipt that would carry a matched value, an absolute path or a
+credential is refused before any write. Agent identity enters only through
+`--agent-card <card.json>` or `MISTER_CLEAN_AGENT_CARD` with an
+`identity_status`; otherwise it is `unobserved`.
+
+```sh
+mister-clean audit planning path/to/live-checkout --json        # writes an AUDIT receipt
+mister-clean second-pass path/to/live-checkout                  # against the latest receipt
+mister-clean second-pass path/to/live-checkout --against mc-receipt:<uuid> --json
+mister-clean second-pass path/to/live-checkout --against path/to/old-bundle   # pre-7.3 bundle
+```
+
+`second-pass` re-runs the earlier receipt's families read-only and classifies
+each finding from Git, never from opinion: `cleared`, `persisting`,
+`persisting_rewritten`, `persisting_unseen` (a MISS: the bytes were already
+committed at the earlier HEAD), `introduced`, `unresolvable_earlier_bytes`
+(the earlier subject was dirty, so the committed tree cannot prove absence), or
+`flaky` (alternates across three or more receipts of one identical subject).
+A pre-7.3 closeout bundle joins through its legacy fingerprints. Pass
+`--no-subject-hash` to skip the RepositoryObject capture on very large trees.
+
 ## Public-safety boundary
 
 The public distribution contains generalized doctrine and synthetic examples.

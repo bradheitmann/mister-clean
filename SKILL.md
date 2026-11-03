@@ -59,6 +59,7 @@ an attributable operator ruling recorded on the affected artifact.
 | `CONFORM` | Normalize a named current, historical, or generated corpus | Preserve provenance under the conformance contract. |
 | `GUARD` | Guard an active implementation before accepted history advances | Use the exact-tree four-role barrier. |
 | `AUDIT` | Explicit “audit,” “review only,” “inspect only,” or “make no changes” | Read-only findings and evidence; no repository or external mutation. |
+| `second-pass` | Re-audit after a receipted run was remediated | Read-only; joins a fresh audit to the earlier receipt by stable fingerprint and classifies each finding from Git: cleared, persisting, MISS, introduced. |
 
 Never downgrade a bare invocation to `AUDIT` because it is short.
 
@@ -138,10 +139,10 @@ node "$MISTER_CLEAN_ROOT/bin/mister-clean.js" detect stack .
 
 Inventory completion debt, projection contradictions, hygiene findings, broken entry points, stale instructions, unreachable tests, generated drift, ownership gaps, and unclassified planning artifacts across all ten dimensions.
 Declared required fields are corpus-wide: validate every eligible artifact; never sample or invent missing history.
-Close identity -> authority -> projection -> behavior -> state. Ambiguous identifiers, stale authority projections, vacuous distinctions, and unbounded state stay payable until semantic probes dispose them; read `references/semantic-boundary-probes.md`. Repository probes may propose cases and raw observations but never grade themselves. Mister Clean owns census, compiled checks, and verdict reduction; arbitrary runtime semantics require an external, independently authorized Ed25519 attestation under an external trust policy. Legacy runner PASS and `not_applicable` remain debt until v2 reproof.
+Close identity -> authority -> projection -> behavior -> state. Ambiguous identifiers, stale authority projections, vacuous distinctions, and unbounded state stay payable until semantic probes dispose them; read `references/semantic-boundary-probes.md`. Repository probes may propose cases and raw observations but never grade themselves. Mister Clean owns census, compiled checks, and verdict reduction; arbitrary runtime semantics require an independently authorized Ed25519 attestation under an external trust policy. Legacy runner PASS and `not_applicable` remain debt until v2 reproof.
 Also close gate-bite, evidence portability, proof-kind liveness, failure-domain independence, mirror equivalence, supersession lineage, instruction polarity, and environment-semantics seams as distinct root invariants.
 Map every production executable, including JavaScript/JSDoc zero-build surfaces, to a reachable native validation route; exclusions fail.
-GitHub Actions debt includes transitive workflow authorization, candidate provenance, and named health checks; pay root invariants and retain negatives. Read detected `references/stack-adapters.md` sections.
+GitHub Actions debt includes transitive workflow authorization, candidate provenance, and named health checks; pay root invariants and retain negatives.
 When code, documentation, dependencies, build context, or topology may change, read `references/complexity-debt.md`. Use one analyzer and count generated shippable mirrors in shipped weight, never authored structure; keep evidence outside the measured subject.
 Repairs need contradiction/near-miss or rationale. Toggles/migrations need reused A→B/B→A/system/host-handoff traces, clear hosts, and path parity; fresh states fail.
 
@@ -161,7 +162,7 @@ A proved common cause shapes one action. Only `mister-clean prepare` mints obser
 Order work `FINISH -> CONFORM -> CLEAN`; choose the smallest dependency-closed action and atomically update its authoritative projections. After each changed or interrupted action, run frozen comparators and exact-object gates; repair or roll back new debt before continuing.
 For supported generic local mutations, use `mister-clean action begin`/`finish`; it refuses incomplete physical action-hygiene evidence or cleanup-created ref, stash, worktree, ignored-path, Git-control, or process regression.
 
-For sealed material, install mechanical least-read custody; prose-only prohibition is not custody. Exposure freezes the lane, revokes that actor's positive authority, and requires replacement. Read `references/concurrent-remediation.md`.
+For sealed material, install mechanical least-read custody; prose-only prohibition is not custody. Exposure freezes the lane, revokes that actor's positive authority, and requires replacement.
 When policy requires separation of duty, use a genuinely distinct actor. `continue` resumes the same role, read/write scope, and task; it grants no new authority.
 A verifier that writes cannot certify its diff. Tab labels/self-reports are not execution identity. Bind model + harness + reasoning + provider route before dispatch/scoring. Restart, fallback, or mismatch invalidates the lease; never backfill unknown identity. Retain findings as `identity_unbound`.
 
@@ -178,14 +179,14 @@ retains repair authority, but any repair restarts affected independent checks.
 Generic action manifests use schema 1.2; every newly prepared GUARD closeout is `closeout_guard` schema 1.3 from initialization and reuses schema-1.2 coordination semantics. A live passed/open or crossed/executed boundary requires external `--accepted-evaluator` and `--guard-authority`; inline copies cannot replace them.
 It proves current object/record coherence, not authorship, historical mutex/CAS execution, or an execution claim without its own evidence.
 
-A path plus digest is an evidence locator, not proof. Load and verify its exact bytes, full bindings, and state-specific semantics; authentication and transport acknowledgement do not establish acceptance, execution, or verification. Read `references/verification-and-claims.md`.
+A path plus digest is an evidence locator, not proof. Load and verify its exact bytes, full bindings, and state-specific semantics; authentication and transport acknowledgement do not establish acceptance, execution, or verification.
 
 Every production executable surface needs a reachable canonical syntax/static/type/build/test gate. A green root typecheck does not cover excluded
 directories. Fixture/demo projections
 must identify themselves conspicuously; excluded files and source imports cannot support packaged, live-state, routing, qualification, or CLEAN claims.
 
 When Mister Clean is under test, it cannot certify itself. **Every Mister Clean commit candidate** crosses the exact-tree GUARD barrier and a read-only dogfood run by the last accepted installed release, pinned by version and digest, against one frozen full repository object; any byte change restarts the gate.
-Matched comparisons receive the same blind packet, never overlap repository writes, and are independently scored. Route genuine misses to a general detector, rule, or fixture. Read `evals/blind-run-contract.md`.
+Matched comparisons receive the same blind packet, never overlap repository writes, and are independently scored. Route genuine misses to a general detector, rule, or fixture.
 
 Before target or remote ref mutation, re-resolve the expected object. If it
 moved, reject the stale transaction, incorporate the current target under
@@ -263,7 +264,7 @@ the proof and report the exact hard boundary as `NOT CLEAN`.
 | Four-role fleet campaign | `evals/rotation-campaign.md` |
 | Local report/control plane | `references/control-plane-product-spec.md` |
 | Selective API | `references/capability-adoption.md` |
-| Optional visual state projection | `assets/codebase-state-dashboard/index.html` and its adjacent scorecard/tokens |
+| Optional visual state projection | `assets/codebase-state-dashboard/index.html` |
 
 Do not return a plan while executable in-scope work remains. Return changed,
 verified repository state, or a precise `NOT CLEAN` boundary report after all
