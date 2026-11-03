@@ -185,6 +185,38 @@ Test Files  3 failed | 50 passed (53)
 No closeout, planning, native-gate, bundle, prepare, receipt, skill-contract
 or toolchain test is red; the native-gates leftover check passed in this run.
 
+## After merging main 9d7b6c8 (PR #53 gate-evidence subject change, PR #54 second-pass flaky per family)
+
+Main advanced a third time. `git merge --no-edit origin/main`: only the
+generated `MANIFEST.sha256` conflicted (taken from main, regenerated); no
+source conflicts.
+
+| command | result |
+|---|---|
+| `bun run build:materials` then `pnpm exec tsc --noEmit` | exit 0 |
+| `pnpm run build:raw` twice, `dist/` removed before each | identical hashes: `bin/mister-clean.js` 4a6cd51d…, `dist/public.js` 1e160172…, `dist/stdio.js` e6ae7768…, `dist/planning.js` d079be0c…, `dist/control-plane.js` b9433691…; `MANIFEST.sha256` 8b116a2d… |
+| `bun run manifest:package:check` | PASS (82 entries) |
+| proofs + `planning-config`, `native-gates`, `gate-snapshot-local-excludes`, `gate-evidence-subject-change`, `skill-contract`, `toolchain-pin` (same vitest flags) | 7 files, 103/103 pass |
+| `bun run audit:public` | PASS (83 files) |
+| `charter check --strict` | ok |
+| `SKILL.md` | unchanged, 19,975 bytes |
+| `pnpm run test:node` | see below |
+
+### Full suite after merging 9d7b6c8 (these exact bytes: 8679a45 plus the regenerated manifest)
+
+```
+Test Files  1 failed | 53 passed (54)
+     Tests  5 failed | 903 passed (908)
+  Duration  676.99s
+```
+
+The five reds are the five `scripts/verify_generated_candidate.test.ts` tests,
+each refused by the host-global lang-guard commit hook inside the test's own
+scratch capsule ("this commit adds untyped code", five occurrences). Environment
+class (host hook), not candidate. Every other file passed, including
+`run_clean_ci`, `release_path` and the native-gates leftover check that were
+red under heavier load in the two earlier runs.
+
 ## Out of scope (recorded obligations)
 
 - Runner-safety findings (`repository:runner-safety`) under evidence/archive
