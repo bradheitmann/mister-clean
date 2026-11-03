@@ -249,6 +249,22 @@ tests refused by the host-global lang-guard commit hook in their scratch
 capsule (five occurrences in the log). Environment class (host hook), not
 candidate. Every other file passed.
 
+## After merging main d70f722 (PR #56 gate toolchain locators, PR #57 one temp root per vitest run) — QA freeze
+
+Fifth merge, `git merge --no-edit origin/main`; only the generated
+`MANIFEST.sha256` conflicted (taken from main, regenerated). Per PM, no further
+full suite for this merge (hosted CI arbitrates).
+
+| command | result |
+|---|---|
+| `bun run build:materials` then `pnpm exec tsc --noEmit` | exit 0 |
+| `pnpm run build:raw` twice, `dist/` removed before each | identical hashes: `bin/mister-clean.js` 1053a245…, `dist/public.js` ed0b1f53…, `dist/stdio.js` 1c06f7a4…, `dist/planning.js` d079be0c…, `dist/control-plane.js` b9433691…; `MANIFEST.sha256` 22b445ea… |
+| `bun run manifest:package:check` | PASS (82 entries) |
+| proof file + `native-gates`, `gate-toolchain-locators`, `skill-contract` (same vitest flags, now under main's `vitest.config.ts`) | 4 files, 79/79 pass |
+| `bun run audit:public` | PASS (83 files) |
+| `charter check --strict` | ok, run as `~/.local/share/charter/bin/b9323cd…/bin/charter` because the `charter` shim on PATH disappeared from the host during this lane (the hooks resolve that same pinned path and still gate) |
+| `SKILL.md` | unchanged by this lane, 19,975 bytes |
+
 ## Out of scope (recorded obligations)
 
 - Runner-safety findings (`repository:runner-safety`) under evidence/archive
