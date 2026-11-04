@@ -110,6 +110,24 @@ describe("executable-surface native routes (CI steps route scripts and built tar
     expect(evidence).toContain("release input closure requires native evidence: build");
   });
 
+  it("recognizes a test runner invoked through its installed node_modules entry as the test matrix", () => {
+    // No build step: the dist targets stay unresolved, but every source file
+    // gets a native route from the installed-runner test step instead of a
+    // "validation route unestablished" reason.
+    const repository = ordinaryRepository("installed-runner", {
+      workflow: WORKFLOW_WITHOUT_BUILD.replace(
+        "          FIXTURE_MODE=1 pnpm run test\n",
+        "          FIXTURE_MODE=1 pnpm exec -- bun ./node_modules/vitest/vitest.mjs run --allowOnly=false\n",
+      ),
+    });
+    const candidate = executableCandidate(repository);
+    const evidence = candidate?.evidence.join(" ") ?? "";
+    expect(evidence).toContain("unresolved declared runtime target: ./dist/public.js");
+    expect(evidence).not.toContain("validation route unestablished");
+    expect(evidence).not.toContain("is not a tracked source file");
+    expect(evidence).toContain("native route: src/public.ts <- .github/workflows/ci.yml#verify step 'Build and test' (test matrix of .)");
+  });
+
   it("credits no step whose condition it cannot classify", () => {
     const repository = ordinaryRepository("conditional", {
       workflow: WORKFLOW_WITH_BUILD.replace("      - name: Build and test\n", "      - name: Build and test\n        if: github.event_name == 'workflow_dispatch'\n"),

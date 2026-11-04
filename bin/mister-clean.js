@@ -14589,6 +14589,11 @@ function nativeRouteChain(root, command, directory, paths, packages, routes, evi
     if (tokens[0] === "bun" || tokens[0] === "node" || tokens[0] === "tsx") {
       const operand = tokens.slice(1).find((token) => !token.startsWith("-"));
       const path = operand ? insidePortablePath(root, cwd, operand) : void 0;
+      const installedRunner = path?.match(/(?:^|\/)node_modules\/([^/]+)\//u)?.[1];
+      if (installedRunner !== void 0 && TEST_RUNNERS.has(installedRunner)) {
+        routes.tests.set(testScope, evidence);
+        continue;
+      }
       if (operand && path && paths.includes(path) && RUNNER_SOURCE.test(path) && !lstatSync4(resolve7(root, path)).isSymbolicLink()) {
         routes.executed.set(path, evidence);
       } else if (operand !== void 0) {

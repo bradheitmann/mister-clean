@@ -650,6 +650,13 @@ function nativeRouteChain(
     if (tokens[0] === "bun" || tokens[0] === "node" || tokens[0] === "tsx") {
       const operand = tokens.slice(1).find((token) => !token.startsWith("-"));
       const path = operand ? insidePortablePath(root, cwd, operand) : undefined;
+      // A test runner invoked through its installed entry (node_modules/<runner>/…)
+      // is the same test matrix as the bare runner command.
+      const installedRunner = path?.match(/(?:^|\/)node_modules\/([^/]+)\//u)?.[1];
+      if (installedRunner !== undefined && TEST_RUNNERS.has(installedRunner)) {
+        routes.tests.set(testScope, evidence);
+        continue;
+      }
       if (operand && path && paths.includes(path) && RUNNER_SOURCE.test(path) && !lstatSync(resolve(root, path)).isSymbolicLink()) {
         routes.executed.set(path, evidence);
       } else if (operand !== undefined) {

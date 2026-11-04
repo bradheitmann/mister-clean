@@ -108,13 +108,13 @@ DONE list requires.
 | `SKILL.md` | unchanged (19,975 bytes, no diff against main) |
 | full local suite | not run (owner decision 24954d2: S6 evidence is hosted CI on the exact tip) |
 
-## Out of scope (recorded obligations)
+A test runner invoked through its installed entry
+(`bun ./node_modules/vitest/vitest.mjs run …`, as this repository's
+`package:surface:check` does) is recognized as the same test matrix as the bare
+runner command; covered by the "installed node_modules entry" test.
 
-- `bun ./node_modules/vitest/vitest.mjs run …` (a test runner invoked by its
-  installed path) is not recognized as a test matrix; it is listed as
-  `workflow step not credited: … bun operand ./node_modules/… is not a tracked
-  source file`. Recognizing runner basenames under `node_modules` is a small
-  follow-up.
+## Out of scope (as declared in the DONE list)
+
 - Steps with conditions other than plain ref checks (for example
   `steps.probe.outputs.reachable == 'true'`) are never credited.
 - Non-GitHub CI systems; `tsc` emit outputs (`outDir`) as built targets.
