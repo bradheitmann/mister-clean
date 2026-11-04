@@ -13,6 +13,5 @@ Gates (exact commands):
 - no full local suite (owner decision 2026-11-04: S6 evidence is hosted CI on the exact tip)
 Out of scope (recorded obligations, not fixed here):
 - SEM-STATE-8CF757A62803 and SEM-STATE-C6FB0796C5F5 (bounded-state lifecycle): the plan carries placeholder cases for them because plan generation requires one per runtime candidate; no observations are supplied and they stay `verification_debt` in this package
-- a `mister-clean semantic observe` command that produces schema 2.0 observations itself (this lane uses a runner script kept with the evidence)
 Owner decision points:
 - none; the key, trust policy and attester seat were approved on 2026-11-04
