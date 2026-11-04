@@ -74,10 +74,25 @@ export interface ExternalDigest {
  */
 export interface EvidenceManifestCitation {
   readonly seam: string;
+  /** The commit in the seam that published the manifest; with a source clone, `git show <commit>:<path>` must re-hash to `sha256`. */
   readonly source_commit: string;
-  /** The manifest's file name as published (no directories). */
-  readonly file: string;
+  /** The manifest's repository-relative path in the seam; its base name is looked up under the evidence root. */
+  readonly path: string;
   readonly sha256: string;
+}
+
+/** `S-nn..S-mm` or `S-nn to S-mm`, optionally followed by a note; the inclusive range of session ids it names. */
+export function parseSessionRange(text: string): readonly string[] | undefined {
+  const match = /^S-([0-9]{2,})(?:\.\.| to )S-([0-9]{2,})(?![0-9])/u.exec(text);
+  if (!match) return undefined;
+  const [, first, last] = match as unknown as [string, string, string];
+  const start = Number(first);
+  const end = Number(last);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || end - start > 999) return undefined;
+  const width = first.length;
+  const sessions: string[] = [];
+  for (let n = start; n <= end; n += 1) sessions.push(`S-${String(n).padStart(width, "0")}`);
+  return sessions;
 }
 
 /**
@@ -205,7 +220,9 @@ export type EvalCaseRefusalCode =
   | "evidence_manifest_unparsable"
   | "evidence_manifest_mismatch"
   | "source_commit_missing"
-  | "recompute_mismatch";
+  | "recompute_mismatch"
+  | "reviewer_model_unbound"
+  | "publisher_commit_mismatch";
 
 export interface EvalCaseRefusal {
   readonly code: EvalCaseRefusalCode;
@@ -323,7 +340,7 @@ function manifestCitationShape(value: unknown, repository: unknown, path: string
     shape(refusals, path, "expected an object with seam, source_commit, file and sha256");
     return false;
   }
-  if (!exactKeys(citation, ["seam", "source_commit", "file", "sha256"], path, refusals)) return false;
+  if (!exactKeys(citation, ["seam", "source_commit", "path", "sha256"], path, refusals)) return false;
   let ok = true;
   if (!nonEmptyString(citation.seam) || citation.seam !== repository) {
     shape(refusals, `${path}.seam`, "expected the same repository seam as the citing field");
@@ -333,8 +350,8 @@ function manifestCitationShape(value: unknown, repository: unknown, path: string
     shape(refusals, `${path}.source_commit`, "expected a 7-40 hex commit sha");
     ok = false;
   }
-  if (typeof citation.file !== "string" || !/^[A-Za-z0-9._-]+$/u.test(citation.file)) {
-    shape(refusals, `${path}.file`, "expected the manifest's bare file name");
+  if (!localPath(citation.path)) {
+    shape(refusals, `${path}.path`, "expected the manifest's repository-relative path in the seam");
     ok = false;
   }
   if (typeof citation.sha256 !== "string" || !HEX64.test(citation.sha256)) {
@@ -484,7 +501,7 @@ export function evalCaseShapeRefusals(value: unknown): EvalCaseRefusal[] {
           if (!nonEmptyString(commit.pair_set)) shape(refusals, `${path}.pair_set`, "required");
           else if (pairSets.has(commit.pair_set)) shape(refusals, `${path}.pair_set`, "duplicate pair set");
           else pairSets.add(commit.pair_set);
-          if (!nonEmptyString(commit.sessions)) shape(refusals, `${path}.sessions`, "expected the S-nn range this commit covers");
+          if (typeof commit.sessions !== "string" || parseSessionRange(commit.sessions) === undefined) shape(refusals, `${path}.sessions`, "expected an explicit session range S-nn..S-mm (a note may follow)");
           if (typeof commit.sha !== "string" || !HEX40.test(commit.sha)) shape(refusals, `${path}.sha`, "expected a 40-hex commit sha");
         }
         // Every pair set the replay reports must have its base commit.
@@ -644,15 +661,62 @@ export function recomputeReviewerCounts(rows: readonly TallyRow[], floorPasses: 
   }));
 }
 
-/** The pinned registry export version, read from the customer test's manifest; undefined when absent or malformed. */
-export function pinnedRegistryExportVersion(root: string): string | undefined {
-  const path = join(root, ...REGISTRY_PIN_PATH.split("/"));
-  if (!existsSync(path)) return undefined;
+/** The pinned registry export: its version, and the routes that bind provider model ids to card ids. */
+export interface PinnedRegistryExport {
+  readonly version: string;
+  /** Card ids the export carries (`kind: "card"`). */
+  readonly cards: ReadonlySet<string>;
+  /** Card id → provider model ids of every route whose `card` names it. */
+  readonly routes: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+/**
+ * Read the customer test's pin (`artifact.version`, `artifact.sha256`, `fixture`) and the vendored export it names;
+ * the export bytes must re-hash to the pinned sha256. A problem is returned as a string.
+ */
+export function pinnedRegistryExport(root: string): PinnedRegistryExport | string {
+  const pinPath = join(root, ...REGISTRY_PIN_PATH.split("/"));
+  if (!existsSync(pinPath)) return `${REGISTRY_PIN_PATH} is absent`;
   let parsed: unknown;
-  try { parsed = JSON.parse(readFileSync(path, "utf8")); } catch { return undefined; }
-  const artifact = object(object(parsed)?.artifact);
+  try { parsed = JSON.parse(readFileSync(pinPath, "utf8")); } catch { return `${REGISTRY_PIN_PATH} is not valid JSON`; }
+  const pin = object(parsed);
+  const artifact = object(pin?.artifact);
   const version = artifact?.version;
-  return typeof version === "string" && version.length > 0 && !version.includes("@") ? version : undefined;
+  if (typeof version !== "string" || version.length === 0 || version.includes("@")) return `${REGISTRY_PIN_PATH}: artifact.version is missing`;
+  const fixture = pin?.fixture;
+  const expected = artifact?.sha256;
+  if (!localPath(fixture) || typeof expected !== "string" || !HEX64.test(expected)) return `${REGISTRY_PIN_PATH}: fixture path or artifact.sha256 is missing`;
+  const exportPath = join(root, ...fixture.split("/"));
+  if (!existsSync(exportPath) || !statSync(exportPath).isFile()) return `${fixture} (the vendored export) is absent`;
+  const bytes = readFileSync(exportPath);
+  const actual = createHash("sha256").update(bytes).digest("hex");
+  if (actual !== expected) return `${fixture} hashes to ${actual}, not the pinned ${expected}`;
+  let exported: unknown;
+  try { exported = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { return `${fixture} is not valid JSON`; }
+  const records = object(exported)?.records;
+  if (!Array.isArray(records)) return `${fixture}: records must be an array`;
+  if (object(exported)?.export_version !== version) return `${fixture}: export_version differs from the pinned ${version}`;
+  const cards = new Set<string>();
+  const routes = new Map<string, Set<string>>();
+  for (const value of records) {
+    const record = object(value);
+    if (!record || typeof record.id !== "string") continue;
+    if (record.kind === "card") cards.add(record.id);
+    if (record.kind === "route" && typeof record.card === "string") {
+      const providerModel = object(record.provider_model_id)?.value;
+      if (typeof providerModel !== "string" || providerModel.length === 0) continue;
+      const set = routes.get(record.card) ?? new Set<string>();
+      set.add(providerModel);
+      routes.set(record.card, set);
+    }
+  }
+  return { version, cards, routes };
+}
+
+/** The pinned registry export version alone; undefined when the pin or its export does not read. */
+export function pinnedRegistryExportVersion(root: string): string | undefined {
+  const loaded = pinnedRegistryExport(root);
+  return typeof loaded === "string" ? undefined : loaded.version;
 }
 
 // ---------------------------------------------------------------------------
@@ -710,7 +774,7 @@ export function parseEvidenceManifest(text: string): EvidenceManifest | string {
   const pairSetsOut: Record<string, { base_commit: string; sessions: string }> = {};
   for (const [name, value] of Object.entries(pairSets)) {
     const entry = object(value);
-    if (!entry || typeof entry.base_commit !== "string" || !HEX40.test(entry.base_commit) || !nonEmptyString(entry.sessions)) return `pair_sets.${name} needs base_commit (40 hex) and sessions`;
+    if (!entry || typeof entry.base_commit !== "string" || !HEX40.test(entry.base_commit) || typeof entry.sessions !== "string" || parseSessionRange(entry.sessions) === undefined) return `pair_sets.${name} needs base_commit (40 hex) and a sessions range S-nn..S-mm`;
     pairSetsOut[name] = { base_commit: entry.base_commit, sessions: entry.sessions };
   }
   const pins = object(manifest.evaluator_pins);
@@ -854,10 +918,21 @@ function manifestValueRefusals(evalCase: EvalCase, manifest: EvidenceManifest, r
   }
   const base = evalCase.base_commit;
   if ("binding" in base && base.binding === "pinned_external") {
+    const mapped = new Set(manifest.session_map.map((entry) => entry.session));
     for (const [index, commit] of base.commits.entries()) {
       const entry = manifest.pair_sets[commit.pair_set];
-      if (entry === undefined) mismatch(`$.base_commit.commits[${index}].pair_set`, `manifest has no pair set ${commit.pair_set}`);
-      else if (entry.base_commit !== commit.sha) mismatch(`$.base_commit.commits[${index}].sha`, `manifest base commit for pair set ${commit.pair_set} is ${entry.base_commit}`);
+      if (entry === undefined) {
+        mismatch(`$.base_commit.commits[${index}].pair_set`, `manifest has no pair set ${commit.pair_set}`);
+        continue;
+      }
+      if (entry.base_commit !== commit.sha) mismatch(`$.base_commit.commits[${index}].sha`, `manifest base commit for pair set ${commit.pair_set} is ${entry.base_commit}`);
+      // The asserted session range must be the manifest's range for that pair set, and every session must be mapped.
+      const asserted = parseSessionRange(commit.sessions) ?? [];
+      const published = parseSessionRange(entry.sessions) ?? [];
+      if (asserted.join(",") !== published.join(",")) mismatch(`$.base_commit.commits[${index}].sessions`, `manifest sessions for pair set ${commit.pair_set} are ${entry.sessions}`);
+      for (const session of asserted) {
+        if (!mapped.has(session)) mismatch(`$.base_commit.commits[${index}].sessions`, `${session} is not in the manifest's session map`);
+      }
     }
     for (const name of Object.keys(manifest.pair_sets)) {
       if (!base.commits.some((commit) => commit.pair_set === name)) mismatch("$.base_commit.commits", `manifest pair set ${name} is not in the record`);
@@ -873,8 +948,20 @@ function manifestValueRefusals(evalCase: EvalCase, manifest: EvidenceManifest, r
  * commit and check the base commits and receipt tool exist there. True when
  * everything recomputed equals the record and the manifest.
  */
-function recomputeFromSource(evalCase: EvalCase, manifest: EvidenceManifest, clone: string, refusals: EvalCaseRefusal[]): boolean {
+function recomputeFromSource(evalCase: EvalCase, manifest: EvidenceManifest, citation: EvidenceManifestCitation, pointer: string, clone: string, refusals: EvalCaseRefusal[]): boolean {
   const before = refusals.length;
+  // The publisher commit must exist in the clone and carry the manifest bytes at the cited path.
+  if (!commitExists(clone, citation.source_commit)) {
+    refusals.push({ code: "publisher_commit_mismatch", citation: `${pointer}.manifest.source_commit`, detail: `${citation.source_commit} is not a commit in the source clone` });
+  } else {
+    const published = gitShow(clone, citation.source_commit, citation.path);
+    if (published === undefined) {
+      refusals.push({ code: "publisher_commit_mismatch", citation: `${pointer}.manifest.path`, detail: `${citation.path} is not at ${citation.source_commit} in the source clone` });
+    } else {
+      const digest = createHash("sha256").update(published).digest("hex");
+      if (digest !== citation.sha256) refusals.push({ code: "publisher_commit_mismatch", citation: `${pointer}.manifest.sha256`, detail: `${citation.path} at ${citation.source_commit} hashes to ${digest}, not the cited ${citation.sha256}` });
+    }
+  }
   const verifier = evalCase.verifier;
   const recordComposite = "binding" in verifier && verifier.binding === "pinned_external" ? verifier.sha256 : undefined;
   const recordDigests = "binding" in verifier && verifier.binding === "pinned_external" ? verifierDigests(verifier) : new Set<string>();
@@ -947,7 +1034,8 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
   let replayRecomputed: readonly RecomputedReviewerCounts[] | null = null;
   const record = object(input.record);
   const caseId = typeof record?.case_id === "string" ? record.case_id : null;
-  const pin = pinnedRegistryExportVersion(root);
+  const registry = pinnedRegistryExport(root);
+  const pin = typeof registry === "string" ? undefined : registry.version;
   const evidenceRoot = input.evidenceRoot === undefined ? undefined : resolve(input.evidenceRoot);
   const sources: Record<string, string> = {};
   for (const [seam, path] of Object.entries(input.sources ?? {})) sources[seam] = resolve(path);
@@ -1000,13 +1088,36 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
         }
       }
       const refPointer = `${pointer}.model_registry_ref`;
-      if (pin === undefined) {
-        if (index === 0) refusals.push({ code: "registry_pin_missing", citation: REGISTRY_PIN_PATH, detail: "the pinned model-registry export version could not be read (artifact.version)" });
+      if (typeof registry === "string") {
+        if (index === 0) refusals.push({ code: "registry_pin_missing", citation: REGISTRY_PIN_PATH, detail: `the pinned model-registry export could not be read: ${registry}` });
       } else {
         const ref = parseRegistryRef(card.model_registry_ref);
         if (ref === undefined || ref.version !== pin) {
           refusals.push({ code: "registry_export_mismatch", citation: refPointer, detail: `${card.model_registry_ref}: expected export ${pin}` });
         } else bound.push(refPointer);
+      }
+    }
+
+    // Each per-reviewer row's reviewer model must be a provider model id the pinned export routes to the row's card:
+    // card_id → the card entry's registry id → routes whose `card` is that id → provider_model_id. Aliases resolve
+    // through the routes (deepseek-flash → deepseek-v4.1-flash); an unknown card or an unrouted model is a refusal, so
+    // relabeling rows between cards cannot move the subject's verdict.
+    if (typeof registry !== "string") {
+      for (const [index, row] of evalCase.replay.per_reviewer.entries()) {
+        const pointer = `$.replay.per_reviewer[${index}].reviewer_model`;
+        const card = evalCase.agent_cards.find((entry) => entry.card_id === row.card_id);
+        const registryId = card === undefined ? undefined : parseRegistryRef(card.model_registry_ref)?.id;
+        if (registryId === undefined) continue; // already a record_shape refusal
+        if (!registry.cards.has(registryId)) {
+          refusals.push({ code: "reviewer_model_unbound", citation: pointer, detail: `card ${row.card_id} names registry card ${registryId}, which export ${registry.version} does not carry` });
+          continue;
+        }
+        const models = registry.routes.get(registryId);
+        if (models === undefined || models.size === 0) {
+          refusals.push({ code: "reviewer_model_unbound", citation: pointer, detail: `export ${registry.version} has no route for registry card ${registryId} (card ${row.card_id}), so ${row.reviewer_model} cannot be bound to it` });
+        } else if (!models.has(row.reviewer_model)) {
+          refusals.push({ code: "reviewer_model_unbound", citation: pointer, detail: `${row.reviewer_model} is not a provider model the export routes to registry card ${registryId} (card ${row.card_id}); routed: ${[...models].sort().join(", ")}` });
+        } else bound.push(pointer);
       }
     }
 
@@ -1041,13 +1152,14 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
       if (lookup === undefined) {
         lookup = { absent: true };
         if (evidenceRoot !== undefined) {
-          const sameName = filesNamed(evidenceRoot, citation.file);
+          const file = citation.path.split("/").pop() as string;
+          const sameName = filesNamed(evidenceRoot, file);
           const found = sameName.find((candidate) => sha256Of(candidate) === citation.sha256);
           if (found === undefined && sameName.length > 0) {
-            lookup = { problem: "evidence_manifest_mismatch", suffix: ".manifest.sha256", detail: `${citation.file} under the evidence root hashes to ${sha256Of(sameName[0] as string)}, not the cited ${citation.sha256}` };
+            lookup = { problem: "evidence_manifest_mismatch", suffix: ".manifest.sha256", detail: `${file} under the evidence root hashes to ${sha256Of(sameName[0] as string)}, not the cited ${citation.sha256}` };
           } else if (found !== undefined) {
             const parsed = parseEvidenceManifest(readFileSync(found, "utf8"));
-            if (typeof parsed === "string") lookup = { problem: "evidence_manifest_unparsable", suffix: ".manifest", detail: `${citation.file}: ${parsed}` };
+            if (typeof parsed === "string") lookup = { problem: "evidence_manifest_unparsable", suffix: ".manifest", detail: `${file}: ${parsed}` };
             else { lookup = { manifest: parsed }; manifests.set(citation.sha256, parsed); }
           }
         }
@@ -1065,7 +1177,7 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
             refusals.push({ code: "source_commit_missing", citation: pointer, detail: `--source ${seam}: ${clone} is not a Git clone` });
             outcomes.set(citation.sha256, "pinned_external");
           } else if (clone !== undefined) {
-            outcomes.set(citation.sha256, recomputeFromSource(evalCase, manifest, clone, refusals) ? "recomputed" : "external");
+            outcomes.set(citation.sha256, recomputeFromSource(evalCase, manifest, citation, pointer, clone, refusals) ? "recomputed" : "external");
           } else outcomes.set(citation.sha256, "pinned_external");
         }
       }
@@ -1114,6 +1226,16 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
         for (const group of replayRecomputed) {
           if (!matched.has(group)) refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.per_reviewer", detail: `tallies carry reviewer ${group.reviewer_model} in pair set ${group.pair_set}, not declared` });
         }
+        // Each asserted session range must be exactly the sessions the tallies carry for that pair set.
+        if ("binding" in evalCase.base_commit && evalCase.base_commit.binding !== "unbound") {
+          for (const [index, commit] of evalCase.base_commit.commits.entries()) {
+            const tallied = [...new Set(parsed.filter((row) => row.pair_set === commit.pair_set).map((row) => row.session))].sort();
+            const asserted = [...(parseSessionRange(commit.sessions) ?? [])].sort();
+            if (tallied.join(",") !== asserted.join(",")) {
+              refusals.push({ code: "replay_counts_mismatch", citation: `$.base_commit.commits[${index}].sessions`, detail: `tallies carry sessions ${tallied.join(",") || "(none)"} for pair set ${commit.pair_set}` });
+            }
+          }
+        }
         // A verdict needs the phenomenon to have repeated past the floor; `met` is recomputed, never declared.
         if (evalCase.replay.outcome === "met" && subjectBreaches === 0) {
           refusals.push({ code: "replay_floor_not_met", citation: "$.replay.outcome", detail: `met declared, but the subject's recomputed floor breaches are 0 under floor ${evalCase.replay.floor}` });
@@ -1124,12 +1246,13 @@ export function validateEvalCase(input: ValidateEvalCaseInput): EvalCaseValidati
     }
     bindCitation(root, evalCase.derived_from, "$.derived_from", refusals, bound);
 
-    // Strict mode: a required citation must be re-verified here (local), through the re-hashed manifest, or recomputed.
+    // Strict mode: a required citation must be re-verified here (local) or recomputed from the source clone.
+    // pinned_external (equality to a manifest the record itself cites) is named but is not sufficient.
     for (const field of requireBound) {
       const pointer = `$.${field}`;
       const cls = classes[pointer];
-      if (cls === "external" || cls === "unverified") {
-        refusals.push({ code: "binding_required", citation: pointer, detail: `${cls} citation; --require-bound ${field} demands one re-verified in this repository, through an evidence manifest under --evidence-root, or recomputed from --source` });
+      if (cls !== "local" && cls !== "recomputed") {
+        refusals.push({ code: "binding_required", citation: pointer, detail: `${cls ?? "unbound"} citation; --require-bound ${field} demands one re-verified in this repository or recomputed from --source with the manifest under --evidence-root` });
       }
     }
   }

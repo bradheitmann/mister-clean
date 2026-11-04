@@ -329,7 +329,7 @@ header constant in the source cannot pass the fixture; the real header is read o
 `94af4936e1073ccc94acb08d192f54096ff9b8046ec1bd36ce1f97b1834b1d23`; `bin/mister-clean.js`
 `ab58ba9aeae8405a0d154cfe619067543df78d8a8ed6fe68b28dd5ed50a81278`; `MANIFEST.sha256`
 `b46f94b86e1797e18bcc6316d99b0a36551710b629d31a7ae6c8b4a29962d06f`); `manifest:package:check` PASS (82);
-`sync:cli:check`: Verified standalone CLI at /Users/bradleyheitmann/.config/superpowers/worktrees/mister-clean/slice-zero/bin/mister-clean.js. On the frozen tip: the live control through the bin with the evidence environment →
+`sync:cli:check`: verified. On the frozen tip: the live control through the bin with the evidence environment →
 `eval-case: VALID case=CS-001 bound=7 pinned_external=none recomputed=$.verifier,$.base_commit external=none
 unverified=none refusals=0 require_bound=verifier,base_commit evidence_root=set sources=specification-pipeline
 registry_export=2026.11.03-1`, exit 0 (2026-11-04T14:15:00Z); without the environment → `binding_required` on both,

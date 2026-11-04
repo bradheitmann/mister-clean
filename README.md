@@ -468,40 +468,52 @@ citation that failed: `path_missing`, `sha256_mismatch`, `card_ref_mismatch`,
 `replay_counts_mismatch`, `replay_floor_not_met`, `binding_required`,
 `registry_pin_missing` or `record_shape`.
 
+Each per-reviewer row is bound to its card through the pinned registry export
+(`registry-join.json` names the vendored export and its sha256; the export is
+re-hashed): the card's registry id must be a card the export carries, and the
+row's `reviewer_model` must be a provider model id one of the export's routes
+binds to that card (aliases resolve through the routes; an unknown card or an
+unrouted model is `reviewer_model_unbound`). Relabeling rows between cards
+therefore cannot move the verdict.
+
 The verifier and base commit are classified by how they were established, and
 the text line names every citation in each class: `local` (a file re-hashed or
 a commit object found in this checkout; counted under `bound`),
 `pinned_external` (`binding: "pinned_external"`: the record cites an evidence
 manifest the evidence owner published in another repository seam, by seam,
-source commit, file name and sha256; under `--evidence-root <dir>` the
-validator finds that file by name, re-hashes it, and checks the record's
-evaluator digests, base commit per control-pair set and session-map basis
-against it), `recomputed` (with `--source <seam>=<clone>` the validator reads
-the manifest's listed files at each base commit from the clone through
-`git show`, recomputes the evaluator composite with the manifest's algorithm
-and header, the review digest and the receipt-tool digest, and requires all to
-equal the record and the manifest), `external` (`binding: "external"`, or a
-pinned manifest the evidence root does not hold: digests recorded, not
-re-hashed) and `unverified` (a bare verifier digest with no local file, or a
-commit sha absent from the checkout). The evidence root must lie outside the
-validated repository. `MISTER_CLEAN_EVIDENCE_ROOT` and
-`MISTER_CLEAN_SOURCE_<SEAM>` (seam upper-cased, non-alphanumerics as `_`) name
-them when the flags are absent, so a committed command never carries a private
-path.
+publisher commit, repository-relative path and sha256; under
+`--evidence-root <dir>` the validator finds the file by name, re-hashes it, and
+checks the record's evaluator digests, base commit and session range per
+control-pair set, and session-map basis against it), `recomputed` (with
+`--source <seam>=<clone>` the validator first verifies the publisher commit
+exists in the clone and that the manifest bytes at the cited path re-hash to
+the cited sha256, then reads the manifest's listed files at each base commit
+through `git show`, recomputes the evaluator composite with the manifest's
+algorithm and header, the review digest and the receipt-tool digest, and
+requires all to equal the record and the manifest), `external`
+(`binding: "external"`, or a pinned manifest the evidence root does not hold:
+digests recorded, not re-hashed) and `unverified` (a bare verifier digest with
+no local file, or a commit sha absent from the checkout). Asserted session
+ranges (`S-nn..S-mm`) must also equal the sessions the cited tallies carry for
+that pair set. The evidence root must lie outside the validated repository.
+`MISTER_CLEAN_EVIDENCE_ROOT` and `MISTER_CLEAN_SOURCE_<SEAM>` (seam upper-cased,
+non-alphanumerics as `_`) name them when the flags are absent, so a committed
+command never carries a private path.
 
-`--require-bound verifier,base_commit` accepts `local`, `pinned_external` and
-`recomputed`, and turns `external` or `unverified` into a `binding_required`
-refusal; the charter's Slice Zero command uses it, so `proven_on` can only be
-set from a run in which the verifier and base commits were re-verified. The
-evidence manifest behind `CS-001.eval.json` is never vendored here because it
-names the source project; a third party reproduces the strict run by obtaining
+`--require-bound verifier,base_commit` accepts only `local` and `recomputed`;
+`pinned_external` stays a named class but is `binding_required` under it, as
+are `external` and `unverified`. The charter's Slice Zero command uses this
+mode, so `proven_on` can only be set from a run in which the verifier and base
+commits were recomputed from the source seam. The evidence manifest behind
+`CS-001.eval.json` is never vendored here because it names the source project;
+a third party reproduces the strict run by obtaining
 `RC-001-EVIDENCE-MANIFEST.v2.json` (sha256 in the record) from the evidence
 owner, placing it under a private directory named by `--evidence-root`, and
-optionally cloning the source seam for the recompute route. A verifier or base
-commit written as `binding: "unbound"` with a reason is an honest record and
-always a refusal. Like `attest`, this verb runs without the runtime attestation,
-because it asserts nothing about the runtime, only about the record and the
-bytes it cites.
+cloning the source seam for `--source`. A verifier or base commit written as
+`binding: "unbound"` with a reason is an honest record and always a refusal.
+Like `attest`, this verb runs without the runtime attestation, because it
+asserts nothing about the runtime, only about the record and the bytes it
+cites.
 ## Declared language policy
 
 A repository that forbids languages declares it in

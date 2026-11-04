@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { type CliIO, runCli } from "./cli.js";
-import { compositeDigest, type EvalCase, type EvalCaseValidationResult, REGISTRY_PIN_PATH, sourceEnvironmentName } from "./eval-case.js";
+import { compositeDigest, type EvalCase, type EvalCaseValidationResult, parseSessionRange, REGISTRY_PIN_PATH, sourceEnvironmentName } from "./eval-case.js";
 import { createFixtureRepository, fixtureCommit } from "./test-support/fixture-repo.js";
 
 const roots: string[] = [];
@@ -47,6 +47,7 @@ const CARD_RC_PATH = "field-evals/controls/cards/RC-900.md";
 const CARD_FLASH_PATH = "field-evals/window/cards/AC-901-fixture-flash.md";
 const CARD_PRO_PATH = "field-evals/window/cards/AC-902-fixture-pro.md";
 const GATE_PATH = "tools/gate.sh";
+const EXPORT_PATH = "customer-tests/model-atlas/fixtures/model-atlas.export-fixture.json";
 
 /** The same derivation as RC-001: two reviewers, one pair set, floor 2 of 3; flash breaches once (S-02 P00). */
 const TALLIES = [
@@ -60,6 +61,21 @@ const TALLIES = [
   "",
 ].join("\n");
 
+/**
+ * A pinned registry export: two cards, and routes binding the provider model ids the tallies use to them. The
+ * flash route's provider model id differs from its card id, as the real registry's alias does.
+ */
+const EXPORT = `${JSON.stringify({
+  schema: "model-atlas.export/1",
+  export_version: PIN,
+  records: [
+    { id: "fixture-flash", kind: "card" },
+    { id: "fixture-pro", kind: "card" },
+    { id: "route.fx.fixture-flash", kind: "route", card: "fixture-flash", provider_model_id: { value: "fixture-flash" } },
+    { id: "route.fx.fixture-pro", kind: "route", card: "fixture-pro", provider_model_id: { value: "fixture-pro" } },
+  ],
+}, null, 2)}\n`;
+
 const FILES: Record<string, string> = {
   [CASE_PATH]: "# CS-900\nphenomenon narrative\n",
   [TALLIES_PATH]: TALLIES,
@@ -67,7 +83,8 @@ const FILES: Record<string, string> = {
   [CARD_FLASH_PATH]: `---\ncard_id: AC-901\nharness: fixture\nmodel_registry_ref: fixture-flash@${PIN}   # card only\n---\n\n# AC-901\n`,
   [CARD_PRO_PATH]: `---\ncard_id: AC-902\nharness: fixture\nmodel_registry_ref: fixture-pro@${PIN}   # card only\n---\n\n# AC-902\n`,
   [GATE_PATH]: "#!/bin/sh\nexit 0\n",
-  [REGISTRY_PIN_PATH]: `${JSON.stringify({ schema: "customer-test/1", artifact: { name: "model-atlas.export/1", version: PIN } })}\n`,
+  [EXPORT_PATH]: EXPORT,
+  [REGISTRY_PIN_PATH]: `${JSON.stringify({ schema: "customer-test/1", artifact: { name: "model-atlas.export/1", version: PIN, sha256: sha256(EXPORT) }, fixture: EXPORT_PATH })}\n`,
 };
 
 /** A hermetic temp repository holding every file a valid record cites, committed once so a base commit can bind. */
@@ -110,6 +127,8 @@ const ALL_BOUND = [
   "$.agent_cards[0].model_registry_ref",
   "$.agent_cards[1]",
   "$.agent_cards[1].model_registry_ref",
+  "$.replay.per_reviewer[0].reviewer_model",
+  "$.replay.per_reviewer[1].reviewer_model",
   "$.verifier",
   "$.base_commit",
   "$.replay.rows_source",
@@ -136,15 +155,15 @@ const EXTERNAL_VERIFIER = {
 };
 const EXTERNAL_BASE = {
   repository: "fixture-seam", binding: "external" as const, location: "evidence owner note, line 14", session_map: "inferred" as const,
-  commits: [{ pair_set: "B", sessions: "S-01 to S-03", sha: "e".repeat(40) }],
+  commits: [{ pair_set: "B", sessions: "S-01..S-03", sha: "e".repeat(40) }],
 };
 
 // ---------------------------------------------------------------------------
-// Rework 2 fixtures: a source clone, an evidence manifest in a private root, a pinned record.
+// Rework 2 / repair 3 fixtures: a source clone that also publishes the manifest, an evidence root, a pinned record.
 // ---------------------------------------------------------------------------
 
 const SEAM = "fixture-seam";
-const MANIFEST_FILE = "FIXTURE-EVIDENCE-MANIFEST.json";
+const MANIFEST_PATH = "reports/FIXTURE-EVIDENCE-MANIFEST.json";
 /** Deliberately not the real source project's header: the validator must read it from the manifest. */
 const FIXTURE_HEADER_TEXT = "fixture.tree/1";
 const SOURCE_PREFIX = "app/src/";
@@ -153,6 +172,8 @@ const RECEIPT_PATH = "tools/receipt/main.rs";
 interface EvidenceFixture {
   readonly clone: string;
   readonly commit: string;
+  /** The commit in the clone that published the manifest. */
+  readonly publisher: string;
   readonly evidenceRoot: string;
   readonly manifestSha256: string;
   readonly composite: string;
@@ -169,13 +190,13 @@ function sourceFiles(reviewText: string): Record<string, string> {
   };
 }
 
-/** Build a clone, compute the pins with the manifest's algorithm, publish a manifest for them under an evidence root. */
-function evidenceFixture(options: { reviewText?: string; header?: Record<string, unknown>; pinsFrom?: { composite: string; review: string } } = {}): EvidenceFixture {
+/** Build a clone, compute the pins with the manifest's algorithm, publish the manifest in the clone and under an evidence root. */
+function evidenceFixture(options: { reviewText?: string; header?: Record<string, unknown>; pinsFrom?: { composite: string; review: string }; sessions?: string } = {}): EvidenceFixture {
   const clone = scratch("mister-clean-source-clone-");
   createFixtureRepository(clone);
   const files = sourceFiles(options.reviewText ?? "fn review() {}\n");
   writeTree(clone, files);
-  const commit = fixtureCommit(clone);
+  const commit = fixtureCommit(clone, "base");
   const headerBytes = Buffer.concat([Buffer.from(FIXTURE_HEADER_TEXT, "utf8"), Buffer.from([0])]);
   const runnerFiles = Object.keys(files).filter((path) => path.startsWith(`${SOURCE_PREFIX}runner`)).sort();
   // pinsFrom publishes another clone's pins over this clone's bytes: what a stale or forged manifest looks like.
@@ -184,7 +205,7 @@ function evidenceFixture(options: { reviewText?: string; header?: Record<string,
   const receipt = sha256(files[RECEIPT_PATH] as string);
   const manifest = {
     schema: "fixture.evidence-manifest/1",
-    pair_sets: { B: { base_commit: commit, sessions: "S-01..S-03" } },
+    pair_sets: { B: { base_commit: commit, sessions: options.sessions ?? "S-01..S-03" } },
     evaluator_pins: {
       [commit]: {
         validator_source: {
@@ -202,15 +223,17 @@ function evidenceFixture(options: { reviewText?: string; header?: Record<string,
     },
     manifest_revision: 2,
   };
-  const evidenceRoot = scratch("mister-clean-evidence-root-");
   const bytes = `${JSON.stringify(manifest, null, 2)}\n`;
+  writeTree(clone, { [MANIFEST_PATH]: bytes });
+  const publisher = fixtureCommit(clone, "publish manifest");
+  const evidenceRoot = scratch("mister-clean-evidence-root-");
   mkdirSync(join(evidenceRoot, "rc-900"), { recursive: true });
-  writeFileSync(join(evidenceRoot, "rc-900", MANIFEST_FILE), bytes);
-  return { clone, commit, evidenceRoot, manifestSha256: sha256(bytes), composite, review, receipt };
+  writeFileSync(join(evidenceRoot, "rc-900", MANIFEST_PATH.split("/").pop() as string), bytes);
+  return { clone, commit, publisher, evidenceRoot, manifestSha256: sha256(bytes), composite, review, receipt };
 }
 
-function pinnedRecord(record: EvalCase, evidence: EvidenceFixture): EvalCase {
-  const manifest = { seam: SEAM, source_commit: "abcdef0123", file: MANIFEST_FILE, sha256: evidence.manifestSha256 };
+function pinnedRecord(record: EvalCase, evidence: EvidenceFixture, sessions = "S-01..S-03 (map inferred from the tallies)"): EvalCase {
+  const manifest = { seam: SEAM, source_commit: evidence.publisher, path: MANIFEST_PATH, sha256: evidence.manifestSha256 };
   return {
     ...record,
     verifier: {
@@ -220,9 +243,13 @@ function pinnedRecord(record: EvalCase, evidence: EvidenceFixture): EvalCase {
     },
     base_commit: {
       repository: SEAM, binding: "pinned_external", location: "evidence owner manifest (fixture)", manifest, session_map: "inferred",
-      commits: [{ pair_set: "B", sessions: "S-01 to S-03", sha: evidence.commit }],
+      commits: [{ pair_set: "B", sessions, sha: evidence.commit }],
     },
   };
+}
+
+function strictWithSource(evidence: EvidenceFixture): string[] {
+  return ["--evidence-root", evidence.evidenceRoot, "--source", `${SEAM}=${evidence.clone}`, "--require-bound", "verifier,base_commit"];
 }
 
 describe("eval-case validate", () => {
@@ -254,7 +281,7 @@ describe("eval-case validate", () => {
     const text = capture();
     expect(await runCli(["eval-case", "validate", join(root, "CS-900.eval.json"), "--repo", root], text.io)).toBe(2);
     expect(text.stderr).toEqual([expect.stringMatching(/^ERROR: sha256_mismatch \$\.derived_from: /u)]);
-    expect(text.stdout).toEqual([`eval-case: REFUSED case=CS-900 bound=8 pinned_external=none recomputed=none external=none unverified=none refusals=1 require_bound=none evidence_root=none sources=none registry_export=${PIN}`]);
+    expect(text.stdout).toEqual([`eval-case: REFUSED case=CS-900 bound=10 pinned_external=none recomputed=none external=none unverified=none refusals=1 require_bound=none evidence_root=none sources=none registry_export=${PIN}`]);
   });
 
   it("proof 2: exactly two agent cards; one or three cards is refused as agent_cards_count", async () => {
@@ -310,12 +337,10 @@ describe("eval-case validate", () => {
 
     const missingPairSet = await validate(root, {
       ...externalRecord,
-      base_commit: { ...EXTERNAL_BASE, commits: [{ pair_set: "A", sessions: "S-01 to S-03", sha: "e".repeat(40) }] },
+      base_commit: { ...EXTERNAL_BASE, commits: [{ pair_set: "A", sessions: "S-01..S-03", sha: "e".repeat(40) }] },
     });
     expect(missingPairSet.code).toBe(2);
-    expect(missingPairSet.result.refusals).toEqual([
-      { code: "record_shape", citation: "$.base_commit.commits", detail: "no base commit for pair set B" },
-    ]);
+    expect(missingPairSet.result.refusals.map((refusal) => [refusal.code, refusal.citation])).toContainEqual(["record_shape", "$.base_commit.commits"]);
   });
 
   // Rework 1. Fixtures are the MC/QA probes against 01b20677, with generic content.
@@ -335,7 +360,7 @@ describe("eval-case validate", () => {
 
     const text = capture();
     expect(await runCli(["eval-case", "validate", join(root, "CS-900.eval.json"), "--repo", root], text.io)).toBe(0);
-    expect(text.stdout).toEqual([`eval-case: VALID case=CS-900 bound=7 pinned_external=none recomputed=none external=none unverified=$.verifier,$.base_commit refusals=0 require_bound=none evidence_root=none sources=none registry_export=${PIN}`]);
+    expect(text.stdout).toEqual([`eval-case: VALID case=CS-900 bound=9 pinned_external=none recomputed=none external=none unverified=$.verifier,$.base_commit refusals=0 require_bound=none evidence_root=none sources=none registry_export=${PIN}`]);
   });
 
   it("rework 2 (fabricated refs): a card must resolve to its cited file whose frontmatter card_id and model_registry_ref match", async () => {
@@ -345,9 +370,9 @@ describe("eval-case validate", () => {
       agent_cards: [{ ...record.agent_cards[0], model_registry_ref: `does-not-exist@${PIN}` }, record.agent_cards[1]],
     });
     expect(invented.code).toBe(2);
-    expect(invented.result.refusals).toEqual([
+    expect(invented.result.refusals).toContainEqual(
       { code: "card_ref_mismatch", citation: "$.agent_cards[0]", detail: `${CARD_FLASH_PATH}: model_registry_ref fixture-flash@${PIN} != does-not-exist@${PIN}` },
-    ]);
+    );
     expect(invented.result.bound).not.toContain("$.agent_cards[0]");
 
     const wrongFile = await validate(root, {
@@ -355,9 +380,9 @@ describe("eval-case validate", () => {
       agent_cards: [{ ...record.agent_cards[0], path: CARD_PRO_PATH, sha256: sha256(FILES[CARD_PRO_PATH] as string) }, record.agent_cards[1]],
     });
     expect(wrongFile.code).toBe(2);
-    expect(wrongFile.result.refusals).toEqual([
+    expect(wrongFile.result.refusals).toContainEqual(
       expect.objectContaining({ code: "card_ref_mismatch", citation: "$.agent_cards[0]", detail: expect.stringContaining("card_id AC-902 != AC-901") }),
-    ]);
+    );
   });
 
   it("rework 3 (zero-replays): counts, sessions and the floor are recomputed from the tallies; a claim they do not support is refused", async () => {
@@ -403,7 +428,7 @@ describe("eval-case validate", () => {
     const forged: EvalCase = {
       ...record,
       verifier: { ...EXTERNAL_VERIFIER, location: "invented", sha256: ZERO64, components: [{ name: "fictional", sha256: "1".repeat(64) }] },
-      base_commit: { ...EXTERNAL_BASE, location: "invented", commits: [{ pair_set: "B", sessions: "S-01 to S-03", sha: ZERO40 }] },
+      base_commit: { ...EXTERNAL_BASE, location: "invented", commits: [{ pair_set: "B", sessions: "S-01..S-03", sha: ZERO40 }] },
     };
     const permissive = await validate(root, forged);
     expect(permissive.code).toBe(0);
@@ -456,7 +481,7 @@ describe("eval-case validate", () => {
     const evidence = evidenceFixture();
     const pinned = pinnedRecord(record, evidence);
 
-    const withRoot = await validate(root, pinned, ["--evidence-root", evidence.evidenceRoot, "--require-bound", "verifier,base_commit"]);
+    const withRoot = await validate(root, pinned, ["--evidence-root", evidence.evidenceRoot]);
     expect(withRoot.result.refusals).toEqual([]);
     expect(withRoot.code).toBe(0);
     expect(withRoot.result.classes).toEqual({ "$.verifier": "pinned_external", "$.base_commit": "pinned_external" });
@@ -466,7 +491,7 @@ describe("eval-case validate", () => {
 
     const text = capture();
     expect(await runCli(["eval-case", "validate", join(root, "CS-900.eval.json"), "--repo", root, "--evidence-root", evidence.evidenceRoot], text.io)).toBe(0);
-    expect(text.stdout).toEqual([`eval-case: VALID case=CS-900 bound=7 pinned_external=$.verifier,$.base_commit recomputed=none external=none unverified=none refusals=0 require_bound=none evidence_root=set sources=none registry_export=${PIN}`]);
+    expect(text.stdout).toEqual([`eval-case: VALID case=CS-900 bound=9 pinned_external=$.verifier,$.base_commit recomputed=none external=none unverified=none refusals=0 require_bound=none evidence_root=set sources=none registry_export=${PIN}`]);
 
     const wrongSha = pinnedRecord(record, { ...evidence, manifestSha256: ZERO64 });
     const mismatch = await validate(root, wrongSha, ["--evidence-root", evidence.evidenceRoot]);
@@ -502,7 +527,7 @@ describe("eval-case validate", () => {
     expect(digest.result.classes["$.verifier"]).toBe("external");
 
     const base = pinned.base_commit as Extract<EvalCase["base_commit"], { readonly commits: readonly unknown[] }>;
-    const commit = await validate(root, { ...pinned, base_commit: { ...base, commits: [{ pair_set: "B", sessions: "S-01 to S-03", sha: ZERO40 }] } }, args);
+    const commit = await validate(root, { ...pinned, base_commit: { ...base, commits: [{ pair_set: "B", sessions: "S-01..S-03", sha: ZERO40 }] } }, args);
     expect(commit.code).toBe(2);
     expect(commit.result.refusals).toEqual([
       { code: "evidence_manifest_mismatch", citation: "$.base_commit.commits[0].sha", detail: `manifest base commit for pair set B is ${evidence.commit}` },
@@ -520,7 +545,7 @@ describe("eval-case validate", () => {
     const evidence = evidenceFixture();
     const pinned = pinnedRecord(record, evidence);
 
-    const recomputed = await validate(root, pinned, ["--evidence-root", evidence.evidenceRoot, "--source", `${SEAM}=${evidence.clone}`, "--require-bound", "verifier,base_commit"]);
+    const recomputed = await validate(root, pinned, strictWithSource(evidence));
     expect(recomputed.result.refusals).toEqual([]);
     expect(recomputed.code).toBe(0);
     expect(recomputed.result.classes).toEqual({ "$.verifier": "recomputed", "$.base_commit": "recomputed" });
@@ -529,11 +554,9 @@ describe("eval-case validate", () => {
 
     // A clone whose review file differs by one byte, published under a manifest that copies the first clone's pins.
     const tampered = evidenceFixture({ reviewText: "fn review() {}\n\n", pinsFrom: { composite: evidence.composite, review: evidence.review } });
-    const tamperedRecord = pinnedRecord(record, tampered);
-    const mismatch = await validate(root, tamperedRecord, ["--evidence-root", tampered.evidenceRoot, "--source", `${SEAM}=${tampered.clone}`, "--require-bound", "verifier,base_commit"]);
+    const mismatch = await validate(root, pinnedRecord(record, tampered), strictWithSource(tampered));
     expect(mismatch.code).toBe(2);
     expect(mismatch.result.classes["$.verifier"]).toBe("external");
-    expect(mismatch.result.refusals.map((refusal) => refusal.code)).toContain("recompute_mismatch");
     expect(mismatch.result.refusals).toContainEqual(expect.objectContaining({ code: "recompute_mismatch", citation: "$.verifier.sha256" }));
 
     // The environment may name the clone instead of the flag.
@@ -585,5 +608,127 @@ describe("eval-case validate", () => {
     ]);
     expect(refused.result.bound).toEqual([]);
     expect(refused.result.classes).toEqual({});
+  });
+
+  // Repair 3 (the owner's last repair under S5). Fixtures are MC/QA's probes against 72645af6, with generic content.
+
+  it("repair 3 proof 1 (card-role-swap): a row's reviewer model must be a provider model the pinned export routes to the row's card", async () => {
+    const { root, record } = fixtureRepository();
+    const evidence = evidenceFixture();
+    const pinned = pinnedRecord(record, evidence);
+    const [flash, pro] = pinned.replay.per_reviewer as [EvalCase["replay"]["per_reviewer"][number], EvalCase["replay"]["per_reviewer"][number]];
+    // The probe: swap the two rows' card ids and flip the verdict; nothing else changes.
+    const swapped = await validate(root, {
+      ...pinned,
+      replay: { ...pinned.replay, outcome: "missed", per_reviewer: [{ ...flash, card_id: "AC-902" }, { ...pro, card_id: "AC-901" }] },
+    }, strictWithSource(evidence));
+    expect(swapped.code).toBe(2);
+    expect(swapped.result.refusals).toEqual([
+      { code: "reviewer_model_unbound", citation: "$.replay.per_reviewer[0].reviewer_model", detail: "fixture-flash is not a provider model the export routes to registry card fixture-pro (card AC-902); routed: fixture-pro" },
+      { code: "reviewer_model_unbound", citation: "$.replay.per_reviewer[1].reviewer_model", detail: "fixture-pro is not a provider model the export routes to registry card fixture-flash (card AC-901); routed: fixture-flash" },
+    ]);
+    expect(swapped.result.bound).not.toContain("$.replay.per_reviewer[0].reviewer_model");
+
+    // A reviewer model the export knows nothing about, and a card the export does not carry.
+    const unknownModel = await validate(root, { ...record, replay: { ...record.replay, per_reviewer: [{ ...flash, reviewer_model: "fixture-flash-v2" }, pro] } });
+    expect(unknownModel.code).toBe(2);
+    expect(codes(unknownModel.result)).toContain("reviewer_model_unbound");
+
+    const exportWithoutRoutes = `${JSON.stringify({ schema: "model-atlas.export/1", export_version: PIN, records: [{ id: "fixture-flash", kind: "card" }, { id: "fixture-pro", kind: "card" }] })}\n`;
+    writeTree(root, { [EXPORT_PATH]: exportWithoutRoutes, [REGISTRY_PIN_PATH]: `${JSON.stringify({ schema: "customer-test/1", artifact: { name: "model-atlas.export/1", version: PIN, sha256: sha256(exportWithoutRoutes) }, fixture: EXPORT_PATH })}\n` });
+    const unrouted = await validate(root, record);
+    expect(unrouted.code).toBe(2);
+    expect(unrouted.result.refusals.map((refusal) => [refusal.code, refusal.citation])).toEqual([
+      ["reviewer_model_unbound", "$.replay.per_reviewer[0].reviewer_model"],
+      ["reviewer_model_unbound", "$.replay.per_reviewer[1].reviewer_model"],
+    ]);
+
+    // An export whose bytes do not match the pin is no pin at all.
+    writeTree(root, { [EXPORT_PATH]: `${exportWithoutRoutes}\n` });
+    const tamperedExport = await validate(root, record);
+    expect(tamperedExport.code).toBe(2);
+    expect(tamperedExport.result.refusals).toContainEqual(expect.objectContaining({ code: "registry_pin_missing", detail: expect.stringContaining("not the pinned") }));
+  });
+
+  it("repair 3 proof 2 (forged-manifest-provenance): with a source clone the publisher commit must exist and carry the manifest bytes at the cited path", async () => {
+    const { root, record } = fixtureRepository();
+    const evidence = evidenceFixture();
+    const pinned = pinnedRecord(record, evidence);
+    const forgeCitation = (changes: Partial<{ source_commit: string; path: string }>): EvalCase => {
+      const verifier = pinned.verifier as Extract<EvalCase["verifier"], { readonly manifest: unknown }>;
+      const base = pinned.base_commit as Extract<EvalCase["base_commit"], { readonly manifest: unknown }>;
+      const manifest = { ...verifier.manifest, ...changes };
+      return { ...pinned, verifier: { ...verifier, manifest }, base_commit: { ...base, manifest } };
+    };
+
+    const zeroCommit = await validate(root, forgeCitation({ source_commit: "00000000" }), strictWithSource(evidence));
+    expect(zeroCommit.code).toBe(2);
+    expect(zeroCommit.result.classes).toEqual({ "$.verifier": "external", "$.base_commit": "external" });
+    expect(zeroCommit.result.refusals).toContainEqual({ code: "publisher_commit_mismatch", citation: "$.verifier.manifest.source_commit", detail: "00000000 is not a commit in the source clone" });
+    expect(zeroCommit.result.recomputed).toEqual([]);
+
+    // The base commit exists but predates the manifest: the path is not there.
+    const earlier = await validate(root, forgeCitation({ source_commit: evidence.commit }), strictWithSource(evidence));
+    expect(earlier.code).toBe(2);
+    expect(earlier.result.refusals).toContainEqual(expect.objectContaining({ code: "publisher_commit_mismatch", citation: "$.verifier.manifest.path" }));
+
+    // Same file name, wrong directory: the evidence root still finds the manifest by name, but the clone has nothing there.
+    const wrongDirectory = await validate(root, forgeCitation({ path: `other/${MANIFEST_PATH.split("/").pop() as string}` }), strictWithSource(evidence));
+    expect(wrongDirectory.code).toBe(2);
+    expect(wrongDirectory.result.refusals).toContainEqual(expect.objectContaining({ code: "publisher_commit_mismatch", citation: "$.verifier.manifest.path" }));
+
+    // A path to a different published file: the manifest is not found by that name, so the citation stays external.
+    const wrongPath = await validate(root, forgeCitation({ path: "app/src/runner.rs" }), strictWithSource(evidence));
+    expect(wrongPath.code).toBe(2);
+    expect(wrongPath.result.classes).toEqual({ "$.verifier": "external", "$.base_commit": "external" });
+    expect(wrongPath.result.refusals.map((refusal) => refusal.code)).toEqual(["binding_required", "binding_required"]);
+
+    // Without a source clone the publisher claim is not checked, and the citation is honestly only pinned_external.
+    const pinnedOnly = await validate(root, forgeCitation({ source_commit: "00000000" }), ["--evidence-root", evidence.evidenceRoot]);
+    expect(pinnedOnly.code).toBe(0);
+    expect(pinnedOnly.result.classes).toEqual({ "$.verifier": "pinned_external", "$.base_commit": "pinned_external" });
+  });
+
+  it("repair 3 proof 3 (forged-session-map): asserted session ranges must equal the manifest's and the tallies' sessions per pair set", async () => {
+    const { root, record } = fixtureRepository();
+    const evidence = evidenceFixture();
+    expect(parseSessionRange("S-03 to S-13 (inferred)")).toEqual(["S-03", "S-04", "S-05", "S-06", "S-07", "S-08", "S-09", "S-10", "S-11", "S-12", "S-13"]);
+    expect(parseSessionRange("S-11..S-13")).toEqual(["S-11", "S-12", "S-13"]);
+    expect(parseSessionRange("sessions one to three")).toBeUndefined();
+
+    const swapped = await validate(root, pinnedRecord(record, evidence, "S-11..S-13"), strictWithSource(evidence));
+    expect(swapped.code).toBe(2);
+    expect(swapped.result.refusals).toContainEqual({ code: "evidence_manifest_mismatch", citation: "$.base_commit.commits[0].sessions", detail: "manifest sessions for pair set B are S-01..S-03" });
+    expect(swapped.result.refusals).toContainEqual({ code: "replay_counts_mismatch", citation: "$.base_commit.commits[0].sessions", detail: "tallies carry sessions S-01,S-02,S-03 for pair set B" });
+    expect(swapped.result.classes["$.base_commit"]).toBe("external");
+
+    // A manifest whose own range disagrees with the tallies is caught through the tallies even when the record copies it.
+    const narrow = evidenceFixture({ sessions: "S-01..S-02" });
+    const copied = await validate(root, pinnedRecord(record, narrow, "S-01..S-02"), strictWithSource(narrow));
+    expect(copied.code).toBe(2);
+    expect(copied.result.refusals).toContainEqual({ code: "replay_counts_mismatch", citation: "$.base_commit.commits[0].sessions", detail: "tallies carry sessions S-01,S-02,S-03 for pair set B" });
+
+    const freeText = await validate(root, pinnedRecord(record, evidence, "sessions one to three"), strictWithSource(evidence));
+    expect(freeText.code).toBe(2);
+    expect(freeText.result.refusals).toContainEqual(expect.objectContaining({ code: "record_shape", citation: "$.base_commit.commits[0].sessions" }));
+  });
+
+  it("repair 3 proof 4 (strict-requires-recomputed): pinned_external stays a named class but does not satisfy --require-bound", async () => {
+    const { root, record } = fixtureRepository();
+    const evidence = evidenceFixture();
+    const pinned = pinnedRecord(record, evidence);
+
+    const pinnedOnly = await validate(root, pinned, ["--evidence-root", evidence.evidenceRoot, "--require-bound", "verifier,base_commit"]);
+    expect(pinnedOnly.code).toBe(2);
+    expect(pinnedOnly.result.classes).toEqual({ "$.verifier": "pinned_external", "$.base_commit": "pinned_external" });
+    expect(pinnedOnly.result.pinned_external).toEqual(["$.verifier", "$.base_commit"]);
+    expect(pinnedOnly.result.refusals).toEqual([
+      expect.objectContaining({ code: "binding_required", citation: "$.verifier", detail: expect.stringMatching(/^pinned_external citation; --require-bound verifier demands/u) }),
+      expect.objectContaining({ code: "binding_required", citation: "$.base_commit", detail: expect.stringMatching(/^pinned_external citation; --require-bound base_commit demands/u) }),
+    ]);
+
+    const recomputed = await validate(root, pinned, strictWithSource(evidence));
+    expect(recomputed.code).toBe(0);
+    expect(recomputed.result.classes).toEqual({ "$.verifier": "recomputed", "$.base_commit": "recomputed" });
   });
 });

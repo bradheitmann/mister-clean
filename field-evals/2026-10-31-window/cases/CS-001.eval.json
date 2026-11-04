@@ -28,11 +28,11 @@
     "kind": "evaluator source pin (validator source plus review source), with the receipt tool's countercases as the mutant-check analogue",
     "binding": "pinned_external",
     "repository": "specification-pipeline",
-    "location": "the source project (a Rust spec-compiler, named generically per the field-evals ledger rules) publishes an RC-001 evidence manifest, revision 2, listing every evaluator file and its sha256 at both base commits, the composite algorithm with its machine-readable header, the receipt tool's digest and the inferred session map; the evidence owner (A/EXEC-PM) holds it in a private evidence root outside this repository, because it names the source project",
+    "location": "the source project (a Rust spec-compiler, named generically per the field-evals ledger rules) publishes an RC-001 evidence manifest, revision 2, listing every evaluator file and its sha256 at both base commits, the composite algorithm with its machine-readable header, the receipt tool's digest and the inferred session map; the evidence owner (A/EXEC-PM) holds a copy in a private evidence root outside this repository, because it names the source project",
     "manifest": {
       "seam": "specification-pipeline",
       "source_commit": "90c6f9a0",
-      "file": "RC-001-EVIDENCE-MANIFEST.v2.json",
+      "path": "reports/team-2026-11-02/RC-001-EVIDENCE-MANIFEST.v2.json",
       "sha256": "a7464d17dd860d8d2d4091b2c325a660255fd02018cfed49f57cd2cbfc3f3cac"
     },
     "sha256": "ca5ca4da37b80008d28b9cabbfcbed4d68e01f00702d1182a44b9ac6bc5c2a4c",
@@ -58,19 +58,19 @@
     "manifest": {
       "seam": "specification-pipeline",
       "source_commit": "90c6f9a0",
-      "file": "RC-001-EVIDENCE-MANIFEST.v2.json",
+      "path": "reports/team-2026-11-02/RC-001-EVIDENCE-MANIFEST.v2.json",
       "sha256": "a7464d17dd860d8d2d4091b2c325a660255fd02018cfed49f57cd2cbfc3f3cac"
     },
     "session_map": "inferred",
     "commits": [
       {
         "pair_set": "A",
-        "sessions": "S-01 to S-02 (session-to-source map inferred one-to-one from the tallies; not recorded by the source project)",
+        "sessions": "S-01..S-02 (session-to-source map inferred one-to-one from the tallies; not recorded by the source project)",
         "sha": "10acd2766333829e77bfaddf1cff8a57e316ba0b"
       },
       {
         "pair_set": "B",
-        "sessions": "S-03 to S-13 (session-to-source map inferred one-to-one from the tallies; not recorded by the source project)",
+        "sessions": "S-03..S-13 (session-to-source map inferred one-to-one from the tallies; not recorded by the source project)",
         "sha": "9a5d527afce542ca8a21d97ae8ccef33e706aaa1"
       }
     ]
