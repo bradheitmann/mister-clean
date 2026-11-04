@@ -1,0 +1,3 @@
+# Generated product bundles, built from strict TS; never hand-edited.
+bin/mister-clean.js
+assets/codebase-state-dashboard/model-scorecard-interactions.js

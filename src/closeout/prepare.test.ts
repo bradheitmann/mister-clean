@@ -816,5 +816,53 @@ describe("prepareCloseout retirement", { timeout: 120_000 }, () => {
       root: "legacy",
       record_path: "charter/retirements/2026-11-01-legacy.json",
     })]);
+
+    // The cited ruling travels with the bundle, so its exception refs resolve
+    // there and the bundle validates without the live checkout's files.
+    const staged = join(prepared.bundleDirectory, rulingPath);
+    expect(existsSync(staged)).toBe(true);
+    const exceptionRef = (retired[0]?.exception as { ref: { path: string } }).ref;
+    const rulingRecord = json(join(prepared.bundleDirectory, exceptionRef.path));
+    expect(rulingRecord).toEqual(expect.objectContaining({
+      record_type: "mister-clean.operator-ruling",
+      debt_id: retired[0]?.id,
+      ruling_ref: { path: rulingPath, sha256: createHash("sha256").update(readFileSync(join(repo, rulingPath))).digest("hex") },
+    }));
+    expect(createHash("sha256").update(readFileSync(staged)).digest("hex"))
+      .toBe((rulingRecord.ruling_ref as { sha256: string }).sha256);
+    const validation = await validateBundleFile(prepared.bundlePath, { repoPath: repo });
+    expect(validation.errors.filter((error) => error.includes("exception.ref"))).toEqual([]);
+  });
+
+  it("refuses to stage a ruling whose bytes changed after the retirement was read", async () => {
+    const { base, evidence, repo } = fixture("retirement-mismatch");
+    const denylist = join(base, "denylist.txt");
+    writeFileSync(denylist, "internal campaign\n");
+    mkdirSync(join(repo, "legacy"), { recursive: true });
+    writeFileSync(join(repo, "legacy", "notes.md"), "internal campaign marker\n");
+    const rulingPath = "charter/owner-decisions/2026-11-01-retire-legacy.md";
+    mkdirSync(join(repo, "charter", "owner-decisions"), { recursive: true });
+    writeFileSync(join(repo, rulingPath), "Owner ruling: the legacy corpus is frozen.\n");
+    mkdirSync(join(repo, "charter", "retirements"), { recursive: true });
+    writeFileSync(join(repo, "charter", "retirements", "2026-11-01-legacy.json"), `${JSON.stringify({
+      record_type: "mister-clean.retirement",
+      schema_version: "1.0",
+      slug: "legacy-corpus",
+      roots: ["legacy"],
+      ruling: {
+        author: "operator",
+        at: "2026-11-01T00:00:00Z",
+        scope: "Retire the frozen legacy corpus",
+        evidence: { path: rulingPath, sha256: "0".repeat(64) },
+      },
+    }, null, 2)}\n`);
+    commit(repo);
+    await expect(prepareCloseout({
+      repo,
+      evidenceHome: evidence,
+      runId: "retirement-mismatch",
+      requestRef: "request-1",
+      publicSafetyDenylistPath: denylist,
+    })).rejects.toThrow(/sha256|refusing to stage|does not match/u);
   });
 });

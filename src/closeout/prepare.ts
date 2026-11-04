@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   discoverPlanningRoots,
   git,
@@ -682,6 +682,73 @@ async function collectPrepareTopology(
     targetObservation,
   };
 }
+/**
+ * Each retired debt's exception ref names the cited ruling by its
+ * repository-relative path, and the bundle validator resolves refs inside the
+ * bundle directory. Stage every cited ruling there, at the same relative path,
+ * so a bundle stays self-contained; the bytes are re-checked against the
+ * digest the ref binds, and a mismatch refuses rather than staging them.
+ */
+function stageRetirementRulings(
+  repository: string,
+  bundleDirectory: string,
+  retirements: ReturnType<typeof readRetirements>,
+): void {
+  const staged = new Set<string>();
+  for (const record of retirements) {
+    const { path, sha256 } = record.ruling.evidence;
+    if (staged.has(path)) continue;
+    const bytes = readFileSync(resolve(repository, path));
+    const observed = createHash("sha256").update(bytes).digest("hex");
+    if (observed !== sha256) {
+      throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha256}`);
+    }
+    const target = join(bundleDirectory, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, bytes);
+    staged.add(path);
+  }
+}
+
+/**
+ * The bundle validator accepts an accepted_exception only through a
+ * `mister-clean.operator-ruling` record that names the debt and binds the run's
+ * operative request. A retirement covers many debts under one owner ruling, so
+ * each retired debt gets its own small record inside the bundle that repeats
+ * the exception fields and cites the staged ruling by path and digest; the
+ * debt's exception ref then points at that record.
+ */
+function bindRetirementRulings(
+  debts: readonly JsonObject[],
+  bundleDirectory: string,
+  requestSha256: string,
+): JsonObject[] {
+  return debts.map((debt) => {
+    const exception = debt.exception as JsonObject | undefined;
+    if (debt.state !== "accepted_exception" || !exception) return debt as JsonObject;
+    const scope = String(exception.scope ?? "");
+    if (!scope.startsWith("retired root ")) return debt as JsonObject;
+    const ruling = exception.ref as { path: string; sha256: string };
+    const relativePath = join("retirement-rulings", `${String(debt.id)}.json`);
+    mkdirSync(join(bundleDirectory, "retirement-rulings"), { recursive: true });
+    writeJson(join(bundleDirectory, relativePath), {
+      record_type: "mister-clean.operator-ruling",
+      schema_version: "1.0",
+      debt_id: debt.id,
+      actor: exception.actor,
+      at: exception.at,
+      scope: exception.scope,
+      rationale: exception.rationale,
+      request_sha256: requestSha256,
+      ruling_ref: { path: ruling.path, sha256: ruling.sha256 },
+    });
+    return {
+      ...debt,
+      exception: { ...exception, ref: { path: relativePath, sha256: sha256File(join(bundleDirectory, relativePath)) } },
+    } as JsonObject;
+  });
+}
+
 function assemblePrepareReport(
   context: Readonly<Awaited<ReturnType<typeof collectPrepareTopology>>>,
 ) {
@@ -780,6 +847,7 @@ function assemblePrepareReport(
   // Committed rulings change how this run reads: retirements apply to every
   // debt family at the end, exemptions only to the public-safety scan.
   const retirements = readRetirements(repository);
+  stageRetirementRulings(repository, bundleDirectory, retirements);
   const publicSafetyExemptions = applyPublicSafetyExemptions(
     publicSafetyAudit?.findings ?? [],
     readPublicSafetyExemptions(repository),
@@ -1007,7 +1075,7 @@ function assemblePrepareReport(
     ...nativeRootDebts,
   ];
   const retirementOutcome = applyRetirements(completionDebts as unknown as JsonObject[], retirements);
-  const appliedDebts = retirementOutcome.debts;
+  const appliedDebts = bindRetirementRulings(retirementOutcome.debts, bundleDirectory, requestSha256);
   const acceptedExceptions = appliedDebts.filter((debt) => debt.state === "accepted_exception").length;
   const rootDebtRows: RootDebtAccountingRow[] = appliedDebts.map((debt) => ({
     debt_key: debt.debt_key as string,

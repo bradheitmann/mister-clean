@@ -9,7 +9,7 @@ const rootPath = dirname(dirname(fileURLToPath(import.meta.url)));
 const outputPath = join(rootPath, "src/generated-materials.ts");
 const checkOnly = process.argv.includes("--check");
 
-const categoryRoots = [
+const categoryRoots: ReadonlyArray<readonly [category: string, path: string]> = [
   ["entrypoint", "SKILL.md"],
   ["agent", "agents"],
   ["asset", "assets"],
@@ -29,7 +29,7 @@ const localEvidenceAssets = new Set([
 ]);
 const localEvidencePrefixes = ["assets/codebase-state-dashboard/receipts/"];
 
-function collect(path) {
+function collect(path: string): string[] {
   const absolute = join(rootPath, path);
   const metadata = lstatSync(absolute);
   if (metadata.isSymbolicLink()) throw new Error(`material source symlink is forbidden: ${path}`);
@@ -45,23 +45,23 @@ function collect(path) {
     .sort(compareCodePoints);
 }
 
-function compareCodePoints(left, right) {
+function compareCodePoints(left: string, right: string): number {
   const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
   const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
   for (let index = 0; index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
-    const difference = leftPoints[index] - rightPoints[index];
+    const difference = leftPoints[index]! - rightPoints[index]!;
     if (difference) return difference;
   }
   return leftPoints.length - rightPoints.length;
 }
 
-function titleFor(path, content) {
+function titleFor(path: string, content: string): string {
   const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
   if (heading) return heading;
   return path.split("/").at(-1)?.replace(/[-_]/g, " ") ?? path;
 }
 
-function mimeFor(path) {
+function mimeFor(path: string): string {
   const extension = extname(path);
   if (extension === ".css") return "text/css";
   if (extension === ".html") return "text/html";
@@ -94,7 +94,7 @@ materials.sort((left, right) => compareCodePoints(left.id, right.id));
 
 const skill = materials.find((material) => material.id === "SKILL.md");
 if (!skill) throw new Error("SKILL.md was not included in the generated material set");
-const packageVersion = JSON.parse(readFileSync(join(rootPath, "package.json"), "utf8")).version;
+const packageVersion = (JSON.parse(readFileSync(join(rootPath, "package.json"), "utf8")) as { version: string }).version;
 const materialsSha256 = createHash("sha256").update(JSON.stringify(materials)).digest("hex");
 
 const source =
