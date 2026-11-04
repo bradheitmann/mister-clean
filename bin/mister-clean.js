@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync17, readFileSync as readFileSync21, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
-import { isAbsolute as isAbsolute24, join as join21, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
+import { existsSync as existsSync18, readFileSync as readFileSync22, realpathSync as realpathSync12, statSync as statSync8, writeFileSync as writeFileSync9 } from "fs";
+import { isAbsolute as isAbsolute24, join as join22, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -11050,7 +11050,7 @@ function captureOnce(repository, visited, projection) {
   field(hash, "surface", SURFACE);
   field(hash, "entry_count", u64(BigInt(before.entries.length)));
   for (const entry of before.entries) hashEntry(hash, repository, entry, visited, projection);
-  const sha25613 = hash.digest("hex");
+  const sha25614 = hash.digest("hex");
   const after = surfaceSnapshot(repository);
   const headAfter = gitLine(repository, ["rev-parse", "--verify", "HEAD^{commit}"]);
   if (headAfter !== headBefore || after.signature !== before.signature) {
@@ -11062,7 +11062,7 @@ function captureOnce(repository, visited, projection) {
     head_commit: headBefore,
     surface: SURFACE,
     entry_count: before.entries.length,
-    sha256: sha25613
+    sha256: sha25614
   };
 }
 function captureStable(root, visited, projection) {
@@ -27920,12 +27920,12 @@ async function collectPrepareTopology(context) {
 function stageRetirementRulings(repository, bundleDirectory, retirements) {
   const staged = /* @__PURE__ */ new Set();
   for (const record4 of retirements) {
-    const { path, sha256: sha25613 } = record4.ruling.evidence;
+    const { path, sha256: sha25614 } = record4.ruling.evidence;
     if (staged.has(path)) continue;
     const bytes2 = readFileSync12(resolve22(repository, path));
     const observed = createHash20("sha256").update(bytes2).digest("hex");
-    if (observed !== sha25613) {
-      throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25613}`);
+    if (observed !== sha25614) {
+      throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25614}`);
     }
     const target = join13(bundleDirectory, path);
     mkdirSync2(dirname12(target), { recursive: true });
@@ -30358,53 +30358,210 @@ var nodeCloseoutEngine = {
 };
 
 // src/mister-clean-invocation-journal.ts
-import { appendFileSync, existsSync as existsSync12, mkdirSync as mkdirSync5, readFileSync as readFileSync16 } from "fs";
-import { createHash as createHash24, randomUUID as randomUUID7 } from "crypto";
-import { dirname as dirname15, isAbsolute as isAbsolute22 } from "path";
-function readMisterCleanInvocationJournal(path) {
-  if (!isAbsolute22(path)) throw new Error("Mister Clean invocation journal path must be absolute");
-  if (!existsSync12(path)) return [];
-  const contents = readFileSync16(path, "utf8");
-  if (contents.length === 0) return [];
-  if (contents.length > 0 && !contents.endsWith("\n")) throw new Error("Mister Clean invocation journal must end with a canonical JSONL newline");
-  const started = /* @__PURE__ */ new Map();
-  const ended = /* @__PURE__ */ new Map();
-  for (const [index, line] of contents.slice(0, -1).split("\n").entries()) {
-    if (line.length === 0) throw new Error(`Mister Clean invocation journal has a blank receipt line at ${index + 1}`);
-    let parsed;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      throw new Error(`Mister Clean invocation journal is not valid JSONL at line ${index + 1}`);
-    }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error(`Mister Clean invocation journal has an invalid receipt at line ${index + 1}`);
-    const record4 = parsed;
-    if (record4.record_type !== "mister-clean.invocation-receipt" || record4.schema_version !== "1.0") throw new Error(`Mister Clean invocation journal has an invalid receipt at line ${index + 1}`);
-    if (record4.event === "started") {
-      const current = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_status", "evaluation_run_event_id"]);
-      const legacy = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_run_event_id"]);
-      if (!current && !legacy || typeof record4.invocation_id !== "string" || typeof record4.command !== "string" || typeof record4.argv_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(record4.argv_sha256) || typeof record4.observed_at !== "string" || record4.identity_provenance !== "UNOBSERVED" || record4.evaluation_run_event_id !== null || current && record4.evaluation_status !== "PENDING_IDENTITY_EVALUATION") throw new Error(`Mister Clean invocation journal has an invalid start receipt at line ${index + 1}`);
-      const canonical4 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
-      if (line !== canonicalJson(canonical4)) throw new Error(`Mister Clean invocation journal has a non-canonical receipt at line ${index + 1}`);
-      const value = { invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, receipt_sha256: sha25612(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null };
-      const existing = started.get(value.invocation_id);
-      if (existing !== void 0 && canonicalJson(existing) !== canonicalJson(value)) throw new Error(`Mister Clean invocation journal reuses invocation_id with different content at line ${index + 1}`);
-      started.set(value.invocation_id, value);
-    } else if (record4.event === "finished") {
-      if (!sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "status", "exit_code", "observed_at"]) || typeof record4.invocation_id !== "string" || record4.run_event_id !== null && typeof record4.run_event_id !== "string" || record4.status !== "SUCCEEDED" && record4.status !== "FAILED" || typeof record4.exit_code !== "number" || !Number.isInteger(record4.exit_code) || record4.exit_code < 0 || record4.exit_code > 255 || record4.status === "SUCCEEDED" && record4.exit_code !== 0 || record4.status === "FAILED" && record4.exit_code === 0 || typeof record4.observed_at !== "string" || !canonicalTimestamp2(record4.observed_at) || line !== canonicalJson(record4)) {
-        throw new Error(`Mister Clean invocation journal has an invalid terminal receipt at line ${index + 1}`);
-      }
-      if (!started.has(record4.invocation_id)) throw new Error(`Mister Clean invocation journal terminates an unknown invocation at line ${index + 1}`);
-      if (ended.has(record4.invocation_id)) throw new Error(`Mister Clean invocation journal terminates an invocation more than once at line ${index + 1}`);
-      ended.set(record4.invocation_id, { status: record4.status, exit_code: record4.exit_code, observed_at: record4.observed_at, run_event_id: record4.run_event_id });
-    } else if (record4.event !== "evaluation_run_linked" || !sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "observed_at"]) || typeof record4.invocation_id !== "string" || typeof record4.run_event_id !== "string" || typeof record4.observed_at !== "string" || line !== canonicalJson(record4)) {
-      throw new Error(`Mister Clean invocation journal has an invalid receipt at line ${index + 1}`);
+import { appendFileSync, existsSync as existsSync13, mkdirSync as mkdirSync5, readFileSync as readFileSync17 } from "fs";
+import { createHash as createHash25, randomUUID as randomUUID7 } from "crypto";
+import { basename as basename14, dirname as dirname16, isAbsolute as isAbsolute22 } from "path";
+
+// src/sealed-segments.ts
+import { chmodSync as chmodSync2, existsSync as existsSync12, readFileSync as readFileSync16, renameSync as renameSync4, statSync as statSync5, writeFileSync as writeFileSync7 } from "fs";
+import { createHash as createHash24 } from "crypto";
+import { basename as basename13, dirname as dirname15, join as join17 } from "path";
+var SEGMENT_MANIFEST_RECORD_TYPE = "mister-clean.segment-manifest";
+var SEGMENT_MANIFEST_SCHEMA_VERSION = "1";
+var SealedSegmentTamperedError = class extends Error {
+  constructor(file, expected_sha256, observed_sha256) {
+    super(`sealed segment ${file} does not match its manifest digest (manifest ${expected_sha256}, file ${observed_sha256}); refusing to read it`);
+    this.file = file;
+    this.expected_sha256 = expected_sha256;
+    this.observed_sha256 = observed_sha256;
+    this.name = "SealedSegmentTamperedError";
+  }
+  code = "sealed_segment_tampered";
+};
+var SegmentStoreInvalidError = class extends Error {
+  code = "segment_store_invalid";
+  constructor(message) {
+    super(message);
+    this.name = "SegmentStoreInvalidError";
+  }
+};
+function segmentLayout(livePath) {
+  const directory = dirname15(livePath);
+  const name = basename13(livePath);
+  const base = name.endsWith(".jsonl") ? name.slice(0, -".jsonl".length) : name;
+  const ordinal = (value) => String(value).padStart(6, "0");
+  return {
+    directory,
+    livePath,
+    manifestPath: join17(directory, `${base}.segments.json`),
+    sealedFile: (value) => `${base}.${ordinal(value)}.jsonl`,
+    keyIndexFile: (value) => `${base}.${ordinal(value)}.keys.json`
+  };
+}
+var readObservers = [];
+var utf83 = new TextDecoder("utf-8", { fatal: true });
+function readSegmentFile(path) {
+  for (const observer of readObservers) observer(path);
+  return readFileSync16(path);
+}
+function sha25612(bytes2) {
+  return createHash24("sha256").update(bytes2).digest("hex");
+}
+function segmentLines(text3, label) {
+  if (text3.length === 0) return [];
+  if (!text3.endsWith("\n")) throw new SegmentStoreInvalidError(`${label} must end with a newline`);
+  return text3.slice(0, -1).split("\n");
+}
+function writeAtomically(path, text3, mode) {
+  const temporary = `${path}.tmp`;
+  writeFileSync7(temporary, text3, { encoding: "utf8", mode });
+  renameSync4(temporary, path);
+}
+function emptyManifest() {
+  return { record_type: SEGMENT_MANIFEST_RECORD_TYPE, schema_version: SEGMENT_MANIFEST_SCHEMA_VERSION, segments: [] };
+}
+function parseManifest2(layout) {
+  if (!existsSync12(layout.manifestPath)) return emptyManifest();
+  let parsed;
+  try {
+    parsed = JSON.parse(utf83.decode(readSegmentFile(layout.manifestPath)));
+  } catch {
+    throw new SegmentStoreInvalidError(`segment manifest ${basename13(layout.manifestPath)} is not valid JSON`);
+  }
+  const record4 = parsed;
+  if (!record4 || record4.record_type !== SEGMENT_MANIFEST_RECORD_TYPE || record4.schema_version !== SEGMENT_MANIFEST_SCHEMA_VERSION || !Array.isArray(record4.segments)) {
+    throw new SegmentStoreInvalidError(`segment manifest ${basename13(layout.manifestPath)} is not a ${SEGMENT_MANIFEST_RECORD_TYPE}/${SEGMENT_MANIFEST_SCHEMA_VERSION}`);
+  }
+  for (const [index, segment] of record4.segments.entries()) {
+    if (segment.file !== layout.sealedFile(index + 1) || !/^[0-9a-f]{64}$/u.test(String(segment.sha256))) {
+      throw new SegmentStoreInvalidError(`segment manifest entry ${index + 1} must name ${layout.sealedFile(index + 1)} with its sha256`);
     }
   }
-  return [...started.values()].map((value) => {
-    const terminal = ended.get(value.invocation_id);
-    return terminal === void 0 ? value : { ...value, terminal_status: terminal.status, terminal_exit_code: terminal.exit_code, terminal_observed_at: terminal.observed_at, terminal_run_event_id: terminal.run_event_id };
-  }).sort((left, right) => left.invocation_id.localeCompare(right.invocation_id));
+  return record4;
+}
+function recordSealedSegment(layout, manifest2, ordinal, summarize, sealedAt) {
+  const file = layout.sealedFile(ordinal);
+  const bytes2 = readSegmentFile(join17(layout.directory, file));
+  const summary = summarize(segmentLines(utf83.decode(bytes2), file));
+  let keyIndex = null;
+  if (summary.keys !== void 0) {
+    const keyFile = layout.keyIndexFile(ordinal);
+    const keyText = `${canonicalJson([...summary.keys].sort())}
+`;
+    const keyPath = join17(layout.directory, keyFile);
+    if (existsSync12(keyPath)) chmodSync2(keyPath, 384);
+    writeAtomically(keyPath, keyText, 384);
+    chmodSync2(keyPath, 256);
+    keyIndex = { file: keyFile, sha256: sha25612(new TextEncoder().encode(keyText)) };
+  }
+  const entry = {
+    file,
+    sha256: sha25612(bytes2),
+    bytes: bytes2.byteLength,
+    records: summary.records,
+    first: summary.first,
+    last: summary.last,
+    groups: [...new Set(summary.groups ?? [])].sort(),
+    key_index: keyIndex,
+    sealed_at: sealedAt
+  };
+  const next = { ...manifest2, segments: [...manifest2.segments, entry] };
+  writeAtomically(layout.manifestPath, `${canonicalJson(next)}
+`, 384);
+  return next;
+}
+function openSegments(layout, summarize, now = () => (/* @__PURE__ */ new Date()).toISOString()) {
+  let manifest2 = parseManifest2(layout);
+  for (; ; ) {
+    const ordinal = manifest2.segments.length + 1;
+    const orphan = join17(layout.directory, layout.sealedFile(ordinal));
+    if (!existsSync12(orphan)) return manifest2;
+    chmodSync2(orphan, 256);
+    manifest2 = recordSealedSegment(layout, manifest2, ordinal, summarize, now());
+  }
+}
+function sealLiveSegmentIfFull(layout, input) {
+  if (!Number.isInteger(input.maxSize) || input.maxSize <= 0) throw new SegmentStoreInvalidError("segment cap must be a positive integer number of bytes");
+  const now = input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
+  const manifest2 = openSegments(layout, input.summarize, now);
+  if (!existsSync12(layout.livePath)) return false;
+  const size = statSync5(layout.livePath).size;
+  if (size === 0 || size + input.incomingBytes <= input.maxSize) return false;
+  const ordinal = manifest2.segments.length + 1;
+  const sealedPath = join17(layout.directory, layout.sealedFile(ordinal));
+  if (existsSync12(sealedPath)) throw new SegmentStoreInvalidError(`refusing to overwrite sealed segment ${layout.sealedFile(ordinal)}`);
+  renameSync4(layout.livePath, sealedPath);
+  chmodSync2(sealedPath, 256);
+  input.betweenSealSteps?.();
+  recordSealedSegment(layout, manifest2, ordinal, input.summarize, now());
+  return true;
+}
+function readSealedSegment(layout, segment) {
+  const bytes2 = readSegmentFile(join17(layout.directory, segment.file));
+  const observed = sha25612(bytes2);
+  if (observed !== segment.sha256) throw new SealedSegmentTamperedError(segment.file, segment.sha256, observed);
+  return utf83.decode(bytes2);
+}
+function readSegmentKeys(layout, segment) {
+  if (segment.key_index === null) throw new SegmentStoreInvalidError(`sealed segment ${segment.file} has no key index`);
+  const bytes2 = readSegmentFile(join17(layout.directory, segment.key_index.file));
+  const observed = sha25612(bytes2);
+  if (observed !== segment.key_index.sha256) throw new SealedSegmentTamperedError(segment.key_index.file, segment.key_index.sha256, observed);
+  const keys = JSON.parse(utf83.decode(bytes2));
+  if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string")) throw new SegmentStoreInvalidError(`key index ${segment.key_index.file} is not a list of keys`);
+  return keys;
+}
+function readLiveSegment(layout) {
+  return existsSync12(layout.livePath) ? utf83.decode(readSegmentFile(layout.livePath)) : "";
+}
+
+// src/mister-clean-invocation-journal.ts
+var INVOCATION_JOURNAL_SEGMENT_MAX_BYTES = 8 * 1024 * 1024;
+function parseJournalLine(line, at) {
+  if (line.length === 0) throw new Error(`Mister Clean invocation journal has a blank receipt line at ${at}`);
+  let parsed;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    throw new Error(`Mister Clean invocation journal is not valid JSONL at ${at}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error(`Mister Clean invocation journal has an invalid receipt at ${at}`);
+  const record4 = parsed;
+  if (record4.record_type !== "mister-clean.invocation-receipt" || record4.schema_version !== "1.0") throw new Error(`Mister Clean invocation journal has an invalid receipt at ${at}`);
+  if (record4.event === "started") {
+    const current = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_status", "evaluation_run_event_id"]);
+    const legacy = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_run_event_id"]);
+    if (!current && !legacy || typeof record4.invocation_id !== "string" || typeof record4.command !== "string" || typeof record4.argv_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(record4.argv_sha256) || typeof record4.observed_at !== "string" || record4.identity_provenance !== "UNOBSERVED" || record4.evaluation_run_event_id !== null || current && record4.evaluation_status !== "PENDING_IDENTITY_EVALUATION") throw new Error(`Mister Clean invocation journal has an invalid start receipt at ${at}`);
+    const canonical4 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
+    if (line !== canonicalJson(canonical4)) throw new Error(`Mister Clean invocation journal has a non-canonical receipt at ${at}`);
+    return { event: "started", value: { invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, receipt_sha256: sha25613(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null } };
+  }
+  if (record4.event === "finished") {
+    if (!sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "status", "exit_code", "observed_at"]) || typeof record4.invocation_id !== "string" || record4.run_event_id !== null && typeof record4.run_event_id !== "string" || record4.status !== "SUCCEEDED" && record4.status !== "FAILED" || typeof record4.exit_code !== "number" || !Number.isInteger(record4.exit_code) || record4.exit_code < 0 || record4.exit_code > 255 || record4.status === "SUCCEEDED" && record4.exit_code !== 0 || record4.status === "FAILED" && record4.exit_code === 0 || typeof record4.observed_at !== "string" || !canonicalTimestamp2(record4.observed_at) || line !== canonicalJson(record4)) {
+      throw new Error(`Mister Clean invocation journal has an invalid terminal receipt at ${at}`);
+    }
+    return { event: "finished", invocation_id: record4.invocation_id, terminal: { status: record4.status, exit_code: record4.exit_code, observed_at: record4.observed_at, run_event_id: record4.run_event_id } };
+  }
+  if (record4.event !== "evaluation_run_linked" || !sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "observed_at"]) || typeof record4.invocation_id !== "string" || typeof record4.run_event_id !== "string" || typeof record4.observed_at !== "string" || line !== canonicalJson(record4)) {
+    throw new Error(`Mister Clean invocation journal has an invalid receipt at ${at}`);
+  }
+  return { event: "evaluation_run_linked" };
+}
+function journalSegmentLines(text3, label, live) {
+  if (text3.length === 0) return [];
+  if (!text3.endsWith("\n")) throw new Error(live ? "Mister Clean invocation journal must end with a canonical JSONL newline" : `Mister Clean invocation journal segment ${label} must end with a canonical JSONL newline`);
+  return text3.slice(0, -1).split("\n").map((line, index) => ({ line, at: live ? `line ${index + 1}` : `line ${index + 1} of ${label}` }));
+}
+function summarizeJournalSegment(lines2) {
+  const observed = lines2.map((line) => {
+    try {
+      const value = JSON.parse(line).observed_at;
+      return typeof value === "string" ? value : null;
+    } catch {
+      return null;
+    }
+  });
+  return { records: lines2.length, first: observed[0] ?? null, last: observed.at(-1) ?? null };
 }
 function canonicalTimestamp2(value) {
   const parsed = Date.parse(value);
@@ -30414,15 +30571,23 @@ function sameKeys(record4, expected) {
   const keys = Object.keys(record4).sort((left, right) => left.localeCompare(right));
   return keys.length === expected.length && keys.every((key) => expected.includes(key));
 }
-function sha25612(value) {
-  return createHash24("sha256").update(value, "utf8").digest("hex");
+function sha25613(value) {
+  return createHash25("sha256").update(value, "utf8").digest("hex");
 }
 var AppendOnlyLocalMisterCleanInvocationJournal = class {
+  /** The live segment: the journal's historical path. */
   #path;
-  constructor(path) {
+  #segments;
+  #segmentMaxBytes;
+  #betweenSealSteps;
+  /** `segmentMaxBytes` and `betweenSealSteps` exist for tests (a small cap; a crash between sealing steps). */
+  constructor(path, options = {}) {
     if (!isAbsolute22(path)) throw new Error("MISTER_CLEAN_INVOCATION_JOURNAL_PATH must be an absolute machine-local path");
     this.#path = path;
-    mkdirSync5(dirname15(path), { recursive: true });
+    this.#segments = segmentLayout(path);
+    this.#segmentMaxBytes = options.segmentMaxBytes ?? INVOCATION_JOURNAL_SEGMENT_MAX_BYTES;
+    this.#betweenSealSteps = options.betweenSealSteps;
+    mkdirSync5(dirname16(path), { recursive: true });
     this.#assertExistingIntegrity();
   }
   recordStart(input) {
@@ -30433,7 +30598,7 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
       event: "started",
       invocation_id: invocationId,
       command: input.command,
-      argv_sha256: sha25612(canonicalJson(input.argv)),
+      argv_sha256: sha25613(canonicalJson(input.argv)),
       observed_at: input.occurred_at,
       identity_provenance: "UNOBSERVED",
       evaluation_status: "PENDING_IDENTITY_EVALUATION",
@@ -30457,11 +30622,22 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
     this.#append({ record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "finished", invocation_id: input.invocation_id, run_event_id: input.run_event_id, status: input.status, exit_code: input.exit_code, observed_at: input.occurred_at });
   }
   #append(record4) {
+    sealLiveSegmentIfFull(this.#segments, {
+      incomingBytes: new TextEncoder().encode(`${canonicalJson(record4)}
+`).byteLength,
+      maxSize: this.#segmentMaxBytes,
+      summarize: summarizeJournalSegment,
+      betweenSealSteps: this.#betweenSealSteps
+    });
     appendFileSync(this.#path, `${canonicalJson(record4)}
 `, { encoding: "utf8", flag: "a", mode: 384 });
   }
+  /** Construction reads the manifest (completing an interrupted seal) and the
+   * live segment only; whole-history checks belong to the reader. */
   #assertExistingIntegrity() {
-    readMisterCleanInvocationJournal(this.#path);
+    openSegments(this.#segments, summarizeJournalSegment);
+    const live = existsSync13(this.#path) ? readFileSync17(this.#path, "utf8") : "";
+    for (const { line, at } of journalSegmentLines(live, basename14(this.#path), true)) parseJournalLine(line, at);
   }
 };
 function invocationJournalPathFromEnvironment(environment) {
@@ -30477,10 +30653,10 @@ function journalFromEnvironment(environment) {
 }
 
 // src/closeout/finding-anchors.ts
-import { createHash as createHash25 } from "crypto";
+import { createHash as createHash26 } from "crypto";
 import { spawnSync as spawnSync6 } from "child_process";
-import { existsSync as existsSync13, readFileSync as readFileSync17, statSync as statSync5 } from "fs";
-import { join as join17 } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync18, statSync as statSync6 } from "fs";
+import { join as join18 } from "path";
 var RECEIPT_FAMILIES = [
   "planning_graph",
   "public_safety",
@@ -30491,7 +30667,7 @@ var RECEIPT_FAMILIES = [
 ];
 var ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy", "file"];
 function sha256Text(value) {
-  return createHash25("sha256").update(value, "utf8").digest("hex");
+  return createHash26("sha256").update(value, "utf8").digest("hex");
 }
 function receiptFingerprint(input) {
   return sha256Text([input.family, input.rule, input.path, input.anchor_kind, input.content_sha256].join("\0"));
@@ -30516,9 +30692,9 @@ function posixPath(prefix, path) {
 }
 function workingTreeBlobOids(repository, paths) {
   const regular = [...new Set(paths)].filter((path) => {
-    const absolute = join17(repository, path);
+    const absolute = join18(repository, path);
     try {
-      return existsSync13(absolute) && statSync5(absolute).isFile();
+      return existsSync14(absolute) && statSync6(absolute).isFile();
     } catch {
       return false;
     }
@@ -30549,7 +30725,7 @@ function githubActionsRefText(repository, ref) {
   if (line === null || !Number.isInteger(line) || line < 1) return { text: "", line: null };
   let text3;
   try {
-    text3 = readFileSync17(join17(repository, path), "utf8");
+    text3 = readFileSync18(join18(repository, path), "utf8");
   } catch {
     return { text: "", line };
   }
@@ -30626,7 +30802,7 @@ function receiptFindingsFromAudit(family, audit, context) {
       severity = typeof row.severity === "string" ? row.severity : null;
       legacy = asString(row.fingerprint, "github_actions.fingerprint");
       kind = "line_content";
-      const auditRoot = prefix ? join17(context.repository, prefix) : context.repository;
+      const auditRoot = prefix ? join18(context.repository, prefix) : context.repository;
       const refs = [...new Set(row.refs)].sort().map((ref) => githubActionsRefText(auditRoot, ref));
       const texts = refs.map((item) => item.text);
       const lineDigests = texts.map(trimmedLineSha256);
@@ -30678,16 +30854,17 @@ function receiptFindingsFromAudit(family, audit, context) {
 }
 
 // src/closeout/second-pass.ts
-import { existsSync as existsSync15, readFileSync as readFileSync19, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
-import { dirname as dirname17, join as join19, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+import { existsSync as existsSync16, readFileSync as readFileSync20, realpathSync as realpathSync11, statSync as statSync7 } from "fs";
+import { dirname as dirname18, join as join20, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
-import { appendFileSync as appendFileSync2, existsSync as existsSync14, mkdirSync as mkdirSync6, readFileSync as readFileSync18, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
-import { createHash as createHash26, randomUUID as randomUUID8 } from "crypto";
-import { dirname as dirname16, isAbsolute as isAbsolute23, join as join18, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
+import { appendFileSync as appendFileSync2, existsSync as existsSync15, mkdirSync as mkdirSync6, readFileSync as readFileSync19, realpathSync as realpathSync10, writeFileSync as writeFileSync8 } from "fs";
+import { createHash as createHash27, randomUUID as randomUUID8 } from "crypto";
+import { dirname as dirname17, isAbsolute as isAbsolute23, join as join19, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
 var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
 var RUN_RECEIPT_SCHEMA_VERSION = "1";
 var RECEIPT_INDEX_FILE = "receipts.index.jsonl";
+var RECEIPT_INDEX_SEGMENT_MAX_BYTES = 8 * 1024 * 1024;
 var ReceiptRootInsideRepositoryError = class extends Error {
   constructor(receipt_root) {
     super("receipt root must not be inside the audited repository");
@@ -30735,7 +30912,7 @@ function isRepositoryRelativePath(path) {
   return path === "." || path.split("/").every((part) => part.length > 0 && part !== "..");
 }
 function sha256Hex(value) {
-  return createHash26("sha256").update(value, "utf8").digest("hex");
+  return createHash27("sha256").update(value, "utf8").digest("hex");
 }
 function repositoryIdSha256(repositoryId) {
   return sha256Hex(repositoryId);
@@ -30857,10 +31034,10 @@ function realOrResolved(path) {
   let cursor = resolved;
   for (; ; ) {
     try {
-      return join18(realpathSync10(cursor), ...[...pending].reverse());
+      return join19(realpathSync10(cursor), ...[...pending].reverse());
     } catch {
     }
-    const parent = dirname16(cursor);
+    const parent = dirname17(cursor);
     if (parent === cursor) return resolved;
     pending.push(cursor.slice(parent.length + 1));
     cursor = parent;
@@ -30870,11 +31047,47 @@ function containedIn(root, candidate) {
   const relation = relative18(realOrResolved(root), realOrResolved(candidate));
   return relation === "" || !relation.startsWith(`..${sep18}`) && relation !== ".." && !isAbsolute23(relation);
 }
+function indexEntries(text3, label, live) {
+  if (text3.length === 0) return [];
+  if (!text3.endsWith("\n")) throw new RunReceiptInvalidError([live ? "receipt index must end with a newline" : `receipt index segment ${label} must end with a newline`]);
+  return text3.slice(0, -1).split("\n").map((line, index) => {
+    const at = live ? `line ${index + 1}` : `line ${index + 1} of ${label}`;
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      throw new RunReceiptInvalidError([`receipt index is not valid JSONL at ${at}`]);
+    }
+    const record4 = object8(parsed);
+    if (!record4 || typeof record4.receipt_id !== "string" || typeof record4.repository_id_sha256 !== "string" || typeof record4.path !== "string") {
+      throw new RunReceiptInvalidError([`receipt index has an invalid entry at ${at}`]);
+    }
+    return record4;
+  });
+}
+function summarizeReceiptIndexSegment(lines2) {
+  const entries2 = indexEntries(lines2.length === 0 ? "" : `${lines2.join("\n")}
+`, "segment", false);
+  return {
+    records: entries2.length,
+    first: entries2[0]?.observed_at ?? null,
+    last: entries2.at(-1)?.observed_at ?? null,
+    groups: entries2.map((entry) => entry.repository_id_sha256),
+    keys: entries2.map((entry) => entry.receipt_id)
+  };
+}
 var LocalRunReceiptStore = class {
   #root;
-  constructor(root) {
+  #index;
+  #segmentMaxBytes;
+  #betweenSealSteps;
+  /** `segmentMaxBytes` and `betweenSealSteps` exist for tests (a small cap; a crash between sealing steps). */
+  constructor(root, options = {}) {
     if (!isAbsolute23(root)) throw new Error("receipt root must be an absolute machine-local path");
     this.#root = root;
+    this.#index = segmentLayout(join19(root, RECEIPT_INDEX_FILE));
+    this.#segmentMaxBytes = options.segmentMaxBytes ?? RECEIPT_INDEX_SEGMENT_MAX_BYTES;
+    this.#betweenSealSteps = options.betweenSealSteps;
   }
   get root() {
     return this.#root;
@@ -30884,7 +31097,7 @@ var LocalRunReceiptStore = class {
     if (containedIn(repository, this.#root)) throw new ReceiptRootInsideRepositoryError(this.#root);
   }
   receiptPath(receipt) {
-    return join18(this.#root, repositoryIdSha256(receipt.repository_id), `${receipt.receipt_id.replace(/^mc-receipt:/u, "")}.json`);
+    return join19(this.#root, repositoryIdSha256(receipt.repository_id), `${receipt.receipt_id.replace(/^mc-receipt:/u, "")}.json`);
   }
   /** Validate, refuse private content, then write the receipt (0600) and append the index line. */
   write(receipt, repository) {
@@ -30894,8 +31107,8 @@ var LocalRunReceiptStore = class {
     const violations = receiptPrivacyViolations(receipt);
     if (violations.length > 0) throw new ReceiptPrivacyError(violations);
     const path = this.receiptPath(receipt);
-    mkdirSync6(dirname16(path), { recursive: true, mode: 448 });
-    writeFileSync7(path, `${canonicalJson(receipt)}
+    mkdirSync6(dirname17(path), { recursive: true, mode: 448 });
+    writeFileSync8(path, `${canonicalJson(receipt)}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
     const entry = {
       receipt_id: receipt.receipt_id,
@@ -30910,17 +31123,24 @@ var LocalRunReceiptStore = class {
       observed_at: receipt.observed_at,
       path: relative18(this.#root, path).split(sep18).join("/")
     };
-    appendFileSync2(join18(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}
+    sealLiveSegmentIfFull(this.#index, {
+      incomingBytes: new TextEncoder().encode(`${canonicalJson(entry)}
+`).byteLength,
+      maxSize: this.#segmentMaxBytes,
+      summarize: summarizeReceiptIndexSegment,
+      betweenSealSteps: this.#betweenSealSteps
+    });
+    appendFileSync2(join19(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}
 `, { encoding: "utf8", flag: "a", mode: 384 });
     return path;
   }
   /** Read one receipt by id or by path; refuses anything that does not validate. */
   read(reference) {
     const path = reference.startsWith("mc-receipt:") ? this.#pathForId(reference) : resolve26(reference);
-    if (path === void 0 || !existsSync14(path)) throw new RunReceiptInvalidError([`receipt not found: ${reference}`]);
+    if (path === void 0 || !existsSync15(path)) throw new RunReceiptInvalidError([`receipt not found: ${reference}`]);
     let parsed;
     try {
-      parsed = JSON.parse(readFileSync18(path, "utf8"));
+      parsed = JSON.parse(readFileSync19(path, "utf8"));
     } catch {
       throw new RunReceiptInvalidError([`receipt is not valid JSON: ${reference}`]);
     }
@@ -30928,34 +31148,36 @@ var LocalRunReceiptStore = class {
     if (errors.length > 0) throw new RunReceiptInvalidError(errors);
     return parsed;
   }
+  /** Every index entry in append order: sealed segments (digest-checked) one at a time, then the live one. */
   index() {
-    const path = join18(this.#root, RECEIPT_INDEX_FILE);
-    if (!existsSync14(path)) return [];
-    const contents = readFileSync18(path, "utf8");
-    if (contents.length === 0) return [];
-    if (!contents.endsWith("\n")) throw new RunReceiptInvalidError(["receipt index must end with a newline"]);
-    return contents.slice(0, -1).split("\n").map((line, index) => {
-      let parsed;
-      try {
-        parsed = JSON.parse(line);
-      } catch {
-        throw new RunReceiptInvalidError([`receipt index is not valid JSONL at line ${index + 1}`]);
-      }
-      const record4 = object8(parsed);
-      if (!record4 || typeof record4.receipt_id !== "string" || typeof record4.repository_id_sha256 !== "string" || typeof record4.path !== "string") {
-        throw new RunReceiptInvalidError([`receipt index has an invalid entry at line ${index + 1}`]);
-      }
-      return record4;
-    });
+    return this.#entries(() => true);
   }
-  /** Index entries for one repository identity, oldest first. */
+  /** Index entries for one repository identity, oldest first. Sealed segments
+   * holding no entry for the repository are not read. */
   forRepository(repositoryId) {
     const sha = repositoryIdSha256(repositoryId);
-    return this.index().filter((entry) => entry.repository_id_sha256 === sha).sort((left, right) => left.observed_at.localeCompare(right.observed_at) || left.receipt_id.localeCompare(right.receipt_id));
+    return this.#entries((segment) => segment.groups.includes(sha)).filter((entry) => entry.repository_id_sha256 === sha).sort((left, right) => left.observed_at.localeCompare(right.observed_at) || left.receipt_id.localeCompare(right.receipt_id));
   }
+  #entries(include) {
+    const manifest2 = openSegments(this.#index, summarizeReceiptIndexSegment);
+    const entries2 = [];
+    for (const segment of manifest2.segments) {
+      if (include(segment)) entries2.push(...indexEntries(readSealedSegment(this.#index, segment), segment.file, false));
+    }
+    entries2.push(...indexEntries(readLiveSegment(this.#index), RECEIPT_INDEX_FILE, true));
+    return entries2;
+  }
+  /** Lookup by id: the live segment, then each sealed segment's key index
+   * (newest first); only the one sealed segment that holds the id is read. */
   #pathForId(receiptId) {
-    const entry = this.index().find((item) => item.receipt_id === receiptId);
-    return entry === void 0 ? void 0 : join18(this.#root, entry.path);
+    const manifest2 = openSegments(this.#index, summarizeReceiptIndexSegment);
+    let entry = indexEntries(readLiveSegment(this.#index), RECEIPT_INDEX_FILE, true).find((item) => item.receipt_id === receiptId);
+    for (const segment of [...manifest2.segments].reverse()) {
+      if (entry !== void 0) break;
+      if (!readSegmentKeys(this.#index, segment).includes(receiptId)) continue;
+      entry = indexEntries(readSealedSegment(this.#index, segment), segment.file, false).find((item) => item.receipt_id === receiptId);
+    }
+    return entry === void 0 ? void 0 : join19(this.#root, entry.path);
   }
 };
 function newReceiptId() {
@@ -30966,7 +31188,7 @@ function agentFromCard(reference, source) {
   const path = resolve26(reference);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync18(path, "utf8"));
+    parsed = JSON.parse(readFileSync19(path, "utf8"));
   } catch {
     throw new Error("agent card must be a readable JSON object");
   }
@@ -30977,7 +31199,7 @@ function agentFromCard(reference, source) {
   }
   if (status === "unobserved") return { identity_status: "unobserved", card_ref: null, source: null };
   const explicitId = typeof card.card_id === "string" && card.card_id.length > 0 && !card.card_id.includes("/") ? card.card_id : void 0;
-  const cardRef = explicitId ?? `sha256:${sha256Hex(readFileSync18(path, "utf8"))}`;
+  const cardRef = explicitId ?? `sha256:${sha256Hex(readFileSync19(path, "utf8"))}`;
   return { identity_status: status, card_ref: cardRef, source };
 }
 function agentFromEnvironment(flagValue, environment) {
@@ -31099,7 +31321,7 @@ function classifySecondPass(input) {
   return rows.sort((left, right) => left.family.localeCompare(right.family) || left.path.localeCompare(right.path) || left.fingerprint.localeCompare(right.fingerprint));
 }
 function captureReceiptSubject(root, options = {}) {
-  if (!existsSync15(resolve27(root)) || !statSync6(resolve27(root)).isDirectory()) return void 0;
+  if (!existsSync16(resolve27(root)) || !statSync7(resolve27(root)).isDirectory()) return void 0;
   const resolved = realpathSync11(resolve27(root));
   const toplevel = runGit2(resolved, ["rev-parse", "--show-toplevel"], [0, 128]);
   if (toplevel.status !== 0 || toplevel.stdout.length === 0) return void 0;
@@ -31162,11 +31384,11 @@ function runReadOnlyFamilies(capture, root, families, options = {}) {
 var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
 function legacyBaselineFromBundle(reference) {
   const path = resolve27(reference);
-  if (!existsSync15(path)) return void 0;
-  const directory = statSync6(path).isDirectory() ? path : dirname17(path);
-  const deltaPath = join19(directory, "regression-delta.json");
-  if (!existsSync15(deltaPath)) return void 0;
-  const delta = JSON.parse(readFileSync19(deltaPath, "utf8"));
+  if (!existsSync16(path)) return void 0;
+  const directory = statSync7(path).isDirectory() ? path : dirname18(path);
+  const deltaPath = join20(directory, "regression-delta.json");
+  if (!existsSync16(deltaPath)) return void 0;
+  const delta = JSON.parse(readFileSync20(deltaPath, "utf8"));
   const coverage = delta.detector_coverage;
   const executions = Array.isArray(coverage?.executions) ? coverage.executions : void 0;
   const baseline = coverage?.baseline_repository_object;
@@ -31180,10 +31402,10 @@ function legacyBaselineFromBundle(reference) {
     const family = detectorId;
     families.push(family);
     const resultRef = execution.result_ref;
-    const resultPath = typeof resultRef?.path === "string" ? join19(directory, resultRef.path) : void 0;
+    const resultPath = typeof resultRef?.path === "string" ? join20(directory, resultRef.path) : void 0;
     let fingerprints;
-    if (resultPath !== void 0 && existsSync15(resultPath)) {
-      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync19(resultPath, "utf8")));
+    if (resultPath !== void 0 && existsSync16(resultPath)) {
+      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync20(resultPath, "utf8")));
     }
     fingerprints ??= Array.isArray(execution.finding_fingerprints) ? execution.finding_fingerprints : [];
     for (const legacy of fingerprints) {
@@ -31284,16 +31506,16 @@ function runSecondPass(input) {
 }
 
 // src/toolchain-pin.ts
-import { existsSync as existsSync16, readFileSync as readFileSync20 } from "fs";
-import { join as join20, resolve as resolve28 } from "path";
+import { existsSync as existsSync17, readFileSync as readFileSync21 } from "fs";
+import { join as join21, resolve as resolve28 } from "path";
 var BUN_VERSION_FILE = ".bun-version";
 function runningBunVersion() {
   return process.versions.bun ?? null;
 }
 function readBunPin(root) {
-  const path = join20(resolve28(root), BUN_VERSION_FILE);
-  if (!existsSync16(path)) return void 0;
-  const version = readFileSync20(path, "utf8").trim();
+  const path = join21(resolve28(root), BUN_VERSION_FILE);
+  if (!existsSync17(path)) return void 0;
+  const version = readFileSync21(path, "utf8").trim();
   if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
   return version;
 }
@@ -31344,13 +31566,13 @@ function inside2(root, candidate) {
   const rootPath = resolve29(root);
   const candidatePath = resolve29(candidate);
   const relation = relative20(
-    existsSync17(rootPath) ? realpathSync12(rootPath) : rootPath,
-    existsSync17(candidatePath) ? realpathSync12(candidatePath) : candidatePath
+    existsSync18(rootPath) ? realpathSync12(rootPath) : rootPath,
+    existsSync18(candidatePath) ? realpathSync12(candidatePath) : candidatePath
   );
   return relation === "" || !relation.startsWith(`..${sep20}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync21(path, "utf8"));
+  return JSON.parse(readFileSync22(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -31369,7 +31591,7 @@ async function runSemantic(args, io) {
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync17(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync18(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -31391,7 +31613,7 @@ async function runSemantic(args, io) {
       runId,
       runtimeCases
     });
-    writeFileSync8(outputPath, `${canonicalJson(plan2)}
+    writeFileSync9(outputPath, `${canonicalJson(plan2)}
 `, { flag: "wx" });
     if (json2) io.stdout(JSON.stringify(plan2, null, 2));
     else io.stdout(`semantic-plan: WROTE candidates=${plan2.candidates.length} sha256=${plan2.plan_sha256} path=${outputPath}`);
@@ -31566,7 +31788,7 @@ async function runValidate(args, io, runtimeAttestation) {
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join21(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join22(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -31612,7 +31834,7 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync17(root) || !statSync7(root).isDirectory()) {
+  if (!existsSync18(root) || !statSync8(root).isDirectory()) {
     io.stderr(`ERROR: not a directory: ${resolve29(root)}`);
     return 2;
   }
@@ -31627,9 +31849,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join21(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync17(reference)) return 0;
-  const text3 = readFileSync21(reference, "utf8");
+  const reference = join22(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync18(reference)) return 0;
+  const text3 = readFileSync22(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -31793,16 +32015,16 @@ async function runManifest(args, io) {
     }
   }
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join21(resolve29(root), "MANIFEST.sha256");
+  const path = join22(resolve29(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync17(path) || readFileSync21(path, "utf8") !== result.content) {
+    if (!existsSync18(path) || readFileSync22(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
     io.stdout(`manifest: PASS (${result.entries.length} entries)`);
     return 0;
   }
-  writeFileSync8(path, result.content, "utf8");
+  writeFileSync9(path, result.content, "utf8");
   io.stdout(`manifest: wrote ${result.entries.length} entries`);
   return 0;
 }
@@ -31843,7 +32065,7 @@ async function runCensus(args, io) {
       exclusions,
       output_path: output
     });
-    writeFileSync8(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
+    writeFileSync9(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
     io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve29(output)}`);
     return 0;
   }
@@ -32029,9 +32251,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "semantic_boundary", file: "semantic-audit.json" },
               { family: "language_policy", file: "language-policy-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync17(join21(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join21(bundle, entry.file)) }));
-            const report = record3(readJson3(join21(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join21(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync18(join22(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join22(bundle, entry.file)) }));
+            const report = record3(readJson3(join22(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join22(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
             const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
