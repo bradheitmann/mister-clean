@@ -107,7 +107,7 @@ function rewriteReport(bundlePath: string, reportPath: string, edit: (report: Js
   writeFileSync(bundlePath, bundleText.replaceAll(before, after));
 }
 
-describe("retirement authority: a tool-minted ruling is never an owner's act", { timeout: 180_000 }, () => {
+describe("retirement authority: a tool-issued ruling is never an owner act", { timeout: 180_000 }, () => {
   it("the exploit fixture prepares NOT CLEAN with one open ratification decision per application and validates structurally", async () => {
     const run = await prepared("exploit");
     const debts = debtsOf(run.report);
@@ -152,7 +152,7 @@ describe("retirement authority: a tool-minted ruling is never an owner's act", {
     }
   });
 
-  it("refuses a bundle whose deleted ratification debt leaves the minted records in place", async () => {
+  it("refuses a bundle whose deleted ratification debt leaves the per-debt ruling records in place", async () => {
     const run = await prepared("deleted-ratification");
     let deletedKey = "";
     rewriteReport(run.bundlePath, run.reportPath, (report) => {
@@ -170,7 +170,7 @@ describe("retirement authority: a tool-minted ruling is never an owner's act", {
     expect(validation.ok).toBe(false);
   });
 
-  it("refuses with --repo when the retirement record changed after prepare", async () => {
+  it("refuses a changed retirement record with --repo after prepare", async () => {
     const run = await prepared("changed-retirement-record");
     const live = join(run.repo, RETIREMENT_RECORD);
     writeFileSync(live, readFileSync(live, "utf8").replace("Retire the legacy corpus", "Retire the legacy corpus, and more"));
@@ -179,7 +179,7 @@ describe("retirement authority: a tool-minted ruling is never an owner's act", {
     expect(validation.errors.filter((error) => error.includes("does not match the live retirement record"))).toHaveLength(1);
   });
 
-  it("still validates a bundle with no retirements, as 7.4.0 minted it", async () => {
+  it("still validates a bundle with no retirements, as 7.4.0 produced it", async () => {
     const run = await prepared("no-retirements", false);
     expect(run.report.retirement_applications).toEqual([]);
     expect(debtsOf(run.report).some((debt) => debt.normalizer === RETIREMENT_RATIFICATION_NORMALIZER)).toBe(false);
