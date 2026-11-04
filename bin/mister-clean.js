@@ -14474,6 +14474,185 @@ function staticGateRoute(root, command, directory, paths, packages, visited = /*
   if (unknown.size > 0) inputs.clear();
   return { inputs, unknown };
 }
+function emptyNativeRoutes() {
+  return { executed: /* @__PURE__ */ new Map(), built: /* @__PURE__ */ new Map(), scripts: /* @__PURE__ */ new Map(), tests: /* @__PURE__ */ new Map(), skipped: [], unknown: [] };
+}
+var ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=[^\s]*$/u;
+var SHELL_STATE_BUILTINS = /* @__PURE__ */ new Set([".", "alias", "eval", "export", "popd", "pushd", "set", "source", "unset"]);
+var TOOL_INVOKERS = /* @__PURE__ */ new Set(["npx", "bunx"]);
+var TEST_RUNNERS = /* @__PURE__ */ new Set(["jest", "mocha", "vitest"]);
+var RUNNER_SOURCE = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/u;
+var CREDITED_STEP_CONDITION = /^(?:startsWith\(\s*github\.ref\s*,\s*'refs\/(?:tags|heads)\/[^']*'\s*\)|github\.ref\s*==\s*'refs\/heads\/[^']*')$/u;
+function stripQuotes(token) {
+  return token.replace(/^["']|["']$/gu, "");
+}
+function tsupEntries(root, cwd, paths) {
+  const config = ["tsup.config.ts", "tsup.config.mts", "tsup.config.js", "tsup.config.mjs", "tsup.config.cjs", "tsup.config.json"].map((name) => insidePortablePath(root, cwd, name)).find((candidate) => candidate !== void 0 && paths.includes(candidate));
+  if (!config) return void 0;
+  let content = "";
+  try {
+    content = readFileSync3(resolve7(root, config), "utf8");
+  } catch {
+    return void 0;
+  }
+  const list = content.match(/\bentry\s*:\s*\[([^\]]*)\]/u);
+  const single = content.match(/\bentry\s*:\s*["']([^"']+)["']/u);
+  const raw = list ? [...list[1].matchAll(/["']([^"']+)["']/gu)].map((match) => match[1]) : single ? [single[1]] : [];
+  const entries2 = raw.flatMap((entry) => tokenPaths(root, cwd, entry, paths));
+  if (entries2.length === 0 || entries2.length !== raw.length) return void 0;
+  const outDir = content.match(/\boutDir\s*:\s*["']([^"']+)["']/u)?.[1] ?? "dist";
+  return { entries: entries2, outDir, config };
+}
+function nativeRouteChain(root, command, directory, paths, packages, routes, evidence, visited) {
+  if (/[\n\r;|<>$`\\(){}\[\]*?!#]/u.test(command) || command.replaceAll("&&", "").includes("&")) {
+    routes.skipped.push(`${evidence}: unsupported shell syntax`);
+    return;
+  }
+  let cwd = directory;
+  for (const part of command.split("&&")) {
+    let tokens = part.trim().split(/\s+/u).filter(Boolean).map(stripQuotes);
+    while (tokens.length > 0 && ENV_ASSIGNMENT.test(tokens[0])) tokens = tokens.slice(1);
+    if (tokens.length === 0) continue;
+    if (tokens[0] === "cd") {
+      const next = tokens.length === 2 ? insidePortablePath(root, cwd, tokens[1]) : void 0;
+      if (!next || !existsSync3(resolve7(root, next)) || !lstatSync4(resolve7(root, next)).isDirectory()) {
+        routes.skipped.push(`${evidence}: unresolved working directory`);
+        return;
+      }
+      cwd = next;
+      continue;
+    }
+    if (SHELL_STATE_BUILTINS.has(tokens[0])) {
+      routes.skipped.push(`${evidence}: shell state builtin ${tokens[0]}`);
+      return;
+    }
+    const managerTool = (tokens[0] === "pnpm" || tokens[0] === "npm") && tokens[1] === "exec";
+    if (managerTool) tokens = tokens.slice(tokens[2] === "--" ? 3 : 2);
+    else if (TOOL_INVOKERS.has(tokens[0])) tokens = tokens.slice(1).filter((token, index) => !(index === 0 && token === "--bun"));
+    if (tokens.length === 0) continue;
+    const owner = [...packages].sort((a, b) => b.directory.length - a.directory.length).find((item) => item.directory === "." || cwd === item.directory || cwd.startsWith(item.directory + "/"));
+    const testScope = owner?.directory ?? cwd;
+    if (["npm", "pnpm", "yarn", "bun"].includes(tokens[0]) && tokens[1] === "run" && tokens.length >= 3) {
+      const script = tokens[2];
+      const key = owner && owner.packagePath + "\0" + script;
+      const nested = owner?.scripts.get(script);
+      if (!key || nested === void 0) {
+        routes.skipped.push(`${evidence}: unresolved package script ${script}`);
+        continue;
+      }
+      if (!routes.scripts.has(key)) routes.scripts.set(key, evidence);
+      if (visited.has(key)) continue;
+      nativeRouteChain(root, nested, owner.directory, paths, packages, routes, `${evidence} -> ${script}`, new Set(visited).add(key));
+      continue;
+    }
+    if (tokens[0] === "bun" && tokens[1] === "test" || tokens[0] === "node" && tokens[1] === "--test" || TEST_RUNNERS.has(tokens[0]) || tokens[0] === "cargo" && tokens[1] === "test") {
+      routes.tests.set(testScope, evidence);
+      continue;
+    }
+    if (tokens[0] === "bun" && tokens[1] === "build") {
+      const entries2 = tokens.slice(2).filter((token) => !token.startsWith("-")).flatMap((token) => tokenPaths(root, cwd, token, paths));
+      const outfile = tokens.indexOf("--outfile");
+      const outdir = tokens.indexOf("--outdir");
+      const output = outfile >= 0 ? insidePortablePath(root, cwd, tokens[outfile + 1] ?? "") : void 0;
+      const outputDirectory = outdir >= 0 ? insidePortablePath(root, cwd, tokens[outdir + 1] ?? "") : void 0;
+      if (entries2.length === 0 || !output && !outputDirectory) {
+        routes.skipped.push(`${evidence}: bun build without a literal entry and output`);
+        continue;
+      }
+      for (const entry of entries2) routes.executed.set(entry, evidence);
+      if (output) routes.built.set(output, { sources: entries2, evidence });
+      if (outputDirectory) {
+        for (const entry of entries2) {
+          const stem = basename6(entry).replace(/\.[^.]+$/u, "");
+          for (const extension of [".js", ".mjs", ".cjs"]) routes.built.set(`${outputDirectory}/${stem}${extension}`, { sources: [entry], evidence });
+        }
+      }
+      continue;
+    }
+    if (tokens[0] === "tsup") {
+      const positional = tokens.slice(1).filter((token) => !token.startsWith("-")).flatMap((token) => tokenPaths(root, cwd, token, paths));
+      const config = tsupEntries(root, cwd, paths);
+      const entries2 = positional.length > 0 ? positional : config?.entries ?? [];
+      const outDir = insidePortablePath(root, cwd, config?.outDir ?? "dist");
+      if (entries2.length === 0 || !outDir) {
+        routes.skipped.push(`${evidence}: tsup without a literal entry list`);
+        continue;
+      }
+      const via = config ? `${evidence} (tsup ${config.config})` : `${evidence} (tsup)`;
+      for (const entry of entries2) {
+        routes.executed.set(entry, via);
+        const stem = basename6(entry).replace(/\.[^.]+$/u, "");
+        for (const extension of [".js", ".mjs", ".cjs"]) routes.built.set(`${outDir}/${stem}${extension}`, { sources: [entry], evidence: via });
+      }
+      continue;
+    }
+    if (tokens[0] === "bun" || tokens[0] === "node" || tokens[0] === "tsx") {
+      const operand = tokens.slice(1).find((token) => !token.startsWith("-"));
+      const path = operand ? insidePortablePath(root, cwd, operand) : void 0;
+      const installedRunner = path?.match(/(?:^|\/)node_modules\/([^/]+)\//u)?.[1];
+      if (installedRunner !== void 0 && TEST_RUNNERS.has(installedRunner)) {
+        routes.tests.set(testScope, evidence);
+        continue;
+      }
+      if (operand && path && paths.includes(path) && RUNNER_SOURCE.test(path) && !lstatSync4(resolve7(root, path)).isSymbolicLink()) {
+        routes.executed.set(path, evidence);
+      } else if (operand !== void 0) {
+        routes.skipped.push(`${evidence}: ${tokens[0]} operand ${operand} is not a tracked source file`);
+      }
+      continue;
+    }
+    routes.unknown.push(`${evidence}: ${tokens[0]}`);
+  }
+}
+function workflowCondition(value) {
+  return typeof value === "string" ? value.trim().replace(/^\$\{\{\s*|\s*\}\}$/gu, "") : void 0;
+}
+function nativeRoutes(root, paths, packages) {
+  const routes = emptyNativeRoutes();
+  for (const workflowPath of paths.filter((path) => /^\.github\/workflows\/[^/]+\.ya?ml$/u.test(path))) {
+    let document;
+    try {
+      document = (0, import_yaml2.parse)(readFileSync3(resolve7(root, workflowPath), "utf8"));
+    } catch {
+      routes.skipped.push(`${workflowPath}: unparseable workflow`);
+      continue;
+    }
+    const jobs = object3(object3(document)?.jobs) ?? {};
+    for (const [jobName, rawJob] of Object.entries(jobs)) {
+      const job = object3(rawJob);
+      if (!job) continue;
+      const jobLabel = `${workflowPath}#${jobName}`;
+      const jobCondition = workflowCondition(job.if);
+      if (jobCondition !== void 0 && !CREDITED_STEP_CONDITION.test(jobCondition)) {
+        routes.skipped.push(`${jobLabel}: job condition not credited: ${jobCondition}`);
+        continue;
+      }
+      const jobDefaults = object3(object3(job.defaults)?.run);
+      const jobDirectory = typeof jobDefaults?.["working-directory"] === "string" ? jobDefaults["working-directory"] : ".";
+      const steps = Array.isArray(job.steps) ? job.steps : [];
+      steps.forEach((rawStep, index) => {
+        const step = object3(rawStep);
+        if (!step || typeof step.run !== "string") return;
+        const name = typeof step.name === "string" ? step.name : `step ${String(index + 1)}`;
+        const label = `${jobLabel} step '${name}'`;
+        const condition = workflowCondition(step.if);
+        if (condition !== void 0 && !CREDITED_STEP_CONDITION.test(condition)) {
+          routes.skipped.push(`${label}: step condition not credited: ${condition}`);
+          return;
+        }
+        const evidence = [jobCondition, condition].some((item) => item !== void 0) ? `${label} (if: ${[jobCondition, condition].filter((item) => item !== void 0).join(" && ")})` : label;
+        const stepDirectory = typeof step["working-directory"] === "string" ? step["working-directory"] : jobDirectory;
+        const directory = insidePortablePath(root, ".", stepDirectory) ?? ".";
+        for (const line of step.run.split(/\r?\n/u)) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          nativeRouteChain(root, trimmed, directory, paths, packages, routes, evidence, /* @__PURE__ */ new Set());
+        }
+      });
+    }
+  }
+  return routes;
+}
 function runtimeSourceClosure(root, seeds, paths) {
   const found = new Set(seeds);
   const queue = [...found];
@@ -14538,15 +14717,39 @@ function executableSurfaceGaps(root, paths) {
       route.unknown.forEach((reason) => routeUnknown.add(item.packagePath + ":" + name + ": " + reason));
     }
   }
+  const native = nativeRoutes(root, paths, packages);
+  const closureRoute = /* @__PURE__ */ new Map();
+  for (const [seed, evidence] of native.executed) {
+    for (const path of runtimeSourceClosure(root, [seed], paths)) {
+      if (!closureRoute.has(path)) closureRoute.set(path, `${evidence} (import closure of ${seed})`);
+    }
+  }
+  const nativeRouteFor = (path) => {
+    const direct = native.executed.get(path) ?? closureRoute.get(path);
+    if (direct) return direct;
+    for (const [directory, evidence] of native.tests) {
+      if (directory === "." || path === directory || path.startsWith(directory + "/")) return `${evidence} (test matrix of ${directory})`;
+    }
+    return void 0;
+  };
   const gaps = [];
   for (const item of packages) {
     const seeds = /* @__PURE__ */ new Set();
     const reasons = /* @__PURE__ */ new Set();
+    const nativeEvidence = /* @__PURE__ */ new Set();
+    const releaseWalks = /* @__PURE__ */ new Map();
     const entries2 = [item.manifest.bin, item.manifest.exports, item.manifest.main, item.manifest.module].flatMap(nestedStrings);
     for (const entry of entries2) {
       if (DECLARATION_SOURCE_SUFFIX.test(entry)) continue;
       const matches = tokenPaths(root, item.directory, entry, paths);
-      if (matches.length === 0) reasons.add("unresolved declared runtime target: " + entry);
+      if (matches.length === 0) {
+        const portable = insidePortablePath(root, item.directory, entry.trim().replace(/^["']|["',]$/gu, ""));
+        const built = portable ? native.built.get(portable) : void 0;
+        if (built) {
+          built.sources.forEach((path) => seeds.add(path));
+          nativeEvidence.add(`declared target ${entry} built by ${built.evidence}`);
+        } else reasons.add("unresolved declared runtime target: " + entry);
+      }
       matches.forEach((path) => seeds.add(path));
     }
     if (entries2.length === 0) {
@@ -14555,12 +14758,27 @@ function executableSurfaceGaps(root, paths) {
     }
     for (const [name, command] of item.scripts) {
       if (!RELEASE_CRITICAL_SCRIPT_NAME.test(name)) continue;
-      reasons.add("release input closure requires native evidence: " + name);
-      const runner = /^(?:node|bun)\s+([A-Za-z0-9_./-]+)(?:\s|$)/u.exec(command.trim());
-      if (runner?.[1]) tokenPaths(root, item.directory, runner[1], paths).forEach((path) => seeds.add(path));
+      const executed = native.scripts.get(item.packagePath + "\0" + name);
+      const walk = emptyNativeRoutes();
+      nativeRouteChain(root, command, item.directory, paths, packages, walk, `package.json script ${name}`, /* @__PURE__ */ new Set([item.packagePath + "\0" + name]));
+      const entries3 = [...walk.executed.keys()];
+      entries3.forEach((path) => seeds.add(path));
+      releaseWalks.set(name, { entries: entries3, closed: walk.skipped.length === 0 && walk.unknown.length === 0 && entries3.length > 0 });
+      if (executed) nativeEvidence.add(`release script ${name} executed by ${executed}`);
     }
     const required = runtimeSourceClosure(root, seeds, paths);
+    for (const [name, walk] of releaseWalks) {
+      if (native.scripts.has(item.packagePath + "\0" + name)) continue;
+      const routed = walk.closed && walk.entries.every((path) => nativeRouteFor(path) !== void 0);
+      if (routed) nativeEvidence.add(`release script ${name} input closure natively routed: ${walk.entries.join(", ")}`);
+      else reasons.add("release input closure requires native evidence: " + name);
+    }
     for (const path of required) {
+      const nativeRoute = nativeRouteFor(path);
+      if (nativeRoute) {
+        nativeEvidence.add(`native route: ${path} <- ${nativeRoute}`);
+        continue;
+      }
       if (!routes.has(path)) reasons.add("validation route unestablished: " + path);
       let content = "";
       try {
@@ -14572,7 +14790,12 @@ function executableSurfaceGaps(root, paths) {
       }
     }
     if (reasons.size === 0) continue;
-    routeUnknown.forEach((reason) => reasons.add(reason));
+    const nativelyExecuted = [...native.scripts.keys()].map((key) => key.replace("\0", ":") + ": ");
+    routeUnknown.forEach((reason) => {
+      if (!nativelyExecuted.some((prefix) => reason.startsWith(prefix))) reasons.add(reason);
+    });
+    native.skipped.forEach((reason) => reasons.add("workflow step not credited: " + reason));
+    nativeEvidence.forEach((reason) => reasons.add(reason));
     gaps.push({
       evidence: item.directory + ": coverage-unestablished; " + [...reasons].sort().join("; "),
       refs: [item.packagePath, ...required].sort()
