@@ -336,3 +336,82 @@ registry_export=2026.11.03-1`, exit 0 (2026-11-04T14:15:00Z); without the enviro
 exit 2. `tsc --noEmit` 0; `src/eval-case.test.ts` + `src/skill-contract.test.ts` 58/58; SKILL.md 19,975 bytes = main's;
 `charter check --strict` ok; `audit:public` PASS (83); the three leak greps empty. `src/eval-case.ts` is byte-identical
 to `de81760` (the mutant runs and the 930/930 suite on `c423a04` stand for it; the merge touched no lane file).
+
+# Repair 3 — the owner's last repair under S5 (MC/QA rejected 72645af6)
+
+Owner decision: `charter/owner-decisions/2026-11-04-s5-slice-zero.md` (`30ad983`). DONE list
+`charter/DONE/slice-zero-eval-case-repair-3.md`, staged before the merge with main `6a42b5f` and therefore committed
+inside the merge commit `a28ef4c`, ahead of every repair-3 change (the merge itself conflicted on the CLI usage string
+and adjacent README sections, both resolved by keeping both sides). QA's four blocking findings and what now refuses each:
+
+| QA finding | Check | Refusal |
+|---|---|---|
+| swapping two rows' card ids flipped the verdict | each row's `reviewer_model` must be a provider model id that a route of the pinned registry export binds to the row's card (card id → the card entry's registry id → routes whose `card` is that id → `provider_model_id`); the export is loaded through `registry-join.json` (`fixture` path, `artifact.sha256` re-hashed); an unknown card, an unrouted card or an unrouted model refuses | `reviewer_model_unbound` |
+| an all-zero publisher commit was labelled recomputed | manifest citations carry the repository-relative `path` in the seam; with a source clone the publisher commit must exist and `git show <commit>:<path>` must re-hash to the cited sha256, before any recompute | `publisher_commit_mismatch` |
+| swapped session ranges passed | `commits[].sessions` must begin with an explicit `S-nn..S-mm` range equal to the manifest's range for that pair set, every session mapped, and equal to the sessions the tallies carry for that pair set | `evidence_manifest_mismatch`, `replay_counts_mismatch` |
+| `pinned_external` satisfied strict mode | `--require-bound` accepts only `local` and `recomputed`; `pinned_external` stays a named class | `binding_required` |
+| an absolute home path in this report | removed; `src/closeout/inspection.test.ts` green | (gate) |
+
+## Live control (through the built bin; private paths supplied by environment, never printed)
+
+```
+$ node bin/mister-clean.js eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo . --require-bound verifier,base_commit
+(MISTER_CLEAN_EVIDENCE_ROOT and MISTER_CLEAN_SOURCE_SPECIFICATION_PIPELINE set; 2026-11-04T18:54:20Z)
+eval-case: VALID case=CS-001 bound=10 pinned_external=none recomputed=$.verifier,$.base_commit external=none unverified=none refusals=0 require_bound=verifier,base_commit evidence_root=set sources=specification-pipeline registry_export=2026.11.03-1
+exit=0
+
+(evidence root only)
+eval-case: REFUSED case=CS-001 bound=10 pinned_external=$.verifier,$.base_commit recomputed=none external=none unverified=none refusals=2 require_bound=verifier,base_commit evidence_root=set sources=none registry_export=2026.11.03-1
+exit=2
+
+(no evidence environment)
+eval-case: REFUSED case=CS-001 bound=10 pinned_external=none recomputed=none external=$.verifier,$.base_commit unverified=none refusals=2 require_bound=verifier,base_commit evidence_root=none sources=none registry_export=2026.11.03-1
+exit=2
+```
+
+The ten bound citations are the case file, both card files, both registry refs, the three rows' reviewer models
+(`deepseek-flash` routed to `deepseek-v4.1-flash`, `deepseek-v4-pro` to `deepseek-v4-pro`, by export 2026.11.03-1), the
+tallies and RC-001. `recomputed` now also means: publisher commit `90c6f9a0` exists in the source clone and the manifest
+bytes at the cited path re-hash to `a7464d17…`; the session ranges `S-01..S-02` (A) and `S-03..S-13` (B) equal the
+manifest's and the tallies'. **`proven_on` is set to `2026-11-04`** (`6d68997`) from that exit 0.
+
+QA's three probes, adapted to the current record shape (QA's copies predate the `path` field) and run through the bin
+with the evidence environment: card-role-swap → exit 2, `reviewer_model_unbound` ×3; forged-manifest-provenance
+(`00000000`) → exit 2, `publisher_commit_mismatch` plus `binding_required` ×2; forged-session-map → exit 2,
+`evidence_manifest_mismatch` ×2, `replay_counts_mismatch` ×2, `binding_required` ×2.
+
+## Proofs and observed-RED mutants (eighteen on the final module `f06f1170…`; each restored and verified `cmp`-identical)
+
+| # | Proof | Mutant | Observed |
+|---|---|---|---|
+| 1-4, R1-R5, W1-W5 | the fourteen earlier proofs | the fourteen earlier mutants | all RED again |
+| P1 | reviewer-card-binding (card-role-swap) | route lookup skipped | RED: swapped rows exited 0 |
+| P2 | publisher-commit (forged provenance) | publisher check skipped | RED: all-zero commit exited 0 |
+| P3 | session-ranges (forged session map) | range comparisons skipped | RED: swapped range not refused |
+| P4 | strict-requires-recomputed | strict accepts `pinned_external` | RED: evidence-root-only strict run exited 0 |
+| P5 | public-tree | none | no absolute path; inspection test green |
+| P6 | live-control | none | exit 0 verbatim above; `proven_on` set |
+
+Green: `src/eval-case.test.ts` 19/19 (fixtures: a fixture export with cards and routes pinned by sha256 through the
+fixture `registry-join.json`; a fixture clone that also publishes its manifest, so the publisher commit is real; an
+export without routes; a tampered export; a publisher commit that predates the manifest; a wrong directory; free-text
+and swapped session ranges; a manifest whose own range disagrees with the tallies).
+
+## Gates on the frozen tip
+
+- Two clean `build:raw` runs under bun 1.4.0: identical hash lists (list sha256
+  `561dce82261c441a2d97a28cd7412194584c8bc5db64b13cfb82307c20fc3100`; `bin/mister-clean.js`
+  `af15ed492c6a204536a1d42cfcbff36749f867fe5bf8e1c502f746ededaf2480`; `MANIFEST.sha256`
+  `f460cf5fbd3e8be3d6c6aa716f67a0044ad91e1f79f0e178595b0e713f3c83c0`); `manifest:package:check` PASS (82);
+  `sync:cli:check` verified; `git status` clean after every commit.
+- `tsc --noEmit` 0; `src/eval-case.test.ts` + `src/skill-contract.test.ts` + `src/closeout/inspection.test.ts` 77/77;
+  SKILL.md 19,975 bytes = main's; `charter check --strict` ok; `audit:public` PASS (83 files).
+- Leak greps over src, bin, README.md, charter, field-evals and this report: the manifest's header text, the source
+  project's name, the private evidence-root path and any absolute home path all absent.
+- Full `nice -n 10 pnpm run test:node` on `6d68997` (the frozen bytes minus this report): first run 932 passed, 12 failed, 944 tests, 3,528 s, every red a timeout while host load was 50 to 130 (three suites plus an external cargo build in parallel) — recorded as INDETERMINATE, neither a pass nor a defect; a second, quiescent run was started on the PM's GO at 20:22Z and was still executing when the owner directed (20:5xZ) that hosted CI's verify job on the exact tip is the S6 evidence, so no local full suite is cited here. `src/eval-case.test.ts`, `src/skill-contract.test.ts` and `src/closeout/inspection.test.ts` (77/77) ran green in isolation on the tip.
+
+## Out of scope (recorded obligations)
+
+- Authenticating the evidence owner beyond the publisher commit (a signed manifest or signed tag in the seam).
+- The manifest's own file list against the source tree at each base commit (QA checked 38/38 by hand; the recompute
+  hashes what the manifest lists).
