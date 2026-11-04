@@ -8,7 +8,7 @@
 - One Ed25519 key, key id `mc-qa-ed25519-20261104`, for the independent reviewer seat MC/QA (actor id `MC/QA:pi:openai/gpt-6.1-terra:openrouter`, a third model family). Role `independent_qa` only.
 - Public key (SPKI PEM body): `MCowBQYDK2VwAyEANCPLhYR6JSwa4w24rXRwhVsdYJEnXZjwl7WW4RNySdM=` (SPKI DER sha256 begins `1dbd530bafd95503`).
 - Validity: 2026-11-04T00:00:00Z to 2027-02-02T00:00:00Z.
-- Trust policy `mister-clean-semantic-trust-2026-11-04` (`mister-clean.semantic-trust-policy` schema 1.0), sha256 `8c19bdc71f0171a1ca49b377cce5b548ab10084c01f25ef4ea2a1f1c4b5df80a`.
+- Trust policy `mister-clean-semantic-trust-2026-11-04` (`mister-clean.semantic-trust-policy` schema 1.0). Canonical bytes are the value as stored in Doppler (538 bytes, no trailing newline), sha256 `b384b2016f6152cdf9b2dfce2baaf4b5cd8e7cebd650e4f00b8e8b77c6e4c4a9`. The file the owner approved was those bytes plus one trailing newline, sha256 `8c19bdc71f0171a1ca49b377cce5b548ab10084c01f25ef4ea2a1f1c4b5df80a`; the content is identical.
 
 ## Where it lives (the convention for every workspace repository)
 - Doppler project named after the repository (`doppler.yaml` at the root links it; default config `dev` for ordinary secrets).
@@ -18,7 +18,10 @@
   - `MISTER_CLEAN_ATTESTATION_KEY_ID`
   - `MISTER_CLEAN_TRUST_POLICY_JSON` and `MISTER_CLEAN_TRUST_POLICY_SHA256`, once the owner has approved that repository's policy.
 - The key reaches a signer only through `doppler run --project <repo> --config attest -- <command>`. It is never written to a file, committed, quoted or sent.
-- `audit semantic` needs the policy as a file outside the audited repository: materialize `MISTER_CLEAN_TRUST_POLICY_JSON` into a fresh directory outside the repository for that run and check its sha256 against `MISTER_CLEAN_TRUST_POLICY_SHA256` and against this record before use.
+- Digest rule: every policy sha256 is over the exact bytes Doppler stores. Policies are stored without a trailing newline, because Doppler strips one.
+- `audit semantic` needs the policy as a file outside the audited repository. Inside `doppler run --project <repo> --config attest`, write it to a fresh directory outside the repository with `printf '%s' "$MISTER_CLEAN_TRUST_POLICY_JSON"` (no newline added), then check that file's sha256 against `MISTER_CLEAN_TRUST_POLICY_SHA256` and the repository's owner-decision record. Do not hash the output of `doppler secrets get --plain`: it appends a newline.
+- Run `doppler setup --no-interactive` once in each checkout. The CLI does not read `doppler.yaml` on its own, so a scope set on a parent directory otherwise wins.
+- Unapproved policies wait as `MISTER_CLEAN_TRUST_POLICY_DRAFT_JSON` and `MISTER_CLEAN_TRUST_POLICY_DRAFT_SHA256`. On the owner's approval the identical bytes are copied to the active names; the sha does not change.
 
 ## How it was made and checked
 - The PM generated this repository's key with `openssl genpkey -algorithm ed25519` at the owner's request, then moved it into Doppler; the local files were removed after the Doppler copy was verified.
