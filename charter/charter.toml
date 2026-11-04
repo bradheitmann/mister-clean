@@ -13,7 +13,7 @@ command = "node bin/mister-clean.js eval-case validate field-evals/2026-10-31-wi
 # MISTER_CLEAN_SOURCE_SPECIFICATION_PIPELINE (a local clone of the source seam; the pins are recomputed from it,
 # class recomputed). Without them the command refuses with binding_required, which is the correct answer on a
 # host that lacks the evidence. See README "Eval cases" for how a third party obtains the manifest.
-proven_on = ""          # ISO date when it last ran green on real infrastructure, else empty
+proven_on = "2026-11-04"          # ISO date when it last ran green on real infrastructure, else empty
 # Verification is a loop: budget it.
 [verification_budget]
 qa_attempts_per_slice = 3

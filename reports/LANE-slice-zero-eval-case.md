@@ -225,5 +225,5 @@ Green: `src/eval-case.test.ts` 10/10 (`MISTER_CLEAN_SOURCE_DEVELOPMENT=1 nice -n
   `eb65091ba0226e297ff938724549d2ed123eb882429443730b19434b0eff92eb`); `manifest:package:check` PASS (82);
   `sync:cli:check` verified.
 - `tsc --noEmit` 0; `src/eval-case.test.ts` + `src/skill-contract.test.ts` 53/53; SKILL.md 19,975 bytes = main's;
-  `charter check --strict` ok; `audit:public` PASS (83 files); `git grep -i reveng` empty.
+  `charter check --strict` ok; `audit:public` PASS (83 files); a `git grep` for the source project's name is empty (the name is quoted only in the private evidence root).
 - Full `nice -n 10 pnpm run test:node` on `697fa8c` (the frozen bytes minus this report): 920 passed, 5 failed, 58 files, 762 s. The five reds are all `scripts/verify_generated_candidate.test.ts` fixture commits refused by the host-global lang-guard hook (environment class CS-016; the same five MC/QA saw on 01b20677); nothing in this lane. Hosted CI arbitrates.
