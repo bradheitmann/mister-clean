@@ -64,6 +64,10 @@ import {
 } from "./guard-authority.test-fixture.js";
 
 const execute = promisify(execFile);
+// This fixture mints regression 1.5 bundles exactly as 7.0-7.5 write them: the frozen registry 5, without language_policy.
+const FIXTURE_DETECTORS = CLOSEOUT_DETECTORS.filter(
+  (detector): detector is Exclude<(typeof CLOSEOUT_DETECTORS)[number], { readonly id: "language_policy" }> => detector.id !== "language_policy",
+);
 const temporaryRoots: string[] = [];
 
 type RecordValue = Record<string, unknown>;
@@ -218,7 +222,7 @@ function registeredComparator(
   id = `${detectorId}-comparator`,
   actionId = "A-1",
 ): RecordValue {
-  const spec = CLOSEOUT_DETECTORS.find((candidate) => candidate.id === detectorId);
+  const spec = FIXTURE_DETECTORS.find((candidate) => candidate.id === detectorId);
   if (!spec) throw new Error(`missing fixture detector ${detectorId}`);
   const result = JSON.stringify(detectorId === "planning_graph"
     ? {
@@ -422,7 +426,7 @@ function modernizeActionAccounting(value: Fixture): void {
     const intermediate = new Set<string>();
     const after = new Set<string>();
     for (const comparator of check.comparators as RecordValue[]) {
-      const spec = CLOSEOUT_DETECTORS.find((candidate) => candidate.id === comparator.detector_id);
+      const spec = FIXTURE_DETECTORS.find((candidate) => candidate.id === comparator.detector_id);
       if (!spec) continue;
       for (const observation of comparator.observations as RecordValue[]) {
         const target = observation.phase === "before" ? before : observation.phase === "after" ? after : intermediate;
@@ -758,6 +762,7 @@ async function fixture(): Promise<Fixture> {
         githubActionsRef: { path: "github-actions-audit.json", sha256: digest(auditText(githubActionsAudit)) },
         semanticAudit,
         semanticRef: { path: "semantic-audit.json", sha256: digest(auditText(semanticAudit)) },
+        registryVersion: "5",
       });
       if (regression.schema_version === "1.3") {
         const coverage = regression.detector_coverage as RecordValue;
@@ -1009,7 +1014,7 @@ async function changedNativeActionFixture(): Promise<ChangedNativeActionFixture>
     before_repository_object: before,
     after_object: after.sha256,
     after_repository_object: after,
-    comparators: CLOSEOUT_DETECTORS.map((detector) => registeredComparator(
+    comparators: FIXTURE_DETECTORS.map((detector) => registeredComparator(
       detector.id,
       before,
       after,
@@ -1227,7 +1232,7 @@ async function publicSafetyDebtFixture(includeDebt = true): Promise<PublicSafety
   ) as RecordValue;
   const finding = (audit.findings as RecordValue[])[0]!;
   const fingerprint = String(finding.fingerprint);
-  const source = CLOSEOUT_DETECTORS.find((detector) => detector.id === "public_safety")!;
+  const source = FIXTURE_DETECTORS.find((detector) => detector.id === "public_safety")!;
   const observationId = canonicalObservationId({
     source_id: source.detector,
     source_native_fingerprint: fingerprint,
@@ -1314,7 +1319,7 @@ async function nativeGateMutationFixture(mutation: NativeGateMutation): Promise<
     before_repository_object: before,
     after_object: after.sha256,
     after_repository_object: after,
-    comparators: CLOSEOUT_DETECTORS.map((detector) => registeredComparator(
+    comparators: FIXTURE_DETECTORS.map((detector) => registeredComparator(
       detector.id,
       before,
       after,
@@ -1592,7 +1597,7 @@ describe("validateBundle", { timeout: 30_000 }, () => {
       before_repository_object: value.repositoryObject,
       after_object: value.repositoryObject.sha256,
       after_repository_object: value.repositoryObject,
-      comparators: CLOSEOUT_DETECTORS.map((detector) => registeredComparator(
+      comparators: FIXTURE_DETECTORS.map((detector) => registeredComparator(
         detector.id,
         value.repositoryObject,
         value.repositoryObject,
@@ -2119,7 +2124,7 @@ describe("validateBundle", { timeout: 30_000 }, () => {
     await clean.persist();
     const cleanResult = await validateBundle(clean.bundle, clean.bundlePath, { repoPath: clean.repo });
     expect(cleanResult.errors).toContain(
-      "$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 runtime and repository-object coverage",
+      "$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 or later runtime and repository-object coverage",
     );
 
     const notClean = await fixture();
@@ -2337,7 +2342,7 @@ describe("validateBundle", { timeout: 30_000 }, () => {
     value.report.actions = [action];
     value.manifest.actions = [action];
     value.manifest.execution_state = "executed";
-    const spec = CLOSEOUT_DETECTORS.find((candidate) => candidate.id === "semantic_boundary");
+    const spec = FIXTURE_DETECTORS.find((candidate) => candidate.id === "semantic_boundary");
     if (!spec) throw new Error("missing semantic detector registry entry");
     const ordinaryResult = JSON.stringify({ findings: [], exitCode: 0 });
     const futureResult = JSON.stringify({ findings: [], exitCode: 0, observed_at: BEYOND_FUTURE_SKEW });

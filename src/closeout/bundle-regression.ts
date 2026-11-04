@@ -2,10 +2,13 @@
 import { REGRESSION_COUNT_FIELDS, REGRESSION_POLICY } from "./records.js";
 import { retirementRatificationProjections } from "./retirement-ratification.js";
 import {
-  DETECTOR_COVERAGE_SCHEMA_VERSION,
+  REGRESSION_DELTA_SCHEMA_VERSION,
   detectorById,
+  isRuntimeBoundRegressionSchema,
+  registryVersionForRegressionSchema,
   requiredDetectorIdsForPolicy,
   sortedUnique,
+  type DetectorRegistryVersion,
   type DetectorRuntimeIdentity,
 } from "./detector-coverage.js";
 import {
@@ -67,6 +70,8 @@ export interface RegressionValidationContext {
   readonly modern: boolean;
   readonly requiresRepositoryObjects: boolean;
   readonly requiresRuntimeIdentity: boolean;
+  /** The one detector registry the record's schema binds (1.6 -> 6, 1.5 -> 5, older -> 1). */
+  readonly registryVersion: DetectorRegistryVersion;
   readonly baselineRepositoryObject: JsonObject | undefined;
   readonly closingRepositoryObject: JsonObject | undefined;
 }
@@ -130,7 +135,7 @@ export async function loadRegressionValidationContext(
   if (!record) return;
   const recordPath = `${path}.evidence_ref`;
   const schemaVersion = String(record.schema_version ?? "");
-  const modern = schemaVersion === "1.5";
+  const modern = isRuntimeBoundRegressionSchema(schemaVersion);
   requireObject(record, modern
     ? [
         "record_type", "schema_version", "policy", "baseline_object", "closing_object",
@@ -140,13 +145,14 @@ export async function loadRegressionValidationContext(
         "record_type", "schema_version", "policy", "baseline_object", "closing_object",
         ...REGRESSION_COUNT_FIELDS.filter((field) => field !== "action_checks"), "action_checks",
       ], recordPath, errors);
-  if (!new Set(["1.2", "1.3", "1.4", "1.5"]).has(String(record.schema_version ?? ""))) {
-    errors.push(`${recordPath}.schema_version: expected 1.2, 1.3, 1.4, or 1.5`);
+  if (!new Set(["1.2", "1.3", "1.4", "1.5", REGRESSION_DELTA_SCHEMA_VERSION]).has(String(record.schema_version ?? ""))) {
+    errors.push(`${recordPath}.schema_version: expected 1.2, 1.3, 1.4, 1.5, or ${REGRESSION_DELTA_SCHEMA_VERSION}`);
   }
-  const requiresRepositoryObjects = schemaVersion === "1.4" || schemaVersion === "1.5";
-  const requiresRuntimeIdentity = schemaVersion === "1.5";
+  const requiresRuntimeIdentity = modern;
+  const requiresRepositoryObjects = schemaVersion === "1.4" || requiresRuntimeIdentity;
+  const registryVersion = registryVersionForRegressionSchema(schemaVersion);
   if (clean && !requiresRuntimeIdentity) {
-    errors.push(`${recordPath}.schema_version: CLEAN requires 1.5 runtime and repository-object binding`);
+    errors.push(`${recordPath}.schema_version: CLEAN requires 1.5 or later runtime and repository-object binding`);
   }
   if (record.policy !== REGRESSION_POLICY) {
     errors.push(`${recordPath}.policy: expected ${REGRESSION_POLICY}`);
@@ -155,8 +161,9 @@ export async function loadRegressionValidationContext(
     if (control[field] !== record[field]) errors.push(`${recordPath}: bound regression record disagrees on ${field}`);
   }
   if (modern) {
-    if (control.accounting_schema !== "1.5") errors.push(`${path}.accounting_schema: must equal 1.5 for regression schema 1.5`);
-    errors.push(...schema15LegacyNumericFieldErrors(record, recordPath));
+    // Regression 1.6 changes the detector registry only; its accounting stays schema 1.5.
+    if (control.accounting_schema !== "1.5") errors.push(`${path}.accounting_schema: must equal 1.5 for regression schema ${schemaVersion}`);
+    errors.push(...schema15LegacyNumericFieldErrors({ ...record, schema_version: "1.5" }, recordPath));
     errors.push(...schema15LegacyNumericFieldErrors({ ...control, schema_version: "1.5" }, path));
   } else {
     for (const field of REGRESSION_COUNT_FIELDS) {
@@ -259,6 +266,7 @@ export async function loadRegressionValidationContext(
     modern,
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
+    registryVersion,
     baselineRepositoryObject,
     closingRepositoryObject,
   };
@@ -473,6 +481,7 @@ export async function validateRegressionActionChain(
     modern,
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
+    registryVersion,
     baselineRepositoryObject,
     closingRepositoryObject,
   } = context;
@@ -562,14 +571,14 @@ export async function validateRegressionActionChain(
   }
   const requiresDetectorCoverage = record.schema_version === "1.3"
     || record.schema_version === "1.4"
-    || record.schema_version === "1.5";
+    || modern;
   const coverageRuntimeIdentitySha256 = requiresRuntimeIdentity
     ? object(record.detector_coverage)?.runtime_identity_sha256
     : undefined;
   const actionRequiredDetectorIds = requiresDetectorCoverage
     ? requiredDetectorIdsForPolicy(
         object(record.detector_coverage)?.run_policy,
-        requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1",
+        registryVersion,
       ) ?? []
     : [];
   let expectedBeforeObject = record.baseline_object;
@@ -647,6 +656,7 @@ export async function validateRegressionActionChain(
       requiresRepositoryObjects,
       requiresRuntimeIdentity,
       requiresDetectorCoverage,
+      registryVersion,
       coverageRuntimeIdentitySha256,
       actionRequiredDetectorIds,
       base,
@@ -764,6 +774,7 @@ export async function validateModernRegressionClosure(
     modern,
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
+    registryVersion,
     baselineRepositoryObject,
     closingRepositoryObject,
     liveRuntimeIdentity,
@@ -828,7 +839,7 @@ export async function validateModernRegressionClosure(
   const coverage = object(record.detector_coverage);
   for (const rawExecution of array(coverage?.executions)) {
     const execution = object(rawExecution);
-    const sourceId = detectorById(String(execution?.detector_id ?? ""))?.detector;
+    const sourceId = detectorById(String(execution?.detector_id ?? ""), registryVersion)?.detector;
     if (!sourceId || execution?.phase !== "baseline") continue;
     for (const rawFingerprint of array(execution.finding_fingerprints)) {
       if (typeof rawFingerprint !== "string" || !HEX64.test(rawFingerprint)) continue;
@@ -944,7 +955,7 @@ export async function validateModernRegressionClosure(
       const fingerprints = array(debt.detector_finding_fingerprints)
         .filter((fingerprint): fingerprint is string => typeof fingerprint === "string" && HEX64.test(fingerprint));
       const detectorFamily = String(object(debt.cause_key)?.detector_family ?? "");
-      const sourceId = detectorById(detectorFamily)?.detector;
+      const sourceId = detectorById(detectorFamily, registryVersion)?.detector;
       if (!sourceId) {
         errors.push(`${debtPath}.cause_key.detector_family: must identify the canonical source of detector fingerprints`);
       } else {
@@ -1001,6 +1012,7 @@ export async function validateModernRegressionClosure(
           record.baseline_object,
           baselineRepositoryObject,
           coverageRuntimeIdentitySha256,
+          registryVersion,
           regressionRepoId,
           base,
           files,

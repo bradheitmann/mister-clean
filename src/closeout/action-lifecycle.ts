@@ -1016,6 +1016,12 @@ export async function beginAction(options: ActionBeginOptions): Promise<ActionLi
     if (pre.detectorCoverage.runtime_identity_sha256 !== baselineCoverage.runtime_identity_sha256) {
       throw new Error("pre-state detector runtime differs from the bundle's validated runtime identity");
     }
+    if (pre.detectorCoverage.registry_version !== baselineCoverage.registry_version
+      || pre.detectorCoverage.registry_sha256 !== baselineCoverage.registry_sha256) {
+      // A bundle minted under another registry (1.5 / registry 5) cannot take
+      // action boundaries from this runtime's registry; close it and re-prepare.
+      throw new Error("pre-state detector registry differs from the bundle's frozen registry; re-prepare under the current registry");
+    }
     const priorControl = loadNativeControl(context.base, object(context.bundle.successor_readiness, "$.successor_readiness").native_gate_control);
     const priorClosingObservationIds = array(
       object(

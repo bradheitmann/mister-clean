@@ -1,5 +1,5 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
-c6ab41a1032400a2cf755c87473fc87eab1d19cfec142481cf2a6e18db760f62  ./README.md
+30fd20ed5998d3ccb89985503ebdef24096e89c39a262779f5710e10232ff41b  ./README.md
 1c4bdca67124f577bebe87528e852a44f48d772a71255b68e9780c52b153b803  ./SECURITY.md
 24f6ac6e0783688f382864fc36d801f370779ef20e6de7fb74340f572d0faf6e  ./SKILL.md
 5e575cbe7a53b8b85aa0b0924eabf338e88669aaf368ae2cbff48a7c6eccf80e  ./THIRD_PARTY_NOTICES.md
@@ -28,7 +28,7 @@ b97a3d54909032f9f5dccba9a3b36dfc08fc065a0abd7af7a41ea4dd887180d9  ./assets/codeb
 b32333bbd5e144d2e2c736df9ce0cd977f73ed50d53c57bcee7051e9ad8c7ce6  ./assets/codebase-state-dashboard/product-mark.svg
 2b280962cfe5fdaf4513877c3d65184c8f71ddadb75f000f8b52b7a40bf57ada  ./assets/codebase-state-dashboard/tsconfig.scorecard.json
 ad4137f8e86b7ff051d650ee37a6c33757154a5698c798526ce0fa47b9d91e46  ./assets/regression-delta.json
-dd3cd22fc5ae11f9133b66050e8ebcedecda1a1accb7c13bfdda1aedede5e7b1  ./bin/mister-clean.js
+03b24189089959ef4723165afff7382b7b590e64e5d4f140a013d75f0b6aa472  ./bin/mister-clean.js
 a512a7f3940e1d875ebe4485a8e676e557c6279305b9d55c3529c6ddcd5752cf  ./dist/control-plane.d.ts
 b56369b55952383f565ff8b9f8db89cb9f99b757e7387bbf68cba717d55f8c74  ./dist/control-plane.js
 20afd4527ea2b6486b48ff858e84a93c847f7fbfb5ea3022e79585657272c2f8  ./dist/control-plane/assets/CormorantGaramond-Medium-B9HO_40Y.ttf
@@ -47,9 +47,9 @@ eed988e3e89d825caf37c2db520b760decce9664e29572af20a73af8e521995d  ./dist/control
 20c2f4014c2b14c6076d6b4f63ed0b112df7d08b5abd98e631c0a548db5f5220  ./dist/planning.d.ts
 d079be0c4fbef7e61b643f2cd5991ed856c35d2279f153fcbef32d144eef3303  ./dist/planning.js
 3ae6b5a0a37ccefb99acb0e1413da1780ba64e1b52792e7ab36328eaf83b77ce  ./dist/public.d.ts
-88a82bf5230d4c4e854f562b26abf4bee331947d34879b89ff21d293cc85888a  ./dist/public.js
+ecf2e77d315e09d84a6158f2c7fbc924951b96b05920c9e40fdb065617b1efe9  ./dist/public.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
-bcde43da9417baa3c468e20203d793073da7e9479cfd710a838fc7e1153e8bcb  ./dist/stdio.js
+1fa17a2e1c36e9c79cfd08e59078b5815e115390f66c406588f2e51af6d52633  ./dist/stdio.js
 e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md
@@ -67,7 +67,7 @@ aa93d33b06b4e7c9a624f7e6bc515007f5e7a07fb91db8eabea8c5653f341b4a  ./references/c
 323d3541e80934112680d60ed322354c2d916c5d509d411d122661e8fc1230d9  ./references/continuous-clean-development.md
 6ed4a7e3984e24689e0e94d457ffb40105351637db62051f6f54c2d33aebd2b6  ./references/control-plane-product-spec.md
 162588e80f5ebf1323248b0defdad9962333f6f759964246f466ad4b6095310a  ./references/intelligent-momentum.md
-8bdc89dd2b091ca06ee8359120d7e416261cd1e90042ad9bea260d6736c4b22a  ./references/no-harm-and-debt-delta.md
+dfa9a3167c2e40ad258f97e107a1b7bd6baaa856e39cbadea0f8d6b1fa518420  ./references/no-harm-and-debt-delta.md
 a75458b2c8600f0d2c3857e56fe04e588deeecfe4781f8636407c9e5d3ac756f  ./references/persistence-and-continuation.md
 1974463bfcc30de0a941ffc3fcd09ed0b7fc05dfd2799ea84f40c9ddaadf2ffa  ./references/semantic-boundary-probes.md
 283e8204351a34bd019570b212c98b8bc310df329c2cda8984aedf3919e9e01c  ./references/situational-awareness.md
