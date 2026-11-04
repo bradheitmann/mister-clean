@@ -8,11 +8,13 @@ import {
   createDetectorRunPolicy,
   detectorResultShapeErrors,
   detectorApplicabilityForPolicy,
+  detectorById,
   detectorRegistrySha256,
   detectorRuntimeIdentityErrors,
   detectorRuntimeIdentitySha256,
   findingFingerprintsFromAudit,
   planningFindingFingerprint,
+  registryVersionForRegressionSchema,
   requiredDetectorIdsForPolicy,
   semanticFindingFingerprint,
 } from "./detector-coverage.js";
@@ -40,19 +42,38 @@ describe("detector coverage registry", () => {
       "public_safety",
       "github_actions",
       "semantic_boundary",
+      "language_policy",
     ]);
-    expect(detectorRegistrySha256()).toBe("35d8e9e9595c124bdf68eb363621533c99e920e454a6d49749702479f9647ee6");
+    // Registry 6 (regression 1.6) is frozen; v1-v5 are untouched, so every 7.0-7.5 bundle still parses.
+    expect(detectorRegistrySha256()).toBe("0dac946a95de2c084c76502f7274fad45d757750c8277a052adbfde6a9965317");
+    expect(detectorRegistrySha256("6")).toBe("0dac946a95de2c084c76502f7274fad45d757750c8277a052adbfde6a9965317");
+    expect(detectorRegistrySha256("5")).toBe("35d8e9e9595c124bdf68eb363621533c99e920e454a6d49749702479f9647ee6");
     expect(detectorRegistrySha256("4")).toBe("2a6687eac140f4277510c11648f3b0bbf06b104390d8a992b2c021999458c1b1");
     expect(detectorRegistrySha256("3")).toBe("856ea127812f22aa50f0b566fae1350bf5d8c13db5c29548eff112d63027e47e");
     expect(detectorRegistrySha256("2")).toBe("bd49c47b93786e215c9e02e6850e55ea9f19c5ff99666e768cd55e6911cfc66a");
     expect(detectorRegistrySha256("1")).toBe("803e6d35762a802e980c874a4e8783c219234fdcaef9b9f2c570df9ba3d66f50");
     const empty = createDetectorRunPolicy({ trackedShippablePathCount: 0 });
-    expect(requiredDetectorIdsForPolicy(empty)).toEqual(["planning_graph", "github_actions", "semantic_boundary"]);
+    expect(requiredDetectorIdsForPolicy(empty)).toEqual(["planning_graph", "github_actions", "semantic_boundary", "language_policy"]);
+    expect(requiredDetectorIdsForPolicy(empty, "5")).toEqual(["planning_graph", "github_actions", "semantic_boundary"]);
+    expect(detectorApplicabilityForPolicy(empty)).toContainEqual({
+      detector_id: "language_policy", disposition: "required", basis: "core_closeout",
+    });
+    expect(detectorById("language_policy", "5")).toBeUndefined();
+    expect(detectorById("language_policy")).toEqual({
+      id: "language_policy",
+      scope: "tracked_shippable",
+      command: "mister-clean audit language-policy . --json",
+      detector: "mister-clean/language_policy@1",
+    });
+    // One registry per schema, never an either-or.
+    expect(registryVersionForRegressionSchema("1.6")).toBe("6");
+    expect(registryVersionForRegressionSchema("1.5")).toBe("5");
+    expect(registryVersionForRegressionSchema("1.4")).toBe("1");
     expect(detectorApplicabilityForPolicy(empty)).toContainEqual({
       detector_id: "public_safety", disposition: "not_applicable", basis: "empty_tracked_surface",
     });
     const publicSurface = createDetectorRunPolicy({ trackedShippablePathCount: 1 });
-    expect(requiredDetectorIdsForPolicy(publicSurface)).toEqual(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
+    expect(requiredDetectorIdsForPolicy(publicSurface)).toEqual(["planning_graph", "public_safety", "github_actions", "semantic_boundary", "language_policy"]);
   });
 
   it("projects a portable release identity independent of installation path", () => {

@@ -240,14 +240,14 @@ function smokeInstalledPrepare(installedCli, packageTree, temporaryRoot) {
   const runtime = coverage?.runtime_identity;
   const expectedEntrypoint = packageTree.attestation.required_entrypoints
     .find((entrypoint) => entrypoint.path === "./bin/mister-clean.js");
-  if (regression.schema_version !== "1.5"
+  if (regression.schema_version !== "1.6"
     || runtime?.status !== "release_attested"
     || JSON.stringify(runtime.package) !== JSON.stringify(packageTree.attestation.package)
     || JSON.stringify(runtime.claimed_source) !== JSON.stringify(packageTree.attestation.claimed_source)
     || JSON.stringify(runtime.manifest) !== JSON.stringify(packageTree.attestation.manifest)
     || JSON.stringify(runtime.claim_scope) !== JSON.stringify(packageTree.attestation.claim_scope)
     || JSON.stringify(runtime.entrypoint) !== JSON.stringify(expectedEntrypoint)) {
-    throw new Error("installed prepare did not bind schema 1.5 to the exact release package identity");
+    throw new Error("installed prepare did not bind schema 1.6 to the exact release package identity");
   }
   if (!coverage.runtime_identity_sha256
     || !coverage.executions.every((execution) => execution.runtime_identity_sha256 === coverage.runtime_identity_sha256)) {

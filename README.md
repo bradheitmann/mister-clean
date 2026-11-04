@@ -464,8 +464,13 @@ wrong schema, an empty or malformed `forbid_extensions`) refuses with a typed
 `language_policy_invalid` and exit 2. `prepare` writes the result as
 `language-policy-audit.json` in the bundle, and run receipts carry the family
 `language_policy` with anchor kind `file`, so `second-pass` reads a ported file
-as `cleared` and an unreported tracked file as a MISS. Findings are not yet
-closeout root debts.
+as `cleared` and an unreported tracked file as a MISS. Since 7.6.0 each finding
+is also a closeout root debt (normalizer `mister-clean/language-policy-root@1`,
+cause key `{detector_family, path, extension}`, disposition
+`autonomously_repair`), so a CLOSE run cannot report CLEAN while the declared
+policy is violated. The family is detector registry 6, always required; a
+repository without a policy records a `not_applicable` execution with zero
+fingerprints.
 
 ## Public-safety boundary
 

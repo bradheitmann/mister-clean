@@ -24,6 +24,7 @@ import {
   createDetectorRunPolicy,
   detectorById,
   planningFindingFingerprint,
+  REGRESSION_DELTA_SCHEMA_VERSION,
   semanticFindingFingerprint,
 } from "./detector-coverage.js";
 import { loadDenylistSync, scanTrackedPublicSafetySync } from "./inspection.js";
@@ -282,14 +283,19 @@ async function collectPrepareEvidence(
       path: "github-actions-audit.json",
       sha256: sha256File(join(bundleDirectory, "github-actions-audit.json")),
     };
-    // Declared language policy: evidence beside the other audits and a family in
-    // the run receipt. Absent policy writes a positive not_applicable result; a
-    // malformed policy refuses the run (LanguagePolicyInvalidError).
-    writeJson(join(bundleDirectory, "language-policy-audit.json"), {
+    // Declared language policy (registry 6, always required): an absent policy
+    // is a positive not_applicable result with zero fingerprints; a malformed
+    // policy refuses the run (LanguagePolicyInvalidError).
+    const languagePolicyAudit = {
       ...auditLanguagePolicy(repository),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject,
-    });
+    };
+    writeJson(join(bundleDirectory, "language-policy-audit.json"), languagePolicyAudit);
+    const languagePolicyAuditRef = {
+      path: "language-policy-audit.json",
+      sha256: sha256File(join(bundleDirectory, "language-policy-audit.json")),
+    };
     const semanticInputRefs: Array<{
       kind: "semantic_evidence_package" | "semantic_probe_manifest" | "semantic_trust_policy";
       path: string;
@@ -354,6 +360,8 @@ async function collectPrepareEvidence(
       githubActionsRef: githubActionsAuditRef,
       semanticAudit,
       semanticRef: semanticAuditRef,
+      languagePolicyAudit,
+      languagePolicyRef: languagePolicyAuditRef,
       inputRefs: {
         ...(publicSafetyInputRef === undefined ? {} : { public_safety: [publicSafetyInputRef] }),
         ...(semanticInputRefs.length === 0 ? {} : { semantic_boundary: semanticInputRefs }),
@@ -482,6 +490,8 @@ async function collectPrepareEvidence(
       publicSafetyAuditRef,
       githubActionsAudit,
       githubActionsAuditRef,
+      languagePolicyAudit,
+      languagePolicyAuditRef,
       semanticAudit,
       semanticAuditRef,
       detectorCoverage,
@@ -702,6 +712,8 @@ function assemblePrepareReport(
     publicSafetyAuditRef,
     githubActionsAudit,
     githubActionsAuditRef,
+    languagePolicyAudit,
+    languagePolicyAuditRef,
     semanticAudit,
     semanticAuditRef,
     detectorCoverage,
@@ -926,6 +938,32 @@ function assemblePrepareReport(
       rule: first.rule,
     }, fingerprints.map((fingerprint) => observationId(githubActionsDetector, fingerprint)));
   });
+  const languagePolicyCommand = "mister-clean audit language-policy . --json";
+  const languagePolicyDetector = detectorById("language_policy")?.detector;
+  if (!languagePolicyDetector) throw new Error("language-policy detector is absent from the canonical registry");
+  const languagePolicyRootDebts = languagePolicyAudit.findings.map((finding) => baselineDebt(repoId, {
+    id: `DEBT-LANGUAGE-POLICY-${finding.fingerprint.slice(0, 16).toUpperCase()}`,
+    class: `language_policy_${finding.rule}`,
+    observation_count: 1,
+    detector_finding_fingerprints: [finding.fingerprint],
+    affected_paths: [finding.path],
+    repair_boundary: `file:${finding.path}`,
+    procedure: `Port ${finding.path} out of the forbidden ${finding.extension} language declared in .mister-clean/language-policy.json (or have the owner allow it), then rerun the language-policy audit`,
+    state: "open",
+    disposition: "autonomously_repair",
+    evidence: [{
+      kind: "gate_result",
+      object: baselineRepositoryObject.sha256,
+      command: languagePolicyCommand,
+      result: `forbidden_language ${finding.extension}: ${finding.path}`,
+      observed_at: now,
+      evidence_ref: languagePolicyAuditRef,
+    }],
+  }, "mister-clean/language-policy-root@1", {
+    detector_family: "language_policy",
+    path: finding.path,
+    extension: finding.extension,
+  }, [observationId(languagePolicyDetector, finding.fingerprint)]));
   const nativeGateDebts = nativeGateFailureObservations(nativeGateDiscovery, nativeGateCoverage).map((projection) => {
     const { gate, execution } = projection;
     const failure = gate.disposition === "absent"
@@ -964,6 +1002,7 @@ function assemblePrepareReport(
     ...planningDebts,
     ...publicSafetyRootDebts,
     ...githubActionsRootDebts,
+    ...languagePolicyRootDebts,
     ...semanticDebts,
     ...nativeRootDebts,
   ];
@@ -1039,6 +1078,15 @@ function assemblePrepareReport(
       root_debt_count: githubActionsRootDebts.length,
       evidence_ref: githubActionsAuditRef,
     },
+    language_policy_accounting: {
+      status: languagePolicyAudit.status,
+      tracked_path_count: languagePolicyAudit.tracked_path_count,
+      finding_count: languagePolicyAudit.findings.length,
+      generated_exempt_count: languagePolicyAudit.generated_exempt.count,
+      allowed_count: languagePolicyAudit.allowed_count,
+      root_debt_count: languagePolicyRootDebts.length,
+      evidence_ref: languagePolicyAuditRef,
+    },
     native_gate_accounting: {
       discovered_count: nativeGateDiscovery.gates.length,
       required_count: nativeGateDiscovery.required_gate_ids.length,
@@ -1059,7 +1107,7 @@ function assemblePrepareReport(
   if (completionDebts.length > 0) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
       state: "open",
-      evidence: [{ kind: "debt_census", object: baselineRepositoryObject.sha256, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${publicSafetyRootDebts.length} public safety, ${githubActionsRootDebts.length} GitHub Actions, ${semanticDebts.length} semantic, ${nativeRootDebts.length} native gate)`, observed_at: now }],
+      evidence: [{ kind: "debt_census", object: baselineRepositoryObject.sha256, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${publicSafetyRootDebts.length} public safety, ${githubActionsRootDebts.length} GitHub Actions, ${languagePolicyRootDebts.length} language policy, ${semanticDebts.length} semantic, ${nativeRootDebts.length} native gate)`, observed_at: now }],
       notes: ["Executable planning, public-safety, workflow-governance, semantic, and native-gate audits found payable successor-readiness debt."],
     });
   }
@@ -1131,7 +1179,7 @@ function assemblePrepareReport(
   };
   writeJson(join(bundleDirectory, "regression-delta.json"), {
     record_type: "mister-clean.regression-delta",
-    schema_version: "1.5",
+    schema_version: REGRESSION_DELTA_SCHEMA_VERSION,
     ...regressionBinding,
     accounting: regressionAccounting,
     action_checks: [],

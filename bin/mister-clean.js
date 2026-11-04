@@ -15507,14 +15507,16 @@ ${result.stderr ?? ""}`;
 }
 
 // src/closeout/detector-coverage.ts
-var DETECTOR_COVERAGE_SCHEMA_VERSION = "5";
+var DETECTOR_COVERAGE_SCHEMA_VERSION = "6";
+var REGRESSION_DELTA_SCHEMA_VERSION = "1.6";
 var DETECTOR_RUN_POLICY_VERSION = "1";
 var DETECTOR_REGISTRY_V1_SHA256 = "803e6d35762a802e980c874a4e8783c219234fdcaef9b9f2c570df9ba3d66f50";
 var DETECTOR_REGISTRY_V2_SHA256 = "bd49c47b93786e215c9e02e6850e55ea9f19c5ff99666e768cd55e6911cfc66a";
 var DETECTOR_REGISTRY_V3_SHA256 = "856ea127812f22aa50f0b566fae1350bf5d8c13db5c29548eff112d63027e47e";
 var DETECTOR_REGISTRY_V4_SHA256 = "2a6687eac140f4277510c11648f3b0bbf06b104390d8a992b2c021999458c1b1";
 var DETECTOR_REGISTRY_V5_SHA256 = "35d8e9e9595c124bdf68eb363621533c99e920e454a6d49749702479f9647ee6";
-var CLOSEOUT_DETECTORS = [
+var DETECTOR_REGISTRY_V6_SHA256 = "0dac946a95de2c084c76502f7274fad45d757750c8277a052adbfde6a9965317";
+var DETECTOR_REGISTRY_V5 = [
   {
     id: "planning_graph",
     scope: ".",
@@ -15538,6 +15540,15 @@ var CLOSEOUT_DETECTORS = [
     scope: ".",
     command: "mister-clean audit semantic . --json",
     detector: "mister-clean/semantic_boundary@1"
+  }
+];
+var CLOSEOUT_DETECTORS = [
+  ...DETECTOR_REGISTRY_V5,
+  {
+    id: "language_policy",
+    scope: "tracked_shippable",
+    command: "mister-clean audit language-policy . --json",
+    detector: "mister-clean/language_policy@1"
   }
 ];
 var DETECTOR_REGISTRY_V1 = [
@@ -15583,7 +15594,15 @@ var DETECTOR_REGISTRY_V4 = [
   DETECTOR_REGISTRY_V1[2]
 ];
 function detectorRegistry(version) {
-  return version === "1" ? DETECTOR_REGISTRY_V1 : version === "2" ? DETECTOR_REGISTRY_V2 : version === "3" ? DETECTOR_REGISTRY_V3 : version === "4" ? DETECTOR_REGISTRY_V4 : CLOSEOUT_DETECTORS;
+  return version === "1" ? DETECTOR_REGISTRY_V1 : version === "2" ? DETECTOR_REGISTRY_V2 : version === "3" ? DETECTOR_REGISTRY_V3 : version === "4" ? DETECTOR_REGISTRY_V4 : version === "5" ? DETECTOR_REGISTRY_V5 : CLOSEOUT_DETECTORS;
+}
+function registryVersionForRegressionSchema(schemaVersion) {
+  if (schemaVersion === REGRESSION_DELTA_SCHEMA_VERSION) return DETECTOR_COVERAGE_SCHEMA_VERSION;
+  if (schemaVersion === "1.5") return "5";
+  return "1";
+}
+function isRuntimeBoundRegressionSchema(schemaVersion) {
+  return schemaVersion === "1.5" || schemaVersion === REGRESSION_DELTA_SCHEMA_VERSION;
 }
 function digest(value) {
   return createHash9("sha256").update(value, "utf8").digest("hex");
@@ -16083,6 +16102,45 @@ function validatePublicSafetyResult(record4, errors) {
   if (record4.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
   if (record4.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
+function languagePolicyFingerprint(path, extension) {
+  return digest(`language_policy\0forbidden_language\0${path}\0${extension}`);
+}
+function validateLanguagePolicyResult(record4, errors) {
+  requireFields(record4, [
+    "allowed_count",
+    "exitCode",
+    "findings",
+    "generated_exempt",
+    "policy",
+    "record_type",
+    "schema_version",
+    "status",
+    "tracked_path_count"
+  ], "$", errors);
+  if (record4.record_type !== "mister-clean.language-policy-audit") errors.push("$.record_type: expected mister-clean.language-policy-audit");
+  if (record4.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
+  if (!nonnegativeInteger(record4.tracked_path_count)) errors.push("$.tracked_path_count: expected nonnegative integer");
+  if (!nonnegativeInteger(record4.allowed_count)) errors.push("$.allowed_count: expected nonnegative integer");
+  const generated = object4(record4.generated_exempt);
+  if (!generated || !nonnegativeInteger(generated.count) || !Array.isArray(generated.paths) || generated.paths.length !== generated.count || generated.paths.some((path) => !nonempty2(path))) {
+    errors.push("$.generated_exempt: expected { count, paths } with one path per count");
+  }
+  const findings = Array.isArray(record4.findings) ? record4.findings : [];
+  if (!Array.isArray(record4.findings)) errors.push("$.findings: expected array");
+  for (const [index, value] of findings.entries()) {
+    const row = object4(value);
+    requireFields(row, ["extension", "family", "fingerprint", "path", "rule"], `$.findings[${index}]`, errors);
+    if (!row || row.family !== "language_policy" || row.rule !== "forbidden_language" || !nonempty2(row.path) || !nonempty2(row.extension) || !hexSha256(row.fingerprint) || row.fingerprint !== languagePolicyFingerprint(String(row.path), String(row.extension))) {
+      errors.push(`$.findings[${index}]: invalid canonical language-policy finding`);
+    }
+  }
+  const declared = record4.policy !== null;
+  if (declared && !object4(record4.policy)) errors.push("$.policy: expected object or null");
+  const expectedStatus = !declared ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
+  if (record4.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
+  if (!declared && (findings.length > 0 || generated?.count !== 0)) errors.push("$: an undeclared policy carries no findings and no exemptions");
+  if (record4.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
+}
 function detectorResultShapeErrors(detectorId, value) {
   const errors = [];
   const record4 = object4(value);
@@ -16091,6 +16149,7 @@ function detectorResultShapeErrors(detectorId, value) {
   else if (detectorId === "semantic_boundary") validateSemanticResult(record4, errors);
   else if (detectorId === "public_safety") validatePublicSafetyResult(record4, errors);
   else if (detectorId === "github_actions") validateGitHubActionsResult(record4, errors);
+  else if (detectorId === "language_policy") validateLanguagePolicyResult(record4, errors);
   else errors.push(`$: unknown detector ${detectorId}`);
   return errors;
 }
@@ -16098,7 +16157,7 @@ function sortedUnique(values) {
   return [...new Set(values)].sort();
 }
 function detectorRegistrySha256(version = DETECTOR_COVERAGE_SCHEMA_VERSION) {
-  const expected = version === "1" ? DETECTOR_REGISTRY_V1_SHA256 : version === "2" ? DETECTOR_REGISTRY_V2_SHA256 : version === "3" ? DETECTOR_REGISTRY_V3_SHA256 : version === "4" ? DETECTOR_REGISTRY_V4_SHA256 : DETECTOR_REGISTRY_V5_SHA256;
+  const expected = version === "1" ? DETECTOR_REGISTRY_V1_SHA256 : version === "2" ? DETECTOR_REGISTRY_V2_SHA256 : version === "3" ? DETECTOR_REGISTRY_V3_SHA256 : version === "4" ? DETECTOR_REGISTRY_V4_SHA256 : version === "5" ? DETECTOR_REGISTRY_V5_SHA256 : DETECTOR_REGISTRY_V6_SHA256;
   const actual = digest(JSON.stringify({ version, detectors: detectorRegistry(version) }));
   if (actual !== expected) {
     throw new Error(`detector registry ${version} changed without a schema-version bump`);
@@ -16222,7 +16281,7 @@ function findingFingerprintsFromAudit(detectorId, value) {
       const expected = row.rule !== void 0 ? typeof row.rule === "string" && row.rule && Number.isInteger(row.line) ? digest(`public_safety\0${row.rule}\0${row.path}\0${row.line}`) : "" : typeof row.reason === "string" && row.reason ? digest(`public_safety_unassessed\0${row.reason}\0${row.path}`) : "";
       if (row.fingerprint !== expected) return void 0;
       fingerprints.push(row.fingerprint);
-    } else if (detectorId === "github_actions") {
+    } else if (detectorId === "github_actions" || detectorId === "language_policy") {
       if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint)) return void 0;
       fingerprints.push(row.fingerprint);
     } else return void 0;
@@ -16230,8 +16289,9 @@ function findingFingerprintsFromAudit(detectorId, value) {
   return sortedUnique(fingerprints);
 }
 function createDetectorCoverage(input) {
-  const requiredDetectorIds = requiredDetectorIdsForPolicy(input.runPolicy);
-  const applicability = detectorApplicabilityForPolicy(input.runPolicy);
+  const registryVersion = input.registryVersion ?? DETECTOR_COVERAGE_SCHEMA_VERSION;
+  const requiredDetectorIds = requiredDetectorIdsForPolicy(input.runPolicy, registryVersion);
+  const applicability = detectorApplicabilityForPolicy(input.runPolicy, registryVersion);
   if (!requiredDetectorIds || !applicability) throw new Error("invalid detector run policy");
   const runtimeIdentity = runtimeIdentityRecord(createDetectorRuntimeIdentity(input.runtimeAttestation));
   const runtimeIdentitySha256 = detectorRuntimeIdentitySha256(runtimeIdentity);
@@ -16240,6 +16300,11 @@ function createDetectorCoverage(input) {
     semantic_boundary: { audit: input.semanticAudit, ref: input.semanticRef, exitCode: input.semanticAudit.exitCode },
     github_actions: { audit: input.githubActionsAudit, ref: input.githubActionsRef, exitCode: input.githubActionsAudit.exitCode }
   };
+  if (requiredDetectorIds.includes("language_policy")) {
+    const audit = object4(input.languagePolicyAudit);
+    if (!audit || !input.languagePolicyRef) throw new Error("registry 6 requires a language-policy audit result and digest reference");
+    results.language_policy = { audit, ref: input.languagePolicyRef, exitCode: Number(audit.exitCode) };
+  }
   if (input.runPolicy.public_safety.disposition === "required") {
     if (!input.publicSafetyAudit || !input.publicSafetyRef) throw new Error("public-safety policy requires an audit result and digest reference");
     results.public_safety = {
@@ -16248,7 +16313,7 @@ function createDetectorCoverage(input) {
       exitCode: input.publicSafetyAudit.exitCode
     };
   }
-  const executions = CLOSEOUT_DETECTORS.filter((spec) => requiredDetectorIds.includes(spec.id)).map((spec) => {
+  const executions = detectorRegistry(registryVersion).filter((spec) => requiredDetectorIds.includes(spec.id)).map((spec) => {
     const result = results[spec.id];
     if (!result) throw new Error(`missing ${spec.id} detector result`);
     const findingFingerprints = findingFingerprintsFromAudit(spec.id, result.audit);
@@ -16273,8 +16338,8 @@ function createDetectorCoverage(input) {
     };
   });
   return {
-    registry_version: DETECTOR_COVERAGE_SCHEMA_VERSION,
-    registry_sha256: detectorRegistrySha256(),
+    registry_version: registryVersion,
+    registry_sha256: detectorRegistrySha256(registryVersion),
     run_policy: input.runPolicy,
     run_policy_sha256: detectorRunPolicySha256(input.runPolicy),
     runtime_identity: runtimeIdentity,
@@ -21434,6 +21499,20 @@ function detectorRootProjections(detectorId, value, repoId) {
         fingerprints: [finding4.fingerprint]
       });
     }
+  } else if (detectorId === "language_policy") {
+    for (const rawFinding of array2(result.findings)) {
+      const finding4 = object5(rawFinding);
+      if (!finding4 || typeof finding4.fingerprint !== "string") continue;
+      rows.push({
+        normalizer: "mister-clean/language-policy-root@1",
+        causeKey: {
+          detector_family: "language_policy",
+          path: finding4.path,
+          extension: finding4.extension
+        },
+        fingerprints: [finding4.fingerprint]
+      });
+    }
   } else if (detectorId === "github_actions") {
     const grouped = /* @__PURE__ */ new Map();
     for (const rawFinding of array2(result.findings)) {
@@ -21468,7 +21547,7 @@ function detectorRootProjections(detectorId, value, repoId) {
     })))
   }));
 }
-async function validateBaselineReplayOrigin(ref, debt, debtPath, baselineObject, baselineRepositoryObject, runtimeIdentitySha256, repoId, base, files, allowPlaceholders, clock, errors) {
+async function validateBaselineReplayOrigin(ref, debt, debtPath, baselineObject, baselineRepositoryObject, runtimeIdentitySha256, registryVersion, repoId, base, files, allowPlaceholders, clock, errors) {
   const path = `${debtPath}.origin.baseline_replay_ref`;
   const replay = await evidenceRef(
     files,
@@ -21506,13 +21585,13 @@ async function validateBaselineReplayOrigin(ref, debt, debtPath, baselineObject,
     errors.push(`${path}.baseline_repository_object: must equal the immutable regression baseline repository object`);
   }
   const detectorId = String(replay.detector_id ?? "");
-  const detector = detectorById(detectorId, DETECTOR_COVERAGE_SCHEMA_VERSION);
+  const detector = detectorById(detectorId, registryVersion);
   if (!detector) errors.push(`${path}.detector_id: must name a canonical detector family`);
   const causalDetector = String(object5(debt.cause_key)?.detector_family ?? "");
   if (detector && detectorId !== causalDetector) {
     errors.push(`${path}.detector_id: must equal the debt causal detector family`);
   }
-  if (replay.detector_registry_sha256 !== detectorRegistrySha256(DETECTOR_COVERAGE_SCHEMA_VERSION)) {
+  if (replay.detector_registry_sha256 !== detectorRegistrySha256(registryVersion)) {
     errors.push(`${path}.detector_registry_sha256: must equal the canonical detector registry`);
   }
   if (replay.runtime_identity_sha256 !== runtimeIdentitySha256) {
@@ -21646,15 +21725,15 @@ async function validateExternalChangeOrigin(ref, debt, debtPath, earliestActionI
 async function validateDetectorCoverage(record4, report, base, files, clean, allowPlaceholders, clock, comparatorFingerprints, liveRuntimeIdentity, errors) {
   const path = "$.report.regression_control.evidence_ref.detector_coverage";
   const schemaVersion = String(record4.schema_version ?? "");
-  if (!(/* @__PURE__ */ new Set(["1.3", "1.4", "1.5"])).has(schemaVersion)) {
-    if (clean) errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 runtime and repository-object coverage");
+  if (!(/* @__PURE__ */ new Set(["1.3", "1.4", "1.5", REGRESSION_DELTA_SCHEMA_VERSION])).has(schemaVersion)) {
+    if (clean) errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 or later runtime and repository-object coverage");
     return;
   }
-  if (clean && schemaVersion !== "1.5") {
-    errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 runtime and repository-object coverage");
+  const requiresRuntimeIdentity = isRuntimeBoundRegressionSchema(schemaVersion);
+  if (clean && !requiresRuntimeIdentity) {
+    errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 or later runtime and repository-object coverage");
   }
-  const requiresRepositoryObjects = schemaVersion === "1.4" || schemaVersion === "1.5";
-  const requiresRuntimeIdentity = schemaVersion === "1.5";
+  const requiresRepositoryObjects = schemaVersion === "1.4" || requiresRuntimeIdentity;
   const coverage = requireObject(record4.detector_coverage, [
     "registry_version",
     "registry_sha256",
@@ -21669,7 +21748,7 @@ async function validateDetectorCoverage(record4, report, base, files, clean, all
     "finding_fingerprints"
   ], path, errors);
   if (!coverage) return;
-  const expectedCoverageVersion = requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1";
+  const expectedCoverageVersion = registryVersionForRegressionSchema(schemaVersion);
   if (coverage.registry_version !== expectedCoverageVersion) {
     errors.push(`${path}.registry_version: expected ${expectedCoverageVersion}`);
   }
@@ -21931,6 +22010,7 @@ async function validateRegressionComparatorEvidence(check, checkPath, input) {
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
     requiresDetectorCoverage,
+    registryVersion,
     coverageRuntimeIdentitySha256,
     actionRequiredDetectorIds,
     base,
@@ -21974,7 +22054,7 @@ async function validateRegressionComparatorEvidence(check, checkPath, input) {
     if (requiresDetectorCoverage) {
       const spec = detectorById(
         String(comparator.detector_id ?? ""),
-        requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1"
+        registryVersion
       );
       if (!spec) errors.push(`${comparatorPath}.detector_id: must name a canonical detector family`);
       else {
@@ -22082,7 +22162,7 @@ async function validateRegressionComparatorEvidence(check, checkPath, input) {
       if (modern && registeredDetectorId) {
         const sourceId = detectorById(
           registeredDetectorId,
-          requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1"
+          registryVersion
         )?.detector;
         const target = expectedPhase === "before" ? beforeObservationIds : expectedPhase === "after" ? afterObservationIds : intermediateObservationIds;
         if (sourceId) {
@@ -22209,7 +22289,7 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
   if (!record4) return;
   const recordPath = `${path}.evidence_ref`;
   const schemaVersion = String(record4.schema_version ?? "");
-  const modern = schemaVersion === "1.5";
+  const modern = isRuntimeBoundRegressionSchema(schemaVersion);
   requireObject(record4, modern ? [
     "record_type",
     "schema_version",
@@ -22230,13 +22310,14 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     ...REGRESSION_COUNT_FIELDS.filter((field2) => field2 !== "action_checks"),
     "action_checks"
   ], recordPath, errors);
-  if (!(/* @__PURE__ */ new Set(["1.2", "1.3", "1.4", "1.5"])).has(String(record4.schema_version ?? ""))) {
-    errors.push(`${recordPath}.schema_version: expected 1.2, 1.3, 1.4, or 1.5`);
+  if (!(/* @__PURE__ */ new Set(["1.2", "1.3", "1.4", "1.5", REGRESSION_DELTA_SCHEMA_VERSION])).has(String(record4.schema_version ?? ""))) {
+    errors.push(`${recordPath}.schema_version: expected 1.2, 1.3, 1.4, 1.5, or ${REGRESSION_DELTA_SCHEMA_VERSION}`);
   }
-  const requiresRepositoryObjects = schemaVersion === "1.4" || schemaVersion === "1.5";
-  const requiresRuntimeIdentity = schemaVersion === "1.5";
+  const requiresRuntimeIdentity = modern;
+  const requiresRepositoryObjects = schemaVersion === "1.4" || requiresRuntimeIdentity;
+  const registryVersion = registryVersionForRegressionSchema(schemaVersion);
   if (clean && !requiresRuntimeIdentity) {
-    errors.push(`${recordPath}.schema_version: CLEAN requires 1.5 runtime and repository-object binding`);
+    errors.push(`${recordPath}.schema_version: CLEAN requires 1.5 or later runtime and repository-object binding`);
   }
   if (record4.policy !== REGRESSION_POLICY) {
     errors.push(`${recordPath}.policy: expected ${REGRESSION_POLICY}`);
@@ -22245,8 +22326,8 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     if (control[field2] !== record4[field2]) errors.push(`${recordPath}: bound regression record disagrees on ${field2}`);
   }
   if (modern) {
-    if (control.accounting_schema !== "1.5") errors.push(`${path}.accounting_schema: must equal 1.5 for regression schema 1.5`);
-    errors.push(...schema15LegacyNumericFieldErrors(record4, recordPath));
+    if (control.accounting_schema !== "1.5") errors.push(`${path}.accounting_schema: must equal 1.5 for regression schema ${schemaVersion}`);
+    errors.push(...schema15LegacyNumericFieldErrors({ ...record4, schema_version: "1.5" }, recordPath));
     errors.push(...schema15LegacyNumericFieldErrors({ ...control, schema_version: "1.5" }, path));
   } else {
     for (const field2 of REGRESSION_COUNT_FIELDS) {
@@ -22339,6 +22420,7 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     modern,
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
+    registryVersion,
     baselineRepositoryObject,
     closingRepositoryObject
   };
@@ -22523,6 +22605,7 @@ async function validateRegressionActionChain(context) {
     modern,
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
+    registryVersion,
     baselineRepositoryObject,
     closingRepositoryObject
   } = context;
@@ -22607,11 +22690,11 @@ async function validateRegressionActionChain(context) {
       for (const root of projection.roots) addExpectedRoot(root);
     }
   }
-  const requiresDetectorCoverage = record4.schema_version === "1.3" || record4.schema_version === "1.4" || record4.schema_version === "1.5";
+  const requiresDetectorCoverage = record4.schema_version === "1.3" || record4.schema_version === "1.4" || modern;
   const coverageRuntimeIdentitySha256 = requiresRuntimeIdentity ? object5(record4.detector_coverage)?.runtime_identity_sha256 : void 0;
   const actionRequiredDetectorIds = requiresDetectorCoverage ? requiredDetectorIdsForPolicy(
     object5(record4.detector_coverage)?.run_policy,
-    requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1"
+    registryVersion
   ) ?? [] : [];
   let expectedBeforeObject = record4.baseline_object;
   let expectedBeforeRepositoryObject = baselineRepositoryObject;
@@ -22691,6 +22774,7 @@ async function validateRegressionActionChain(context) {
       requiresRepositoryObjects,
       requiresRuntimeIdentity,
       requiresDetectorCoverage,
+      registryVersion,
       coverageRuntimeIdentitySha256,
       actionRequiredDetectorIds,
       base,
@@ -22832,6 +22916,7 @@ async function validateModernRegressionClosure(context, state) {
     modern,
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
+    registryVersion,
     baselineRepositoryObject,
     closingRepositoryObject,
     liveRuntimeIdentity
@@ -22898,7 +22983,7 @@ async function validateModernRegressionClosure(context, state) {
   const coverage = object5(record4.detector_coverage);
   for (const rawExecution of array2(coverage?.executions)) {
     const execution = object5(rawExecution);
-    const sourceId = detectorById(String(execution?.detector_id ?? ""))?.detector;
+    const sourceId = detectorById(String(execution?.detector_id ?? ""), registryVersion)?.detector;
     if (!sourceId || execution?.phase !== "baseline") continue;
     for (const rawFingerprint of array2(execution.finding_fingerprints)) {
       if (typeof rawFingerprint !== "string" || !HEX643.test(rawFingerprint)) continue;
@@ -23000,7 +23085,7 @@ async function validateModernRegressionClosure(context, state) {
     if (debt.detector_finding_fingerprints !== void 0) {
       const fingerprints = array2(debt.detector_finding_fingerprints).filter((fingerprint2) => typeof fingerprint2 === "string" && HEX643.test(fingerprint2));
       const detectorFamily = String(object5(debt.cause_key)?.detector_family ?? "");
-      const sourceId = detectorById(detectorFamily)?.detector;
+      const sourceId = detectorById(detectorFamily, registryVersion)?.detector;
       if (!sourceId) {
         errors.push(`${debtPath}.cause_key.detector_family: must identify the canonical source of detector fingerprints`);
       } else {
@@ -23054,6 +23139,7 @@ async function validateModernRegressionClosure(context, state) {
           record4.baseline_object,
           baselineRepositoryObject,
           coverageRuntimeIdentitySha256,
+          registryVersion,
           regressionRepoId,
           base,
           files,
@@ -23149,14 +23235,178 @@ async function validateRegressionDelta(bundle, report, manifest2, base, files, c
 // src/closeout/bundle-live-validation.ts
 import { mkdtemp as mkdtemp3, rm as rm4 } from "fs/promises";
 import { tmpdir as tmpdir5 } from "os";
-import { dirname as dirname10, isAbsolute as isAbsolute17, join as join10, resolve as resolve19 } from "path";
+import { dirname as dirname10, isAbsolute as isAbsolute17, join as join11, resolve as resolve19 } from "path";
+
+// src/closeout/language-policy.ts
+import { createHash as createHash16 } from "crypto";
+import { existsSync as existsSync6, readFileSync as readFileSync7 } from "fs";
+import { join as join8, posix as posix2 } from "path";
+var LANGUAGE_POLICY_PATH = ".mister-clean/language-policy.json";
+var LANGUAGE_POLICY_SCHEMA = "mister-clean.language-policy/1";
+var LANG_GUARD_ALLOW_PATH = ".lang-guard-allow";
+var POLICY_KEYS = /* @__PURE__ */ new Set(["schema", "forbid_extensions", "allow", "generated"]);
+var EXTENSION = /^\.[A-Za-z0-9_+-]+$/u;
+var LanguagePolicyInvalidError = class extends Error {
+  constructor(path, reason) {
+    super(`${path}: language policy is invalid: ${reason}`);
+    this.path = path;
+    this.reason = reason;
+    this.name = "LanguagePolicyInvalidError";
+  }
+  code = "language_policy_invalid";
+};
+function sha25610(value) {
+  return createHash16("sha256").update(value).digest("hex");
+}
+function utf82(bytes2, path) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes2);
+  } catch {
+    throw new LanguagePolicyInvalidError(path, "not valid UTF-8");
+  }
+}
+function languagePolicyFindingFingerprint(path, extension) {
+  return sha25610(`language_policy\0forbidden_language\0${path}\0${extension}`);
+}
+function stringList(value, key, required) {
+  if (value === void 0 && !required) return [];
+  if (!Array.isArray(value)) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `${key} must be an array of strings`);
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.trim().length === 0) {
+      throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `${key} entries must be nonempty strings`);
+    }
+  }
+  return [...new Set(value)];
+}
+function parseLanguagePolicy(text3) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text3);
+  } catch {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "not valid JSON");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "expected a JSON object");
+  }
+  const record4 = parsed;
+  const unknownKeys = Object.keys(record4).filter((key) => !POLICY_KEYS.has(key)).sort();
+  if (unknownKeys.length > 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `unknown key(s): ${unknownKeys.join(", ")}`);
+  if (record4.schema !== LANGUAGE_POLICY_SCHEMA) {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `schema must be ${LANGUAGE_POLICY_SCHEMA}`);
+  }
+  const forbid = stringList(record4.forbid_extensions, "forbid_extensions", true);
+  if (forbid.length === 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "forbid_extensions must not be empty");
+  const malformed = forbid.filter((extension) => !EXTENSION.test(extension));
+  if (malformed.length > 0) {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `forbid_extensions entries must look like ".ext": ${malformed.join(", ")}`);
+  }
+  return {
+    forbid_extensions: [...new Set(forbid.map((extension) => extension.toLowerCase()))].sort(),
+    allow: stringList(record4.allow, "allow", false),
+    generated: stringList(record4.generated, "generated", false)
+  };
+}
+function parseLangGuardAllow(text3) {
+  return [...new Set(text3.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#")))];
+}
+function regexLiteral2(character) {
+  return /[\\^$.*+?()[\]{}|/]/u.test(character) ? `\\${character}` : character;
+}
+function globMatcher(pattern) {
+  const portable = pattern.replace(/^\.\//u, "");
+  let result = "^";
+  for (let index = 0; index < portable.length; index += 1) {
+    const character = portable[index] ?? "";
+    if (character === "*" && portable[index + 1] === "*") {
+      index += 1;
+      if (portable[index + 1] === "/") {
+        index += 1;
+        result += "(?:.*/)?";
+      } else result += ".*";
+    } else if (character === "*") result += "[^/]*";
+    else if (character === "?") result += "[^/]";
+    else result += regexLiteral2(character);
+  }
+  if (portable.endsWith("/")) result += ".*";
+  return new RegExp(`${result}$`, "u");
+}
+function anyMatch(matchers, path) {
+  return matchers.some((matcher) => matcher.test(path));
+}
+function languagePolicyCandidatePaths(root) {
+  return trackedShippablePaths(root);
+}
+function auditLanguagePolicy(root) {
+  const policyPath = join8(root, LANGUAGE_POLICY_PATH);
+  const empty = {
+    record_type: "mister-clean.language-policy-audit",
+    schema_version: "1.0",
+    allowed_count: 0,
+    generated_exempt: { count: 0, paths: [] },
+    findings: []
+  };
+  if (!existsSync6(policyPath)) {
+    return { ...empty, status: "not_applicable", exitCode: 0, policy: null, tracked_path_count: 0 };
+  }
+  let bytes2;
+  try {
+    bytes2 = readFileSync7(policyPath);
+  } catch {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "unreadable");
+  }
+  const policy = parseLanguagePolicy(utf82(bytes2, LANGUAGE_POLICY_PATH));
+  const langGuardPath = join8(root, LANG_GUARD_ALLOW_PATH);
+  let langGuard = null;
+  let langGuardGlobs = [];
+  if (existsSync6(langGuardPath)) {
+    const langGuardBytes = readFileSync7(langGuardPath);
+    langGuardGlobs = parseLangGuardAllow(utf82(langGuardBytes, LANG_GUARD_ALLOW_PATH));
+    langGuard = { path: LANG_GUARD_ALLOW_PATH, sha256: sha25610(langGuardBytes), glob_count: langGuardGlobs.length };
+  }
+  const allow = [...policy.allow, ...langGuardGlobs].map(globMatcher);
+  const generated = policy.generated.map(globMatcher);
+  const forbidden = new Set(policy.forbid_extensions);
+  const tracked = languagePolicyCandidatePaths(root);
+  const findings = [];
+  const generatedPaths = [];
+  let allowedCount = 0;
+  for (const path of tracked) {
+    const extension = posix2.extname(path).toLowerCase();
+    if (!forbidden.has(extension)) continue;
+    if (anyMatch(generated, path)) generatedPaths.push(path);
+    else if (anyMatch(allow, path)) allowedCount += 1;
+    else {
+      findings.push({
+        fingerprint: languagePolicyFindingFingerprint(path, extension),
+        family: "language_policy",
+        rule: "forbidden_language",
+        path,
+        extension
+      });
+    }
+  }
+  return {
+    ...empty,
+    status: findings.length > 0 ? "fail" : "pass",
+    exitCode: findings.length > 0 ? 1 : 0,
+    policy: {
+      ...policy,
+      source: { path: LANGUAGE_POLICY_PATH, sha256: sha25610(bytes2) },
+      lang_guard_allow: langGuard
+    },
+    tracked_path_count: tracked.length,
+    allowed_count: allowedCount,
+    generated_exempt: { count: generatedPaths.length, paths: generatedPaths },
+    findings
+  };
+}
 
 // src/closeout/github-actions.ts
 var import_yaml3 = __toESM(require_dist(), 1);
-import { createHash as createHash16 } from "crypto";
+import { createHash as createHash17 } from "crypto";
 import { execFileSync as execFileSync5 } from "child_process";
-import { lstatSync as lstatSync8, readFileSync as readFileSync7 } from "fs";
-import { isAbsolute as isAbsolute13, join as join8, relative as relative11, resolve as resolve14 } from "path";
+import { lstatSync as lstatSync8, readFileSync as readFileSync8 } from "fs";
+import { isAbsolute as isAbsolute13, join as join9, relative as relative11, resolve as resolve14 } from "path";
 var SENSITIVE_COMMAND = /(?:\bflyctl\s+deploy\b|\bwrangler\s+deploy\b|\bpnpm\s+publish\b|\bnpm\s+publish\b|\bdocker\s+push\b|\bkubectl\b|\bterraform\s+apply\b|\bgh\s+release\b|\bgit\s+push\b)/iu;
 var HEALTH_COMMAND = /(?:\bchecks?\s+list\b|\bhealthz\b|\bhealth(?:check)?\b)/iu;
 var FULL_COMMIT_REF = /^[0-9a-f]{40}$/u;
@@ -23174,7 +23424,7 @@ var PRIVILEGED_ACTION_INPUT_ALLOWLISTS = /* @__PURE__ */ new Map([
   ["actions/checkout", /* @__PURE__ */ new Set(["fetch-depth", "ref"])]
 ]);
 function digest2(value) {
-  return createHash16("sha256").update(value, "utf8").digest("hex");
+  return createHash17("sha256").update(value, "utf8").digest("hex");
 }
 function map(value) {
   return value instanceof Map ? value : void 0;
@@ -23288,7 +23538,7 @@ function referencedLocalSourceText(repository, run) {
     try {
       const metadata = lstatSync8(absolute);
       if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1048576) continue;
-      sources.push(readFileSync7(absolute, "utf8"));
+      sources.push(readFileSync8(absolute, "utf8"));
     } catch {
     }
   }
@@ -23605,13 +23855,13 @@ function auditGitHubActionsRepository(root) {
   let sensitiveWorkflowCount = 0;
   const audits = [];
   for (const path of paths) {
-    const absolute = join8(repository, path);
+    const absolute = join9(repository, path);
     const metadata = lstatSync8(absolute);
     if (!metadata.isFile()) {
       findings.push(finding2(path, "workflow_unparseable", "P1", "Tracked workflow is not a regular file.", [path]));
       continue;
     }
-    const result = auditWorkflow(repository, path, readFileSync7(absolute, "utf8"));
+    const result = auditWorkflow(repository, path, readFileSync8(absolute, "utf8"));
     audits.push(result);
     if (result.sensitive) sensitiveWorkflowCount += 1;
     findings.push(...result.findings);
@@ -23636,8 +23886,8 @@ function auditGitHubActionsRepository(root) {
 }
 
 // src/closeout/inspection.ts
-import { createHash as createHash17 } from "crypto";
-import { lstatSync as lstatSync9, readFileSync as readFileSync8, readdirSync as readdirSync6, readlinkSync as readlinkSync4 } from "fs";
+import { createHash as createHash18 } from "crypto";
+import { lstatSync as lstatSync9, readFileSync as readFileSync9, readdirSync as readdirSync6, readlinkSync as readlinkSync4 } from "fs";
 import {
   readFile as readFile3,
   readdir as readdir5,
@@ -23825,7 +24075,7 @@ async function loadDenylist(path) {
 }
 function loadDenylistSync(path) {
   if (!path) return [];
-  return readFileSync8(path, "utf8").split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"));
+  return readFileSync9(path, "utf8").split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"));
 }
 function lines(text3) {
   return text3.split(/\r\n|\n|\r/);
@@ -23846,23 +24096,23 @@ function printableBinaryText(bytes2) {
   return result;
 }
 function publicSafetyFingerprint(finding4) {
-  return createHash17("sha256").update(`public_safety\0${finding4.rule}\0${finding4.path}\0${finding4.line}`, "utf8").digest("hex");
+  return createHash18("sha256").update(`public_safety\0${finding4.rule}\0${finding4.path}\0${finding4.line}`, "utf8").digest("hex");
 }
 function publicSafetyUnassessedFingerprint(finding4) {
-  return createHash17("sha256").update(`public_safety_unassessed\0${finding4.reason}\0${finding4.path}`, "utf8").digest("hex");
+  return createHash18("sha256").update(`public_safety_unassessed\0${finding4.reason}\0${finding4.path}`, "utf8").digest("hex");
 }
 function publicSafetyUnassessed(path, reason) {
   return { fingerprint: publicSafetyUnassessedFingerprint({ path, reason }), path, reason };
 }
 function selectedPathSetSha256(paths) {
-  return createHash17("sha256").update(JSON.stringify([...new Set(paths)].sort(compareCodePoints5)), "utf8").digest("hex");
+  return createHash18("sha256").update(JSON.stringify([...new Set(paths)].sort(compareCodePoints5)), "utf8").digest("hex");
 }
 function publicSafetyValueDigestsInText(text3) {
   const digests = [];
   for (const line of lines(text3)) {
     for (const [rule, expression] of PUBLIC_SAFETY_RULES) {
       const match = line.match(expression);
-      if (match) digests.push({ rule, value_sha256: createHash17("sha256").update(match[0] ?? line.trim(), "utf8").digest("hex") });
+      if (match) digests.push({ rule, value_sha256: createHash18("sha256").update(match[0] ?? line.trim(), "utf8").digest("hex") });
     }
   }
   return digests;
@@ -23874,7 +24124,7 @@ function publicSafetyFinding(path, line, rule, matched, provenance) {
     line,
     provenance,
     rule,
-    value_sha256: createHash17("sha256").update(matched, "utf8").digest("hex")
+    value_sha256: createHash18("sha256").update(matched, "utf8").digest("hex")
   };
 }
 var SCOPE_TRACKED_PROVENANCE = { of: () => "tracked", source: "scope" };
@@ -23970,7 +24220,7 @@ function scanPublicSafetyFilesSync(files, customTerms, provenance, initialUnasse
       if (file.symlink) {
         text3 = `SYMLINK_TARGET=${readlinkSync4(file.absolute)}`;
       } else {
-        const bytes2 = readFileSync8(file.absolute);
+        const bytes2 = readFileSync9(file.absolute);
         if (bytes2.includes(0)) text3 = printableBinaryText(bytes2);
         else {
           try {
@@ -24019,7 +24269,7 @@ async function generateManifest(root) {
     const bytes2 = await readFile3(file.absolute);
     entries2.push({
       path: `./${file.relative}`,
-      sha256: createHash17("sha256").update(bytes2).digest("hex")
+      sha256: createHash18("sha256").update(bytes2).digest("hex")
     });
   }
   entries2.sort((left, right) => compareCodePoints5(left.path, right.path));
@@ -24036,10 +24286,10 @@ async function generatePackageManifest(root) {
 // src/closeout/native-gate-runner.ts
 import { randomUUID as randomUUID4 } from "crypto";
 import { spawnSync as spawnSync5 } from "child_process";
-import { accessSync as accessSync2, constants as constants4, existsSync as existsSync6, lstatSync as lstatSync10, realpathSync as realpathSync6 } from "fs";
+import { accessSync as accessSync2, constants as constants4, existsSync as existsSync7, lstatSync as lstatSync10, realpathSync as realpathSync6 } from "fs";
 import { lstat as lstat6, mkdir as mkdir3, realpath as realpath6, rm as rm3, writeFile as writeFile2 } from "fs/promises";
 import { homedir, tmpdir as tmpdir4 } from "os";
-import { delimiter as delimiter2, isAbsolute as isAbsolute14, join as join9, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
+import { delimiter as delimiter2, isAbsolute as isAbsolute14, join as join10, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
 
 // src/closeout/execution-supervisor.ts
 import {
@@ -24424,7 +24674,7 @@ function evidenceOutputName(gateId, stream) {
 }
 async function writeOutput(evidenceRoot, gateId, stream, bytes2, complete) {
   const path = evidenceOutputName(gateId, stream);
-  await writeFile2(join9(evidenceRoot, path), bytes2, { flag: "wx", mode: 384 });
+  await writeFile2(join10(evidenceRoot, path), bytes2, { flag: "wx", mode: 384 });
   return { path, sha256: sha2567(bytes2), byte_count: bytes2.length, complete };
 }
 function executableCandidates(name, pathValue) {
@@ -24432,7 +24682,7 @@ function executableCandidates(name, pathValue) {
   const candidates = [];
   for (const directory of pathValue.split(delimiter2)) {
     if (!directory || !isAbsolute14(directory)) continue;
-    for (const extension of extensions) candidates.push(join9(directory, `${name}${extension}`));
+    for (const extension of extensions) candidates.push(join10(directory, `${name}${extension}`));
   }
   return candidates;
 }
@@ -24460,7 +24710,7 @@ var TOOLCHAIN_LOCATORS = [
   ["RUSTUP_HOME", ".rustup"],
   ["CARGO_HOME", ".cargo"],
   ["GOPATH", "go"],
-  ["GOMODCACHE", join9("go", "pkg", "mod")]
+  ["GOMODCACHE", join10("go", "pkg", "mod")]
 ];
 function toolchainLocators(environment = process.env, operatorHome = environment.HOME ?? homedir()) {
   const locators = {};
@@ -24470,8 +24720,8 @@ function toolchainLocators(environment = process.env, operatorHome = environment
       locators[name] = explicit;
       continue;
     }
-    const candidate = join9(operatorHome, conventional);
-    if (existsSync6(candidate)) locators[name] = candidate;
+    const candidate = join10(operatorHome, conventional);
+    if (existsSync7(candidate)) locators[name] = candidate;
   }
   return locators;
 }
@@ -24490,7 +24740,7 @@ function scrubbedEnvironment(home) {
     GIT_OPTIONAL_LOCKS: "0",
     NPM_CONFIG_OFFLINE: "true",
     YARN_ENABLE_NETWORK: "0",
-    BUN_INSTALL_CACHE_DIR: join9(home, "bun-cache"),
+    BUN_INSTALL_CACHE_DIR: join10(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
     GOPROXY: "off",
     ...toolchainLocators()
@@ -24947,7 +25197,7 @@ async function runNativeGates(repository, discovery, evidenceDirectory, runOptio
 
 // src/closeout/semantic-v2.ts
 import { verify } from "crypto";
-import { existsSync as existsSync7, lstatSync as lstatSync11, readFileSync as readFileSync9, readdirSync as readdirSync7, realpathSync as realpathSync7 } from "fs";
+import { existsSync as existsSync8, lstatSync as lstatSync11, readFileSync as readFileSync10, readdirSync as readdirSync7, realpathSync as realpathSync7 } from "fs";
 import { isAbsolute as isAbsolute15, relative as relative14, resolve as resolve17, sep as sep13 } from "path";
 var HEX_64 = /^[0-9a-f]{64}$/u;
 var ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
@@ -24978,14 +25228,14 @@ function sourceRef2(repository, rawRef) {
     throw new Error(`semantic source reference is not repository-relative: ${rawRef}`);
   }
   const absolute = resolve17(repository, rawPath);
-  if (!isInside2(resolve17(repository), absolute) || !existsSync7(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
+  if (!isInside2(resolve17(repository), absolute) || !existsSync8(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
     throw new Error(`semantic source reference is missing, non-file, symlinked, or outside the repository: ${rawRef}`);
   }
   const lineMatch = /^line-(\d+)$/u.exec(fragment);
   return {
     ...lineMatch ? { line: Number(lineMatch[1]) } : {},
     path: rawPath.replaceAll("\\", "/"),
-    sha256: sha256Bytes(readFileSync9(absolute))
+    sha256: sha256Bytes(readFileSync10(absolute))
   };
 }
 function directChecker(kind) {
@@ -25041,7 +25291,7 @@ function semanticEvidenceRootSha256Once(evidenceRoot) {
   const paths = walkEvidenceFiles(root);
   const hashInput = [];
   for (const path of paths) {
-    const bytes2 = readFileSync9(resolve17(root, path));
+    const bytes2 = readFileSync10(resolve17(root, path));
     hashInput.push(`${path.length}:${path}\0${bytes2.byteLength}:`, bytes2, "\0");
   }
   return sha256Bytes(Buffer.concat(hashInput.map((item) => typeof item === "string" ? Buffer.from(item) : Buffer.from(item))));
@@ -25061,11 +25311,11 @@ function verifyEvidenceRefs(evidenceRoot, refs) {
       continue;
     }
     const absolute = resolve17(root, ref.path);
-    if (!isInside2(root, absolute) || !existsSync7(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
+    if (!isInside2(root, absolute) || !existsSync8(absolute) || !lstatSync11(absolute).isFile() || lstatSync11(absolute).isSymbolicLink()) {
       errors.push(`semantic evidence reference is missing, symlinked, or outside the evidence root: ${ref.path}`);
       continue;
     }
-    if (sha256Bytes(readFileSync9(absolute)) !== ref.sha256) errors.push(`semantic evidence reference digest mismatch: ${ref.path}`);
+    if (sha256Bytes(readFileSync10(absolute)) !== ref.sha256) errors.push(`semantic evidence reference digest mismatch: ${ref.path}`);
   }
   return errors;
 }
@@ -25260,7 +25510,7 @@ function verifyRuntimeSemanticCandidateV2(input) {
     verifyBoundEvidence = (refs) => verifyPackagedEvidenceRefs(files, refs);
   }
   let policy;
-  const policyBytes = readFileSync9(policyPath);
+  const policyBytes = readFileSync10(policyPath);
   try {
     policy = JSON.parse(new TextDecoder().decode(policyBytes));
   } catch {
@@ -25416,7 +25666,7 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
   const externalPackagePath = realpathSync7(resolve17(packagePath));
   const externalTrustPolicyPath = realpathSync7(resolve17(trustPolicyPath));
   const base = auditSemanticRepository(root);
-  const packageBytes = readFileSync9(externalPackagePath);
+  const packageBytes = readFileSync10(externalPackagePath);
   const manifestSha256 = sha256Bytes(packageBytes);
   const findings = [];
   const executions = [];
@@ -25433,7 +25683,7 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
     packageErrors.push("semantic evidence package must be schema 2.0 with one plan and runtime_records array");
   }
   try {
-    const trustPolicy = JSON.parse(readFileSync9(externalTrustPolicyPath, "utf8"));
+    const trustPolicy = JSON.parse(readFileSync10(externalTrustPolicyPath, "utf8"));
     if (trustPolicy.record_type !== "mister-clean.semantic-trust-policy" || trustPolicy.schema_version !== "1.0" || !Array.isArray(trustPolicy.keys)) {
       packageErrors.push("semantic trust policy record_type, schema_version, or keys are invalid");
     }
@@ -25568,7 +25818,7 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
     resolutions,
     snapshot: base.snapshot,
     status,
-    trust_policy_sha256: sha256Bytes(readFileSync9(externalTrustPolicyPath)),
+    trust_policy_sha256: sha256Bytes(readFileSync10(externalTrustPolicyPath)),
     working_tree_sha256: base.working_tree_sha256
   };
 }
@@ -26214,7 +26464,8 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
   if (!stableEqual2(coverage?.run_policy, liveRunPolicy)) {
     errors.push("$.live_detector_coverage.run_policy: recorded applicability differs from the live tracked shippable surface");
   }
-  const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy) ?? [];
+  const liveRegistryVersion = coverage?.registry_version === "5" ? "5" : DETECTOR_COVERAGE_SCHEMA_VERSION;
+  const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy, liveRegistryVersion) ?? [];
   const executionFor = (detectorId) => array2(coverage?.executions).map(object5).find((execution) => execution?.detector_id === detectorId);
   const frozenInput = async (detectorId, kind) => {
     const execution = executionFor(detectorId);
@@ -26276,6 +26527,17 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
       findingFingerprintsFromAudit("public_safety", publicSafetyResult)
     ]);
   }
+  if (liveRequiredDetectorIds.includes("language_policy")) {
+    let languagePolicyFingerprints;
+    try {
+      languagePolicyFingerprints = findingFingerprintsFromAudit("language_policy", auditLanguagePolicy(repo));
+    } catch (error) {
+      errors.push(`$.live_detector_coverage.language_policy: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (languagePolicyFingerprints !== void 0 || !errors.some((error) => error.startsWith("$.live_detector_coverage.language_policy:"))) {
+      liveDetectorFindings.push(["language_policy", languagePolicyFingerprints]);
+    }
+  }
   for (const [detectorId, fingerprints] of liveDetectorFindings) {
     if (!fingerprints) {
       errors.push(`$.live_detector_coverage.${detectorId}: fresh registered detector result was not canonical`);
@@ -26317,7 +26579,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
         if (!recordedDiscovery || !stableEqual2(liveDiscovery, recordedDiscovery)) {
           errors.push("$.live_native_gates.discovery: fresh canonical discovery differs from recorded successor discovery");
         }
-        const evidenceDirectory = await mkdtemp3(join10(tmpdir5(), "mister-clean-live-native-"));
+        const evidenceDirectory = await mkdtemp3(join11(tmpdir5(), "mister-clean-live-native-"));
         try {
           const liveCoverage = await runNativeGates(
             repo,
@@ -26886,9 +27148,9 @@ import { existsSync as existsSync10, mkdirSync as mkdirSync2, readFileSync as re
 import { join as join13, resolve as resolve22 } from "path";
 
 // src/closeout/retirements.ts
-import { createHash as createHash18 } from "crypto";
-import { existsSync as existsSync8, readdirSync as readdirSync8, readFileSync as readFileSync10, statSync as statSync2 } from "fs";
-import { isAbsolute as isAbsolute19, join as join11, normalize as normalize2, resolve as resolve21, sep as sep15 } from "path";
+import { createHash as createHash19 } from "crypto";
+import { existsSync as existsSync9, readdirSync as readdirSync8, readFileSync as readFileSync11, statSync as statSync2 } from "fs";
+import { isAbsolute as isAbsolute19, join as join12, normalize as normalize2, resolve as resolve21, sep as sep15 } from "path";
 var RETIREMENT_RECORD_TYPE = "mister-clean.retirement";
 var RETIREMENT_SCHEMA_VERSION = "1.0";
 var RETIREMENT_DIRECTORY = "charter/retirements";
@@ -26915,14 +27177,14 @@ function isUnder(subject, root) {
   return subject === root || subject.startsWith(`${root}/`);
 }
 function censusInputPaths(repository, directory) {
-  const absolute = join11(repository, directory);
-  if (!existsSync8(absolute) || !statSync2(absolute).isDirectory()) return [];
+  const absolute = join12(repository, directory);
+  if (!existsSync9(absolute) || !statSync2(absolute).isDirectory()) return [];
   return readdirSync8(absolute).filter((name) => name.endsWith(".json")).sort().map((name) => `${directory}/${name}`);
 }
 function readJsonRecord(repository, relativePath, refusals) {
-  const absolute = join11(repository, relativePath);
+  const absolute = join12(repository, relativePath);
   try {
-    const parsed = JSON.parse(readFileSync10(absolute, "utf8"));
+    const parsed = JSON.parse(readFileSync11(absolute, "utf8"));
     const record4 = object5(parsed);
     if (!record4) refusals.push(`${relativePath}: expected a JSON object`);
     return record4;
@@ -26932,7 +27194,7 @@ function readJsonRecord(repository, relativePath, refusals) {
   }
 }
 function sha256FileBytes(absolute) {
-  return createHash18("sha256").update(readFileSync10(absolute)).digest("hex");
+  return createHash19("sha256").update(readFileSync11(absolute)).digest("hex");
 }
 function readRetirements(repository) {
   const refusals = [];
@@ -26991,7 +27253,7 @@ function readRetirements(repository) {
       refusals.push(`${relativePath}: ruling.evidence.path escapes the repository`);
       continue;
     }
-    if (!existsSync8(evidenceAbsolute) || !statSync2(evidenceAbsolute).isFile()) {
+    if (!existsSync9(evidenceAbsolute) || !statSync2(evidenceAbsolute).isFile()) {
       refusals.push(`${relativePath}: ruling.evidence.path ${JSON.stringify(evidencePath)} does not exist`);
       continue;
     }
@@ -27119,170 +27381,6 @@ function applyPublicSafetyExemptions(findings, entries2) {
     throw new CensusInputRefused(stale.map((entry) => `${entry.record_path}: exemption for ${entry.rule} in ${entry.file} with value ${entry.value_sha256} matches no current finding (stale)`));
   }
   return { findings: kept, exempted };
-}
-
-// src/closeout/language-policy.ts
-import { createHash as createHash19 } from "crypto";
-import { existsSync as existsSync9, readFileSync as readFileSync11 } from "fs";
-import { join as join12, posix as posix2 } from "path";
-var LANGUAGE_POLICY_PATH = ".mister-clean/language-policy.json";
-var LANGUAGE_POLICY_SCHEMA = "mister-clean.language-policy/1";
-var LANG_GUARD_ALLOW_PATH = ".lang-guard-allow";
-var POLICY_KEYS = /* @__PURE__ */ new Set(["schema", "forbid_extensions", "allow", "generated"]);
-var EXTENSION = /^\.[A-Za-z0-9_+-]+$/u;
-var LanguagePolicyInvalidError = class extends Error {
-  constructor(path, reason) {
-    super(`${path}: language policy is invalid: ${reason}`);
-    this.path = path;
-    this.reason = reason;
-    this.name = "LanguagePolicyInvalidError";
-  }
-  code = "language_policy_invalid";
-};
-function sha25610(value) {
-  return createHash19("sha256").update(value).digest("hex");
-}
-function utf82(bytes2, path) {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes2);
-  } catch {
-    throw new LanguagePolicyInvalidError(path, "not valid UTF-8");
-  }
-}
-function languagePolicyFindingFingerprint(path, extension) {
-  return sha25610(`language_policy\0forbidden_language\0${path}\0${extension}`);
-}
-function stringList(value, key, required) {
-  if (value === void 0 && !required) return [];
-  if (!Array.isArray(value)) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `${key} must be an array of strings`);
-  for (const entry of value) {
-    if (typeof entry !== "string" || entry.trim().length === 0) {
-      throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `${key} entries must be nonempty strings`);
-    }
-  }
-  return [...new Set(value)];
-}
-function parseLanguagePolicy(text3) {
-  let parsed;
-  try {
-    parsed = JSON.parse(text3);
-  } catch {
-    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "not valid JSON");
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "expected a JSON object");
-  }
-  const record4 = parsed;
-  const unknownKeys = Object.keys(record4).filter((key) => !POLICY_KEYS.has(key)).sort();
-  if (unknownKeys.length > 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `unknown key(s): ${unknownKeys.join(", ")}`);
-  if (record4.schema !== LANGUAGE_POLICY_SCHEMA) {
-    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `schema must be ${LANGUAGE_POLICY_SCHEMA}`);
-  }
-  const forbid = stringList(record4.forbid_extensions, "forbid_extensions", true);
-  if (forbid.length === 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "forbid_extensions must not be empty");
-  const malformed = forbid.filter((extension) => !EXTENSION.test(extension));
-  if (malformed.length > 0) {
-    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `forbid_extensions entries must look like ".ext": ${malformed.join(", ")}`);
-  }
-  return {
-    forbid_extensions: [...new Set(forbid.map((extension) => extension.toLowerCase()))].sort(),
-    allow: stringList(record4.allow, "allow", false),
-    generated: stringList(record4.generated, "generated", false)
-  };
-}
-function parseLangGuardAllow(text3) {
-  return [...new Set(text3.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#")))];
-}
-function regexLiteral2(character) {
-  return /[\\^$.*+?()[\]{}|/]/u.test(character) ? `\\${character}` : character;
-}
-function globMatcher(pattern) {
-  const portable = pattern.replace(/^\.\//u, "");
-  let result = "^";
-  for (let index = 0; index < portable.length; index += 1) {
-    const character = portable[index] ?? "";
-    if (character === "*" && portable[index + 1] === "*") {
-      index += 1;
-      if (portable[index + 1] === "/") {
-        index += 1;
-        result += "(?:.*/)?";
-      } else result += ".*";
-    } else if (character === "*") result += "[^/]*";
-    else if (character === "?") result += "[^/]";
-    else result += regexLiteral2(character);
-  }
-  if (portable.endsWith("/")) result += ".*";
-  return new RegExp(`${result}$`, "u");
-}
-function anyMatch(matchers, path) {
-  return matchers.some((matcher) => matcher.test(path));
-}
-function languagePolicyCandidatePaths(root) {
-  return trackedShippablePaths(root);
-}
-function auditLanguagePolicy(root) {
-  const policyPath = join12(root, LANGUAGE_POLICY_PATH);
-  const empty = {
-    record_type: "mister-clean.language-policy-audit",
-    schema_version: "1.0",
-    allowed_count: 0,
-    generated_exempt: { count: 0, paths: [] },
-    findings: []
-  };
-  if (!existsSync9(policyPath)) {
-    return { ...empty, status: "not_applicable", exitCode: 0, policy: null, tracked_path_count: 0 };
-  }
-  let bytes2;
-  try {
-    bytes2 = readFileSync11(policyPath);
-  } catch {
-    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "unreadable");
-  }
-  const policy = parseLanguagePolicy(utf82(bytes2, LANGUAGE_POLICY_PATH));
-  const langGuardPath = join12(root, LANG_GUARD_ALLOW_PATH);
-  let langGuard = null;
-  let langGuardGlobs = [];
-  if (existsSync9(langGuardPath)) {
-    const langGuardBytes = readFileSync11(langGuardPath);
-    langGuardGlobs = parseLangGuardAllow(utf82(langGuardBytes, LANG_GUARD_ALLOW_PATH));
-    langGuard = { path: LANG_GUARD_ALLOW_PATH, sha256: sha25610(langGuardBytes), glob_count: langGuardGlobs.length };
-  }
-  const allow = [...policy.allow, ...langGuardGlobs].map(globMatcher);
-  const generated = policy.generated.map(globMatcher);
-  const forbidden = new Set(policy.forbid_extensions);
-  const tracked = languagePolicyCandidatePaths(root);
-  const findings = [];
-  const generatedPaths = [];
-  let allowedCount = 0;
-  for (const path of tracked) {
-    const extension = posix2.extname(path).toLowerCase();
-    if (!forbidden.has(extension)) continue;
-    if (anyMatch(generated, path)) generatedPaths.push(path);
-    else if (anyMatch(allow, path)) allowedCount += 1;
-    else {
-      findings.push({
-        fingerprint: languagePolicyFindingFingerprint(path, extension),
-        family: "language_policy",
-        rule: "forbidden_language",
-        path,
-        extension
-      });
-    }
-  }
-  return {
-    ...empty,
-    status: findings.length > 0 ? "fail" : "pass",
-    exitCode: findings.length > 0 ? 1 : 0,
-    policy: {
-      ...policy,
-      source: { path: LANGUAGE_POLICY_PATH, sha256: sha25610(bytes2) },
-      lang_guard_allow: langGuard
-    },
-    tracked_path_count: tracked.length,
-    allowed_count: allowedCount,
-    generated_exempt: { count: generatedPaths.length, paths: generatedPaths },
-    findings
-  };
 }
 
 // src/closeout/prepare.ts
@@ -27463,11 +27561,16 @@ async function collectPrepareEvidence(options, mode) {
       path: "github-actions-audit.json",
       sha256: sha256File2(join13(bundleDirectory, "github-actions-audit.json"))
     };
-    writeJson(join13(bundleDirectory, "language-policy-audit.json"), {
+    const languagePolicyAudit = {
       ...auditLanguagePolicy(repository),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject
-    });
+    };
+    writeJson(join13(bundleDirectory, "language-policy-audit.json"), languagePolicyAudit);
+    const languagePolicyAuditRef = {
+      path: "language-policy-audit.json",
+      sha256: sha256File2(join13(bundleDirectory, "language-policy-audit.json"))
+    };
     const semanticInputRefs = [];
     let semanticManifestPath;
     let semanticEvidencePackagePath;
@@ -27526,6 +27629,8 @@ async function collectPrepareEvidence(options, mode) {
       githubActionsRef: githubActionsAuditRef,
       semanticAudit,
       semanticRef: semanticAuditRef,
+      languagePolicyAudit,
+      languagePolicyRef: languagePolicyAuditRef,
       inputRefs: {
         ...publicSafetyInputRef === void 0 ? {} : { public_safety: [publicSafetyInputRef] },
         ...semanticInputRefs.length === 0 ? {} : { semantic_boundary: semanticInputRefs }
@@ -27654,6 +27759,8 @@ async function collectPrepareEvidence(options, mode) {
       publicSafetyAuditRef,
       githubActionsAudit,
       githubActionsAuditRef,
+      languagePolicyAudit,
+      languagePolicyAuditRef,
       semanticAudit,
       semanticAuditRef,
       detectorCoverage,
@@ -27863,6 +27970,8 @@ function assemblePrepareReport(context) {
     publicSafetyAuditRef,
     githubActionsAudit,
     githubActionsAuditRef,
+    languagePolicyAudit,
+    languagePolicyAuditRef,
     semanticAudit,
     semanticAuditRef,
     detectorCoverage,
@@ -28062,6 +28171,32 @@ function assemblePrepareReport(context) {
       rule: first.rule
     }, fingerprints.map((fingerprint2) => observationId(githubActionsDetector, fingerprint2)));
   });
+  const languagePolicyCommand = "mister-clean audit language-policy . --json";
+  const languagePolicyDetector = detectorById("language_policy")?.detector;
+  if (!languagePolicyDetector) throw new Error("language-policy detector is absent from the canonical registry");
+  const languagePolicyRootDebts = languagePolicyAudit.findings.map((finding4) => baselineDebt(repoId, {
+    id: `DEBT-LANGUAGE-POLICY-${finding4.fingerprint.slice(0, 16).toUpperCase()}`,
+    class: `language_policy_${finding4.rule}`,
+    observation_count: 1,
+    detector_finding_fingerprints: [finding4.fingerprint],
+    affected_paths: [finding4.path],
+    repair_boundary: `file:${finding4.path}`,
+    procedure: `Port ${finding4.path} out of the forbidden ${finding4.extension} language declared in .mister-clean/language-policy.json (or have the owner allow it), then rerun the language-policy audit`,
+    state: "open",
+    disposition: "autonomously_repair",
+    evidence: [{
+      kind: "gate_result",
+      object: baselineRepositoryObject.sha256,
+      command: languagePolicyCommand,
+      result: `forbidden_language ${finding4.extension}: ${finding4.path}`,
+      observed_at: now,
+      evidence_ref: languagePolicyAuditRef
+    }]
+  }, "mister-clean/language-policy-root@1", {
+    detector_family: "language_policy",
+    path: finding4.path,
+    extension: finding4.extension
+  }, [observationId(languagePolicyDetector, finding4.fingerprint)]));
   const nativeGateDebts = nativeGateFailureObservations(nativeGateDiscovery, nativeGateCoverage).map((projection) => {
     const { gate, execution } = projection;
     const failure = gate.disposition === "absent" ? `required native gate is absent (${gate.basis})` : `native gate ended ${execution?.state ?? "without execution"}: ${execution?.failure_reason ?? "no passing evidence"}`;
@@ -28094,6 +28229,7 @@ function assemblePrepareReport(context) {
     ...planningDebts,
     ...publicSafetyRootDebts,
     ...githubActionsRootDebts,
+    ...languagePolicyRootDebts,
     ...semanticDebts,
     ...nativeRootDebts
   ];
@@ -28169,6 +28305,15 @@ function assemblePrepareReport(context) {
       root_debt_count: githubActionsRootDebts.length,
       evidence_ref: githubActionsAuditRef
     },
+    language_policy_accounting: {
+      status: languagePolicyAudit.status,
+      tracked_path_count: languagePolicyAudit.tracked_path_count,
+      finding_count: languagePolicyAudit.findings.length,
+      generated_exempt_count: languagePolicyAudit.generated_exempt.count,
+      allowed_count: languagePolicyAudit.allowed_count,
+      root_debt_count: languagePolicyRootDebts.length,
+      evidence_ref: languagePolicyAuditRef
+    },
     native_gate_accounting: {
       discovered_count: nativeGateDiscovery.gates.length,
       required_count: nativeGateDiscovery.required_gate_ids.length,
@@ -28189,7 +28334,7 @@ function assemblePrepareReport(context) {
   if (completionDebts.length > 0) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
       state: "open",
-      evidence: [{ kind: "debt_census", object: baselineRepositoryObject.sha256, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${publicSafetyRootDebts.length} public safety, ${githubActionsRootDebts.length} GitHub Actions, ${semanticDebts.length} semantic, ${nativeRootDebts.length} native gate)`, observed_at: now }],
+      evidence: [{ kind: "debt_census", object: baselineRepositoryObject.sha256, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${publicSafetyRootDebts.length} public safety, ${githubActionsRootDebts.length} GitHub Actions, ${languagePolicyRootDebts.length} language policy, ${semanticDebts.length} semantic, ${nativeRootDebts.length} native gate)`, observed_at: now }],
       notes: ["Executable planning, public-safety, workflow-governance, semantic, and native-gate audits found payable successor-readiness debt."]
     });
   }
@@ -28258,7 +28403,7 @@ function assemblePrepareReport(context) {
   };
   writeJson(join13(bundleDirectory, "regression-delta.json"), {
     record_type: "mister-clean.regression-delta",
-    schema_version: "1.5",
+    schema_version: REGRESSION_DELTA_SCHEMA_VERSION,
     ...regressionBinding,
     accounting: regressionAccounting,
     action_checks: [],
@@ -29776,6 +29921,9 @@ async function beginAction(options) {
     }
     if (pre.detectorCoverage.runtime_identity_sha256 !== baselineCoverage.runtime_identity_sha256) {
       throw new Error("pre-state detector runtime differs from the bundle's validated runtime identity");
+    }
+    if (pre.detectorCoverage.registry_version !== baselineCoverage.registry_version || pre.detectorCoverage.registry_sha256 !== baselineCoverage.registry_sha256) {
+      throw new Error("pre-state detector registry differs from the bundle's frozen registry; re-prepare under the current registry");
     }
     const priorControl = loadNativeControl(context.base, object6(context.bundle.successor_readiness, "$.successor_readiness").native_gate_control);
     const priorClosingObservationIds = array4(
