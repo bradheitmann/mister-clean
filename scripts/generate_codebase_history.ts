@@ -4,15 +4,15 @@ import { execFileSync } from "node:child_process";
 import { basename, resolve } from "node:path";
 import { writeFileSync } from "node:fs";
 
-function usage(message) {
+function usage(message?: string): void {
   if (message) console.error(message);
   console.error(
-    "Usage: bun scripts/generate_codebase_history.mjs [--repo PATH] [--ref REF] [--label NAME] [--out FILE]",
+    "Usage: bun scripts/generate_codebase_history.ts [--repo PATH] [--ref REF] [--label NAME] [--out FILE]",
   );
   process.exit(message ? 2 : 0);
 }
 
-const options = {
+const options: { repo: string; ref: string; label: string | undefined; out: string | undefined } = {
   repo: process.cwd(),
   ref: "main",
   label: undefined,
@@ -27,17 +27,17 @@ for (let index = 2; index < process.argv.length; index += 1) {
   }
   const value = process.argv[index + 1];
   if (!value) usage(`Missing value for ${argument}`);
-  options[argument.slice(2)] = value;
+  options[argument.slice(2) as "repo" | "ref" | "label" | "out"] = value;
   index += 1;
 }
 
 const repositoryPath = resolve(options.repo);
-const runGit = (args, encoding = "utf8") =>
+const runGit = ((args: string[], encoding: "utf8" | "buffer" = "utf8") =>
   execFileSync("git", ["--no-optional-locks", "-C", repositoryPath, ...args], {
     encoding,
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     maxBuffer: 256 * 1024 * 1024,
-  });
+  })) as { (args: string[]): string; (args: string[], encoding: "buffer"): { toString(encoding: "utf8"): string } };
 
 runGit(["rev-parse", "--is-inside-work-tree"]);
 const head = runGit(["rev-parse", options.ref]).trim();
@@ -52,7 +52,7 @@ const records = runGit([
   .map((record) => record.trim())
   .filter(Boolean)
   .map((record) => {
-    const [commit, date, ...subjectParts] = record.split("\x1f");
+    const [commit, date, ...subjectParts] = record.split("\x1f") as [string, string, ...string[]];
     return { commit, date, subject: subjectParts.join("\x1f") };
   });
 
@@ -92,8 +92,8 @@ if (states.length === 0) {
   throw new Error(`No first-parent history found for ${options.ref}`);
 }
 
-const first = states[0];
-const last = states.at(-1);
+const first = states[0]!;
+const last = states.at(-1)!;
 const largestGrowth = states.reduce((winner, state) =>
   state.deltaBytes > winner.deltaBytes ? state : winner,
 );
