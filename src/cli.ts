@@ -12,6 +12,7 @@ import { PlanningAuditTimeout, nodeCloseoutEngine } from "./closeout/engine.js";
 import { DEFAULT_PLANNING_DEADLINE_MS } from "./closeout/planning.js";
 import { loadDenylist, scanTrackedPublicSafetySync } from "./closeout/inspection.js";
 import { inspectRepositoryObject } from "./closeout/repository-inspection.js";
+import { auditLanguagePolicy, LanguagePolicyInvalidError } from "./closeout/language-policy.js";
 import { packageRoot, PlanningConfigInvalidError, trackedShippablePaths } from "./closeout/repository.js";
 import {
   executionContentionJson,
@@ -442,8 +443,8 @@ async function runDetect(args: string[], io: CliIO): Promise<number> {
 
 async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): Promise<number> {
   const kind = args.shift();
-  if (!new Set(["github-actions", "planning", "public-safety", "repository-boundaries", "semantic"]).has(String(kind))) {
-    throw new UsageError("audit requires github-actions, planning, public-safety, repository-boundaries, or semantic");
+  if (!new Set(["github-actions", "language-policy", "planning", "public-safety", "repository-boundaries", "semantic"]).has(String(kind))) {
+    throw new UsageError("audit requires github-actions, language-policy, planning, public-safety, repository-boundaries, or semantic");
   }
   const root = args[0]?.startsWith("--") === false ? (args.shift() as string) : process.cwd();
   if (kind === "planning") {
@@ -527,6 +528,27 @@ async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): 
       io.stdout(`github-actions: ${result.status.toLocaleUpperCase("und")} workflows=${result.workflow_count} sensitive=${result.sensitive_workflow_count} findings=${result.findings.length}`);
     }
     onResult?.({ root, family: "github_actions", result });
+    return result.exitCode;
+  }
+  if (kind === "language-policy") {
+    const json = removeFlag(args, "--json");
+    assertNoArgs(args);
+    let result;
+    try {
+      result = auditLanguagePolicy(root);
+    } catch (error) {
+      // A malformed declared policy is a typed refusal, never a silent pass.
+      if (!(error instanceof LanguagePolicyInvalidError)) throw error;
+      if (json) io.stdout(JSON.stringify({ code: error.code, path: error.path, reason: error.reason }, null, 2));
+      io.stderr(`ERROR: ${error.message}`);
+      return 2;
+    }
+    if (json) io.stdout(JSON.stringify(result, null, 2));
+    else {
+      for (const policyFinding of result.findings) io.stdout(`${policyFinding.rule}\t${policyFinding.path}\t${policyFinding.extension}`);
+      io.stdout(`language-policy: ${result.status.toLocaleUpperCase("und")} tracked=${result.tracked_path_count} generated_exempt=${result.generated_exempt.count} allowed=${result.allowed_count} findings=${result.findings.length}`);
+    }
+    onResult?.({ root, family: "language_policy", result });
     return result.exitCode;
   }
   if (kind === "repository-boundaries") {
@@ -886,7 +908,7 @@ async function runEvalCase(args: string[], io: CliIO): Promise<number> {
 }
 
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--evidence-root <dir>] [--source <seam>=<clone>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|language-policy|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--evidence-root <dir>] [--source <seam>=<clone>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 
 export function receiptStoreFromEnvironment(environment: NodeJS.ProcessEnv): LocalRunReceiptStore {
@@ -958,6 +980,7 @@ export async function runCli(
               { family: "public_safety", file: "public-safety-audit.json" },
               { family: "github_actions", file: "github-actions-audit.json" },
               { family: "semantic_boundary", file: "semantic-audit.json" },
+              { family: "language_policy", file: "language-policy-audit.json" },
             ];
             const results = families
               .filter((entry) => existsSync(join(bundle, entry.file)))

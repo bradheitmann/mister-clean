@@ -502,6 +502,35 @@ commit written as `binding: "unbound"` with a reason is an honest record and
 always a refusal. Like `attest`, this verb runs without the runtime attestation,
 because it asserts nothing about the runtime, only about the record and the
 bytes it cites.
+## Declared language policy
+
+A repository that forbids languages declares it in
+`.mister-clean/language-policy.json`:
+
+```json
+{
+  "schema": "mister-clean.language-policy/1",
+  "forbid_extensions": [".py", ".js", ".mjs"],
+  "allow": ["vendor/**"],
+  "generated": ["dist/*.js"]
+}
+```
+
+`mister-clean audit language-policy <repo> --json` reads the tracked surface
+only (one Git listing, never a walk). Every tracked path whose extension is
+forbidden and that matches neither `allow` nor `generated` is a
+`forbidden_language` finding (exit 1). Paths matching `generated` are reported
+as `generated_exempt` with a count and their paths, never as findings, so they
+stay visible. A root `.lang-guard-allow` file (one glob per line, `#` comments)
+is read as an extra `allow` source; it is an interop source, not a requirement.
+Without a policy file the family reports `not_applicable` and zero findings;
+there is no built-in forbid list. A malformed policy (bad JSON, unknown key,
+wrong schema, an empty or malformed `forbid_extensions`) refuses with a typed
+`language_policy_invalid` and exit 2. `prepare` writes the result as
+`language-policy-audit.json` in the bundle, and run receipts carry the family
+`language_policy` with anchor kind `file`, so `second-pass` reads a ported file
+as `cleared` and an unreported tracked file as a MISS. Findings are not yet
+closeout root debts.
 
 ## Public-safety boundary
 

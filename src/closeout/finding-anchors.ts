@@ -29,10 +29,16 @@ export const RECEIPT_FAMILIES = [
   "github_actions",
   "repository_boundaries",
   "semantic_boundary",
+  "language_policy",
 ] as const;
 export type ReceiptFamily = (typeof RECEIPT_FAMILIES)[number];
 
-export const ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy"] as const;
+/**
+ * `file`: the finding is about a tracked path itself (its language), not about
+ * bytes inside it; the content digest binds the rule and the extension, so an
+ * edit to the file leaves the fingerprint unchanged.
+ */
+export const ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy", "file"] as const;
 export type AnchorKind = (typeof ANCHOR_KINDS)[number];
 
 export interface FindingAnchor {
@@ -66,6 +72,7 @@ export type EarlierBytesProbe =
   | { readonly kind: "value_digest"; readonly rule: string; readonly value_sha256: string }
   | { readonly kind: "detail_digest"; readonly blob_oid: string | null }
   | { readonly kind: "whole_repo"; readonly content_sha256: string }
+  | { readonly kind: "file" }
   | { readonly kind: "legacy" };
 
 export interface AnchoredFinding {
@@ -179,6 +186,10 @@ export function receiptFindingsFromAudit(
     if (!Array.isArray(record.findings) || !Array.isArray(record.unassessed)) {
       throw new Error("public_safety: audit result is not canonical");
     }
+  } else if (family === "language_policy") {
+    if (record.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record.findings)) {
+      throw new Error("language_policy: audit result is not canonical");
+    }
   } else {
     const errors = detectorResultShapeErrors(family, audit);
     if (errors.length > 0) throw new Error(`${family}: audit result is not canonical: ${errors[0]}`);
@@ -260,6 +271,12 @@ export function receiptFindingsFromAudit(
       kind = "detail_digest";
       content = sha256Text(asString(row.detail, "repository_boundaries.detail"));
       probe = { kind, blob_oid: blobOid };
+    } else if (family === "language_policy") {
+      rule = asString(row.rule, "language_policy.rule");
+      legacy = asString(row.fingerprint, "language_policy.fingerprint");
+      kind = "file";
+      content = sha256Text(`${rule}\0${asString(row.extension, "language_policy.extension")}`);
+      probe = { kind };
     } else {
       rule = asString(row.code, "semantic_boundary.code");
       legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
