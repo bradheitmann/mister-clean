@@ -2,8 +2,8 @@
 artifact_type: reference
 classification_rationale: Cross-repository engineering standard; adopted per repository by its maintainer. Not a lifecycle-bearing planning artifact.
 title: Common engineering standard
-version: 0.2-reviewed
-ratification: pending-owner
+version: "0.2"
+ratification: owner-ratified 2026-11-04 (charter/owner-decisions/2026-11-04-ratify-intent-and-standard.md)
 ---
 
 # Common engineering standard (v0.2, co-author reviewed)
