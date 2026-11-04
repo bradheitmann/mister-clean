@@ -14,17 +14,17 @@ import {
 } from "../src/attestation.ts";
 
 function usage() {
-  console.error("usage: bun scripts/generate_release_attestation.mjs <--source-check|--check|--write|--capsule-write> [--root <path>] [--source-root <path>] [--json]");
+  console.error("usage: bun scripts/generate_release_attestation.ts <--source-check|--check|--write|--capsule-write> [--root <path>] [--source-root <path>] [--json]");
 }
 
-function removeFlag(args, flag) {
+function removeFlag(args: string[], flag: string): boolean {
   const index = args.indexOf(flag);
   if (index < 0) return false;
   args.splice(index, 1);
   return true;
 }
 
-function removeOption(args, option) {
+function removeOption(args: string[], option: string): string | undefined {
   const index = args.indexOf(option);
   if (index < 0) return undefined;
   const value = args[index + 1];
@@ -33,7 +33,8 @@ function removeOption(args, option) {
   return value;
 }
 
-const args = process.argv.slice(2);
+// @cloudflare/workers-types declares `process` as `any`; annotate what is read from it.
+const args: string[] = process.argv.slice(2);
 const sourceCheck = removeFlag(args, "--source-check");
 const check = removeFlag(args, "--check");
 const write = removeFlag(args, "--write");
@@ -50,7 +51,8 @@ if (args.length || [sourceCheck, check, write, capsuleWrite].filter(Boolean).len
 }
 
 if (capsuleWrite) {
-  const sourceRoot = resolve(sourceRootValue);
+  // The usage guard exits when --capsule-write lacks --source-root.
+  const sourceRoot = resolve(sourceRootValue!);
   if (sourceRoot === root) throw new Error("capsule root must differ from the source repository root");
   const source = await checkReleaseSourceConsistency(sourceRoot);
   if (source.status !== "pass" || !source.source || !source.package) {
@@ -60,8 +62,9 @@ if (capsuleWrite) {
   }
   const manifest = await generateAttestedPackageManifest(root);
   await writeFile(join(root, "MANIFEST.sha256"), manifest.content, "utf8");
-  const attestation = await createReleaseAttestation(root, source.source);
-  if (attestation.package.name !== source.package.name || attestation.package.version !== source.package.version) {
+  // The guard above exits unless both are present; `process` is `any`, so exit() does not narrow.
+  const attestation = await createReleaseAttestation(root, source.source!);
+  if (attestation.package.name !== source.package!.name || attestation.package.version !== source.package!.version) {
     throw new Error("capsule package identity differs from the verified source package");
   }
   await writeFile(join(root, RELEASE_ATTESTATION_FILE), releaseAttestationBytes(attestation), "utf8");
