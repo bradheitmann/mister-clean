@@ -42,7 +42,7 @@ import {
   type FileCensus,
 } from "./census.js";
 import { receiptFindingsFromAudit, type ReceiptFamily } from "./closeout/finding-anchors.js";
-import { REQUIRE_BOUND_FIELDS, type RequireBoundField, validateEvalCase } from "./eval-case.js";
+import { REQUIRE_BOUND_FIELDS, type RequireBoundField, sourceEnvironmentName, validateEvalCase } from "./eval-case.js";
 import type { RepositoryObject } from "./closeout/repository-object.js";
 import {
   assembleRunReceipt,
@@ -809,6 +809,22 @@ async function runSecondPassCommand(
  * this runtime, only about the record and the repository bytes it cites, and
  * the charter's Slice Zero command runs it from a source checkout.
  */
+function emptyToUndefined(value: string | undefined): string | undefined {
+  return value === undefined || value.trim().length === 0 ? undefined : value;
+}
+
+/** Seams a (possibly malformed) record cites through pinned_external verifier or base commit; empty when unreadable. */
+function seamsCitedBy(parsed: unknown): string[] {
+  const seams = new Set<string>();
+  const top = record(parsed);
+  for (const key of ["verifier", "base_commit"] as const) {
+    const field = record(top?.[key]);
+    const manifest = record(field?.manifest);
+    if (field?.binding === "pinned_external" && typeof manifest?.seam === "string" && manifest.seam.length > 0) seams.add(manifest.seam);
+  }
+  return [...seams];
+}
+
 async function runEvalCase(args: string[], io: CliIO): Promise<number> {
   const subcommand = args.shift();
   if (subcommand !== "validate") throw new UsageError("eval-case requires validate");
@@ -816,6 +832,10 @@ async function runEvalCase(args: string[], io: CliIO): Promise<number> {
   if (path === undefined) throw new UsageError("eval-case validate requires a record path");
   const repo = removeOption(args, "--repo") ?? process.cwd();
   const requireBoundOption = removeOption(args, "--require-bound");
+  // Real infrastructure for pinned citations: a private evidence root and local source clones.
+  // Flags win; otherwise the environment names them, so a committed command string never carries a private path.
+  const evidenceRoot = removeOption(args, "--evidence-root") ?? emptyToUndefined(process.env.MISTER_CLEAN_EVIDENCE_ROOT);
+  const sourceOptions = removeRepeatedOption(args, "--source");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
   const requireBound: RequireBoundField[] = [];
@@ -825,8 +845,18 @@ async function runEvalCase(args: string[], io: CliIO): Promise<number> {
     }
     requireBound.push(field as RequireBoundField);
   }
+  const sources: Record<string, string> = {};
+  for (const option of sourceOptions) {
+    const equals = option.indexOf("=");
+    if (equals <= 0 || equals === option.length - 1) throw new UsageError("--source requires <seam>=<path to a local clone>");
+    sources[option.slice(0, equals)] = option.slice(equals + 1);
+  }
   if (!existsSync(repo) || !statSync(repo).isDirectory()) {
     io.stderr(`ERROR: --repo is not a directory: ${resolve(repo)}`);
+    return 2;
+  }
+  if (evidenceRoot !== undefined && (!existsSync(evidenceRoot) || !statSync(evidenceRoot).isDirectory())) {
+    io.stderr(`ERROR: --evidence-root is not a directory: ${resolve(evidenceRoot)}`);
     return 2;
   }
   let parsed: unknown;
@@ -836,19 +866,27 @@ async function runEvalCase(args: string[], io: CliIO): Promise<number> {
     parsed = undefined;
     io.stderr(`ERROR: record_shape ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path, requireBound });
+  // Seams the record names but no --source covered may still be named by MISTER_CLEAN_SOURCE_<SEAM>.
+  for (const seam of seamsCitedBy(parsed)) {
+    const fromEnvironment = emptyToUndefined(process.env[sourceEnvironmentName(seam)]);
+    if (sources[seam] === undefined && fromEnvironment !== undefined) sources[seam] = fromEnvironment;
+  }
+  const result = validateEvalCase({
+    record: parsed, repositoryRoot: repo, recordPath: path, requireBound, sources,
+    ...(evidenceRoot === undefined ? {} : { evidenceRoot }),
+  });
   if (json) io.stdout(JSON.stringify(result, null, 2));
   else {
     for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
     // Name every citation that was not re-verified here; a count alone hides what was taken on trust.
     const list = (items: readonly string[]): string => (items.length === 0 ? "none" : items.join(","));
-    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} external=${list(result.external)} unverified=${list(result.unverified)} refusals=${result.refusals.length} require_bound=${list(result.require_bound)} registry_export=${result.registry_export_version ?? "unpinned"}`);
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} pinned_external=${list(result.pinned_external)} recomputed=${list(result.recomputed)} external=${list(result.external)} unverified=${list(result.unverified)} refusals=${result.refusals.length} require_bound=${list(result.require_bound)} evidence_root=${result.evidence_root === null ? "none" : "set"} sources=${list(Object.keys(result.sources))} registry_export=${result.registry_export_version ?? "unpinned"}`);
   }
   return result.status === "eval_case_valid" ? 0 : 2;
 }
 
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--evidence-root <dir>] [--source <seam>=<clone>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 
 export function receiptStoreFromEnvironment(environment: NodeJS.ProcessEnv): LocalRunReceiptStore {

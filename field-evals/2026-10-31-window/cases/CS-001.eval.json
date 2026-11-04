@@ -26,17 +26,23 @@
   "verifier": {
     "name": "evaluator pin of the control-pair qualification gate (a good control must pass 2 of 3); no constant gate script existed, the per-session drivers differ, so the constant is the pinned evaluator source",
     "kind": "evaluator source pin (validator source plus review source), with the receipt tool's countercases as the mutant-check analogue",
-    "binding": "external",
-    "repository": "specification-pipeline (the Rust spec-compiler source project; named generically per the field-evals ledger rules)",
-    "location": "evidence owner A/EXEC-PM provenance note of 2026-11-03, citing the source project's tracked WAVES snapshot of 2026-11-03 at lines 4634, 4711-4712 and 4886-4887 and its profile-openrouter-2 done list at lines 108 and 118-120; digests recomputed at both base commits",
+    "binding": "pinned_external",
+    "repository": "specification-pipeline",
+    "location": "the source project (a Rust spec-compiler, named generically per the field-evals ledger rules) publishes an RC-001 evidence manifest, revision 2, listing every evaluator file and its sha256 at both base commits, the composite algorithm with its machine-readable header, the receipt tool's digest and the inferred session map; the evidence owner (A/EXEC-PM) holds it in a private evidence root outside this repository, because it names the source project",
+    "manifest": {
+      "seam": "specification-pipeline",
+      "source_commit": "90c6f9a0",
+      "file": "RC-001-EVIDENCE-MANIFEST.v2.json",
+      "sha256": "a7464d17dd860d8d2d4091b2c325a660255fd02018cfed49f57cd2cbfc3f3cac"
+    },
     "sha256": "ca5ca4da37b80008d28b9cabbfcbed4d68e01f00702d1182a44b9ac6bc5c2a4c",
     "components": [
       {
-        "name": "validator_source (runner.rs plus runner/**)",
+        "name": "validator_source (runner.rs plus runner/**, 38 files; composite over header, byte-sorted paths and u64 big-endian length prefixes)",
         "sha256": "ca5ca4da37b80008d28b9cabbfcbed4d68e01f00702d1182a44b9ac6bc5c2a4c"
       },
       {
-        "name": "review_source (runner/review.rs)",
+        "name": "review_source (runner/review.rs, raw bytes)",
         "sha256": "2b7a1560ac837b67c9a77a6db45a5a0ecdc3464df39dd535ec68af45d5877a35"
       },
       {
@@ -46,9 +52,15 @@
     ]
   },
   "base_commit": {
-    "repository": "specification-pipeline (the Rust spec-compiler source project; named generically per the field-evals ledger rules)",
-    "binding": "external",
-    "location": "evidence owner A/EXEC-PM provenance note of 2026-11-03, citing the source project's tracked WAVES snapshot of 2026-11-03 at lines 4657 and 4711-4712 (set A) and 4864, 4870, 4873-4874 and 5132 (set B); the same 24 control files at both commits, only host-profile files differ",
+    "repository": "specification-pipeline",
+    "binding": "pinned_external",
+    "location": "the same RC-001 evidence manifest (revision 2): one base commit per control-pair set, the same 24 control files at both commits (only host-profile files differ), and a session map whose every entry is marked inferred from the tallies because the source project never recorded it",
+    "manifest": {
+      "seam": "specification-pipeline",
+      "source_commit": "90c6f9a0",
+      "file": "RC-001-EVIDENCE-MANIFEST.v2.json",
+      "sha256": "a7464d17dd860d8d2d4091b2c325a660255fd02018cfed49f57cd2cbfc3f3cac"
+    },
     "session_map": "inferred",
     "commits": [
       {

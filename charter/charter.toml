@@ -7,6 +7,12 @@ owner = "repository owner; operated by the project PM"
 [slice_zero]
 description = "One recorded field failure (case CS-001 from the 2026-10-31 field window) replayed with its control agent in an isolated worktree until it meets or misses its repeat floor, written as a durable eval case that cites two agent cards, the constant verifier and the base commit, and read back by a validator"
 command = "node bin/mister-clean.js eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo . --require-bound verifier,base_commit"
+# Real infrastructure for this command: the record's verifier and base commits are pinned to an evidence manifest
+# that names the source project, so it is never vendored here. The validator reads MISTER_CLEAN_EVIDENCE_ROOT
+# (a private directory outside every repository holding that manifest; pinned_external) and, when set,
+# MISTER_CLEAN_SOURCE_SPECIFICATION_PIPELINE (a local clone of the source seam; the pins are recomputed from it,
+# class recomputed). Without them the command refuses with binding_required, which is the correct answer on a
+# host that lacks the evidence. See README "Eval cases" for how a third party obtains the manifest.
 proven_on = ""          # ISO date when it last ran green on real infrastructure, else empty
 # Verification is a loop: budget it.
 [verification_budget]
