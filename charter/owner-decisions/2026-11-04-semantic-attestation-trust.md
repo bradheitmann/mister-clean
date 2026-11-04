@@ -34,3 +34,21 @@
 
 ## Use
 This authorizes the attestation lane for SEM-EXECUTABLE (the executable surfaces). It does not by itself retire that finding: an attestation signed by MC/QA over a real run, validated by `audit semantic` v2, does.
+
+## Owner approval of every workspace policy (2026-11-04)
+Owner's words: "Approve all." This covers the policies below, each trusting one independent_qa seat with that repository's own key, valid 2026-11-04 to 2027-02-02. It also accepts the custody limit as stated above, option (a): independence rests on rule and the Doppler access log, not on separate OS users. Each policy was promoted from its draft only after its stored sha256 matched the approved table; the drafts were then removed.
+
+| Repository | Trusted seat | Policy sha256 (stored bytes) |
+|---|---|---|
+| mister-clean | MC/QA:pi:openai/gpt-6.1-terra:openrouter | b384b2016f6152cdf9b2dfce2baaf4b5cd8e7cebd650e4f00b8e8b77c6e4c4a9 |
+| odin | OD/QA:pi:xiaomi/mimo-v2.6-flash:openrouter | 2dce07712af270bd133ba6e0603e0d494c5c0abc581524bc297a232724b459dd |
+| lumbr | LU/QA:pi:xiaomi/mimo-v2.6-flash:openrouter | 8f030e40f25d232edde2f41bae9c3ceb70b12a3f8193828061d05a83f1ed02a8 |
+| plangraph | PG/QA:pi:xiaomi/mimo-v2.6-flash:openrouter | 2e2649744efbe04c6f0d6c40e302f60d9b1c561701caf634ac09137c39f78dc8 |
+| polyswarm | PS/QA:pi:xiaomi/mimo-v2.6-flash:openrouter | c542232b84835c949e0e7805f9f6fd643ac387ec23e254560bb3f30c1e80597f |
+| model-tier-drop | MTD/QA:pi:xiaomi/mimo-v2.6-flash:openrouter | 7fb3ddfbd88c3bc95e5ea1ed315cab76cc4e81361267a11100b851f42944c101 |
+| model-atlas | MA/QA:pi:xiaomi/mimo-v2.6-flash:openrouter | a855fd209f2e63127db6bad6181f6b62446cee3f5d479d40e401fa1bcd3f1fa0 |
+| charter | CH/QA:pi:xiaomi/mimo-v2.6-flash:openrouter | 41db601aec2a5c843f09b03f22e2000be1e5f78d2b582a78f9587cae91c5a410 |
+| reveng | A/CAPTAIN:opencode:xiaomi/mimo-v2.6-pro:openrouter | baa13927991ec71d702c29a9d4aac8455af7779523aeb0f91a871457d7feb405 |
+| holden-mcp | SEAT:codex-cli:gpt-6-luna:openai | f9d1e027ffa6df48095d6c5085d23dd023f53fe5ea6f45d35e1db129ff8839d5 |
+
+Each repository's own charter records its row. holden-mcp sits outside this workspace and was included at the owner's request.
