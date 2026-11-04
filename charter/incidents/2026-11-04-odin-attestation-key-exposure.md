@@ -27,4 +27,4 @@ When you provision a secret, ship the only allowed way to inspect it at the same
 
 ## Obligations
 - O-ATTEST-INSPECT-1: move the helper into Mister Clean as a packaged command, with a test proving that no byte of any secret value can reach its output.
-- Owner: approve odin's new policy `cc052efd…`; until then odin has no active policy.
+- Done: the owner approved odin's new policy ("approve odin", 2026-11-04); it is active, sha256 `cc052efd1f3283b0773fd0dc55f032e73c44f45267962c93b4cdd9dca7bf1ad4`.
