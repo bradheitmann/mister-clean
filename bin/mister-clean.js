@@ -18348,7 +18348,67 @@ var DISCOVERY_RECORD_TYPE = "mister-clean.native-gate-discovery";
 var COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
 var DISCOVERY_SCHEMA_VERSION = "1.4";
 var LEGACY_DISCOVERY_SCHEMA_VERSION = "1.3";
-var COVERAGE_SCHEMA_VERSION = "1.4";
+var COVERAGE_SCHEMA_VERSION = "1.5";
+var LEGACY_COVERAGE_SCHEMA_VERSION = "1.4";
+var NATIVE_GATE_BUDGET_PATH = ".mister-clean/native-gates.json";
+var NATIVE_GATE_BUDGET_SCHEMA = "mister-clean.native-gates/1";
+var NATIVE_GATE_TIMEOUT_MAX_MS = 2 * 60 * 60 * 1e3;
+var NativeGateBudgetInvalidError = class extends Error {
+  constructor(path, reason) {
+    super(`native_gate_budget_invalid: ${path}: ${reason}`);
+    this.path = path;
+    this.reason = reason;
+    this.name = "NativeGateBudgetInvalidError";
+  }
+  code = "native_gate_budget_invalid";
+};
+function loadNativeGateBudgets(repository, knownGateIds) {
+  const configPath = join6(resolve11(repository), ...NATIVE_GATE_BUDGET_PATH.split("/"));
+  let stat3;
+  try {
+    stat3 = lstatSync7(configPath);
+  } catch {
+    return null;
+  }
+  const invalid = (reason) => new NativeGateBudgetInvalidError(NATIVE_GATE_BUDGET_PATH, reason);
+  if (!stat3.isFile()) throw invalid("not a regular file");
+  const bytes2 = readFileSync6(configPath);
+  let parsed;
+  try {
+    parsed = JSON.parse(UTF82.decode(bytes2));
+  } catch (error) {
+    throw invalid(`malformed JSON: ${errorMessage2(error)}`);
+  }
+  const top = record(parsed);
+  if (!top) throw invalid("expected a JSON object");
+  const unknownKeys = Object.keys(top).filter((key) => key !== "schema" && key !== "gates").sort();
+  if (unknownKeys.length) throw invalid(`unknown key(s) ${JSON.stringify(unknownKeys)}`);
+  if (top.schema !== NATIVE_GATE_BUDGET_SCHEMA) {
+    throw invalid(`unknown schema ${JSON.stringify(top.schema)}; expected ${JSON.stringify(NATIVE_GATE_BUDGET_SCHEMA)}`);
+  }
+  const gatesRecord = record(top.gates);
+  if (!gatesRecord) throw invalid("gates must be an object keyed by gate id");
+  const gates = /* @__PURE__ */ new Map();
+  for (const [gateId, rawBudget] of Object.entries(gatesRecord)) {
+    if (!knownGateIds.has(gateId)) throw invalid(`gates[${JSON.stringify(gateId)}] is not a gate this repository's discovery defines`);
+    const budget = record(rawBudget);
+    if (!budget) throw invalid(`gates[${JSON.stringify(gateId)}] must be an object`);
+    const extra = Object.keys(budget).filter((key) => key !== "timeout_ms" && key !== "reason").sort();
+    if (extra.length) throw invalid(`gates[${JSON.stringify(gateId)}] has unknown key(s) ${JSON.stringify(extra)}`);
+    const timeout = budget.timeout_ms;
+    if (typeof timeout !== "number" || !Number.isSafeInteger(timeout) || timeout <= 0) {
+      throw invalid(`gates[${JSON.stringify(gateId)}].timeout_ms must be a positive integer of milliseconds`);
+    }
+    if (timeout > NATIVE_GATE_TIMEOUT_MAX_MS) {
+      throw invalid(`gates[${JSON.stringify(gateId)}].timeout_ms ${String(timeout)} exceeds NATIVE_GATE_TIMEOUT_MAX_MS ${String(NATIVE_GATE_TIMEOUT_MAX_MS)}`);
+    }
+    if (typeof budget.reason !== "string" || budget.reason.trim() === "") {
+      throw invalid(`gates[${JSON.stringify(gateId)}].reason must be a nonempty string`);
+    }
+    gates.set(gateId, { timeout_ms: timeout, reason: budget.reason });
+  }
+  return { path: NATIVE_GATE_BUDGET_PATH, sha256: sha2567(bytes2), gates };
+}
 var SCHEMA_VERSION2 = DISCOVERY_SCHEMA_VERSION;
 var EXCLUDED_CANDIDATE_KIND = "gate_candidate_excluded_by_planning_policy";
 var EXCLUDED_CANDIDATE_MANIFESTS = /* @__PURE__ */ new Map([
@@ -19611,6 +19671,34 @@ function validClock(value) {
   const milliseconds = Date.parse(value);
   return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value ? milliseconds : void 0;
 }
+function validateBudgetEvidence(value, label, errors) {
+  const before = errors.length;
+  const raw = record(value);
+  if (!raw) {
+    errors.push(`${label} must be an object`);
+    return false;
+  }
+  const positiveBudget = (field2) => {
+    const number = raw[field2];
+    if (typeof number !== "number" || !Number.isSafeInteger(number) || number <= 0 || number > NATIVE_GATE_TIMEOUT_MAX_MS) {
+      errors.push(`${label}.${field2} must be a positive integer of milliseconds no greater than ${String(NATIVE_GATE_TIMEOUT_MAX_MS)}`);
+    }
+  };
+  if (raw.source === "default") {
+    validateExactKeys(raw, ["source", "timeout_ms"], label, errors);
+    positiveBudget("timeout_ms");
+  } else if (raw.source === "repository") {
+    validateExactKeys(raw, ["source", "timeout_ms", "path", "sha256", "reason", "default_timeout_ms"], label, errors);
+    positiveBudget("timeout_ms");
+    positiveBudget("default_timeout_ms");
+    if (raw.path !== NATIVE_GATE_BUDGET_PATH) errors.push(`${label}.path must be ${NATIVE_GATE_BUDGET_PATH}`);
+    if (typeof raw.sha256 !== "string" || !HEX642.test(raw.sha256)) errors.push(`${label}.sha256 is invalid`);
+    if (typeof raw.reason !== "string" || raw.reason.trim() === "") errors.push(`${label}.reason must be a nonempty string`);
+  } else {
+    errors.push(`${label}.source must be "default" or "repository"`);
+  }
+  return errors.length === before;
+}
 async function validateNativeGateCoverage(coverage, discovery, closingRepositoryObject, evidenceDirectory, options = {}) {
   const errors = [...validateDiscoveryIntegrity(discovery)];
   const requirePassing = options.require_passing ?? true;
@@ -19628,7 +19716,8 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
   ], "coverage", errors);
   if (!rawCoverage) return errors;
   if (rawCoverage.record_type !== COVERAGE_RECORD_TYPE) errors.push("coverage.record_type is invalid");
-  if (rawCoverage.schema_version !== COVERAGE_SCHEMA_VERSION) errors.push("coverage.schema_version is invalid");
+  const legacyCoverage = rawCoverage.schema_version === LEGACY_COVERAGE_SCHEMA_VERSION;
+  if (rawCoverage.schema_version !== COVERAGE_SCHEMA_VERSION && !legacyCoverage) errors.push("coverage.schema_version is invalid");
   if (typeof rawCoverage.discovery_sha256 !== "string" || !HEX642.test(rawCoverage.discovery_sha256)) {
     errors.push("coverage.discovery_sha256 is invalid");
   } else if (rawCoverage.discovery_sha256 !== discovery.catalog_sha256) {
@@ -19719,9 +19808,11 @@ async function validateNativeGateCoverage(coverage, discovery, closingRepository
       "exit_code",
       "signal",
       "stdout_ref",
-      "stderr_ref"
+      "stderr_ref",
+      ...legacyCoverage ? [] : ["budget"]
     ], label, errors);
     if (!execution) continue;
+    if (!legacyCoverage) validateBudgetEvidence(execution.budget, `${label}.budget`, errors);
     if (typeof execution.gate_id !== "string" || !/^[a-z0-9][a-z0-9:._-]*$/u.test(execution.gate_id)) {
       errors.push(`${label}.gate_id is invalid`);
       continue;
@@ -25202,7 +25293,20 @@ ${diagnostic}` : diagnostic;
     stderr_ref: stderrRef
   };
 }
-async function executeGate(repository, gate, discoveryObject, evidenceRoot, options, skip, now, lease) {
+async function executeGate(repository, gate, discoveryObject, evidenceRoot, options, budget, skip, now, lease) {
+  const execution = await executeGateUnderDeadline(
+    repository,
+    gate,
+    discoveryObject,
+    evidenceRoot,
+    { ...options, timeout_ms: budget.timeout_ms },
+    skip,
+    now,
+    lease
+  );
+  return { ...execution, budget };
+}
+async function executeGateUnderDeadline(repository, gate, discoveryObject, evidenceRoot, options, skip, now, lease) {
   const subjectStartState = captureSubjectState(repository);
   const startObject = subjectStartState.repository_object;
   if (!stableEqual(startObject, discoveryObject)) {
@@ -25449,6 +25553,18 @@ async function runNativeGates(repository, discovery, evidenceDirectory, runOptio
         throw new Error(`cannot skip unknown or non-required gate ${JSON.stringify(id)}`);
       }
     }
+    const budgets = loadNativeGateBudgets(root, new Set(discovery.gates.map((gate) => gate.id)));
+    const budgetFor = (gateId) => {
+      const declared = budgets?.gates.get(gateId);
+      return declared ? {
+        source: "repository",
+        timeout_ms: declared.timeout_ms,
+        path: budgets.path,
+        sha256: budgets.sha256,
+        reason: declared.reason,
+        default_timeout_ms: timeoutMs
+      } : { source: "default", timeout_ms: timeoutMs };
+    };
     await mkdir3(evidenceDirectory, { recursive: true, mode: 448 });
     const evidenceRoot = await realpath6(resolve16(evidenceDirectory));
     const relation = relative13(root, evidenceRoot);
@@ -25467,7 +25583,8 @@ async function runNativeGates(repository, discovery, evidenceDirectory, runOptio
         gate,
         discovery.repository_object,
         evidenceRoot,
-        { timeout_ms: timeoutMs, max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
+        { max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
+        budgetFor(gate.id),
         skip,
         now,
         lease
