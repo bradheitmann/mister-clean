@@ -10,6 +10,9 @@ import {
 import {
   COVERAGE_RECORD_TYPE,
   COVERAGE_SCHEMA_VERSION,
+  LEGACY_COVERAGE_SCHEMA_VERSION,
+  NATIVE_GATE_BUDGET_PATH,
+  NATIVE_GATE_TIMEOUT_MAX_MS,
   HEX64,
   NATIVE_GATE_FAILURE_REASONS,
   NATIVE_GATE_KINDS,
@@ -103,6 +106,36 @@ export function validClock(value: string): number | undefined {
   return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value ? milliseconds : undefined;
 }
 
+/** The budget an execution ran under: the default, or a repository declaration with its provenance. */
+export function validateBudgetEvidence(value: unknown, label: string, errors: string[]): boolean {
+  const before = errors.length;
+  const raw = record(value);
+  if (!raw) {
+    errors.push(`${label} must be an object`);
+    return false;
+  }
+  const positiveBudget = (field: string): void => {
+    const number = raw[field];
+    if (typeof number !== "number" || !Number.isSafeInteger(number) || number <= 0 || number > NATIVE_GATE_TIMEOUT_MAX_MS) {
+      errors.push(`${label}.${field} must be a positive integer of milliseconds no greater than ${String(NATIVE_GATE_TIMEOUT_MAX_MS)}`);
+    }
+  };
+  if (raw.source === "default") {
+    validateExactKeys(raw, ["source", "timeout_ms"], label, errors);
+    positiveBudget("timeout_ms");
+  } else if (raw.source === "repository") {
+    validateExactKeys(raw, ["source", "timeout_ms", "path", "sha256", "reason", "default_timeout_ms"], label, errors);
+    positiveBudget("timeout_ms");
+    positiveBudget("default_timeout_ms");
+    if (raw.path !== NATIVE_GATE_BUDGET_PATH) errors.push(`${label}.path must be ${NATIVE_GATE_BUDGET_PATH}`);
+    if (typeof raw.sha256 !== "string" || !HEX64.test(raw.sha256)) errors.push(`${label}.sha256 is invalid`);
+    if (typeof raw.reason !== "string" || raw.reason.trim() === "") errors.push(`${label}.reason must be a nonempty string`);
+  } else {
+    errors.push(`${label}.source must be "default" or "repository"`);
+  }
+  return errors.length === before;
+}
+
 export async function validateNativeGateCoverage(
   coverage: NativeGateCoverage,
   discovery: NativeGateDiscovery,
@@ -124,7 +157,8 @@ export async function validateNativeGateCoverage(
   ], "coverage", errors);
   if (!rawCoverage) return errors;
   if (rawCoverage.record_type !== COVERAGE_RECORD_TYPE) errors.push("coverage.record_type is invalid");
-  if (rawCoverage.schema_version !== COVERAGE_SCHEMA_VERSION) errors.push("coverage.schema_version is invalid");
+  const legacyCoverage = rawCoverage.schema_version === LEGACY_COVERAGE_SCHEMA_VERSION;
+  if (rawCoverage.schema_version !== COVERAGE_SCHEMA_VERSION && !legacyCoverage) errors.push("coverage.schema_version is invalid");
   if (typeof rawCoverage.discovery_sha256 !== "string" || !HEX64.test(rawCoverage.discovery_sha256)) {
     errors.push("coverage.discovery_sha256 is invalid");
   } else if (rawCoverage.discovery_sha256 !== discovery.catalog_sha256) {
@@ -205,8 +239,10 @@ export async function validateNativeGateCoverage(
       "resolved_executable", "invoked_executable", "executable_sha256", "started_at", "finished_at",
       "start_repository_object", "end_repository_object", "subject_start_state", "subject_end_state",
       "exit_code", "signal", "stdout_ref", "stderr_ref",
+      ...(legacyCoverage ? [] : ["budget"]),
     ], label, errors);
     if (!execution) continue;
+    if (!legacyCoverage) validateBudgetEvidence(execution.budget, `${label}.budget`, errors);
     if (typeof execution.gate_id !== "string" || !/^[a-z0-9][a-z0-9:._-]*$/u.test(execution.gate_id)) {
       errors.push(`${label}.gate_id is invalid`);
       continue;

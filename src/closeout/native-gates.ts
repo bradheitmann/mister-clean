@@ -130,12 +130,31 @@ export interface NativeGateOutputRef {
   readonly complete: boolean;
 }
 
+/**
+ * The time budget one gate execution ran under. `default` is the run's
+ * default (the runner option or DEFAULT_TIMEOUT_MS). `repository` is a budget
+ * the repository declared in `.mister-clean/native-gates.json`; the evidence
+ * names the file, its digest, the reason, and the default it replaced.
+ */
+export type NativeGateBudgetEvidence =
+  | { readonly source: "default"; readonly timeout_ms: number }
+  | {
+    readonly source: "repository";
+    readonly timeout_ms: number;
+    readonly path: string;
+    readonly sha256: string;
+    readonly reason: string;
+    readonly default_timeout_ms: number;
+  };
+
 export interface NativeGateExecution {
   readonly gate_id: string;
   readonly kind: NativeGateKind;
   readonly isolation: "disposable_exact_object_snapshot";
   readonly state: NativeGateExecutionState;
   readonly failure_reason: NativeGateFailureReason | null;
+  /** Absent only on a legacy coverage record (schema 1.4). */
+  readonly budget?: NativeGateBudgetEvidence;
   readonly command: NativeGateCommand;
   readonly command_sha256: string;
   readonly resolved_executable: string | null;
@@ -155,7 +174,8 @@ export interface NativeGateExecution {
 
 export interface NativeGateCoverage {
   readonly record_type: "mister-clean.native-gate-coverage";
-  readonly schema_version: "1.4";
+  /** `1.4` records predate per-execution budget evidence; fresh runs write `1.5`. */
+  readonly schema_version: "1.4" | "1.5";
   readonly discovery_sha256: string;
   readonly closing_repository_object: RepositoryObject;
   readonly required_gate_ids: readonly string[];
@@ -242,7 +262,92 @@ export const COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
 export const DISCOVERY_SCHEMA_VERSION = "1.4";
 /** Discovery records written before `excluded_candidates` existed; still readable. */
 const LEGACY_DISCOVERY_SCHEMA_VERSION = "1.3";
-export const COVERAGE_SCHEMA_VERSION = "1.4";
+export const COVERAGE_SCHEMA_VERSION = "1.5";
+/** Coverage records written before per-execution budget evidence; still readable. */
+export const LEGACY_COVERAGE_SCHEMA_VERSION = "1.4";
+
+/** Repository-relative location of the declared per-gate time budgets. */
+export const NATIVE_GATE_BUDGET_PATH = ".mister-clean/native-gates.json";
+export const NATIVE_GATE_BUDGET_SCHEMA = "mister-clean.native-gates/1";
+/** Hard ceiling on any declared gate budget: two hours. */
+export const NATIVE_GATE_TIMEOUT_MAX_MS = 2 * 60 * 60 * 1_000;
+
+/** Typed refusal for an invalid `.mister-clean/native-gates.json`; raised before any gate runs. */
+export class NativeGateBudgetInvalidError extends Error {
+  readonly code = "native_gate_budget_invalid";
+  constructor(readonly path: string, readonly reason: string) {
+    super(`native_gate_budget_invalid: ${path}: ${reason}`);
+    this.name = "NativeGateBudgetInvalidError";
+  }
+}
+
+export interface NativeGateBudgets {
+  readonly path: string;
+  readonly sha256: string;
+  /** gate id -> declared budget and its reason. */
+  readonly gates: ReadonlyMap<string, { readonly timeout_ms: number; readonly reason: string }>;
+}
+
+/**
+ * Load `.mister-clean/native-gates.json`:
+ *
+ * ```json
+ * { "schema": "mister-clean.native-gates/1",
+ *   "gates": { "node:.:ci-check": { "timeout_ms": 2400000, "reason": "..." } } }
+ * ```
+ *
+ * Returns null when the file is absent (every gate keeps the run's default).
+ * Refuses, typed, for malformed JSON, an unknown schema or key, a gate id the
+ * supplied discovery does not define, a `timeout_ms` that is not a positive
+ * safe integer or exceeds NATIVE_GATE_TIMEOUT_MAX_MS, or an empty reason.
+ */
+export function loadNativeGateBudgets(repository: string, knownGateIds: ReadonlySet<string>): NativeGateBudgets | null {
+  const configPath = join(resolve(repository), ...NATIVE_GATE_BUDGET_PATH.split("/"));
+  let stat;
+  try {
+    stat = lstatSync(configPath);
+  } catch {
+    return null;
+  }
+  const invalid = (reason: string): NativeGateBudgetInvalidError => new NativeGateBudgetInvalidError(NATIVE_GATE_BUDGET_PATH, reason);
+  if (!stat.isFile()) throw invalid("not a regular file");
+  const bytes = readFileSync(configPath);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(UTF8.decode(bytes));
+  } catch (error) {
+    throw invalid(`malformed JSON: ${errorMessage(error)}`);
+  }
+  const top = record(parsed);
+  if (!top) throw invalid("expected a JSON object");
+  const unknownKeys = Object.keys(top).filter((key) => key !== "schema" && key !== "gates").sort();
+  if (unknownKeys.length) throw invalid(`unknown key(s) ${JSON.stringify(unknownKeys)}`);
+  if (top.schema !== NATIVE_GATE_BUDGET_SCHEMA) {
+    throw invalid(`unknown schema ${JSON.stringify(top.schema)}; expected ${JSON.stringify(NATIVE_GATE_BUDGET_SCHEMA)}`);
+  }
+  const gatesRecord = record(top.gates);
+  if (!gatesRecord) throw invalid("gates must be an object keyed by gate id");
+  const gates = new Map<string, { readonly timeout_ms: number; readonly reason: string }>();
+  for (const [gateId, rawBudget] of Object.entries(gatesRecord)) {
+    if (!knownGateIds.has(gateId)) throw invalid(`gates[${JSON.stringify(gateId)}] is not a gate this repository's discovery defines`);
+    const budget = record(rawBudget);
+    if (!budget) throw invalid(`gates[${JSON.stringify(gateId)}] must be an object`);
+    const extra = Object.keys(budget).filter((key) => key !== "timeout_ms" && key !== "reason").sort();
+    if (extra.length) throw invalid(`gates[${JSON.stringify(gateId)}] has unknown key(s) ${JSON.stringify(extra)}`);
+    const timeout = budget.timeout_ms;
+    if (typeof timeout !== "number" || !Number.isSafeInteger(timeout) || timeout <= 0) {
+      throw invalid(`gates[${JSON.stringify(gateId)}].timeout_ms must be a positive integer of milliseconds`);
+    }
+    if (timeout > NATIVE_GATE_TIMEOUT_MAX_MS) {
+      throw invalid(`gates[${JSON.stringify(gateId)}].timeout_ms ${String(timeout)} exceeds NATIVE_GATE_TIMEOUT_MAX_MS ${String(NATIVE_GATE_TIMEOUT_MAX_MS)}`);
+    }
+    if (typeof budget.reason !== "string" || budget.reason.trim() === "") {
+      throw invalid(`gates[${JSON.stringify(gateId)}].reason must be a nonempty string`);
+    }
+    gates.set(gateId, { timeout_ms: timeout, reason: budget.reason });
+  }
+  return { path: NATIVE_GATE_BUDGET_PATH, sha256: sha256(bytes), gates };
+}
 export const SCHEMA_VERSION = DISCOVERY_SCHEMA_VERSION;
 export const EXCLUDED_CANDIDATE_KIND = "gate_candidate_excluded_by_planning_policy";
 const EXCLUDED_CANDIDATE_MANIFESTS = new Map<string, NativeGateExcludedCandidate["manifest"]>([

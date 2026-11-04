@@ -1,0 +1,9 @@
+{
+  "schema": "mister-clean.native-gates/1",
+  "gates": {
+    "node:.:ci-check": {
+      "timeout_ms": 2400000,
+      "reason": "ci:check reconstructs the exact candidate in a clean capsule and runs the serialized Node test matrix (TEST_NODE_MATRIX_TIMEOUT_MS = 1,500,000 in scripts/run_clean_ci.ts); measured 18-25 minutes on the hosted runner, so the 10-minute default can never pass this gate. 40 minutes leaves headroom under the 2-hour maximum."
+    }
+  }
+}
