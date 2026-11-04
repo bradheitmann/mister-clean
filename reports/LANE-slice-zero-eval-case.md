@@ -227,3 +227,97 @@ Green: `src/eval-case.test.ts` 10/10 (`MISTER_CLEAN_SOURCE_DEVELOPMENT=1 nice -n
 - `tsc --noEmit` 0; `src/eval-case.test.ts` + `src/skill-contract.test.ts` 53/53; SKILL.md 19,975 bytes = main's;
   `charter check --strict` ok; `audit:public` PASS (83 files); a `git grep` for the source project's name is empty (the name is quoted only in the private evidence root).
 - Full `nice -n 10 pnpm run test:node` on `697fa8c` (the frozen bytes minus this report): 920 passed, 5 failed, 58 files, 762 s. The five reds are all `scripts/verify_generated_candidate.test.ts` fixture commits refused by the host-global lang-guard hook (environment class CS-016; the same five MC/QA saw on 01b20677); nothing in this lane. Hosted CI arbitrates.
+
+# Rework 2 — the evidence root and the recompute route (proven_on set from a live run)
+
+DONE list committed first as `charter/DONE/slice-zero-eval-case-rework-2.md` (`bfdea45`; its grep lines reworded at
+`de81760` so the public file quotes neither the manifest's header text nor the source project's name: wording only).
+Evidence: the evidence owner's RC-001 evidence manifest, revision 2 (source commit `90c6f9a0`, sha256
+`a7464d17dd860d8d2d4091b2c325a660255fd02018cfed49f57cd2cbfc3f3cac`). It names the source project, so it is never
+vendored into this public repository (G1); it lives in a private evidence root outside every repository, together with
+a provenance line (seam, source commit, path, sha256, vendored_at).
+
+## What changed (`de81760`)
+
+- `binding: "pinned_external"` for the verifier and the base commit: the record cites the manifest by seam, source
+  commit, bare file name and sha256 (`manifest`), plus the same digests and per-pair-set commits as before.
+- `--evidence-root <dir>` (or `MISTER_CLEAN_EVIDENCE_ROOT`): a directory outside the validated repository (inside is
+  `evidence_root_inside_repository`, exit 2, before any read). The validator finds the manifest by file name under the
+  root (depth ≤ 4), re-hashes it against the cited sha256 (`evidence_manifest_mismatch` when a same-named file hashes
+  differently; absent → the citation stays `external`), parses it strictly (`evidence_manifest_unparsable`; the
+  composite header is decoded from `algorithm.header`: `bytes_hex` must equal `text` plus one NUL and have the stated
+  length; no header constant exists in this source), and checks the record against it: evaluator composite at every
+  base commit, the digest set (composite, review, receipt tool) both ways, each pair set's base commit, every manifest
+  pair set present, and the session-map basis (`recorded` only when every session was recorded). Class `pinned_external`.
+- `--source <seam>=<clone>` (or `MISTER_CLEAN_SOURCE_<SEAM>`): with a bound manifest, the validator reads the manifest's
+  listed files at each base commit from the clone through `git show` (read-only), recomputes the composite (header,
+  byte-sorted paths relative to the manifest's prefix, u64 big-endian length prefixes), the review digest and the
+  receipt-tool digest, and requires each to equal the manifest and the record (`recompute_mismatch`;
+  `source_commit_missing` when a commit or file is absent or the path is not a clone). Class `recomputed`.
+- `--require-bound` accepts `local`, `pinned_external` and `recomputed`; `external` and `unverified` stay
+  `binding_required`. The text line names every class member and whether an evidence root and which sources were used;
+  `--json` carries `classes`, `pinned_external`, `recomputed`, `evidence_root` and `sources`.
+- `charter.toml`: the command is unchanged and carries no private path; a comment names the two environment variables
+  as the command's real infrastructure. README: the classes, the environment variables and how a third party reproduces
+  the strict run (obtain the manifest from the evidence owner; optionally clone the seam).
+
+## Live control (through the built bin, merged tip; private paths supplied by environment, never printed here)
+
+```
+$ node bin/mister-clean.js eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo . --require-bound verifier,base_commit
+(no evidence environment)
+ERROR: binding_required $.verifier: external citation; --require-bound verifier demands one re-verified in this repository, through an evidence manifest under --evidence-root, or recomputed from --source
+ERROR: binding_required $.base_commit: external citation; --require-bound base_commit demands one re-verified in this repository, through an evidence manifest under --evidence-root, or recomputed from --source
+eval-case: REFUSED case=CS-001 bound=7 pinned_external=none recomputed=none external=$.verifier,$.base_commit unverified=none refusals=2 require_bound=verifier,base_commit evidence_root=none sources=none registry_export=2026.11.03-1
+exit=2
+
+(MISTER_CLEAN_EVIDENCE_ROOT set)
+eval-case: VALID case=CS-001 bound=7 pinned_external=$.verifier,$.base_commit recomputed=none external=none unverified=none refusals=0 require_bound=verifier,base_commit evidence_root=set sources=none registry_export=2026.11.03-1
+exit=0
+
+(MISTER_CLEAN_EVIDENCE_ROOT and MISTER_CLEAN_SOURCE_SPECIFICATION_PIPELINE set; 2026-11-04T03:55:20Z)
+eval-case: VALID case=CS-001 bound=7 pinned_external=none recomputed=$.verifier,$.base_commit external=none unverified=none refusals=0 require_bound=verifier,base_commit evidence_root=set sources=specification-pipeline registry_export=2026.11.03-1
+exit=0
+```
+
+`--json` on the last run: `status: eval_case_valid`, `classes: { "$.verifier": "recomputed", "$.base_commit": "recomputed" }`.
+The recompute read 38 files at each of the two base commits from the local source clone and reproduced the manifest's
+composite `ca5ca4da…` and review digest `2b7a1560…` at both, plus the receipt-tool digest `df37fb1c…`; the per-reviewer
+table, 13 sessions and `met` outcome were recomputed from `control-tallies.tsv` as in rework 1. **`proven_on` is
+therefore set to `2026-11-04`** (`c423a04`): the strict charter command exited 0 on real infrastructure. On a host without
+the evidence root the same command refuses, which is the correct answer there.
+
+## Proofs and observed-RED mutants (fourteen on the final module `d1220049…`; each restored and verified `cmp`-identical)
+
+| # | Proof | Mutant | Observed |
+|---|---|---|---|
+| 1-4, R1-R5 | the nine earlier proofs | the nine earlier mutants | all RED again (same assertions as rework 1) |
+| W1 | manifest-pinned | manifest accepted without re-hashing (`found = sameName[0]`) | RED: wrong cited sha256 exited 0 |
+| W2 | manifest-values | value comparison skipped | RED: altered verifier digest exited 0 |
+| W3 | recomputed | manifest's stated composite trusted instead of recomputed | RED: one-byte-changed clone exited 0 |
+| W4 | header-from-manifest | header hard-coded to a constant | RED: the fixture header (`fixture.tree/1`, not the real one) no longer reproduced the fixture composite |
+| W5 | evidence-root-outside-repo | containment check dropped | RED: an evidence root inside the fixture repository exited 0 |
+| W6 | live-control | none | exit 0 verbatim above; `proven_on` set |
+
+Green: `src/eval-case.test.ts` 15/15. The fixture manifest uses a header text that differs from the real one, so a
+header constant in the source cannot pass the fixture; the real header is read only from the manifest at run time.
+
+## Gates on the frozen tip
+
+- Merged origin/main `ea50cb9` (`7bc14ce`, no conflicts); two clean `build:raw` runs under bun 1.4.0: identical hash
+  lists (list sha256 `a85eb8129897e9ceaefe67b5d041545607a529bbe086343434c8905825346408`; `bin/mister-clean.js`
+  `aa2c5d2265dd84f8d8cea92758340565b0557fce71fbdea2d375b6a6010395aa`; `MANIFEST.sha256`
+  `623e903a6a027644b5657cd6307747081f3308cbd6f3f7981094db67e93e5e93`); `manifest:package:check` PASS (82);
+  `sync:cli:check` verified.
+- `tsc --noEmit` 0; `src/eval-case.test.ts` + `src/skill-contract.test.ts` 58/58; SKILL.md 19,975 bytes = main's;
+  `charter check --strict` ok; `audit:public` PASS (83 files).
+- Leak greps over src, bin, README.md, charter, field-evals and this report: the manifest's header text, the source
+  project's name and the private evidence-root path all absent (the name had appeared in the rework-1 section's gate
+  line and in the rework-2 DONE list's grep commands; both reworded here, and recorded as a finding: those strings remain
+  in the history of `8e2343d`, `bfdea45` and `de81760`, which only the owner can decide to rewrite).
+- Full `nice -n 10 pnpm run test:node` on `c423a04`: 930 passed, 0 failed, 58 files, 630 s, exit 0 (the earlier lang-guard reds are gone: main now carries `.lang-guard-allow`).
+
+## Out of scope (recorded obligation)
+
+- A public, project-free form of the evidence manifest vendored under `customer-tests/` would let a fresh clone reach
+  `pinned_external` without the private root; the evidence owner decides whether such a form can exist.
