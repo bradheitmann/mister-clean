@@ -601,8 +601,8 @@ var require_Node = __commonJS({
         };
         const res = toJS.toJS(this, "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
     };
@@ -708,13 +708,13 @@ var require_Alias = __commonJS({
         const anchor = anchors2 && source && anchors2.get(source);
         return anchor ? anchor.count * anchor.aliasCount : 0;
       } else if (identity4.isCollection(node)) {
-        let count = 0;
+        let count2 = 0;
         for (const item of node.items) {
           const c = getAliasCount(doc, item, anchors2);
-          if (c > count)
-            count = c;
+          if (c > count2)
+            count2 = c;
         }
-        return count;
+        return count2;
       } else if (identity4.isPair(node)) {
         const kc = getAliasCount(doc, node.key, anchors2);
         const vc = getAliasCount(doc, node.value, anchors2);
@@ -3667,8 +3667,8 @@ var require_Document = __commonJS({
         };
         const res = toJS.toJS(this.contents, jsonArg ?? "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
       /**
@@ -3745,12 +3745,12 @@ var require_errors = __commonJS({
         lineStr = prev + lineStr;
       }
       if (/[^ ]/.test(lineStr)) {
-        let count = 1;
+        let count2 = 1;
         const end = error.linePos[1];
         if (end?.line === line && end.col > col) {
-          count = Math.max(1, Math.min(end.col - col, 80 - ci));
+          count2 = Math.max(1, Math.min(end.col - col, 80 - ci));
         }
-        const pointer = " ".repeat(ci) + "^".repeat(count);
+        const pointer = " ".repeat(ci) + "^".repeat(count2);
         error.message += `:
 
 ${lineStr}
@@ -3994,10 +3994,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep21, value } = collItem;
+        const { start, key, sep: sep22, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep21?.[0],
+          next: key ?? sep22?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -4011,7 +4011,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep21) {
+          if (!keyProps.anchor && !keyProps.tag && !sep22) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map2.comment)
@@ -4035,7 +4035,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep21 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep22 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -4051,7 +4051,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep21, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep22, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -4142,7 +4142,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep21 = "";
+        let sep22 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -4156,13 +4156,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep21 + cb;
-              sep21 = "";
+                comment += sep22 + cb;
+              sep22 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep21 += source;
+                sep22 += source;
               hasSpace = true;
               break;
             default:
@@ -4205,18 +4205,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep21, value } = collItem;
+        const { start, key, sep: sep22, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep21?.[0],
+          next: key ?? sep22?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep21 && !value) {
+          if (!props.anchor && !props.tag && !sep22 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -4270,8 +4270,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep21 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep21, null, props, onError);
+        if (!isMap && !sep22 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep22, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -4283,7 +4283,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep21 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep22 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -4294,8 +4294,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep21)
-                for (const st of sep21) {
+              if (sep22)
+                for (const st of sep22) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -4312,7 +4312,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep21, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep22, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -4492,7 +4492,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep21 = "";
+      let sep22 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines2[i][0].slice(trimIndent) + "\n";
@@ -4509,24 +4509,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep21 + indent.slice(trimIndent) + content;
-          sep21 = "\n";
+          value += sep22 + indent.slice(trimIndent) + content;
+          sep22 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep21 === " ")
-            sep21 = "\n";
-          else if (!prevMoreIndented && sep21 === "\n")
-            sep21 = "\n\n";
-          value += sep21 + indent.slice(trimIndent) + content;
-          sep21 = "\n";
+          if (sep22 === " ")
+            sep22 = "\n";
+          else if (!prevMoreIndented && sep22 === "\n")
+            sep22 = "\n\n";
+          value += sep22 + indent.slice(trimIndent) + content;
+          sep22 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep21 === "\n")
+          if (sep22 === "\n")
             value += "\n";
           else
-            sep21 = "\n";
+            sep22 = "\n";
         } else {
-          value += sep21 + content;
-          sep21 = " ";
+          value += sep22 + content;
+          sep22 = " ";
           prevMoreIndented = false;
         }
       }
@@ -4708,25 +4708,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep21 = " ";
+      let sep22 = " ";
       let pos = first.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
-          if (sep21 === "\n")
-            res += sep21;
+          if (sep22 === "\n")
+            res += sep22;
           else
-            sep21 = "\n";
+            sep22 = "\n";
         } else {
-          res += sep21 + match[1];
-          sep21 = " ";
+          res += sep22 + match[1];
+          sep22 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep21 + (match?.[1] ?? "");
+      return res + sep22 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -5536,14 +5536,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep21, value }) {
+    function stringifyItem({ start, key, sep: sep22, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep21)
-        for (const st of sep21)
+      if (sep22)
+        for (const st of sep22)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -6710,18 +6710,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep21;
+          let sep22;
           if (scalar3.end) {
-            sep21 = scalar3.end;
-            sep21.push(this.sourceToken);
+            sep22 = scalar3.end;
+            sep22.push(this.sourceToken);
             delete scalar3.end;
           } else
-            sep21 = [this.sourceToken];
+            sep22 = [this.sourceToken];
           const map2 = {
             type: "block-map",
             offset: scalar3.offset,
             indent: scalar3.indent,
-            items: [{ start, key: scalar3, sep: sep21 }]
+            items: [{ start, key: scalar3, sep: sep22 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map2;
@@ -6874,15 +6874,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep21 = it.sep;
-                  sep21.push(this.sourceToken);
+                  const sep22 = it.sep;
+                  sep22.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep21 }]
+                    items: [{ start: start2, key, sep: sep22 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -7076,13 +7076,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep21 = fc.end.splice(1, fc.end.length);
-            sep21.push(this.sourceToken);
+            const sep22 = fc.end.splice(1, fc.end.length);
+            sep22.push(this.sourceToken);
             const map2 = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep21 }]
+              items: [{ start, key: fc, sep: sep22 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map2;
@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync17, readFileSync as readFileSync21, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
-import { isAbsolute as isAbsolute24, join as join21, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
+import { existsSync as existsSync18, readFileSync as readFileSync22, realpathSync as realpathSync13, statSync as statSync8, writeFileSync as writeFileSync8 } from "fs";
+import { isAbsolute as isAbsolute25, join as join22, relative as relative21, resolve as resolve30, sep as sep21 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -10318,14 +10318,14 @@ function planningConfigEntries(record4, key, invalid) {
     if (key !== "exclude" || !entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw invalid(`${label} must be a string${key === "exclude" ? ' or a { "path", "kind" } object' : ""}`);
     }
-    const object9 = entry;
-    const unknownKeys = Object.keys(object9).filter((name) => name !== "path" && name !== "kind").sort();
+    const object10 = entry;
+    const unknownKeys = Object.keys(object10).filter((name) => name !== "path" && name !== "kind").sort();
     if (unknownKeys.length) throw invalid(`${label} has unknown key(s) ${JSON.stringify(unknownKeys)}`);
-    if (typeof object9.path !== "string") throw invalid(`${label}.path must be a string`);
-    if (typeof object9.kind !== "string" || !PLANNING_GATE_EXCLUDE_KINDS.has(object9.kind)) {
-      throw invalid(`${label}.kind ${JSON.stringify(object9.kind)} is not one of ${JSON.stringify([...PLANNING_GATE_EXCLUDE_KINDS].sort())}`);
+    if (typeof object10.path !== "string") throw invalid(`${label}.path must be a string`);
+    if (typeof object10.kind !== "string" || !PLANNING_GATE_EXCLUDE_KINDS.has(object10.kind)) {
+      throw invalid(`${label}.kind ${JSON.stringify(object10.kind)} is not one of ${JSON.stringify([...PLANNING_GATE_EXCLUDE_KINDS].sort())}`);
     }
-    return { path: planningConfigPath(`${label}.path`, object9.path, invalid), kind: object9.kind };
+    return { path: planningConfigPath(`${label}.path`, object10.path, invalid), kind: object10.kind };
   });
 }
 function insideRepository(repositoryReal, path) {
@@ -10828,8 +10828,8 @@ function assertFilesystemCoverage(repository, entries2) {
   const directoryPrefixes = /* @__PURE__ */ new Set();
   for (const entry of entries2) {
     const segments = entry.path.split("/");
-    for (let count = 1; count < segments.length; count += 1) {
-      directoryPrefixes.add(segments.slice(0, count).join("/"));
+    for (let count2 = 1; count2 < segments.length; count2 += 1) {
+      directoryPrefixes.add(segments.slice(0, count2).join("/"));
     }
   }
   function walk(directory, parentPathBytes) {
@@ -10930,12 +10930,12 @@ function hashRegularFile(hash, absolute, path, before, captureBytes) {
     let remaining = before.size;
     while (remaining > 0n) {
       const requested = Number(remaining > BigInt(buffer.length) ? BigInt(buffer.length) : remaining);
-      const count = readSync(descriptor, buffer, 0, requested, null);
-      if (count === 0) throw new Error(`unstable regular file ended during read: ${JSON.stringify(path)}`);
-      const chunk = buffer.subarray(0, count);
+      const count2 = readSync(descriptor, buffer, 0, requested, null);
+      if (count2 === 0) throw new Error(`unstable regular file ended during read: ${JSON.stringify(path)}`);
+      const chunk = buffer.subarray(0, count2);
       hash.update(chunk);
       chunks?.push(Buffer.from(chunk));
-      remaining -= BigInt(count);
+      remaining -= BigInt(count2);
     }
     const afterRead = fstatSync(descriptor, { bigint: true });
     if (!stableStat(opened, afterRead)) {
@@ -16924,10 +16924,10 @@ function captureWorktreeTopology(repository) {
   finish();
   return rows.sort((left, right) => compare2(left.path, right.path));
 }
-function splitStatusPrefix(value, count, source) {
+function splitStatusPrefix(value, count2, source) {
   const fields = [];
   let cursor = 0;
-  for (let index = 0; index < count; index += 1) {
+  for (let index = 0; index < count2; index += 1) {
     const next = value.indexOf(" ", cursor);
     if (next < 0) throw new Error(`${source} returned a truncated row`);
     fields.push(value.slice(cursor, next));
@@ -18585,9 +18585,9 @@ function digestFileSync(path) {
   try {
     const buffer = Buffer.allocUnsafe(1024 * 1024);
     for (; ; ) {
-      const count = readSync2(descriptor, buffer, 0, buffer.length, null);
-      if (count === 0) break;
-      hash.update(buffer.subarray(0, count));
+      const count2 = readSync2(descriptor, buffer, 0, buffer.length, null);
+      if (count2 === 0) break;
+      hash.update(buffer.subarray(0, count2));
     }
   } finally {
     closeSync3(descriptor);
@@ -20063,8 +20063,8 @@ function regressionEvidenceErrors(evidence) {
     }
   }
   for (const id of [...universe].sort(compareCanonicalText)) {
-    const count = owners.get(id) ?? 0;
-    if (count !== 1) errors.push(`observation ${id}: must map to exactly one root debt (${count} owners)`);
+    const count2 = owners.get(id) ?? 0;
+    if (count2 !== 1) errors.push(`observation ${id}: must map to exactly one root debt (${count2} owners)`);
   }
   return errors;
 }
@@ -24616,7 +24616,7 @@ function resolveGateCwd(repository, cwd) {
   if (!stat3.isDirectory()) throw new Error(`native gate cwd is not a directory: ${cwd}`);
   return target;
 }
-async function blockedExecution(gate, reason, object9, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
+async function blockedExecution(gate, reason, object10, evidenceRoot, now, subjectStartState, subjectEndState = subjectStartState, resolvedExecutable = null, executableSha256 = null, state = "blocked", diagnostic = "", invokedExecutable = null) {
   const subjectChanged = !stableEqual(subjectStartState, subjectEndState);
   const recordedReason = subjectChanged ? "subject_repository_changed" : reason;
   const recordedState = subjectChanged ? "blocked" : state;
@@ -24638,8 +24638,8 @@ ${diagnostic}` : diagnostic;
     executable_sha256: executableSha256,
     started_at: started,
     finished_at: now().toISOString(),
-    start_repository_object: object9,
-    end_repository_object: object9,
+    start_repository_object: object10,
+    end_repository_object: object10,
     subject_start_state: subjectStartState,
     subject_end_state: subjectEndState,
     exit_code: null,
@@ -30556,9 +30556,11 @@ function receiptFindingsFromAudit(family, audit, context) {
   return anchored.sort((left, right) => left.finding.fingerprint.localeCompare(right.finding.fingerprint));
 }
 
-// src/closeout/second-pass.ts
-import { existsSync as existsSync15, readFileSync as readFileSync19, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
-import { dirname as dirname17, join as join19, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+// src/eval-case.ts
+import { spawnSync as spawnSync7 } from "child_process";
+import { createHash as createHash27 } from "crypto";
+import { existsSync as existsSync15, readdirSync as readdirSync9, readFileSync as readFileSync19, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
+import { isAbsolute as isAbsolute24, join as join19, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
 import { appendFileSync as appendFileSync2, existsSync as existsSync14, mkdirSync as mkdirSync6, readFileSync as readFileSync18, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
@@ -30864,7 +30866,890 @@ function agentFromEnvironment(flagValue, environment) {
   return agentFromCard(environment.MISTER_CLEAN_AGENT_CARD, "env");
 }
 
+// src/eval-case.ts
+var EVAL_CASE_RECORD_TYPE = "mister-clean.eval-case";
+var EVAL_CASE_SCHEMA_VERSION = "1";
+var EVAL_CASE_VALIDATION_RECORD_TYPE = "mister-clean.eval-case-validation";
+var REGISTRY_PIN_PATH = "customer-tests/model-atlas/registry-join.json";
+var TALLY_COLUMNS = ["session", "pair_set", "reviewer_model", "population", "good_passed", "good_n", "bad_passed", "bad_n", "source"];
+var REQUIRE_BOUND_FIELDS = ["verifier", "base_commit"];
+function parseSessionRange(text3) {
+  const match = /^S-([0-9]{2,})(?:\.\.| to )S-([0-9]{2,})(?![0-9])/u.exec(text3);
+  if (!match) return void 0;
+  const [, first, last] = match;
+  const start = Number(first);
+  const end = Number(last);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || end - start > 999) return void 0;
+  const width = first.length;
+  const sessions = [];
+  for (let n = start; n <= end; n += 1) sessions.push(`S-${String(n).padStart(width, "0")}`);
+  return sessions;
+}
+var HEX646 = /^[0-9a-f]{64}$/u;
+var HEX402 = /^[0-9a-f]{40}$/u;
+var CASE_ID = /^[A-Z]{2,4}-[0-9]{3,}$/u;
+var CARD_ID = /^[A-Z]{2,4}-[0-9]{3,}$/u;
+var FLOOR = /^([1-9][0-9]*)\/([1-9][0-9]*)$/u;
+var TIMESTAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{3})?Z$/u;
+var REGISTRY_RECORD_ID = /^[a-z0-9][a-z0-9.-]*$/u;
+var COUNT_KEYS = ["sessions", "good_replays", "false_rejects", "populations_at_floor", "floor_breaches", "bad_passes"];
+function object9(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function exactKeys2(record4, expected, path, refusals) {
+  const keys = Object.keys(record4).sort();
+  const wanted = [...expected].sort();
+  if (keys.length === wanted.length && keys.every((key, index) => key === wanted[index])) return true;
+  refusals.push({ code: "record_shape", citation: path, detail: `expected exactly the keys ${wanted.join(",")}; got ${keys.join(",")}` });
+  return false;
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function count(value) {
+  return Number.isInteger(value) && Number(value) >= 0;
+}
+function shape(refusals, citation, detail) {
+  refusals.push({ code: "record_shape", citation, detail });
+}
+function localPath(value) {
+  return typeof value === "string" && isRepositoryRelativePath(value) && value !== ".";
+}
+function citationShape(value, path, refusals) {
+  const citation = object9(value);
+  if (!citation) {
+    shape(refusals, path, "expected an object with path and sha256");
+    return false;
+  }
+  if (!exactKeys2(citation, ["path", "sha256"], path, refusals)) return false;
+  let ok = true;
+  if (!localPath(citation.path)) {
+    shape(refusals, `${path}.path`, "expected a repository-relative file path");
+    ok = false;
+  }
+  if (typeof citation.sha256 !== "string" || !HEX646.test(citation.sha256)) {
+    shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
+    ok = false;
+  }
+  return ok;
+}
+var SHORT_SHA = /^[0-9a-f]{7,40}$/u;
+function manifestCitationShape(value, repository, path, refusals) {
+  const citation = object9(value);
+  if (!citation) {
+    shape(refusals, path, "expected an object with seam, source_commit, file and sha256");
+    return false;
+  }
+  if (!exactKeys2(citation, ["seam", "source_commit", "path", "sha256"], path, refusals)) return false;
+  let ok = true;
+  if (!nonEmptyString(citation.seam) || citation.seam !== repository) {
+    shape(refusals, `${path}.seam`, "expected the same repository seam as the citing field");
+    ok = false;
+  }
+  if (typeof citation.source_commit !== "string" || !SHORT_SHA.test(citation.source_commit)) {
+    shape(refusals, `${path}.source_commit`, "expected a 7-40 hex commit sha");
+    ok = false;
+  }
+  if (!localPath(citation.path)) {
+    shape(refusals, `${path}.path`, "expected the manifest's repository-relative path in the seam");
+    ok = false;
+  }
+  if (typeof citation.sha256 !== "string" || !HEX646.test(citation.sha256)) {
+    shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
+    ok = false;
+  }
+  return ok;
+}
+function parseRegistryRef(ref) {
+  const at = ref.lastIndexOf("@");
+  if (at <= 0 || at === ref.length - 1) return void 0;
+  const id = ref.slice(0, at);
+  const version = ref.slice(at + 1);
+  if (!REGISTRY_RECORD_ID.test(id) || version.includes("@") || version.trim().length === 0) return void 0;
+  return { id, version };
+}
+function evalCaseShapeRefusals(value) {
+  const refusals = [];
+  const record4 = object9(value);
+  if (!record4) return [{ code: "record_shape", citation: "$", detail: "expected a JSON object" }];
+  if (!exactKeys2(record4, [
+    "record_type",
+    "schema_version",
+    "case_id",
+    "field_case",
+    "phenomenon",
+    "agent_cards",
+    "verifier",
+    "base_commit",
+    "replay",
+    "derived_from",
+    "created_at"
+  ], "$", refusals)) return refusals;
+  if (record4.record_type !== EVAL_CASE_RECORD_TYPE) shape(refusals, "$.record_type", `expected ${EVAL_CASE_RECORD_TYPE}`);
+  if (record4.schema_version !== EVAL_CASE_SCHEMA_VERSION) shape(refusals, "$.schema_version", `expected "${EVAL_CASE_SCHEMA_VERSION}"`);
+  if (typeof record4.case_id !== "string" || !CASE_ID.test(record4.case_id)) shape(refusals, "$.case_id", "expected a case id such as CS-001");
+  citationShape(record4.field_case, "$.field_case", refusals);
+  if (!nonEmptyString(record4.phenomenon) || record4.phenomenon.includes("\n")) shape(refusals, "$.phenomenon", "expected one sentence");
+  const cardIds = /* @__PURE__ */ new Set();
+  const cards = Array.isArray(record4.agent_cards) ? record4.agent_cards : void 0;
+  if (!cards) shape(refusals, "$.agent_cards", "expected an array of agent cards");
+  else {
+    if (cards.length !== 2) refusals.push({ code: "agent_cards_count", citation: "$.agent_cards", detail: `expected exactly 2 agent cards; got ${cards.length}` });
+    const roles = [];
+    for (const [index, value2] of cards.entries()) {
+      const path = `$.agent_cards[${index}]`;
+      const card = object9(value2);
+      if (!card) {
+        shape(refusals, path, "expected an object");
+        continue;
+      }
+      if (!exactKeys2(card, ["card_id", "path", "sha256", "model_registry_ref", "role"], path, refusals)) continue;
+      if (typeof card.card_id !== "string" || !CARD_ID.test(card.card_id)) shape(refusals, `${path}.card_id`, "expected a card id such as AC-003");
+      else if (cardIds.has(card.card_id)) shape(refusals, `${path}.card_id`, "duplicate card id");
+      else cardIds.add(card.card_id);
+      if (!localPath(card.path)) shape(refusals, `${path}.path`, "expected the card file's repository-relative path");
+      if (typeof card.sha256 !== "string" || !HEX646.test(card.sha256)) shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
+      if (typeof card.model_registry_ref !== "string" || parseRegistryRef(card.model_registry_ref) === void 0) {
+        shape(refusals, `${path}.model_registry_ref`, "expected <registry card id>@<export version>");
+      }
+      if (card.role !== "subject" && card.role !== "control") shape(refusals, `${path}.role`, "expected subject or control");
+      else roles.push(card.role);
+    }
+    if (cards.length === 2 && !(roles.includes("subject") && roles.includes("control"))) {
+      shape(refusals, "$.agent_cards", "expected one subject card and one control card");
+    }
+  }
+  const verifier = object9(record4.verifier);
+  if (!verifier) shape(refusals, "$.verifier", "expected an object");
+  else if (verifier.binding === "unbound") {
+    if (exactKeys2(verifier, ["name", "kind", "binding", "reason"], "$.verifier", refusals)) {
+      if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
+      if (!nonEmptyString(verifier.reason)) shape(refusals, "$.verifier.reason", "an unbound verifier must state why");
+      refusals.push({ code: "verifier_unbound", citation: "$.verifier", detail: nonEmptyString(verifier.reason) ? verifier.reason : "verifier bytes are not bound" });
+    }
+  } else if (verifier.binding === "external" || verifier.binding === "pinned_external") {
+    const pinned = verifier.binding === "pinned_external";
+    const keys = pinned ? ["name", "kind", "binding", "repository", "location", "manifest", "sha256", "components"] : ["name", "kind", "binding", "repository", "location", "sha256", "components"];
+    if (exactKeys2(verifier, keys, "$.verifier", refusals)) {
+      if (pinned) manifestCitationShape(verifier.manifest, verifier.repository, "$.verifier.manifest", refusals);
+      if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
+      if (!nonEmptyString(verifier.repository)) shape(refusals, "$.verifier.repository", "expected a repository seam id or name");
+      if (!nonEmptyString(verifier.location)) shape(refusals, "$.verifier.location", "an external verifier must say where the evidence owner recorded its digests");
+      if (typeof verifier.sha256 !== "string" || !HEX646.test(verifier.sha256)) shape(refusals, "$.verifier.sha256", "expected lowercase SHA-256");
+      const components = Array.isArray(verifier.components) ? verifier.components : void 0;
+      if (!components || components.length === 0) shape(refusals, "$.verifier.components", "expected at least one named digest");
+      else {
+        const names = /* @__PURE__ */ new Set();
+        for (const [index, value2] of components.entries()) {
+          const path = `$.verifier.components[${index}]`;
+          const component = object9(value2);
+          if (!component || !exactKeys2(component, ["name", "sha256"], path, refusals)) {
+            if (!component) shape(refusals, path, "expected an object with name and sha256");
+            continue;
+          }
+          if (!nonEmptyString(component.name)) shape(refusals, `${path}.name`, "required");
+          else if (names.has(component.name)) shape(refusals, `${path}.name`, "duplicate component name");
+          else names.add(component.name);
+          if (typeof component.sha256 !== "string" || !HEX646.test(component.sha256)) shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
+        }
+      }
+    }
+  } else {
+    const keys = "path" in verifier ? ["name", "kind", "path", "sha256"] : ["name", "kind", "sha256"];
+    if (exactKeys2(verifier, keys, "$.verifier", refusals)) {
+      if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
+      if ("path" in verifier && !localPath(verifier.path)) shape(refusals, "$.verifier.path", "expected a repository-relative file path");
+      if (typeof verifier.sha256 !== "string" || !HEX646.test(verifier.sha256)) shape(refusals, "$.verifier.sha256", "expected lowercase SHA-256");
+    }
+  }
+  const replayRows = Array.isArray(object9(record4.replay)?.per_reviewer) ? object9(record4.replay)?.per_reviewer : [];
+  const rowPairSets = new Set(replayRows.map((row) => object9(row)?.pair_set).filter((value2) => nonEmptyString(value2)));
+  const base = object9(record4.base_commit);
+  if (!base) shape(refusals, "$.base_commit", "expected an object");
+  else if (base.binding === "unbound") {
+    if (exactKeys2(base, ["repository", "binding", "reason"], "$.base_commit", refusals)) {
+      if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
+      if (!nonEmptyString(base.reason)) shape(refusals, "$.base_commit.reason", "an unbound base commit must state why");
+      refusals.push({ code: "base_commit_unbound", citation: "$.base_commit", detail: nonEmptyString(base.reason) ? base.reason : "base commit is not bound" });
+    }
+  } else if (base.binding === "external" || base.binding === "pinned_external") {
+    const pinned = base.binding === "pinned_external";
+    const keys = pinned ? ["repository", "binding", "location", "manifest", "session_map", "commits"] : ["repository", "binding", "location", "session_map", "commits"];
+    if (exactKeys2(base, keys, "$.base_commit", refusals)) {
+      if (pinned) manifestCitationShape(base.manifest, base.repository, "$.base_commit.manifest", refusals);
+      if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
+      if (!nonEmptyString(base.location)) shape(refusals, "$.base_commit.location", "an external base commit must say where the evidence owner recorded it");
+      if (base.session_map !== "recorded" && base.session_map !== "inferred") shape(refusals, "$.base_commit.session_map", "expected recorded or inferred");
+      const commits = Array.isArray(base.commits) ? base.commits : void 0;
+      if (!commits || commits.length === 0) shape(refusals, "$.base_commit.commits", "expected one commit per control-pair set");
+      else {
+        const pairSets = /* @__PURE__ */ new Set();
+        for (const [index, value2] of commits.entries()) {
+          const path = `$.base_commit.commits[${index}]`;
+          const commit = object9(value2);
+          if (!commit || !exactKeys2(commit, ["pair_set", "sessions", "sha"], path, refusals)) {
+            if (!commit) shape(refusals, path, "expected an object with pair_set, sessions and sha");
+            continue;
+          }
+          if (!nonEmptyString(commit.pair_set)) shape(refusals, `${path}.pair_set`, "required");
+          else if (pairSets.has(commit.pair_set)) shape(refusals, `${path}.pair_set`, "duplicate pair set");
+          else pairSets.add(commit.pair_set);
+          if (typeof commit.sessions !== "string" || parseSessionRange(commit.sessions) === void 0) shape(refusals, `${path}.sessions`, "expected an explicit session range S-nn..S-mm (a note may follow)");
+          if (typeof commit.sha !== "string" || !HEX402.test(commit.sha)) shape(refusals, `${path}.sha`, "expected a 40-hex commit sha");
+        }
+        for (const pairSet of rowPairSets) {
+          if (!pairSets.has(pairSet)) shape(refusals, "$.base_commit.commits", `no base commit for pair set ${pairSet}`);
+        }
+      }
+    }
+  } else if (exactKeys2(base, ["repository", "sha"], "$.base_commit", refusals)) {
+    if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
+    if (typeof base.sha !== "string" || !HEX402.test(base.sha)) shape(refusals, "$.base_commit.sha", "expected a 40-hex commit sha");
+  }
+  const replay = object9(record4.replay);
+  if (!replay) shape(refusals, "$.replay", "expected an object");
+  else if (exactKeys2(replay, ["floor", "sessions", "rows_source", "outcome", "per_reviewer"], "$.replay", refusals)) {
+    const floor = typeof replay.floor === "string" ? replay.floor.match(FLOOR) : null;
+    if (!floor || Number(floor[1]) > Number(floor[2])) shape(refusals, "$.replay.floor", "expected a repeat floor k/n with k <= n");
+    if (!count(replay.sessions) || replay.sessions < 1) shape(refusals, "$.replay.sessions", "expected a positive session count");
+    citationShape(replay.rows_source, "$.replay.rows_source", refusals);
+    if (replay.outcome !== "met" && replay.outcome !== "missed") shape(refusals, "$.replay.outcome", "expected met or missed");
+    const rows = Array.isArray(replay.per_reviewer) ? replay.per_reviewer : void 0;
+    if (!rows || rows.length === 0) shape(refusals, "$.replay.per_reviewer", "expected at least one per-reviewer row");
+    else {
+      const seen = /* @__PURE__ */ new Set();
+      for (const [index, value2] of rows.entries()) {
+        const path = `$.replay.per_reviewer[${index}]`;
+        const row = object9(value2);
+        if (!row) {
+          shape(refusals, path, "expected an object");
+          continue;
+        }
+        if (!exactKeys2(row, ["card_id", "reviewer_model", "pair_set", ...COUNT_KEYS], path, refusals)) continue;
+        if (typeof row.card_id !== "string" || !cardIds.has(row.card_id)) shape(refusals, `${path}.card_id`, "expected the id of one of the record's agent cards");
+        if (!nonEmptyString(row.reviewer_model)) shape(refusals, `${path}.reviewer_model`, "required");
+        if (!nonEmptyString(row.pair_set)) shape(refusals, `${path}.pair_set`, "required");
+        const key = `${String(row.reviewer_model)}\0${String(row.pair_set)}`;
+        if (seen.has(key)) shape(refusals, path, "duplicate reviewer and pair set");
+        seen.add(key);
+        for (const field2 of COUNT_KEYS) {
+          if (!count(row[field2])) shape(refusals, `${path}.${field2}`, "expected a non-negative integer");
+        }
+        if (count(row.false_rejects) && count(row.good_replays) && row.false_rejects > row.good_replays) shape(refusals, `${path}.false_rejects`, "cannot exceed good_replays");
+      }
+    }
+  }
+  citationShape(record4.derived_from, "$.derived_from", refusals);
+  if (typeof record4.created_at !== "string" || !TIMESTAMP.test(record4.created_at) || !Number.isFinite(Date.parse(record4.created_at))) {
+    shape(refusals, "$.created_at", "expected an ISO-8601 UTC timestamp");
+  }
+  return refusals;
+}
+function sha256Of(path) {
+  return createHash27("sha256").update(readFileSync19(path)).digest("hex");
+}
+function containedIn2(root, candidate) {
+  const relation = relative19(realpathSync11(root), realpathSync11(candidate));
+  return relation === "" || !relation.startsWith(`..${sep19}`) && relation !== ".." && !isAbsolute24(relation);
+}
+function bindCitation(root, citation, pointer, refusals, bound) {
+  const target = join19(root, ...citation.path.split("/"));
+  if (!existsSync15(target) || !statSync6(target).isFile() || !containedIn2(root, target)) {
+    refusals.push({ code: "path_missing", citation: pointer, detail: `${citation.path} is not a file inside the repository` });
+    return false;
+  }
+  const actual = sha256Of(target);
+  if (actual !== citation.sha256) {
+    refusals.push({ code: "sha256_mismatch", citation: pointer, detail: `${citation.path}: expected ${citation.sha256}, got ${actual}` });
+    return false;
+  }
+  bound.push(pointer);
+  return true;
+}
+function cardFrontmatter(text3) {
+  const fields = /* @__PURE__ */ new Map();
+  const lines2 = text3.split(/\r?\n/u);
+  if (lines2[0] !== "---") return fields;
+  for (const line of lines2.slice(1)) {
+    if (line === "---") return fields;
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const key = line.slice(0, colon).trim();
+    const value = line.slice(colon + 1).split("#")[0]?.trim() ?? "";
+    if (key.length > 0) fields.set(key, value);
+  }
+  return /* @__PURE__ */ new Map();
+}
+function commitExists(root, sha) {
+  const result = spawnSync7("git", ["--no-optional-locks", "-C", root, "cat-file", "-e", `${sha}^{commit}`], { stdio: "ignore" });
+  return result.status === 0;
+}
+function parseTallies(text3) {
+  const lines2 = text3.split(/\r?\n/u);
+  if (lines2[lines2.length - 1] === "") lines2.pop();
+  if (lines2.length < 2) return "expected a header line and at least one row";
+  const header = lines2[0]?.split("	") ?? [];
+  if (header.length !== TALLY_COLUMNS.length || header.some((column, index) => column !== TALLY_COLUMNS[index])) {
+    return `expected the columns ${TALLY_COLUMNS.join(",")}`;
+  }
+  const rows = [];
+  for (const [index, line] of lines2.slice(1).entries()) {
+    const cells = line.split("	");
+    if (cells.length !== TALLY_COLUMNS.length) return `line ${index + 2}: expected ${TALLY_COLUMNS.length} columns, got ${cells.length}`;
+    const numbers = cells.slice(4, 8).map((cell) => /^[0-9]+$/u.test(cell) ? Number(cell) : Number.NaN);
+    if (numbers.some((value) => !Number.isSafeInteger(value))) return `line ${index + 2}: counts must be non-negative integers`;
+    const [goodPassed, goodN, badPassed, badN] = numbers;
+    if (goodPassed > goodN || badPassed > badN) return `line ${index + 2}: passed counts exceed their replay counts`;
+    if (cells.slice(0, 4).some((cell) => cell.trim().length === 0)) return `line ${index + 2}: session, pair_set, reviewer_model and population are required`;
+    rows.push({
+      session: cells[0],
+      pair_set: cells[1],
+      reviewer_model: cells[2],
+      population: cells[3],
+      good_passed: goodPassed,
+      good_n: goodN,
+      bad_passed: badPassed,
+      bad_n: badN,
+      source: cells[8]
+    });
+  }
+  return rows;
+}
+function recomputeReviewerCounts(rows, floorPasses) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const key = `${row.reviewer_model}\0${row.pair_set}`;
+    const group = groups.get(key) ?? { sessions: /* @__PURE__ */ new Set(), good: 0, rejects: 0, atFloor: 0, breaches: 0, badPasses: 0, reviewer: row.reviewer_model, pairSet: row.pair_set };
+    group.sessions.add(row.session);
+    group.good += row.good_n;
+    group.rejects += row.good_n - row.good_passed;
+    if (row.good_passed === floorPasses) group.atFloor += 1;
+    if (row.good_passed < floorPasses) group.breaches += 1;
+    group.badPasses += row.bad_passed;
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => ({
+    reviewer_model: group.reviewer,
+    pair_set: group.pairSet,
+    sessions: group.sessions.size,
+    good_replays: group.good,
+    false_rejects: group.rejects,
+    populations_at_floor: group.atFloor,
+    floor_breaches: group.breaches,
+    bad_passes: group.badPasses
+  }));
+}
+function pinnedRegistryExport(root) {
+  const pinPath = join19(root, ...REGISTRY_PIN_PATH.split("/"));
+  if (!existsSync15(pinPath)) return `${REGISTRY_PIN_PATH} is absent`;
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync19(pinPath, "utf8"));
+  } catch {
+    return `${REGISTRY_PIN_PATH} is not valid JSON`;
+  }
+  const pin = object9(parsed);
+  const artifact = object9(pin?.artifact);
+  const version = artifact?.version;
+  if (typeof version !== "string" || version.length === 0 || version.includes("@")) return `${REGISTRY_PIN_PATH}: artifact.version is missing`;
+  const fixture = pin?.fixture;
+  const expected = artifact?.sha256;
+  if (!localPath(fixture) || typeof expected !== "string" || !HEX646.test(expected)) return `${REGISTRY_PIN_PATH}: fixture path or artifact.sha256 is missing`;
+  const exportPath = join19(root, ...fixture.split("/"));
+  if (!existsSync15(exportPath) || !statSync6(exportPath).isFile()) return `${fixture} (the vendored export) is absent`;
+  const bytes2 = readFileSync19(exportPath);
+  const actual = createHash27("sha256").update(bytes2).digest("hex");
+  if (actual !== expected) return `${fixture} hashes to ${actual}, not the pinned ${expected}`;
+  let exported;
+  try {
+    exported = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes2));
+  } catch {
+    return `${fixture} is not valid JSON`;
+  }
+  const records = object9(exported)?.records;
+  if (!Array.isArray(records)) return `${fixture}: records must be an array`;
+  if (object9(exported)?.export_version !== version) return `${fixture}: export_version differs from the pinned ${version}`;
+  const cards = /* @__PURE__ */ new Set();
+  const routes = /* @__PURE__ */ new Map();
+  for (const value of records) {
+    const record4 = object9(value);
+    if (!record4 || typeof record4.id !== "string") continue;
+    if (record4.kind === "card") cards.add(record4.id);
+    if (record4.kind === "route" && typeof record4.card === "string") {
+      const providerModel = object9(record4.provider_model_id)?.value;
+      if (typeof providerModel !== "string" || providerModel.length === 0) continue;
+      const set = routes.get(record4.card) ?? /* @__PURE__ */ new Set();
+      set.add(providerModel);
+      routes.set(record4.card, set);
+    }
+  }
+  return { version, cards, routes };
+}
+function fileDigestList(value) {
+  if (!Array.isArray(value) || value.length === 0) return void 0;
+  const list = [];
+  for (const entry of value) {
+    const item = object9(entry);
+    if (!item || typeof item.path !== "string" || item.path.length === 0 || typeof item.sha256 !== "string" || !HEX646.test(item.sha256)) return void 0;
+    list.push({ path: item.path, sha256: item.sha256 });
+  }
+  return list;
+}
+function decodeHeader(value) {
+  const header = object9(value);
+  if (!header) return "algorithm.header is absent";
+  if (header.encoding !== "utf8_with_trailing_nul") return "algorithm.header.encoding is not utf8_with_trailing_nul";
+  if (typeof header.text !== "string" || header.text.length === 0 || header.text.includes("\0")) return "algorithm.header.text must be a non-empty string without NUL";
+  if (typeof header.bytes_hex !== "string" || !/^(?:[0-9a-f]{2})+$/u.test(header.bytes_hex)) return "algorithm.header.bytes_hex must be lowercase hex";
+  const bytes2 = Buffer.from(header.bytes_hex, "hex");
+  if (!Number.isInteger(header.length) || bytes2.length !== header.length) return `algorithm.header.length ${String(header.length)} does not match bytes_hex (${bytes2.length} bytes)`;
+  const expected = Buffer.concat([Buffer.from(header.text, "utf8"), Buffer.from([0])]);
+  if (!bytes2.equals(expected)) return "algorithm.header.bytes_hex is not text plus a trailing NUL";
+  return bytes2;
+}
+function parseEvidenceManifest(text3) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text3);
+  } catch {
+    return "not valid JSON";
+  }
+  const manifest2 = object9(parsed);
+  if (!manifest2) return "not a JSON object";
+  if (!nonEmptyString(manifest2.schema)) return "schema is required";
+  const pairSets = object9(manifest2.pair_sets);
+  if (!pairSets || Object.keys(pairSets).length === 0) return "pair_sets is required";
+  const pairSetsOut = {};
+  for (const [name, value] of Object.entries(pairSets)) {
+    const entry = object9(value);
+    if (!entry || typeof entry.base_commit !== "string" || !HEX402.test(entry.base_commit) || typeof entry.sessions !== "string" || parseSessionRange(entry.sessions) === void 0) return `pair_sets.${name} needs base_commit (40 hex) and a sessions range S-nn..S-mm`;
+    pairSetsOut[name] = { base_commit: entry.base_commit, sessions: entry.sessions };
+  }
+  const pins = object9(manifest2.evaluator_pins);
+  if (!pins) return "evaluator_pins is required";
+  const pinsOut = {};
+  for (const [commit, value] of Object.entries(pins)) {
+    const pin = object9(value);
+    const validator = object9(pin?.validator_source);
+    const review = object9(pin?.review_source);
+    const files = fileDigestList(validator?.ordered_files);
+    const reviewFiles = fileDigestList(review?.files);
+    if (!HEX402.test(commit) || !validator || !review || !files || !reviewFiles || reviewFiles.length !== 1 || !nonEmptyString(validator.hashed_paths_relative_to) || !validator.hashed_paths_relative_to.endsWith("/") || typeof validator.composite_sha256 !== "string" || !HEX646.test(validator.composite_sha256) || typeof review.composite_sha256 !== "string" || !HEX646.test(review.composite_sha256)) {
+      return `evaluator_pins.${commit} is malformed`;
+    }
+    if (files.some((file) => !file.path.startsWith(validator.hashed_paths_relative_to))) return `evaluator_pins.${commit}: a listed file is outside hashed_paths_relative_to`;
+    pinsOut[commit] = {
+      validator_source: { hashed_paths_relative_to: validator.hashed_paths_relative_to, ordered_files: files, composite_sha256: validator.composite_sha256 },
+      review_source: { files: reviewFiles, composite_sha256: review.composite_sha256 }
+    };
+  }
+  for (const [name, entry] of Object.entries(pairSetsOut)) {
+    if (pinsOut[entry.base_commit] === void 0) return `pair_sets.${name}: no evaluator pin for its base commit`;
+  }
+  const receipt = object9(manifest2.receipt_tool);
+  if (!receipt || !nonEmptyString(receipt.path) || typeof receipt.commit !== "string" || !SHORT_SHA.test(receipt.commit) || typeof receipt.sha256 !== "string" || !HEX646.test(receipt.sha256)) {
+    return "receipt_tool needs path, commit and sha256";
+  }
+  const sessions = Array.isArray(manifest2.session_map) ? manifest2.session_map : void 0;
+  if (!sessions || sessions.length === 0) return "session_map is required";
+  const sessionsOut = [];
+  for (const value of sessions) {
+    const entry = object9(value);
+    if (!entry || !nonEmptyString(entry.session) || entry.basis !== "recorded" && entry.basis !== "inferred") return "session_map entries need session and basis (recorded or inferred)";
+    sessionsOut.push({ session: entry.session, basis: entry.basis });
+  }
+  const header = decodeHeader(object9(manifest2.algorithm)?.header);
+  if (typeof header === "string") return header;
+  return {
+    schema: manifest2.schema,
+    pair_sets: pairSetsOut,
+    evaluator_pins: pinsOut,
+    receipt_tool: { path: receipt.path, commit: receipt.commit, sha256: receipt.sha256 },
+    session_map: sessionsOut,
+    header
+  };
+}
+var EVIDENCE_WALK_DEPTH = 4;
+function filesNamed(root, file, depth = 0) {
+  const found = [];
+  let entries2;
+  try {
+    entries2 = readdirSync9(root, { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of entries2) {
+    const path = join19(root, entry.name);
+    if (entry.isFile() && entry.name === file) found.push(path);
+    else if (entry.isDirectory() && depth < EVIDENCE_WALK_DEPTH) found.push(...filesNamed(path, file, depth + 1));
+  }
+  return found.sort();
+}
+function u64be(value) {
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64BE(BigInt(value));
+  return buffer;
+}
+function compositeDigest(header, files) {
+  const sorted = [...files].sort((left, right) => Buffer.compare(Buffer.from(left.relativePath, "utf8"), Buffer.from(right.relativePath, "utf8")));
+  const parts = [header];
+  for (const file of sorted) {
+    const path = Buffer.from(file.relativePath, "utf8");
+    parts.push(u64be(path.length), path, u64be(file.content.length), file.content);
+  }
+  return createHash27("sha256").update(Buffer.concat(parts)).digest("hex");
+}
+function gitShow(clone2, commit, path) {
+  const result = spawnSync7("git", ["--no-optional-locks", "-C", clone2, "show", `${commit}:${path}`], { maxBuffer: 64 * 1024 * 1024 });
+  return result.status === 0 ? result.stdout : void 0;
+}
+function isGitClone(path) {
+  if (!existsSync15(path) || !statSync6(path).isDirectory()) return false;
+  return spawnSync7("git", ["--no-optional-locks", "-C", path, "rev-parse", "--git-dir"], { stdio: "ignore" }).status === 0;
+}
+function sourceEnvironmentName(seam) {
+  return `MISTER_CLEAN_SOURCE_${seam.toUpperCase().replace(/[^A-Z0-9]/gu, "_")}`;
+}
+function verifierDigests(verifier) {
+  return /* @__PURE__ */ new Set([verifier.sha256, ...verifier.components.map((component) => component.sha256)]);
+}
+function manifestSessionBasis(manifest2) {
+  return manifest2.session_map.every((entry) => entry.basis === "recorded") ? "recorded" : "inferred";
+}
+function manifestValueRefusals(evalCase, manifest2, refusals) {
+  const before = refusals.length;
+  const mismatch = (citation, detail) => {
+    refusals.push({ code: "evidence_manifest_mismatch", citation, detail });
+  };
+  const commits = Object.values(manifest2.pair_sets).map((entry) => entry.base_commit);
+  const manifestDigests = /* @__PURE__ */ new Set([manifest2.receipt_tool.sha256]);
+  for (const commit of commits) {
+    const pin = manifest2.evaluator_pins[commit];
+    manifestDigests.add(pin.validator_source.composite_sha256);
+    manifestDigests.add(pin.review_source.composite_sha256);
+  }
+  const verifier = evalCase.verifier;
+  if ("binding" in verifier && verifier.binding === "pinned_external") {
+    for (const commit of commits) {
+      const pin = manifest2.evaluator_pins[commit];
+      if (pin.validator_source.composite_sha256 !== verifier.sha256) mismatch("$.verifier.sha256", `manifest composite at ${commit.slice(0, 12)} is ${pin.validator_source.composite_sha256}`);
+    }
+    const recorded = verifierDigests(verifier);
+    for (const digest4 of manifestDigests) if (!recorded.has(digest4)) mismatch("$.verifier.components", `manifest digest ${digest4} is not among the record's verifier digests`);
+    for (const digest4 of recorded) if (!manifestDigests.has(digest4)) mismatch("$.verifier.components", `record digest ${digest4} is not in the manifest`);
+  }
+  const base = evalCase.base_commit;
+  if ("binding" in base && base.binding === "pinned_external") {
+    const mapped = new Set(manifest2.session_map.map((entry) => entry.session));
+    for (const [index, commit] of base.commits.entries()) {
+      const entry = manifest2.pair_sets[commit.pair_set];
+      if (entry === void 0) {
+        mismatch(`$.base_commit.commits[${index}].pair_set`, `manifest has no pair set ${commit.pair_set}`);
+        continue;
+      }
+      if (entry.base_commit !== commit.sha) mismatch(`$.base_commit.commits[${index}].sha`, `manifest base commit for pair set ${commit.pair_set} is ${entry.base_commit}`);
+      const asserted = parseSessionRange(commit.sessions) ?? [];
+      const published = parseSessionRange(entry.sessions) ?? [];
+      if (asserted.join(",") !== published.join(",")) mismatch(`$.base_commit.commits[${index}].sessions`, `manifest sessions for pair set ${commit.pair_set} are ${entry.sessions}`);
+      for (const session of asserted) {
+        if (!mapped.has(session)) mismatch(`$.base_commit.commits[${index}].sessions`, `${session} is not in the manifest's session map`);
+      }
+    }
+    for (const name of Object.keys(manifest2.pair_sets)) {
+      if (!base.commits.some((commit) => commit.pair_set === name)) mismatch("$.base_commit.commits", `manifest pair set ${name} is not in the record`);
+    }
+    const basis = manifestSessionBasis(manifest2);
+    if (base.session_map !== basis) mismatch("$.base_commit.session_map", `manifest session map basis is ${basis}`);
+  }
+  return refusals.length === before;
+}
+function recomputeFromSource(evalCase, manifest2, citation, pointer, clone2, refusals) {
+  const before = refusals.length;
+  if (!commitExists(clone2, citation.source_commit)) {
+    refusals.push({ code: "publisher_commit_mismatch", citation: `${pointer}.manifest.source_commit`, detail: `${citation.source_commit} is not a commit in the source clone` });
+  } else {
+    const published = gitShow(clone2, citation.source_commit, citation.path);
+    if (published === void 0) {
+      refusals.push({ code: "publisher_commit_mismatch", citation: `${pointer}.manifest.path`, detail: `${citation.path} is not at ${citation.source_commit} in the source clone` });
+    } else {
+      const digest4 = createHash27("sha256").update(published).digest("hex");
+      if (digest4 !== citation.sha256) refusals.push({ code: "publisher_commit_mismatch", citation: `${pointer}.manifest.sha256`, detail: `${citation.path} at ${citation.source_commit} hashes to ${digest4}, not the cited ${citation.sha256}` });
+    }
+  }
+  const verifier = evalCase.verifier;
+  const recordComposite = "binding" in verifier && verifier.binding === "pinned_external" ? verifier.sha256 : void 0;
+  const recordDigests = "binding" in verifier && verifier.binding === "pinned_external" ? verifierDigests(verifier) : /* @__PURE__ */ new Set();
+  const header = manifest2.header;
+  for (const [name, entry] of Object.entries(manifest2.pair_sets)) {
+    const commit = entry.base_commit;
+    if (!commitExists(clone2, commit)) {
+      refusals.push({ code: "source_commit_missing", citation: "$.base_commit.commits", detail: `pair set ${name}: base commit ${commit} is not in the source clone` });
+      continue;
+    }
+    const pin = manifest2.evaluator_pins[commit];
+    const prefix = pin.validator_source.hashed_paths_relative_to;
+    const files = [];
+    let missing = false;
+    for (const file of pin.validator_source.ordered_files) {
+      const content = gitShow(clone2, commit, file.path);
+      if (content === void 0) {
+        refusals.push({ code: "source_commit_missing", citation: "$.verifier", detail: `${file.path} is not at ${commit.slice(0, 12)} in the source clone` });
+        missing = true;
+        continue;
+      }
+      files.push({ relativePath: file.path.slice(prefix.length), content });
+    }
+    if (missing) continue;
+    const composite = compositeDigest(header, files);
+    if (composite !== pin.validator_source.composite_sha256 || recordComposite !== void 0 && composite !== recordComposite) {
+      refusals.push({ code: "recompute_mismatch", citation: "$.verifier.sha256", detail: `recomputed ${composite} at ${commit.slice(0, 12)}; manifest ${pin.validator_source.composite_sha256}; record ${recordComposite ?? "(none)"}` });
+    }
+    const reviewPath = pin.review_source.files[0].path;
+    const reviewBytes = gitShow(clone2, commit, reviewPath);
+    if (reviewBytes === void 0) {
+      refusals.push({ code: "source_commit_missing", citation: "$.verifier.components", detail: `${reviewPath} is not at ${commit.slice(0, 12)} in the source clone` });
+    } else {
+      const review = createHash27("sha256").update(reviewBytes).digest("hex");
+      if (review !== pin.review_source.composite_sha256 || !recordDigests.has(review)) {
+        refusals.push({ code: "recompute_mismatch", citation: "$.verifier.components", detail: `recomputed review digest ${review} at ${commit.slice(0, 12)}; manifest ${pin.review_source.composite_sha256}` });
+      }
+    }
+  }
+  const receipt = gitShow(clone2, manifest2.receipt_tool.commit, manifest2.receipt_tool.path);
+  if (receipt === void 0) {
+    refusals.push({ code: "source_commit_missing", citation: "$.verifier.components", detail: `receipt tool ${manifest2.receipt_tool.path} is not at ${manifest2.receipt_tool.commit} in the source clone` });
+  } else {
+    const digest4 = createHash27("sha256").update(receipt).digest("hex");
+    if (digest4 !== manifest2.receipt_tool.sha256 || !recordDigests.has(digest4)) {
+      refusals.push({ code: "recompute_mismatch", citation: "$.verifier.components", detail: `recomputed receipt-tool digest ${digest4}; manifest ${manifest2.receipt_tool.sha256}` });
+    }
+  }
+  return refusals.length === before;
+}
+function validateEvalCase(input) {
+  const root = resolve27(input.repositoryRoot);
+  const requireBound = [...input.requireBound ?? []];
+  const refusals = evalCaseShapeRefusals(input.record);
+  const bound = [];
+  const external = [];
+  const unverified = [];
+  const pinnedExternal = [];
+  const recomputed = [];
+  const classes = {};
+  let replayRecomputed = null;
+  const record4 = object9(input.record);
+  const caseId = typeof record4?.case_id === "string" ? record4.case_id : null;
+  const registry = pinnedRegistryExport(root);
+  const pin = typeof registry === "string" ? void 0 : registry.version;
+  const evidenceRoot = input.evidenceRoot === void 0 ? void 0 : resolve27(input.evidenceRoot);
+  const sources = {};
+  for (const [seam, path] of Object.entries(input.sources ?? {})) sources[seam] = resolve27(path);
+  if (evidenceRoot !== void 0 && existsSync15(evidenceRoot) && containedIn2(root, evidenceRoot)) {
+    refusals.push({ code: "evidence_root_inside_repository", citation: "--evidence-root", detail: "the evidence root must lie outside the validated repository" });
+  }
+  const result = () => ({
+    record_type: EVAL_CASE_VALIDATION_RECORD_TYPE,
+    schema_version: "1",
+    status: refusals.length === 0 ? "eval_case_valid" : "eval_case_refused",
+    case_id: caseId,
+    record_path: input.recordPath,
+    repository_root: root,
+    registry_export_version: pin ?? null,
+    require_bound: requireBound,
+    bound,
+    external,
+    unverified,
+    pinned_external: pinnedExternal,
+    recomputed,
+    classes,
+    evidence_root: evidenceRoot ?? null,
+    sources,
+    replay_recomputed: replayRecomputed,
+    refusals
+  });
+  if (refusals.some((refusal) => refusal.code === "evidence_root_inside_repository")) return result();
+  if (refusals.every((refusal) => refusal.code !== "record_shape")) {
+    const evalCase = input.record;
+    bindCitation(root, evalCase.field_case, "$.field_case", refusals, bound);
+    for (const [index, card] of evalCase.agent_cards.entries()) {
+      const pointer = `$.agent_cards[${index}]`;
+      if (bindCitation(root, card, pointer, refusals, bound)) {
+        const front = cardFrontmatter(readFileSync19(join19(root, ...card.path.split("/")), "utf8"));
+        const mismatches = [];
+        if (front.get("card_id") !== card.card_id) mismatches.push(`card_id ${front.get("card_id") ?? "(none)"} != ${card.card_id}`);
+        if (front.get("model_registry_ref") !== card.model_registry_ref) mismatches.push(`model_registry_ref ${front.get("model_registry_ref") ?? "(none)"} != ${card.model_registry_ref}`);
+        if (mismatches.length > 0) {
+          bound.splice(bound.indexOf(pointer), 1);
+          refusals.push({ code: "card_ref_mismatch", citation: pointer, detail: `${card.path}: ${mismatches.join("; ")}` });
+        }
+      }
+      const refPointer = `${pointer}.model_registry_ref`;
+      if (typeof registry === "string") {
+        if (index === 0) refusals.push({ code: "registry_pin_missing", citation: REGISTRY_PIN_PATH, detail: `the pinned model-registry export could not be read: ${registry}` });
+      } else {
+        const ref = parseRegistryRef(card.model_registry_ref);
+        if (ref === void 0 || ref.version !== pin) {
+          refusals.push({ code: "registry_export_mismatch", citation: refPointer, detail: `${card.model_registry_ref}: expected export ${pin}` });
+        } else bound.push(refPointer);
+      }
+    }
+    if (typeof registry !== "string") {
+      for (const [index, row] of evalCase.replay.per_reviewer.entries()) {
+        const pointer = `$.replay.per_reviewer[${index}].reviewer_model`;
+        const card = evalCase.agent_cards.find((entry) => entry.card_id === row.card_id);
+        const registryId = card === void 0 ? void 0 : parseRegistryRef(card.model_registry_ref)?.id;
+        if (registryId === void 0) continue;
+        if (!registry.cards.has(registryId)) {
+          refusals.push({ code: "reviewer_model_unbound", citation: pointer, detail: `card ${row.card_id} names registry card ${registryId}, which export ${registry.version} does not carry` });
+          continue;
+        }
+        const models = registry.routes.get(registryId);
+        if (models === void 0 || models.size === 0) {
+          refusals.push({ code: "reviewer_model_unbound", citation: pointer, detail: `export ${registry.version} has no route for registry card ${registryId} (card ${row.card_id}), so ${row.reviewer_model} cannot be bound to it` });
+        } else if (!models.has(row.reviewer_model)) {
+          refusals.push({ code: "reviewer_model_unbound", citation: pointer, detail: `${row.reviewer_model} is not a provider model the export routes to registry card ${registryId} (card ${row.card_id}); routed: ${[...models].sort().join(", ")}` });
+        } else bound.push(pointer);
+      }
+    }
+    const verifier = evalCase.verifier;
+    const base = evalCase.base_commit;
+    const pinnedCitations = [];
+    if ("binding" in verifier) {
+      if (verifier.binding === "external") {
+        external.push("$.verifier");
+        classes["$.verifier"] = "external";
+      } else if (verifier.binding === "pinned_external") pinnedCitations.push({ pointer: "$.verifier", citation: verifier.manifest });
+    } else if ("path" in verifier) {
+      if (bindCitation(root, verifier, "$.verifier", refusals, bound)) classes["$.verifier"] = "local";
+    } else {
+      unverified.push("$.verifier");
+      classes["$.verifier"] = "unverified";
+    }
+    if ("binding" in base) {
+      if (base.binding === "external") {
+        external.push("$.base_commit");
+        classes["$.base_commit"] = "external";
+      } else if (base.binding === "pinned_external") pinnedCitations.push({ pointer: "$.base_commit", citation: base.manifest });
+    } else if (commitExists(root, base.sha)) {
+      bound.push("$.base_commit");
+      classes["$.base_commit"] = "local";
+    } else {
+      unverified.push("$.base_commit");
+      classes["$.base_commit"] = "unverified";
+    }
+    const lookups = /* @__PURE__ */ new Map();
+    const manifests = /* @__PURE__ */ new Map();
+    const outcomes = /* @__PURE__ */ new Map();
+    for (const { pointer, citation } of pinnedCitations) {
+      let lookup = lookups.get(citation.sha256);
+      if (lookup === void 0) {
+        lookup = { absent: true };
+        if (evidenceRoot !== void 0) {
+          const file = citation.path.split("/").pop();
+          const sameName = filesNamed(evidenceRoot, file);
+          const found = sameName.find((candidate) => sha256Of(candidate) === citation.sha256);
+          if (found === void 0 && sameName.length > 0) {
+            lookup = { problem: "evidence_manifest_mismatch", suffix: ".manifest.sha256", detail: `${file} under the evidence root hashes to ${sha256Of(sameName[0])}, not the cited ${citation.sha256}` };
+          } else if (found !== void 0) {
+            const parsed = parseEvidenceManifest(readFileSync19(found, "utf8"));
+            if (typeof parsed === "string") lookup = { problem: "evidence_manifest_unparsable", suffix: ".manifest", detail: `${file}: ${parsed}` };
+            else {
+              lookup = { manifest: parsed };
+              manifests.set(citation.sha256, parsed);
+            }
+          }
+        }
+        lookups.set(citation.sha256, lookup);
+      }
+      if ("problem" in lookup) refusals.push({ code: lookup.problem, citation: `${pointer}${lookup.suffix}`, detail: lookup.detail });
+      const manifest2 = manifests.get(citation.sha256);
+      if (manifest2 !== void 0 && !outcomes.has(citation.sha256)) {
+        if (!manifestValueRefusals(evalCase, manifest2, refusals)) outcomes.set(citation.sha256, "external");
+        else {
+          const seam = citation.seam;
+          const clone2 = sources[seam];
+          if (clone2 !== void 0 && !isGitClone(clone2)) {
+            refusals.push({ code: "source_commit_missing", citation: pointer, detail: `--source ${seam}: ${clone2} is not a Git clone` });
+            outcomes.set(citation.sha256, "pinned_external");
+          } else if (clone2 !== void 0) {
+            outcomes.set(citation.sha256, recomputeFromSource(evalCase, manifest2, citation, pointer, clone2, refusals) ? "recomputed" : "external");
+          } else outcomes.set(citation.sha256, "pinned_external");
+        }
+      }
+      const cls = outcomes.get(citation.sha256) ?? "external";
+      classes[pointer] = cls;
+      if (cls === "recomputed") recomputed.push(pointer);
+      else if (cls === "pinned_external") pinnedExternal.push(pointer);
+      else external.push(pointer);
+    }
+    if (bindCitation(root, evalCase.replay.rows_source, "$.replay.rows_source", refusals, bound)) {
+      const parsed = parseTallies(readFileSync19(join19(root, ...evalCase.replay.rows_source.path.split("/")), "utf8"));
+      if (typeof parsed === "string") {
+        refusals.push({ code: "rows_source_unparsable", citation: "$.replay.rows_source", detail: `${evalCase.replay.rows_source.path}: ${parsed}` });
+      } else {
+        const floor = evalCase.replay.floor.match(FLOOR);
+        const floorPasses = Number(floor[1]);
+        const floorReplays = Number(floor[2]);
+        for (const row of parsed) {
+          if (row.good_n !== floorReplays) {
+            refusals.push({ code: "replay_floor_mismatch", citation: "$.replay.floor", detail: `${row.session} ${row.population}: ${row.good_n} good replays tallied, floor ${evalCase.replay.floor} needs ${floorReplays}` });
+          }
+        }
+        replayRecomputed = recomputeReviewerCounts(parsed, floorPasses);
+        const totalSessions = new Set(parsed.map((row) => row.session)).size;
+        if (evalCase.replay.sessions !== totalSessions) {
+          refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.sessions", detail: `declared ${evalCase.replay.sessions}, recomputed ${totalSessions}` });
+        }
+        const subjectIds = new Set(evalCase.agent_cards.filter((card) => card.role === "subject").map((card) => card.card_id));
+        let subjectBreaches = 0;
+        const matched = /* @__PURE__ */ new Set();
+        for (const [index, row] of evalCase.replay.per_reviewer.entries()) {
+          const pointer = `$.replay.per_reviewer[${index}]`;
+          const group = replayRecomputed.find((entry) => entry.reviewer_model === row.reviewer_model && entry.pair_set === row.pair_set);
+          if (group === void 0) {
+            refusals.push({ code: "replay_counts_mismatch", citation: pointer, detail: `no tallied rows for reviewer ${row.reviewer_model} in pair set ${row.pair_set}` });
+            continue;
+          }
+          matched.add(group);
+          for (const field2 of COUNT_KEYS) {
+            if (row[field2] !== group[field2]) refusals.push({ code: "replay_counts_mismatch", citation: `${pointer}.${field2}`, detail: `declared ${row[field2]}, recomputed ${group[field2]}` });
+          }
+          if (subjectIds.has(row.card_id)) subjectBreaches += group.floor_breaches;
+        }
+        for (const group of replayRecomputed) {
+          if (!matched.has(group)) refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.per_reviewer", detail: `tallies carry reviewer ${group.reviewer_model} in pair set ${group.pair_set}, not declared` });
+        }
+        if ("binding" in evalCase.base_commit && evalCase.base_commit.binding !== "unbound") {
+          for (const [index, commit] of evalCase.base_commit.commits.entries()) {
+            const tallied = [...new Set(parsed.filter((row) => row.pair_set === commit.pair_set).map((row) => row.session))].sort();
+            const asserted = [...parseSessionRange(commit.sessions) ?? []].sort();
+            if (tallied.join(",") !== asserted.join(",")) {
+              refusals.push({ code: "replay_counts_mismatch", citation: `$.base_commit.commits[${index}].sessions`, detail: `tallies carry sessions ${tallied.join(",") || "(none)"} for pair set ${commit.pair_set}` });
+            }
+          }
+        }
+        if (evalCase.replay.outcome === "met" && subjectBreaches === 0) {
+          refusals.push({ code: "replay_floor_not_met", citation: "$.replay.outcome", detail: `met declared, but the subject's recomputed floor breaches are 0 under floor ${evalCase.replay.floor}` });
+        } else if (evalCase.replay.outcome === "missed" && subjectBreaches > 0) {
+          refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.outcome", detail: `missed declared, but the subject's recomputed floor breaches are ${subjectBreaches}` });
+        }
+      }
+    }
+    bindCitation(root, evalCase.derived_from, "$.derived_from", refusals, bound);
+    for (const field2 of requireBound) {
+      const pointer = `$.${field2}`;
+      const cls = classes[pointer];
+      if (cls !== "local" && cls !== "recomputed") {
+        refusals.push({ code: "binding_required", citation: pointer, detail: `${cls ?? "unbound"} citation; --require-bound ${field2} demands one re-verified in this repository or recomputed from --source with the manifest under --evidence-root` });
+      }
+    }
+  }
+  return result();
+}
+
 // src/closeout/second-pass.ts
+import { existsSync as existsSync16, readFileSync as readFileSync20, realpathSync as realpathSync12, statSync as statSync7 } from "fs";
+import { dirname as dirname17, join as join20, relative as relative20, resolve as resolve28, sep as sep20 } from "path";
 var SECOND_PASS_CLASSES = [
   "cleared",
   "persisting",
@@ -30978,16 +31863,16 @@ function classifySecondPass(input) {
   return rows.sort((left, right) => left.family.localeCompare(right.family) || left.path.localeCompare(right.path) || left.fingerprint.localeCompare(right.fingerprint));
 }
 function captureReceiptSubject(root, options = {}) {
-  if (!existsSync15(resolve27(root)) || !statSync6(resolve27(root)).isDirectory()) return void 0;
-  const resolved = realpathSync11(resolve27(root));
+  if (!existsSync16(resolve28(root)) || !statSync7(resolve28(root)).isDirectory()) return void 0;
+  const resolved = realpathSync12(resolve28(root));
   const toplevel = runGit2(resolved, ["rev-parse", "--show-toplevel"], [0, 128]);
   if (toplevel.status !== 0 || toplevel.stdout.length === 0) return void 0;
-  const repository = realpathSync11(resolve27(toplevel.stdout));
+  const repository = realpathSync12(resolve28(toplevel.stdout));
   const headCommit = runGit2(repository, ["rev-parse", "--verify", "HEAD^{commit}"], [0, 128]);
   if (headCommit.status !== 0) return void 0;
   const headTree = runGit2(repository, ["rev-parse", "--verify", "HEAD^{tree}"]).stdout;
   const dirty = runGit2(repository, ["status", "--porcelain", "--untracked-files=normal"]).stdout.length > 0;
-  const relation = relative19(repository, resolved).split(sep19).join("/");
+  const relation = relative20(repository, resolved).split(sep20).join("/");
   return {
     repository,
     subject: {
@@ -31040,12 +31925,12 @@ function runReadOnlyFamilies(capture, root, families, options = {}) {
 }
 var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
 function legacyBaselineFromBundle(reference) {
-  const path = resolve27(reference);
-  if (!existsSync15(path)) return void 0;
-  const directory = statSync6(path).isDirectory() ? path : dirname17(path);
-  const deltaPath = join19(directory, "regression-delta.json");
-  if (!existsSync15(deltaPath)) return void 0;
-  const delta = JSON.parse(readFileSync19(deltaPath, "utf8"));
+  const path = resolve28(reference);
+  if (!existsSync16(path)) return void 0;
+  const directory = statSync7(path).isDirectory() ? path : dirname17(path);
+  const deltaPath = join20(directory, "regression-delta.json");
+  if (!existsSync16(deltaPath)) return void 0;
+  const delta = JSON.parse(readFileSync20(deltaPath, "utf8"));
   const coverage = delta.detector_coverage;
   const executions = Array.isArray(coverage?.executions) ? coverage.executions : void 0;
   const baseline = coverage?.baseline_repository_object;
@@ -31059,10 +31944,10 @@ function legacyBaselineFromBundle(reference) {
     const family = detectorId;
     families.push(family);
     const resultRef = execution.result_ref;
-    const resultPath = typeof resultRef?.path === "string" ? join19(directory, resultRef.path) : void 0;
+    const resultPath = typeof resultRef?.path === "string" ? join20(directory, resultRef.path) : void 0;
     let fingerprints;
-    if (resultPath !== void 0 && existsSync15(resultPath)) {
-      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync19(resultPath, "utf8")));
+    if (resultPath !== void 0 && existsSync16(resultPath)) {
+      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync20(resultPath, "utf8")));
     }
     fingerprints ??= Array.isArray(execution.finding_fingerprints) ? execution.finding_fingerprints : [];
     for (const legacy of fingerprints) {
@@ -31079,7 +31964,7 @@ function legacyBaselineFromBundle(reference) {
   }
   return {
     kind: "legacy_bundle",
-    ref: relative19(process.cwd(), deltaPath) || deltaPath,
+    ref: relative20(process.cwd(), deltaPath) || deltaPath,
     head_commit: headCommit,
     dirty: null,
     families,
@@ -31163,16 +32048,16 @@ function runSecondPass(input) {
 }
 
 // src/toolchain-pin.ts
-import { existsSync as existsSync16, readFileSync as readFileSync20 } from "fs";
-import { join as join20, resolve as resolve28 } from "path";
+import { existsSync as existsSync17, readFileSync as readFileSync21 } from "fs";
+import { join as join21, resolve as resolve29 } from "path";
 var BUN_VERSION_FILE = ".bun-version";
 function runningBunVersion() {
   return process.versions.bun ?? null;
 }
 function readBunPin(root) {
-  const path = join20(resolve28(root), BUN_VERSION_FILE);
-  if (!existsSync16(path)) return void 0;
-  const version = readFileSync20(path, "utf8").trim();
+  const path = join21(resolve29(root), BUN_VERSION_FILE);
+  if (!existsSync17(path)) return void 0;
+  const version = readFileSync21(path, "utf8").trim();
   if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
   return version;
 }
@@ -31220,16 +32105,16 @@ function assertNoArgs(args) {
   if (args.length) throw new UsageError(`unexpected argument(s): ${args.join(" ")}`);
 }
 function inside2(root, candidate) {
-  const rootPath = resolve29(root);
-  const candidatePath = resolve29(candidate);
-  const relation = relative20(
-    existsSync17(rootPath) ? realpathSync12(rootPath) : rootPath,
-    existsSync17(candidatePath) ? realpathSync12(candidatePath) : candidatePath
+  const rootPath = resolve30(root);
+  const candidatePath = resolve30(candidate);
+  const relation = relative21(
+    existsSync18(rootPath) ? realpathSync13(rootPath) : rootPath,
+    existsSync18(candidatePath) ? realpathSync13(candidatePath) : candidatePath
   );
-  return relation === "" || !relation.startsWith(`..${sep20}`) && relation !== ".." && !relation.startsWith("/");
+  return relation === "" || !relation.startsWith(`..${sep21}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync21(path, "utf8"));
+  return JSON.parse(readFileSync22(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -31244,11 +32129,11 @@ async function runSemantic(args, io) {
     const proposalsPath = removeOption(args, "--case-proposals", true);
     const runId = removeOption(args, "--run-id", true);
     const challengeNonce = removeOption(args, "--nonce", true);
-    const outputPath = resolve29(removeOption(args, "--output", true));
+    const outputPath = resolve30(removeOption(args, "--output", true));
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync17(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync18(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -31433,19 +32318,19 @@ async function runValidate(args, io, runtimeAttestation) {
   if (kind !== "bundle" && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for bundle validation");
   }
-  if (acceptedEvaluatorPath !== void 0 && !isAbsolute24(acceptedEvaluatorPath)) {
+  if (acceptedEvaluatorPath !== void 0 && !isAbsolute25(acceptedEvaluatorPath)) {
     throw new UsageError("--accepted-evaluator requires an absolute path");
   }
   if (structural && acceptedEvaluatorPath !== void 0) {
     throw new UsageError("--accepted-evaluator is only valid for live bundle validation");
   }
-  if (guardAuthorityPath !== void 0 && !isAbsolute24(guardAuthorityPath)) {
+  if (guardAuthorityPath !== void 0 && !isAbsolute25(guardAuthorityPath)) {
     throw new UsageError("--guard-authority requires an absolute path");
   }
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join21(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join22(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -31491,13 +32376,13 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync17(root) || !statSync7(root).isDirectory()) {
-    io.stderr(`ERROR: not a directory: ${resolve29(root)}`);
+  if (!existsSync18(root) || !statSync8(root).isDirectory()) {
+    io.stderr(`ERROR: not a directory: ${resolve30(root)}`);
     return 2;
   }
   const result = await nodeCloseoutEngine.detectStack(root);
   if (json) {
-    io.stdout(JSON.stringify({ resolved_root: resolve29(root), ...result }, null, 2));
+    io.stdout(JSON.stringify({ resolved_root: resolve30(root), ...result }, null, 2));
     return result.exitCode;
   }
   if (result.status === "unknown") {
@@ -31506,9 +32391,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join21(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync17(reference)) return 0;
-  const text3 = readFileSync21(reference, "utf8");
+  const reference = join22(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync18(reference)) return 0;
+  const text3 = readFileSync22(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -31672,9 +32557,9 @@ async function runManifest(args, io) {
     }
   }
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join21(resolve29(root), "MANIFEST.sha256");
+  const path = join22(resolve30(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync17(path) || readFileSync21(path, "utf8") !== result.content) {
+    if (!existsSync18(path) || readFileSync22(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -31723,7 +32608,7 @@ async function runCensus(args, io) {
       output_path: output
     });
     writeFileSync8(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
-    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve29(output)}`);
+    io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve30(output)}`);
     return 0;
   }
   if (subcommand === "validate") {
@@ -31843,8 +32728,80 @@ async function runSecondPassCommand(args, io, runtimeAttestation, receipts, opti
   }
   return result.exitCode;
 }
+function emptyToUndefined(value) {
+  return value === void 0 || value.trim().length === 0 ? void 0 : value;
+}
+function seamsCitedBy(parsed) {
+  const seams = /* @__PURE__ */ new Set();
+  const top = record3(parsed);
+  for (const key of ["verifier", "base_commit"]) {
+    const field2 = record3(top?.[key]);
+    const manifest2 = record3(field2?.manifest);
+    if (field2?.binding === "pinned_external" && typeof manifest2?.seam === "string" && manifest2.seam.length > 0) seams.add(manifest2.seam);
+  }
+  return [...seams];
+}
+async function runEvalCase(args, io) {
+  const subcommand = args.shift();
+  if (subcommand !== "validate") throw new UsageError("eval-case requires validate");
+  const path = args[0]?.startsWith("--") === false ? args.shift() : void 0;
+  if (path === void 0) throw new UsageError("eval-case validate requires a record path");
+  const repo = removeOption(args, "--repo") ?? process.cwd();
+  const requireBoundOption = removeOption(args, "--require-bound");
+  const evidenceRoot = removeOption(args, "--evidence-root") ?? emptyToUndefined(process.env.MISTER_CLEAN_EVIDENCE_ROOT);
+  const sourceOptions = removeRepeatedOption(args, "--source");
+  const json = removeFlag(args, "--json");
+  assertNoArgs(args);
+  const requireBound = [];
+  for (const field2 of requireBoundOption === void 0 ? [] : requireBoundOption.split(",")) {
+    if (!REQUIRE_BOUND_FIELDS.includes(field2)) {
+      throw new UsageError(`--require-bound accepts a comma-separated subset of ${REQUIRE_BOUND_FIELDS.join(",")}`);
+    }
+    requireBound.push(field2);
+  }
+  const sources = {};
+  for (const option of sourceOptions) {
+    const equals2 = option.indexOf("=");
+    if (equals2 <= 0 || equals2 === option.length - 1) throw new UsageError("--source requires <seam>=<path to a local clone>");
+    sources[option.slice(0, equals2)] = option.slice(equals2 + 1);
+  }
+  if (!existsSync18(repo) || !statSync8(repo).isDirectory()) {
+    io.stderr(`ERROR: --repo is not a directory: ${resolve30(repo)}`);
+    return 2;
+  }
+  if (evidenceRoot !== void 0 && (!existsSync18(evidenceRoot) || !statSync8(evidenceRoot).isDirectory())) {
+    io.stderr(`ERROR: --evidence-root is not a directory: ${resolve30(evidenceRoot)}`);
+    return 2;
+  }
+  let parsed;
+  try {
+    parsed = readJson3(path);
+  } catch (error) {
+    parsed = void 0;
+    io.stderr(`ERROR: record_shape ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  for (const seam of seamsCitedBy(parsed)) {
+    const fromEnvironment = emptyToUndefined(process.env[sourceEnvironmentName(seam)]);
+    if (sources[seam] === void 0 && fromEnvironment !== void 0) sources[seam] = fromEnvironment;
+  }
+  const result = validateEvalCase({
+    record: parsed,
+    repositoryRoot: repo,
+    recordPath: path,
+    requireBound,
+    sources,
+    ...evidenceRoot === void 0 ? {} : { evidenceRoot }
+  });
+  if (json) io.stdout(JSON.stringify(result, null, 2));
+  else {
+    for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
+    const list = (items) => items.length === 0 ? "none" : items.join(",");
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} pinned_external=${list(result.pinned_external)} recomputed=${list(result.recomputed)} external=${list(result.external)} unverified=${list(result.unverified)} refusals=${result.refusals.length} require_bound=${list(result.require_bound)} evidence_root=${result.evidence_root === null ? "none" : "set"} sources=${list(Object.keys(result.sources))} registry_export=${result.registry_export_version ?? "unpinned"}`);
+  }
+  return result.status === "eval_case_valid" ? 0 : 2;
+}
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|language-policy|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|language-policy|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--evidence-root <dir>] [--source <seam>=<clone>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 function receiptStoreFromEnvironment(environment) {
   return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));
@@ -31856,7 +32813,7 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
   let lifecycleRunEventId = null;
   let terminalRecorded = false;
   try {
-    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "attest"])).has(String(command))) {
+    if (!(/* @__PURE__ */ new Set(["prepare", "action", "validate", "detect", "audit", "inspect", "census", "manifest", "semantic", "second-pass", "eval-case", "attest"])).has(String(command))) {
       usage(io);
       return 2;
     }
@@ -31868,6 +32825,7 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
     }
     let exitCode;
     if (command === "attest") exitCode = await runAttest(args, io);
+    else if (command === "eval-case") exitCode = await runEvalCase(args, io);
     else {
       const runtimeAttestation = await bindCliRuntime(io);
       if (!runtimeAttestation) exitCode = 2;
@@ -31908,9 +32866,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "semantic_boundary", file: "semantic-audit.json" },
               { family: "language_policy", file: "language-policy-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync17(join21(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join21(bundle, entry.file)) }));
-            const report = record3(readJson3(join21(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join21(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync18(join22(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join22(bundle, entry.file)) }));
+            const report = record3(readJson3(join22(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join22(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
             const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
@@ -31958,9 +32916,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
 function isDirectInvocation(argvPath, moduleUrl) {
   if (!argvPath) return false;
   try {
-    return realpathSync12(argvPath) === realpathSync12(fileURLToPath3(moduleUrl));
+    return realpathSync13(argvPath) === realpathSync13(fileURLToPath3(moduleUrl));
   } catch {
-    const invokedPath = resolve29(argvPath);
+    const invokedPath = resolve30(argvPath);
     return invokedPath === fileURLToPath3(moduleUrl) || pathToFileURL(invokedPath).href === moduleUrl;
   }
 }
