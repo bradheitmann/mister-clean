@@ -30336,7 +30336,7 @@ function receiptFindingsFromAudit(family, audit, context) {
 // src/eval-case.ts
 import { spawnSync as spawnSync7 } from "child_process";
 import { createHash as createHash26 } from "crypto";
-import { existsSync as existsSync14, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
+import { existsSync as existsSync14, readdirSync as readdirSync9, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
 import { isAbsolute as isAbsolute24, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
@@ -30698,6 +30698,33 @@ function citationShape(value, path, refusals) {
   }
   return ok;
 }
+var SHORT_SHA = /^[0-9a-f]{7,40}$/u;
+function manifestCitationShape(value, repository, path, refusals) {
+  const citation = object9(value);
+  if (!citation) {
+    shape(refusals, path, "expected an object with seam, source_commit, file and sha256");
+    return false;
+  }
+  if (!exactKeys2(citation, ["seam", "source_commit", "file", "sha256"], path, refusals)) return false;
+  let ok = true;
+  if (!nonEmptyString(citation.seam) || citation.seam !== repository) {
+    shape(refusals, `${path}.seam`, "expected the same repository seam as the citing field");
+    ok = false;
+  }
+  if (typeof citation.source_commit !== "string" || !SHORT_SHA.test(citation.source_commit)) {
+    shape(refusals, `${path}.source_commit`, "expected a 7-40 hex commit sha");
+    ok = false;
+  }
+  if (typeof citation.file !== "string" || !/^[A-Za-z0-9._-]+$/u.test(citation.file)) {
+    shape(refusals, `${path}.file`, "expected the manifest's bare file name");
+    ok = false;
+  }
+  if (typeof citation.sha256 !== "string" || !HEX646.test(citation.sha256)) {
+    shape(refusals, `${path}.sha256`, "expected lowercase SHA-256");
+    ok = false;
+  }
+  return ok;
+}
 function parseRegistryRef(ref) {
   const at = ref.lastIndexOf("@");
   if (at <= 0 || at === ref.length - 1) return void 0;
@@ -30765,8 +30792,11 @@ function evalCaseShapeRefusals(value) {
       if (!nonEmptyString(verifier.reason)) shape(refusals, "$.verifier.reason", "an unbound verifier must state why");
       refusals.push({ code: "verifier_unbound", citation: "$.verifier", detail: nonEmptyString(verifier.reason) ? verifier.reason : "verifier bytes are not bound" });
     }
-  } else if (verifier.binding === "external") {
-    if (exactKeys2(verifier, ["name", "kind", "binding", "repository", "location", "sha256", "components"], "$.verifier", refusals)) {
+  } else if (verifier.binding === "external" || verifier.binding === "pinned_external") {
+    const pinned = verifier.binding === "pinned_external";
+    const keys = pinned ? ["name", "kind", "binding", "repository", "location", "manifest", "sha256", "components"] : ["name", "kind", "binding", "repository", "location", "sha256", "components"];
+    if (exactKeys2(verifier, keys, "$.verifier", refusals)) {
+      if (pinned) manifestCitationShape(verifier.manifest, verifier.repository, "$.verifier.manifest", refusals);
       if (!nonEmptyString(verifier.name) || !nonEmptyString(verifier.kind)) shape(refusals, "$.verifier", "name and kind are required");
       if (!nonEmptyString(verifier.repository)) shape(refusals, "$.verifier.repository", "expected a repository seam id or name");
       if (!nonEmptyString(verifier.location)) shape(refusals, "$.verifier.location", "an external verifier must say where the evidence owner recorded its digests");
@@ -30807,8 +30837,11 @@ function evalCaseShapeRefusals(value) {
       if (!nonEmptyString(base.reason)) shape(refusals, "$.base_commit.reason", "an unbound base commit must state why");
       refusals.push({ code: "base_commit_unbound", citation: "$.base_commit", detail: nonEmptyString(base.reason) ? base.reason : "base commit is not bound" });
     }
-  } else if (base.binding === "external") {
-    if (exactKeys2(base, ["repository", "binding", "location", "session_map", "commits"], "$.base_commit", refusals)) {
+  } else if (base.binding === "external" || base.binding === "pinned_external") {
+    const pinned = base.binding === "pinned_external";
+    const keys = pinned ? ["repository", "binding", "location", "manifest", "session_map", "commits"] : ["repository", "binding", "location", "session_map", "commits"];
+    if (exactKeys2(base, keys, "$.base_commit", refusals)) {
+      if (pinned) manifestCitationShape(base.manifest, base.repository, "$.base_commit.manifest", refusals);
       if (!nonEmptyString(base.repository)) shape(refusals, "$.base_commit.repository", "expected a repository seam id or name");
       if (!nonEmptyString(base.location)) shape(refusals, "$.base_commit.location", "an external base commit must say where the evidence owner recorded it");
       if (base.session_map !== "recorded" && base.session_map !== "inferred") shape(refusals, "$.base_commit.session_map", "expected recorded or inferred");
@@ -30984,6 +31017,226 @@ function pinnedRegistryExportVersion(root) {
   const version = artifact?.version;
   return typeof version === "string" && version.length > 0 && !version.includes("@") ? version : void 0;
 }
+function fileDigestList(value) {
+  if (!Array.isArray(value) || value.length === 0) return void 0;
+  const list = [];
+  for (const entry of value) {
+    const item = object9(entry);
+    if (!item || typeof item.path !== "string" || item.path.length === 0 || typeof item.sha256 !== "string" || !HEX646.test(item.sha256)) return void 0;
+    list.push({ path: item.path, sha256: item.sha256 });
+  }
+  return list;
+}
+function decodeHeader(value) {
+  const header = object9(value);
+  if (!header) return "algorithm.header is absent";
+  if (header.encoding !== "utf8_with_trailing_nul") return "algorithm.header.encoding is not utf8_with_trailing_nul";
+  if (typeof header.text !== "string" || header.text.length === 0 || header.text.includes("\0")) return "algorithm.header.text must be a non-empty string without NUL";
+  if (typeof header.bytes_hex !== "string" || !/^(?:[0-9a-f]{2})+$/u.test(header.bytes_hex)) return "algorithm.header.bytes_hex must be lowercase hex";
+  const bytes2 = Buffer.from(header.bytes_hex, "hex");
+  if (!Number.isInteger(header.length) || bytes2.length !== header.length) return `algorithm.header.length ${String(header.length)} does not match bytes_hex (${bytes2.length} bytes)`;
+  const expected = Buffer.concat([Buffer.from(header.text, "utf8"), Buffer.from([0])]);
+  if (!bytes2.equals(expected)) return "algorithm.header.bytes_hex is not text plus a trailing NUL";
+  return bytes2;
+}
+function parseEvidenceManifest(text3) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text3);
+  } catch {
+    return "not valid JSON";
+  }
+  const manifest2 = object9(parsed);
+  if (!manifest2) return "not a JSON object";
+  if (!nonEmptyString(manifest2.schema)) return "schema is required";
+  const pairSets = object9(manifest2.pair_sets);
+  if (!pairSets || Object.keys(pairSets).length === 0) return "pair_sets is required";
+  const pairSetsOut = {};
+  for (const [name, value] of Object.entries(pairSets)) {
+    const entry = object9(value);
+    if (!entry || typeof entry.base_commit !== "string" || !HEX402.test(entry.base_commit) || !nonEmptyString(entry.sessions)) return `pair_sets.${name} needs base_commit (40 hex) and sessions`;
+    pairSetsOut[name] = { base_commit: entry.base_commit, sessions: entry.sessions };
+  }
+  const pins = object9(manifest2.evaluator_pins);
+  if (!pins) return "evaluator_pins is required";
+  const pinsOut = {};
+  for (const [commit, value] of Object.entries(pins)) {
+    const pin = object9(value);
+    const validator = object9(pin?.validator_source);
+    const review = object9(pin?.review_source);
+    const files = fileDigestList(validator?.ordered_files);
+    const reviewFiles = fileDigestList(review?.files);
+    if (!HEX402.test(commit) || !validator || !review || !files || !reviewFiles || reviewFiles.length !== 1 || !nonEmptyString(validator.hashed_paths_relative_to) || !validator.hashed_paths_relative_to.endsWith("/") || typeof validator.composite_sha256 !== "string" || !HEX646.test(validator.composite_sha256) || typeof review.composite_sha256 !== "string" || !HEX646.test(review.composite_sha256)) {
+      return `evaluator_pins.${commit} is malformed`;
+    }
+    if (files.some((file) => !file.path.startsWith(validator.hashed_paths_relative_to))) return `evaluator_pins.${commit}: a listed file is outside hashed_paths_relative_to`;
+    pinsOut[commit] = {
+      validator_source: { hashed_paths_relative_to: validator.hashed_paths_relative_to, ordered_files: files, composite_sha256: validator.composite_sha256 },
+      review_source: { files: reviewFiles, composite_sha256: review.composite_sha256 }
+    };
+  }
+  for (const [name, entry] of Object.entries(pairSetsOut)) {
+    if (pinsOut[entry.base_commit] === void 0) return `pair_sets.${name}: no evaluator pin for its base commit`;
+  }
+  const receipt = object9(manifest2.receipt_tool);
+  if (!receipt || !nonEmptyString(receipt.path) || typeof receipt.commit !== "string" || !SHORT_SHA.test(receipt.commit) || typeof receipt.sha256 !== "string" || !HEX646.test(receipt.sha256)) {
+    return "receipt_tool needs path, commit and sha256";
+  }
+  const sessions = Array.isArray(manifest2.session_map) ? manifest2.session_map : void 0;
+  if (!sessions || sessions.length === 0) return "session_map is required";
+  const sessionsOut = [];
+  for (const value of sessions) {
+    const entry = object9(value);
+    if (!entry || !nonEmptyString(entry.session) || entry.basis !== "recorded" && entry.basis !== "inferred") return "session_map entries need session and basis (recorded or inferred)";
+    sessionsOut.push({ session: entry.session, basis: entry.basis });
+  }
+  const header = decodeHeader(object9(manifest2.algorithm)?.header);
+  if (typeof header === "string") return header;
+  return {
+    schema: manifest2.schema,
+    pair_sets: pairSetsOut,
+    evaluator_pins: pinsOut,
+    receipt_tool: { path: receipt.path, commit: receipt.commit, sha256: receipt.sha256 },
+    session_map: sessionsOut,
+    header
+  };
+}
+var EVIDENCE_WALK_DEPTH = 4;
+function filesNamed(root, file, depth = 0) {
+  const found = [];
+  let entries2;
+  try {
+    entries2 = readdirSync9(root, { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of entries2) {
+    const path = join18(root, entry.name);
+    if (entry.isFile() && entry.name === file) found.push(path);
+    else if (entry.isDirectory() && depth < EVIDENCE_WALK_DEPTH) found.push(...filesNamed(path, file, depth + 1));
+  }
+  return found.sort();
+}
+function u64be(value) {
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64BE(BigInt(value));
+  return buffer;
+}
+function compositeDigest(header, files) {
+  const sorted = [...files].sort((left, right) => Buffer.compare(Buffer.from(left.relativePath, "utf8"), Buffer.from(right.relativePath, "utf8")));
+  const parts = [header];
+  for (const file of sorted) {
+    const path = Buffer.from(file.relativePath, "utf8");
+    parts.push(u64be(path.length), path, u64be(file.content.length), file.content);
+  }
+  return createHash26("sha256").update(Buffer.concat(parts)).digest("hex");
+}
+function gitShow(clone2, commit, path) {
+  const result = spawnSync7("git", ["--no-optional-locks", "-C", clone2, "show", `${commit}:${path}`], { maxBuffer: 64 * 1024 * 1024 });
+  return result.status === 0 ? result.stdout : void 0;
+}
+function isGitClone(path) {
+  if (!existsSync14(path) || !statSync6(path).isDirectory()) return false;
+  return spawnSync7("git", ["--no-optional-locks", "-C", path, "rev-parse", "--git-dir"], { stdio: "ignore" }).status === 0;
+}
+function sourceEnvironmentName(seam) {
+  return `MISTER_CLEAN_SOURCE_${seam.toUpperCase().replace(/[^A-Z0-9]/gu, "_")}`;
+}
+function verifierDigests(verifier) {
+  return /* @__PURE__ */ new Set([verifier.sha256, ...verifier.components.map((component) => component.sha256)]);
+}
+function manifestSessionBasis(manifest2) {
+  return manifest2.session_map.every((entry) => entry.basis === "recorded") ? "recorded" : "inferred";
+}
+function manifestValueRefusals(evalCase, manifest2, refusals) {
+  const before = refusals.length;
+  const mismatch = (citation, detail) => {
+    refusals.push({ code: "evidence_manifest_mismatch", citation, detail });
+  };
+  const commits = Object.values(manifest2.pair_sets).map((entry) => entry.base_commit);
+  const manifestDigests = /* @__PURE__ */ new Set([manifest2.receipt_tool.sha256]);
+  for (const commit of commits) {
+    const pin = manifest2.evaluator_pins[commit];
+    manifestDigests.add(pin.validator_source.composite_sha256);
+    manifestDigests.add(pin.review_source.composite_sha256);
+  }
+  const verifier = evalCase.verifier;
+  if ("binding" in verifier && verifier.binding === "pinned_external") {
+    for (const commit of commits) {
+      const pin = manifest2.evaluator_pins[commit];
+      if (pin.validator_source.composite_sha256 !== verifier.sha256) mismatch("$.verifier.sha256", `manifest composite at ${commit.slice(0, 12)} is ${pin.validator_source.composite_sha256}`);
+    }
+    const recorded = verifierDigests(verifier);
+    for (const digest4 of manifestDigests) if (!recorded.has(digest4)) mismatch("$.verifier.components", `manifest digest ${digest4} is not among the record's verifier digests`);
+    for (const digest4 of recorded) if (!manifestDigests.has(digest4)) mismatch("$.verifier.components", `record digest ${digest4} is not in the manifest`);
+  }
+  const base = evalCase.base_commit;
+  if ("binding" in base && base.binding === "pinned_external") {
+    for (const [index, commit] of base.commits.entries()) {
+      const entry = manifest2.pair_sets[commit.pair_set];
+      if (entry === void 0) mismatch(`$.base_commit.commits[${index}].pair_set`, `manifest has no pair set ${commit.pair_set}`);
+      else if (entry.base_commit !== commit.sha) mismatch(`$.base_commit.commits[${index}].sha`, `manifest base commit for pair set ${commit.pair_set} is ${entry.base_commit}`);
+    }
+    for (const name of Object.keys(manifest2.pair_sets)) {
+      if (!base.commits.some((commit) => commit.pair_set === name)) mismatch("$.base_commit.commits", `manifest pair set ${name} is not in the record`);
+    }
+    const basis = manifestSessionBasis(manifest2);
+    if (base.session_map !== basis) mismatch("$.base_commit.session_map", `manifest session map basis is ${basis}`);
+  }
+  return refusals.length === before;
+}
+function recomputeFromSource(evalCase, manifest2, clone2, refusals) {
+  const before = refusals.length;
+  const verifier = evalCase.verifier;
+  const recordComposite = "binding" in verifier && verifier.binding === "pinned_external" ? verifier.sha256 : void 0;
+  const recordDigests = "binding" in verifier && verifier.binding === "pinned_external" ? verifierDigests(verifier) : /* @__PURE__ */ new Set();
+  const header = manifest2.header;
+  for (const [name, entry] of Object.entries(manifest2.pair_sets)) {
+    const commit = entry.base_commit;
+    if (!commitExists(clone2, commit)) {
+      refusals.push({ code: "source_commit_missing", citation: "$.base_commit.commits", detail: `pair set ${name}: base commit ${commit} is not in the source clone` });
+      continue;
+    }
+    const pin = manifest2.evaluator_pins[commit];
+    const prefix = pin.validator_source.hashed_paths_relative_to;
+    const files = [];
+    let missing = false;
+    for (const file of pin.validator_source.ordered_files) {
+      const content = gitShow(clone2, commit, file.path);
+      if (content === void 0) {
+        refusals.push({ code: "source_commit_missing", citation: "$.verifier", detail: `${file.path} is not at ${commit.slice(0, 12)} in the source clone` });
+        missing = true;
+        continue;
+      }
+      files.push({ relativePath: file.path.slice(prefix.length), content });
+    }
+    if (missing) continue;
+    const composite = compositeDigest(header, files);
+    if (composite !== pin.validator_source.composite_sha256 || recordComposite !== void 0 && composite !== recordComposite) {
+      refusals.push({ code: "recompute_mismatch", citation: "$.verifier.sha256", detail: `recomputed ${composite} at ${commit.slice(0, 12)}; manifest ${pin.validator_source.composite_sha256}; record ${recordComposite ?? "(none)"}` });
+    }
+    const reviewPath = pin.review_source.files[0].path;
+    const reviewBytes = gitShow(clone2, commit, reviewPath);
+    if (reviewBytes === void 0) {
+      refusals.push({ code: "source_commit_missing", citation: "$.verifier.components", detail: `${reviewPath} is not at ${commit.slice(0, 12)} in the source clone` });
+    } else {
+      const review = createHash26("sha256").update(reviewBytes).digest("hex");
+      if (review !== pin.review_source.composite_sha256 || !recordDigests.has(review)) {
+        refusals.push({ code: "recompute_mismatch", citation: "$.verifier.components", detail: `recomputed review digest ${review} at ${commit.slice(0, 12)}; manifest ${pin.review_source.composite_sha256}` });
+      }
+    }
+  }
+  const receipt = gitShow(clone2, manifest2.receipt_tool.commit, manifest2.receipt_tool.path);
+  if (receipt === void 0) {
+    refusals.push({ code: "source_commit_missing", citation: "$.verifier.components", detail: `receipt tool ${manifest2.receipt_tool.path} is not at ${manifest2.receipt_tool.commit} in the source clone` });
+  } else {
+    const digest4 = createHash26("sha256").update(receipt).digest("hex");
+    if (digest4 !== manifest2.receipt_tool.sha256 || !recordDigests.has(digest4)) {
+      refusals.push({ code: "recompute_mismatch", citation: "$.verifier.components", detail: `recomputed receipt-tool digest ${digest4}; manifest ${manifest2.receipt_tool.sha256}` });
+    }
+  }
+  return refusals.length === before;
+}
 function validateEvalCase(input) {
   const root = resolve27(input.repositoryRoot);
   const requireBound = [...input.requireBound ?? []];
@@ -30991,10 +31244,40 @@ function validateEvalCase(input) {
   const bound = [];
   const external = [];
   const unverified = [];
-  let recomputed = null;
+  const pinnedExternal = [];
+  const recomputed = [];
+  const classes = {};
+  let replayRecomputed = null;
   const record4 = object9(input.record);
   const caseId = typeof record4?.case_id === "string" ? record4.case_id : null;
   const pin = pinnedRegistryExportVersion(root);
+  const evidenceRoot = input.evidenceRoot === void 0 ? void 0 : resolve27(input.evidenceRoot);
+  const sources = {};
+  for (const [seam, path] of Object.entries(input.sources ?? {})) sources[seam] = resolve27(path);
+  if (evidenceRoot !== void 0 && existsSync14(evidenceRoot) && containedIn2(root, evidenceRoot)) {
+    refusals.push({ code: "evidence_root_inside_repository", citation: "--evidence-root", detail: "the evidence root must lie outside the validated repository" });
+  }
+  const result = () => ({
+    record_type: EVAL_CASE_VALIDATION_RECORD_TYPE,
+    schema_version: "1",
+    status: refusals.length === 0 ? "eval_case_valid" : "eval_case_refused",
+    case_id: caseId,
+    record_path: input.recordPath,
+    repository_root: root,
+    registry_export_version: pin ?? null,
+    require_bound: requireBound,
+    bound,
+    external,
+    unverified,
+    pinned_external: pinnedExternal,
+    recomputed,
+    classes,
+    evidence_root: evidenceRoot ?? null,
+    sources,
+    replay_recomputed: replayRecomputed,
+    refusals
+  });
+  if (refusals.some((refusal) => refusal.code === "evidence_root_inside_repository")) return result();
   if (refusals.every((refusal) => refusal.code !== "record_shape")) {
     const evalCase = input.record;
     bindCitation(root, evalCase.field_case, "$.field_case", refusals, bound);
@@ -31021,18 +31304,75 @@ function validateEvalCase(input) {
       }
     }
     const verifier = evalCase.verifier;
+    const base = evalCase.base_commit;
+    const pinnedCitations = [];
     if ("binding" in verifier) {
-      if (verifier.binding === "external") external.push("$.verifier");
+      if (verifier.binding === "external") {
+        external.push("$.verifier");
+        classes["$.verifier"] = "external";
+      } else if (verifier.binding === "pinned_external") pinnedCitations.push({ pointer: "$.verifier", citation: verifier.manifest });
     } else if ("path" in verifier) {
-      bindCitation(root, verifier, "$.verifier", refusals, bound);
+      if (bindCitation(root, verifier, "$.verifier", refusals, bound)) classes["$.verifier"] = "local";
     } else {
       unverified.push("$.verifier");
+      classes["$.verifier"] = "unverified";
     }
-    const base = evalCase.base_commit;
     if ("binding" in base) {
-      if (base.binding === "external") external.push("$.base_commit");
-    } else if (commitExists(root, base.sha)) bound.push("$.base_commit");
-    else unverified.push("$.base_commit");
+      if (base.binding === "external") {
+        external.push("$.base_commit");
+        classes["$.base_commit"] = "external";
+      } else if (base.binding === "pinned_external") pinnedCitations.push({ pointer: "$.base_commit", citation: base.manifest });
+    } else if (commitExists(root, base.sha)) {
+      bound.push("$.base_commit");
+      classes["$.base_commit"] = "local";
+    } else {
+      unverified.push("$.base_commit");
+      classes["$.base_commit"] = "unverified";
+    }
+    const lookups = /* @__PURE__ */ new Map();
+    const manifests = /* @__PURE__ */ new Map();
+    const outcomes = /* @__PURE__ */ new Map();
+    for (const { pointer, citation } of pinnedCitations) {
+      let lookup = lookups.get(citation.sha256);
+      if (lookup === void 0) {
+        lookup = { absent: true };
+        if (evidenceRoot !== void 0) {
+          const sameName = filesNamed(evidenceRoot, citation.file);
+          const found = sameName.find((candidate) => sha256Of(candidate) === citation.sha256);
+          if (found === void 0 && sameName.length > 0) {
+            lookup = { problem: "evidence_manifest_mismatch", suffix: ".manifest.sha256", detail: `${citation.file} under the evidence root hashes to ${sha256Of(sameName[0])}, not the cited ${citation.sha256}` };
+          } else if (found !== void 0) {
+            const parsed = parseEvidenceManifest(readFileSync18(found, "utf8"));
+            if (typeof parsed === "string") lookup = { problem: "evidence_manifest_unparsable", suffix: ".manifest", detail: `${citation.file}: ${parsed}` };
+            else {
+              lookup = { manifest: parsed };
+              manifests.set(citation.sha256, parsed);
+            }
+          }
+        }
+        lookups.set(citation.sha256, lookup);
+      }
+      if ("problem" in lookup) refusals.push({ code: lookup.problem, citation: `${pointer}${lookup.suffix}`, detail: lookup.detail });
+      const manifest2 = manifests.get(citation.sha256);
+      if (manifest2 !== void 0 && !outcomes.has(citation.sha256)) {
+        if (!manifestValueRefusals(evalCase, manifest2, refusals)) outcomes.set(citation.sha256, "external");
+        else {
+          const seam = citation.seam;
+          const clone2 = sources[seam];
+          if (clone2 !== void 0 && !isGitClone(clone2)) {
+            refusals.push({ code: "source_commit_missing", citation: pointer, detail: `--source ${seam}: ${clone2} is not a Git clone` });
+            outcomes.set(citation.sha256, "pinned_external");
+          } else if (clone2 !== void 0) {
+            outcomes.set(citation.sha256, recomputeFromSource(evalCase, manifest2, clone2, refusals) ? "recomputed" : "external");
+          } else outcomes.set(citation.sha256, "pinned_external");
+        }
+      }
+      const cls = outcomes.get(citation.sha256) ?? "external";
+      classes[pointer] = cls;
+      if (cls === "recomputed") recomputed.push(pointer);
+      else if (cls === "pinned_external") pinnedExternal.push(pointer);
+      else external.push(pointer);
+    }
     if (bindCitation(root, evalCase.replay.rows_source, "$.replay.rows_source", refusals, bound)) {
       const parsed = parseTallies(readFileSync18(join18(root, ...evalCase.replay.rows_source.path.split("/")), "utf8"));
       if (typeof parsed === "string") {
@@ -31046,7 +31386,7 @@ function validateEvalCase(input) {
             refusals.push({ code: "replay_floor_mismatch", citation: "$.replay.floor", detail: `${row.session} ${row.population}: ${row.good_n} good replays tallied, floor ${evalCase.replay.floor} needs ${floorReplays}` });
           }
         }
-        recomputed = recomputeReviewerCounts(parsed, floorPasses);
+        replayRecomputed = recomputeReviewerCounts(parsed, floorPasses);
         const totalSessions = new Set(parsed.map((row) => row.session)).size;
         if (evalCase.replay.sessions !== totalSessions) {
           refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.sessions", detail: `declared ${evalCase.replay.sessions}, recomputed ${totalSessions}` });
@@ -31056,7 +31396,7 @@ function validateEvalCase(input) {
         const matched = /* @__PURE__ */ new Set();
         for (const [index, row] of evalCase.replay.per_reviewer.entries()) {
           const pointer = `$.replay.per_reviewer[${index}]`;
-          const group = recomputed.find((entry) => entry.reviewer_model === row.reviewer_model && entry.pair_set === row.pair_set);
+          const group = replayRecomputed.find((entry) => entry.reviewer_model === row.reviewer_model && entry.pair_set === row.pair_set);
           if (group === void 0) {
             refusals.push({ code: "replay_counts_mismatch", citation: pointer, detail: `no tallied rows for reviewer ${row.reviewer_model} in pair set ${row.pair_set}` });
             continue;
@@ -31067,7 +31407,7 @@ function validateEvalCase(input) {
           }
           if (subjectIds.has(row.card_id)) subjectBreaches += group.floor_breaches;
         }
-        for (const group of recomputed) {
+        for (const group of replayRecomputed) {
           if (!matched.has(group)) refusals.push({ code: "replay_counts_mismatch", citation: "$.replay.per_reviewer", detail: `tallies carry reviewer ${group.reviewer_model} in pair set ${group.pair_set}, not declared` });
         }
         if (evalCase.replay.outcome === "met" && subjectBreaches === 0) {
@@ -31080,26 +31420,13 @@ function validateEvalCase(input) {
     bindCitation(root, evalCase.derived_from, "$.derived_from", refusals, bound);
     for (const field2 of requireBound) {
       const pointer = `$.${field2}`;
-      if (external.includes(pointer) || unverified.includes(pointer)) {
-        refusals.push({ code: "binding_required", citation: pointer, detail: `${external.includes(pointer) ? "external" : "unverified"} citation; --require-bound ${field2} demands one re-verified in this repository` });
+      const cls = classes[pointer];
+      if (cls === "external" || cls === "unverified") {
+        refusals.push({ code: "binding_required", citation: pointer, detail: `${cls} citation; --require-bound ${field2} demands one re-verified in this repository, through an evidence manifest under --evidence-root, or recomputed from --source` });
       }
     }
   }
-  return {
-    record_type: EVAL_CASE_VALIDATION_RECORD_TYPE,
-    schema_version: "1",
-    status: refusals.length === 0 ? "eval_case_valid" : "eval_case_refused",
-    case_id: caseId,
-    record_path: input.recordPath,
-    repository_root: root,
-    registry_export_version: pin ?? null,
-    require_bound: requireBound,
-    bound,
-    external,
-    unverified,
-    replay_recomputed: recomputed,
-    refusals
-  };
+  return result();
 }
 
 // src/closeout/second-pass.ts
@@ -32061,6 +32388,19 @@ async function runSecondPassCommand(args, io, runtimeAttestation, receipts, opti
   }
   return result.exitCode;
 }
+function emptyToUndefined(value) {
+  return value === void 0 || value.trim().length === 0 ? void 0 : value;
+}
+function seamsCitedBy(parsed) {
+  const seams = /* @__PURE__ */ new Set();
+  const top = record3(parsed);
+  for (const key of ["verifier", "base_commit"]) {
+    const field2 = record3(top?.[key]);
+    const manifest2 = record3(field2?.manifest);
+    if (field2?.binding === "pinned_external" && typeof manifest2?.seam === "string" && manifest2.seam.length > 0) seams.add(manifest2.seam);
+  }
+  return [...seams];
+}
 async function runEvalCase(args, io) {
   const subcommand = args.shift();
   if (subcommand !== "validate") throw new UsageError("eval-case requires validate");
@@ -32068,6 +32408,8 @@ async function runEvalCase(args, io) {
   if (path === void 0) throw new UsageError("eval-case validate requires a record path");
   const repo = removeOption(args, "--repo") ?? process.cwd();
   const requireBoundOption = removeOption(args, "--require-bound");
+  const evidenceRoot = removeOption(args, "--evidence-root") ?? emptyToUndefined(process.env.MISTER_CLEAN_EVIDENCE_ROOT);
+  const sourceOptions = removeRepeatedOption(args, "--source");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
   const requireBound = [];
@@ -32077,8 +32419,18 @@ async function runEvalCase(args, io) {
     }
     requireBound.push(field2);
   }
+  const sources = {};
+  for (const option of sourceOptions) {
+    const equals2 = option.indexOf("=");
+    if (equals2 <= 0 || equals2 === option.length - 1) throw new UsageError("--source requires <seam>=<path to a local clone>");
+    sources[option.slice(0, equals2)] = option.slice(equals2 + 1);
+  }
   if (!existsSync17(repo) || !statSync8(repo).isDirectory()) {
     io.stderr(`ERROR: --repo is not a directory: ${resolve30(repo)}`);
+    return 2;
+  }
+  if (evidenceRoot !== void 0 && (!existsSync17(evidenceRoot) || !statSync8(evidenceRoot).isDirectory())) {
+    io.stderr(`ERROR: --evidence-root is not a directory: ${resolve30(evidenceRoot)}`);
     return 2;
   }
   let parsed;
@@ -32088,17 +32440,28 @@ async function runEvalCase(args, io) {
     parsed = void 0;
     io.stderr(`ERROR: record_shape ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const result = validateEvalCase({ record: parsed, repositoryRoot: repo, recordPath: path, requireBound });
+  for (const seam of seamsCitedBy(parsed)) {
+    const fromEnvironment = emptyToUndefined(process.env[sourceEnvironmentName(seam)]);
+    if (sources[seam] === void 0 && fromEnvironment !== void 0) sources[seam] = fromEnvironment;
+  }
+  const result = validateEvalCase({
+    record: parsed,
+    repositoryRoot: repo,
+    recordPath: path,
+    requireBound,
+    sources,
+    ...evidenceRoot === void 0 ? {} : { evidenceRoot }
+  });
   if (json) io.stdout(JSON.stringify(result, null, 2));
   else {
     for (const refusal of result.refusals) io.stderr(`ERROR: ${refusal.code} ${refusal.citation}: ${refusal.detail}`);
     const list = (items) => items.length === 0 ? "none" : items.join(",");
-    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} external=${list(result.external)} unverified=${list(result.unverified)} refusals=${result.refusals.length} require_bound=${list(result.require_bound)} registry_export=${result.registry_export_version ?? "unpinned"}`);
+    io.stdout(`eval-case: ${result.status === "eval_case_valid" ? "VALID" : "REFUSED"} case=${result.case_id ?? "?"} bound=${result.bound.length} pinned_external=${list(result.pinned_external)} recomputed=${list(result.recomputed)} external=${list(result.external)} unverified=${list(result.unverified)} refusals=${result.refusals.length} require_bound=${list(result.require_bound)} evidence_root=${result.evidence_root === null ? "none" : "set"} sources=${list(Object.keys(result.sources))} registry_export=${result.registry_export_version ?? "unpinned"}`);
   }
   return result.status === "eval_case_valid" ? 0 : 2;
 }
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|eval-case|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; eval-case validate <file.eval.json> [--repo <root>] [--require-bound verifier,base_commit] [--evidence-root <dir>] [--source <seam>=<clone>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 function receiptStoreFromEnvironment(environment) {
   return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));
