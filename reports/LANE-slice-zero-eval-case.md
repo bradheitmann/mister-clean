@@ -145,3 +145,85 @@ bound=5 external=2 refusals=0 registry_export=2026.11.03-1`, exit 0; `src/eval-c
 → 48/48 (under the new `vitest.config.ts` per-run temp root); SKILL.md 19,975 bytes, equal to main's; `charter check
 --strict` ok; `audit:public` PASS (83 files). The lane's own files are still byte-identical to `2b2cfdb`. No full suite
 on this merge (PM decision; hosted CI arbitrates).
+
+# Rework 1 — after MC/QA REJECTED 01b20677
+
+QA's two blocking findings: `bound` overstated verification (a bare verifier digest and a fabricated commit were
+reported bound; forged external digests validated), and the repeat floor was taken from the record, never recomputed.
+DONE list for the rework committed first as `charter/DONE/slice-zero-eval-case-rework-1.md` (`e81d787`; proof 7's
+reopen clause added at `697fa8c` after `charter check --strict` named it, wording only). The five QA probes
+(forged-verifier-commit, false-bound, fabricated-external, all-external, zero-replays) are now generic fixtures in
+`src/eval-case.test.ts`; the private evidence path is not in any public file.
+
+## What changed (`f8ebca5`)
+
+- Three citation classes, never conflated, each named in the text line and listed in JSON: `bound` (re-verified
+  here), `external` (`binding: "external"`; digests recorded from the evidence owner, not re-hashed), `unverified`
+  (a bare verifier digest with no local file; a commit sha that is not an object in the checkout, checked with
+  `git cat-file -e`). A verifier bound by local file is `{name, kind, path, sha256}` and is re-hashed.
+- Agent cards cite their card file by `path` + `sha256`; the file's frontmatter `card_id` and `model_registry_ref`
+  must equal the record's (`card_ref_mismatch`), and the ref's export version must equal the pin.
+- The replay table is recomputed from the cited tallies TSV (strict 9-column parse; `rows_source_unparsable`):
+  per-reviewer sessions, good replays, false rejects, populations at and below the floor, bad passes, the total
+  session count, every tallied population carrying the floor's replay count (`replay_floor_mismatch`), and the
+  outcome (`met` iff the subject reviewer breached the floor at least once; `replay_floor_not_met` otherwise). Any
+  difference from the record's claim is `replay_counts_mismatch` at the exact field. Closes O-EVAL-CASE-1 and -2.
+- `--require-bound verifier,base_commit`: an external or unverified citation there is `binding_required`. The
+  charter command uses it; `--json` carries `require_bound`, `unverified` and `replay_recomputed`.
+
+## The real record under the new validator (through the built bin, merged tip)
+
+```
+$ node bin/mister-clean.js eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo . --require-bound verifier,base_commit
+ERROR: binding_required $.verifier: external citation; --require-bound verifier demands one re-verified in this repository
+ERROR: binding_required $.base_commit: external citation; --require-bound base_commit demands one re-verified in this repository
+eval-case: REFUSED case=CS-001 bound=7 external=$.verifier,$.base_commit unverified=none refusals=2 require_bound=verifier,base_commit registry_export=2026.11.03-1
+exit=2
+
+$ node bin/mister-clean.js eval-case validate field-evals/2026-10-31-window/cases/CS-001.eval.json --repo .
+eval-case: VALID case=CS-001 bound=7 external=$.verifier,$.base_commit unverified=none refusals=0 require_bound=none registry_export=2026.11.03-1
+exit=0
+```
+
+So **`proven_on` is cleared to `""`**: the strict charter command refuses, correctly. The seven bound citations are the
+case file, both card files (frontmatter ids and refs equal), both registry refs against the pin, the tallies and
+RC-001; every per-reviewer count, the 13-session total and the `met` outcome were recomputed from
+`control-tallies.tsv` and equal the record. What stays external is exactly the verifier and the base commits.
+
+**What would bind them** (the cross-repository artifact; recorded obligation O-EVAL-CASE-3): the evidence owner
+publishes a digest-pinned evidence manifest (version + sha256, like the model-atlas export) that lists, for this
+replay, the evaluator component digests (`validator_source`, `review_source`, the receipt-tool countercases) and the
+base commit per pair set with the session map and its status (recorded or inferred). Mister Clean vendors it under
+`customer-tests/` with its pin, the validator re-hashes the vendored manifest and matches the record's external
+digests against it, and only then are `$.verifier` and `$.base_commit` `bound`. Until that route exists, a fresh clone
+of this repository cannot re-verify them, and `proven_on` stays empty.
+
+## Proofs and observed-RED mutants (all nine on the final module `3d756654…`; each restored and verified `cmp`-identical)
+
+| # | Proof | Mutant | Observed |
+|---|---|---|---|
+| 1 | fixture-record-binds (original) | `if (actual !== citation.sha256)` → `if (false)` | RED: flipped sha256 exited 0 |
+| 2 | agent-cards-count (original) | count check → `if (false)` | RED: `agent_cards_count` absent |
+| 3 | verifier-unbound (original) | `verifier_unbound` push deleted | RED: exited 0 |
+| 4 | registry-export-mismatch (original) | `ref.version !== pin` dropped | RED: `registry_export_mismatch` absent |
+| R1 | bound-means-reverified (false-bound) | bare values pushed to `bound` | RED: `unverified` was `[]` |
+| R2 | card-resolution (fabricated refs) | frontmatter comparison skipped | RED: exited 0 |
+| R3 | replay-recomputed (zero-replays) | recompute block disabled | RED: exited 0 |
+| R4 | require-bound (forged-verifier-commit) | flag loop emptied | RED: exited 0 |
+| R5 | file-citations-local (all-external) | `citationShape` returns true for `binding: external` | RED: test failed (no `record_shape`) |
+| R6 | real-record-strict | none | exit 2, verbatim above; `proven_on = ""` |
+
+Green: `src/eval-case.test.ts` 10/10 (`MISTER_CLEAN_SOURCE_DEVELOPMENT=1 nice -n 10 node ./node_modules/vitest/vitest.mjs run
+--allowOnly=false --no-file-parallelism --testTimeout=120000 src/eval-case.test.ts`).
+
+## Gates on the frozen tip
+
+- Merged origin/main `ef4987a` (PR #59) with `git merge --no-edit`; conflict only in generated `MANIFEST.sha256`.
+- Two clean `build:raw` runs under bun 1.4.0: identical hash lists (list sha256
+  `3757fa5f58b1a4cd62b2689db4a261dac7ed54f782ed7cd6181c0d626d2981c6`; `bin/mister-clean.js`
+  `a25eaa87cae92eb3fad7c48c976c4ec21f013b74a5c73ec854ff5cfd99884343`; `MANIFEST.sha256`
+  `eb65091ba0226e297ff938724549d2ed123eb882429443730b19434b0eff92eb`); `manifest:package:check` PASS (82);
+  `sync:cli:check` verified.
+- `tsc --noEmit` 0; `src/eval-case.test.ts` + `src/skill-contract.test.ts` 53/53; SKILL.md 19,975 bytes = main's;
+  `charter check --strict` ok; `audit:public` PASS (83 files); `git grep -i reveng` empty.
+- Full `nice -n 10 pnpm run test:node` on `697fa8c` (the frozen bytes minus this report): 920 passed, 5 failed, 58 files, 762 s. The five reds are all `scripts/verify_generated_candidate.test.ts` fixture commits refused by the host-global lang-guard hook (environment class CS-016; the same five MC/QA saw on 01b20677); nothing in this lane. Hosted CI arbitrates.
