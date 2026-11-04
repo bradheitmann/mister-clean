@@ -54,20 +54,46 @@ not verify over the canonical bytes). Restored; tests 5/5 and `tsc --noEmit` cle
   adequacy and limitation left as `<FILL …>` for MC/QA. `RUN-NOTES.md` tells the attester what to read and the exact
   signing command.
 
-## Proof 2: judge accepts and refuses (pending the MC/QA signature)
+## Proof 2: judge accepts and refuses
 
-To be run after `semantic-attestation.json` exists: materialize the policy with `printf '%s'` under `doppler run`,
-check its sha256 against `b384b2016f6152cdf9b2dfce2baaf4b5cd8e7cebd650e4f00b8e8b77c6e4c4a9`, assemble the evidence
-package (plan, observations, attestation, inline evidence files), run
-`node ~/.claude/skills/mister-clean/bin/mister-clean.js audit semantic <clone> --evidence-package <pkg> --trust-policy <policy> --json`,
-then the one-character binding mutant. Results will be appended here with the verdict JSON paths.
+- MC/QA signed at 2026-11-04T21:25:54Z: `semantic-attestation.json` (sha256 `93b074d4…`), attester
+  `MC/QA:pi:openai/gpt-6.1-terra:openrouter`, key `mc-qa-ed25519-20261104`, role `independent_qa`; three judgments, all
+  `supports`; `case_plan_adequacy: adequate`; five limitations recorded by the attester. Its `binding` is byte-equal
+  to the runner's template binding. The signature was made with `scripts/attest_sign.ts` under
+  `doppler run --project mister-clean --config attest`.
+- Trust policy: `materialize-policy.sh` (kept with the evidence; `set -euo pipefail`, cwd assertion, refuses a target
+  inside any checkout) ran under `doppler run` and wrote `printf '%s' "$MISTER_CLEAN_TRUST_POLICY_JSON"` into a fresh
+  `mktemp -d` directory: 538 bytes, sha256 equal to `MISTER_CLEAN_TRUST_POLICY_SHA256` and to the owner-decision value
+  `b384b2016f6152cdf9b2dfce2baaf4b5cd8e7cebd650e4f00b8e8b77c6e4c4a9`. A copy of those exact bytes is kept as
+  `trust-policy.materialized.json` (0600) in the evidence directory for reopening; the temp directory was removed.
+- Package: `assemble-package.ts` (kept with the evidence) built `semantic-evidence-package.json` (plan, the runner's
+  observations, the signed attestation, 7 inline evidence files) after checking that the inline-file digest, the
+  evidence-root digest and the attestation's `evidence_root_sha256` agree, and wrote the mutant package with the first
+  character of the attestation's `binding.repository_object_sha256` changed (`7` → `0`).
+- GREEN: `MISTER_CLEAN_RECEIPT_ROOT=<evidence>/receipts node ~/.claude/skills/mister-clean/bin/mister-clean.js audit semantic
+  $TMPDIR/sem-exec-lane/clone --evidence-package semantic-evidence-package.json --trust-policy <policy> --json`
+  (installed 7.4.0; subject snapshot `24954d22c3808cf5279f9a4975ab3b5f6a55410d`) → `verdict-7.4.0.json`:
+  resolution `SEM-EXECUTABLE-CBB67799E249 attested_satisfied`, execution `result: pass`. The audit's overall status is
+  still `fail`, exit 1, because the two pre-existing `SEM-STATE-*` candidates remain `semantic_probe_unexecuted`
+  (`verification_debt`), as the DONE list states; this lane does not pay them.
+- RED (mutant): the same command over `semantic-evidence-package.mutant-binding.json` → `verdict-7.4.0.mutant-binding.json`:
+  `SEM-EXECUTABLE-CBB67799E249 semantic_probe_execution_error verification_debt` with
+  `semantic attestation binding mismatch: repository_object_sha256; semantic attestation signed-payload digest is
+  invalid; semantic attestation signature is invalid`; no resolution; execution `result: error`.
+- Both receipts were written under scratch roots inside the evidence directory, never under the real state root.
 
 ## Proof 3: no secret bytes
 
 `git grep -c -E -- "-----BEGIN [A-Z ]*PRIVATE KEY-----" -- . ':!src/closeout/inspection.ts' ':!bin/mister-clean.js'` on the
 branch tip prints nothing (the two excluded files hold the public-safety detector's own rule), and the same pattern over
 the evidence directory reports 0 for every file (the test's throwaway key never reaches a file; the end-to-end test
-asserts the signed output and stdout contain no PEM header). Re-checked at the final tip below.
+asserts the signed output and stdout contain no PEM header). Re-checked after the signature and the verify runs, with
+the attester's `QA-RUN.log` and both receipts present in the evidence directory: still 0 everywhere.
+
+## Verdict digests (evidence directory)
+
+`verdict-7.4.0.json` `cef9743a9d93…`; `verdict-7.4.0.mutant-binding.json` `4817313166bf…`;
+`semantic-evidence-package.json` `b98d0988dea6…`; `semantic-attestation.json` `93b074d43ca2…`.
 
 ## Gates on this tip
 
