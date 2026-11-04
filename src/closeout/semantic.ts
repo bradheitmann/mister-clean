@@ -493,6 +493,231 @@ function staticGateRoute(
   return { inputs, unknown };
 }
 
+/**
+ * Native validation routes: commands a hosted CI workflow step visibly runs.
+ * A step is execution evidence that its shell ran these commands, so the
+ * recognizer may follow env prefixes and runners (bun, node, pnpm run, tool
+ * invocations, tsup, test runners) to the entry files they execute or build.
+ * It still reads no script body, no compiler config beyond a tsup entry list,
+ * and credits no step whose `if:` it cannot classify (fail closed). Every
+ * credit names the workflow, job and step that is the route.
+ */
+interface NativeRoutes {
+  /** Tracked file executed or compiled by a credited step -> evidence. */
+  readonly executed: Map<string, string>;
+  /** Build output (repository-relative) -> its entry sources and evidence. */
+  readonly built: Map<string, { readonly sources: readonly string[]; readonly evidence: string }>;
+  /** `<packagePath>\0<script>` executed by a credited step -> evidence. */
+  readonly scripts: Map<string, string>;
+  /** Package directory whose test runner a credited step executes -> evidence. */
+  readonly tests: Map<string, string>;
+  /** Steps seen but not credited, with the reason. */
+  readonly skipped: string[];
+  /** Commands the grammar does not model (external tools); visible, never credited. */
+  readonly unknown: string[];
+}
+
+function emptyNativeRoutes(): NativeRoutes {
+  return { executed: new Map(), built: new Map(), scripts: new Map(), tests: new Map(), skipped: [], unknown: [] };
+}
+
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=[^\s]*$/u;
+const SHELL_STATE_BUILTINS = new Set([".", "alias", "eval", "export", "popd", "pushd", "set", "source", "unset"]);
+const TOOL_INVOKERS = new Set(["npx", "bunx"]);
+const TEST_RUNNERS = new Set(["jest", "mocha", "vitest"]);
+const RUNNER_SOURCE = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/u;
+const CREDITED_STEP_CONDITION = /^(?:startsWith\(\s*github\.ref\s*,\s*'refs\/(?:tags|heads)\/[^']*'\s*\)|github\.ref\s*==\s*'refs\/heads\/[^']*')$/u;
+
+function stripQuotes(token: string): string {
+  return token.replace(/^["']|["']$/gu, "");
+}
+
+function tsupEntries(root: string, cwd: string, paths: readonly string[]): { readonly entries: string[]; readonly outDir: string; readonly config: string } | undefined {
+  const config = ["tsup.config.ts", "tsup.config.mts", "tsup.config.js", "tsup.config.mjs", "tsup.config.cjs", "tsup.config.json"]
+    .map((name) => insidePortablePath(root, cwd, name))
+    .find((candidate): candidate is string => candidate !== undefined && paths.includes(candidate));
+  if (!config) return undefined;
+  let content = "";
+  try { content = readFileSync(resolve(root, config), "utf8"); } catch { return undefined; }
+  const list = content.match(/\bentry\s*:\s*\[([^\]]*)\]/u);
+  const single = content.match(/\bentry\s*:\s*["']([^"']+)["']/u);
+  const raw = list ? [...list[1]!.matchAll(/["']([^"']+)["']/gu)].map((match) => match[1]!) : single ? [single[1]!] : [];
+  const entries = raw.flatMap((entry) => tokenPaths(root, cwd, entry, paths));
+  if (entries.length === 0 || entries.length !== raw.length) return undefined;
+  const outDir = content.match(/\boutDir\s*:\s*["']([^"']+)["']/u)?.[1] ?? "dist";
+  return { entries, outDir, config };
+}
+
+function nativeRouteChain(
+  root: string,
+  command: string,
+  directory: string,
+  paths: readonly string[],
+  packages: readonly PackageSurface[],
+  routes: NativeRoutes,
+  evidence: string,
+  visited: Set<string>,
+): void {
+  // The same literal-token discipline as the static recognizer: no control
+  // flow, expansion, redirection or quoting beyond success-dependent `&&`.
+  if (/[\n\r;|<>$`\\(){}\[\]*?!#]/u.test(command) || command.replaceAll("&&", "").includes("&")) {
+    routes.skipped.push(`${evidence}: unsupported shell syntax`);
+    return;
+  }
+  let cwd = directory;
+  for (const part of command.split("&&")) {
+    let tokens = part.trim().split(/\s+/u).filter(Boolean).map(stripQuotes);
+    while (tokens.length > 0 && ENV_ASSIGNMENT.test(tokens[0]!)) tokens = tokens.slice(1);
+    if (tokens.length === 0) continue;
+    if (tokens[0] === "cd") {
+      const next = tokens.length === 2 ? insidePortablePath(root, cwd, tokens[1]!) : undefined;
+      if (!next || !existsSync(resolve(root, next)) || !lstatSync(resolve(root, next)).isDirectory()) {
+        routes.skipped.push(`${evidence}: unresolved working directory`);
+        return;
+      }
+      cwd = next;
+      continue;
+    }
+    if (SHELL_STATE_BUILTINS.has(tokens[0]!)) {
+      // Shell state changed in a way this recognizer does not model; nothing
+      // after this segment is credited.
+      routes.skipped.push(`${evidence}: shell state builtin ${tokens[0]!}`);
+      return;
+    }
+    // Package-manager tool invocations run the named tool.
+    const managerTool = (tokens[0] === "pnpm" || tokens[0] === "npm") && tokens[1] === "exec";
+    if (managerTool) tokens = tokens.slice(tokens[2] === "--" ? 3 : 2);
+    else if (TOOL_INVOKERS.has(tokens[0]!)) tokens = tokens.slice(1).filter((token, index) => !(index === 0 && token === "--bun"));
+    if (tokens.length === 0) continue;
+    const owner = [...packages].sort((a, b) => b.directory.length - a.directory.length)
+      .find((item) => item.directory === "." || cwd === item.directory || cwd.startsWith(item.directory + "/"));
+    const testScope = owner?.directory ?? cwd;
+    if (["npm", "pnpm", "yarn", "bun"].includes(tokens[0]!) && tokens[1] === "run" && tokens.length >= 3) {
+      const script = tokens[2]!;
+      const key = owner && owner.packagePath + "\0" + script;
+      const nested = owner?.scripts.get(script);
+      if (!key || nested === undefined) {
+        routes.skipped.push(`${evidence}: unresolved package script ${script}`);
+        continue;
+      }
+      if (!routes.scripts.has(key)) routes.scripts.set(key, evidence);
+      if (visited.has(key)) continue;
+      nativeRouteChain(root, nested, owner!.directory, paths, packages, routes, `${evidence} -> ${script}`, new Set(visited).add(key));
+      continue;
+    }
+    if ((tokens[0] === "bun" && tokens[1] === "test") || (tokens[0] === "node" && tokens[1] === "--test")
+      || TEST_RUNNERS.has(tokens[0]!) || (tokens[0] === "cargo" && tokens[1] === "test")) {
+      routes.tests.set(testScope, evidence);
+      continue;
+    }
+    if (tokens[0] === "bun" && tokens[1] === "build") {
+      const entries = tokens.slice(2).filter((token) => !token.startsWith("-")).flatMap((token) => tokenPaths(root, cwd, token, paths));
+      const outfile = tokens.indexOf("--outfile");
+      const outdir = tokens.indexOf("--outdir");
+      const output = outfile >= 0 ? insidePortablePath(root, cwd, tokens[outfile + 1] ?? "") : undefined;
+      const outputDirectory = outdir >= 0 ? insidePortablePath(root, cwd, tokens[outdir + 1] ?? "") : undefined;
+      if (entries.length === 0 || (!output && !outputDirectory)) {
+        routes.skipped.push(`${evidence}: bun build without a literal entry and output`);
+        continue;
+      }
+      for (const entry of entries) routes.executed.set(entry, evidence);
+      if (output) routes.built.set(output, { sources: entries, evidence });
+      if (outputDirectory) {
+        for (const entry of entries) {
+          const stem = basename(entry).replace(/\.[^.]+$/u, "");
+          for (const extension of [".js", ".mjs", ".cjs"]) routes.built.set(`${outputDirectory}/${stem}${extension}`, { sources: [entry], evidence });
+        }
+      }
+      continue;
+    }
+    if (tokens[0] === "tsup") {
+      const positional = tokens.slice(1).filter((token) => !token.startsWith("-")).flatMap((token) => tokenPaths(root, cwd, token, paths));
+      const config = tsupEntries(root, cwd, paths);
+      const entries = positional.length > 0 ? positional : config?.entries ?? [];
+      const outDir = insidePortablePath(root, cwd, config?.outDir ?? "dist");
+      if (entries.length === 0 || !outDir) {
+        routes.skipped.push(`${evidence}: tsup without a literal entry list`);
+        continue;
+      }
+      const via = config ? `${evidence} (tsup ${config.config})` : `${evidence} (tsup)`;
+      for (const entry of entries) {
+        routes.executed.set(entry, via);
+        const stem = basename(entry).replace(/\.[^.]+$/u, "");
+        for (const extension of [".js", ".mjs", ".cjs"]) routes.built.set(`${outDir}/${stem}${extension}`, { sources: [entry], evidence: via });
+      }
+      continue;
+    }
+    if (tokens[0] === "bun" || tokens[0] === "node" || tokens[0] === "tsx") {
+      const operand = tokens.slice(1).find((token) => !token.startsWith("-"));
+      const path = operand ? insidePortablePath(root, cwd, operand) : undefined;
+      if (operand && path && paths.includes(path) && RUNNER_SOURCE.test(path) && !lstatSync(resolve(root, path)).isSymbolicLink()) {
+        routes.executed.set(path, evidence);
+      } else if (operand !== undefined) {
+        routes.skipped.push(`${evidence}: ${tokens[0]!} operand ${operand} is not a tracked source file`);
+      }
+      continue;
+    }
+    // Other commands (installs, typecheck-only compilers, linters, external
+    // tools) run as child processes: they cannot change this shell's state and
+    // they prove nothing about inputs, so they neither credit nor poison a CI
+    // route; they do keep a release script's input closure unknown.
+    routes.unknown.push(`${evidence}: ${tokens[0]!}`);
+  }
+}
+
+function workflowCondition(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim().replace(/^\$\{\{\s*|\s*\}\}$/gu, "") : undefined;
+}
+
+function nativeRoutes(root: string, paths: readonly string[], packages: readonly PackageSurface[]): NativeRoutes {
+  const routes = emptyNativeRoutes();
+  for (const workflowPath of paths.filter((path) => /^\.github\/workflows\/[^/]+\.ya?ml$/u.test(path))) {
+    let document: unknown;
+    try {
+      document = parseYaml(readFileSync(resolve(root, workflowPath), "utf8"));
+    } catch {
+      routes.skipped.push(`${workflowPath}: unparseable workflow`);
+      continue;
+    }
+    const jobs = object(object(document)?.jobs) ?? {};
+    for (const [jobName, rawJob] of Object.entries(jobs)) {
+      const job = object(rawJob);
+      if (!job) continue;
+      const jobLabel = `${workflowPath}#${jobName}`;
+      const jobCondition = workflowCondition(job.if);
+      if (jobCondition !== undefined && !CREDITED_STEP_CONDITION.test(jobCondition)) {
+        routes.skipped.push(`${jobLabel}: job condition not credited: ${jobCondition}`);
+        continue;
+      }
+      const jobDefaults = object(object(job.defaults)?.run);
+      const jobDirectory = typeof jobDefaults?.["working-directory"] === "string" ? jobDefaults["working-directory"] : ".";
+      const steps = Array.isArray(job.steps) ? job.steps : [];
+      steps.forEach((rawStep, index) => {
+        const step = object(rawStep);
+        if (!step || typeof step.run !== "string") return;
+        const name = typeof step.name === "string" ? step.name : `step ${String(index + 1)}`;
+        const label = `${jobLabel} step '${name}'`;
+        const condition = workflowCondition(step.if);
+        if (condition !== undefined && !CREDITED_STEP_CONDITION.test(condition)) {
+          routes.skipped.push(`${label}: step condition not credited: ${condition}`);
+          return;
+        }
+        const evidence = [jobCondition, condition].some((item) => item !== undefined)
+          ? `${label} (if: ${[jobCondition, condition].filter((item) => item !== undefined).join(" && ")})`
+          : label;
+        const stepDirectory = typeof step["working-directory"] === "string" ? step["working-directory"] : jobDirectory;
+        const directory = insidePortablePath(root, ".", stepDirectory) ?? ".";
+        for (const line of step.run.split(/\r?\n/u)) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          nativeRouteChain(root, trimmed, directory, paths, packages, routes, evidence, new Set());
+        }
+      });
+    }
+  }
+  return routes;
+}
+
 function runtimeSourceClosure(root: string, seeds: Iterable<string>, paths: readonly string[]): Set<string> {
   const found = new Set(seeds);
   const queue = [...found];
@@ -564,15 +789,44 @@ function executableSurfaceGaps(root: string, paths: readonly string[]): Array<{
       route.unknown.forEach((reason) => routeUnknown.add(item.packagePath + ":" + name + ": " + reason));
     }
   }
+  // Hosted CI steps are the native routes. A file executed or compiled by a
+  // credited step, and its static import closure, has a native route; so does
+  // every file of a package whose test runner a credited step executes.
+  const native = nativeRoutes(root, paths, packages);
+  const closureRoute = new Map<string, string>();
+  for (const [seed, evidence] of native.executed) {
+    for (const path of runtimeSourceClosure(root, [seed], paths)) {
+      if (!closureRoute.has(path)) closureRoute.set(path, `${evidence} (import closure of ${seed})`);
+    }
+  }
+  const nativeRouteFor = (path: string): string | undefined => {
+    const direct = native.executed.get(path) ?? closureRoute.get(path);
+    if (direct) return direct;
+    for (const [directory, evidence] of native.tests) {
+      if (directory === "." || path === directory || path.startsWith(directory + "/")) return `${evidence} (test matrix of ${directory})`;
+    }
+    return undefined;
+  };
   const gaps: Array<{ evidence: string; refs: readonly string[] }> = [];
   for (const item of packages) {
     const seeds = new Set<string>();
     const reasons = new Set<string>();
+    const nativeEvidence = new Set<string>();
+    const releaseWalks = new Map<string, { readonly entries: readonly string[]; readonly closed: boolean }>();
     const entries = [item.manifest.bin, item.manifest.exports, item.manifest.main, item.manifest.module].flatMap(nestedStrings);
     for (const entry of entries) {
       if (DECLARATION_SOURCE_SUFFIX.test(entry)) continue;
       const matches = tokenPaths(root, item.directory, entry, paths);
-      if (matches.length === 0) reasons.add("unresolved declared runtime target: " + entry);
+      if (matches.length === 0) {
+        // A declared target absent from the tree is resolved only through the
+        // credited build step that produces it; its entry sources become seeds.
+        const portable = insidePortablePath(root, item.directory, entry.trim().replace(/^["']|["',]$/gu, ""));
+        const built = portable ? native.built.get(portable) : undefined;
+        if (built) {
+          built.sources.forEach((path) => seeds.add(path));
+          nativeEvidence.add(`declared target ${entry} built by ${built.evidence}`);
+        } else reasons.add("unresolved declared runtime target: " + entry);
+      }
       matches.forEach((path) => seeds.add(path));
     }
     if (entries.length === 0) {
@@ -582,12 +836,31 @@ function executableSurfaceGaps(root: string, paths: readonly string[]): Array<{
     for (const [name, command] of item.scripts) {
       if (!RELEASE_CRITICAL_SCRIPT_NAME.test(name)) continue;
       // A release command is an obligation, not evidence that it checks itself.
-      reasons.add("release input closure requires native evidence: " + name);
-      const runner = /^(?:node|bun)\s+([A-Za-z0-9_./-]+)(?:\s|$)/u.exec(command.trim());
-      if (runner?.[1]) tokenPaths(root, item.directory, runner[1], paths).forEach((path) => seeds.add(path));
+      // It is discharged by a credited workflow step that executes it, or when
+      // its whole chain parses on the native grammar (env prefixes, runners,
+      // nested scripts), names no unmodelled tool, and every entry file it
+      // reaches has a native route. Anything else stays an obligation.
+      const executed = native.scripts.get(item.packagePath + "\0" + name);
+      const walk = emptyNativeRoutes();
+      nativeRouteChain(root, command, item.directory, paths, packages, walk, `package.json script ${name}`, new Set([item.packagePath + "\0" + name]));
+      const entries = [...walk.executed.keys()];
+      entries.forEach((path) => seeds.add(path));
+      releaseWalks.set(name, { entries, closed: walk.skipped.length === 0 && walk.unknown.length === 0 && entries.length > 0 });
+      if (executed) nativeEvidence.add(`release script ${name} executed by ${executed}`);
     }
     const required = runtimeSourceClosure(root, seeds, paths);
+    for (const [name, walk] of releaseWalks) {
+      if (native.scripts.has(item.packagePath + "\0" + name)) continue;
+      const routed = walk.closed && walk.entries.every((path) => nativeRouteFor(path) !== undefined);
+      if (routed) nativeEvidence.add(`release script ${name} input closure natively routed: ${walk.entries.join(", ")}`);
+      else reasons.add("release input closure requires native evidence: " + name);
+    }
     for (const path of required) {
+      const nativeRoute = nativeRouteFor(path);
+      if (nativeRoute) {
+        nativeEvidence.add(`native route: ${path} <- ${nativeRoute}`);
+        continue;
+      }
       if (!routes.has(path)) reasons.add("validation route unestablished: " + path);
       let content = "";
       try { content = readFileSync(resolve(root, path), "utf8"); } catch { /* Native evidence is required. */ }
@@ -596,7 +869,14 @@ function executableSurfaceGaps(root: string, paths: readonly string[]): Array<{
       }
     }
     if (reasons.size === 0) continue;
-    routeUnknown.forEach((reason) => reasons.add(reason));
+    // A script a credited workflow step executes has its native route; the
+    // static recognizer's diagnostics for that script are no longer the gap.
+    const nativelyExecuted = [...native.scripts.keys()].map((key) => key.replace("\0", ":") + ": ");
+    routeUnknown.forEach((reason) => {
+      if (!nativelyExecuted.some((prefix) => reason.startsWith(prefix))) reasons.add(reason);
+    });
+    native.skipped.forEach((reason) => reasons.add("workflow step not credited: " + reason));
+    nativeEvidence.forEach((reason) => reasons.add(reason));
     gaps.push({
       evidence: item.directory + ": coverage-unestablished; " + [...reasons].sort().join("; "),
       refs: [item.packagePath, ...required].sort(),
