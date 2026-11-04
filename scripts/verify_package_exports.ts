@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
-function exact(actual, expected, label) {
+function exact(actual: Iterable<string>, expected: Iterable<string>, label: string): void {
   const observed = [...actual].sort();
   const wanted = [...expected].sort();
   if (JSON.stringify(observed) !== JSON.stringify(wanted)) {
@@ -12,30 +12,30 @@ function exact(actual, expected, label) {
   }
 }
 
-function declarationExports(path) {
+function declarationExports(path: string): string[] {
   const source = readFileSync(path, "utf8");
   if (/export\s+(?:default|\*)/u.test(source)) {
     throw new Error(`${path}: wildcard or default declaration exports are forbidden`);
   }
   const blocks = [...source.matchAll(/^export\s*\{([^}]*)\};?$/gmu)];
   if (blocks.length !== 1) throw new Error(`${path}: expected one exact declaration export block`);
-  return blocks[0][1].split(",").map((entry) => {
+  return blocks[0]![1]!.split(",").map((entry) => {
     const normalized = entry.trim().replace(/^type\s+/u, "");
     return normalized.split(/\s+as\s+/u).at(-1);
-  }).filter(Boolean);
+  }).filter(Boolean) as string[];
 }
 
-function javascriptExports(path) {
+function javascriptExports(path: string): string[] {
   const source = readFileSync(path, "utf8");
   if (/export\s+(?:default|\*)/u.test(source)) {
     throw new Error(`${path}: wildcard or default runtime exports are forbidden`);
   }
   const blocks = [...source.matchAll(/^export\s*\{([^}]*)\};?$/gmu)];
   if (blocks.length !== 1) throw new Error(`${path}: expected one exact runtime export block`);
-  return blocks[0][1].split(",").map((entry) => {
+  return blocks[0]![1]!.split(",").map((entry) => {
     const normalized = entry.trim();
     return normalized.split(/\s+as\s+/u).at(-1);
-  }).filter(Boolean);
+  }).filter(Boolean) as string[];
 }
 
 exact(javascriptExports(join(root, "dist", "public.js")), ["createMisterCleanServer"], "root runtime exports");
