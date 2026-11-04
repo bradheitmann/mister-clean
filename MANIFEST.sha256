@@ -1,5 +1,5 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
-87767594e7be4dd5d7d886bb5bc191b68d0173fce46526821fa0a8c5d23c0706  ./README.md
+c6ab41a1032400a2cf755c87473fc87eab1d19cfec142481cf2a6e18db760f62  ./README.md
 1c4bdca67124f577bebe87528e852a44f48d772a71255b68e9780c52b153b803  ./SECURITY.md
 24f6ac6e0783688f382864fc36d801f370779ef20e6de7fb74340f572d0faf6e  ./SKILL.md
 5e575cbe7a53b8b85aa0b0924eabf338e88669aaf368ae2cbff48a7c6eccf80e  ./THIRD_PARTY_NOTICES.md
@@ -55,7 +55,7 @@ e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md
 e77aa854e06035c0a51b8e95779e8121689e493b3536564e8fa2ad9f79927834  ./evals/rotation-campaign.md
 34fcc94c1a7a86f9746a7bb93e1380768f13485260b78af76d0c86eabb656214  ./examples/example-report.md
-b6b8beaa8d49f7dbf987faf2d2f714dc9fe712bc89ce9ee661caedcae9011674  ./package.json
+0ae448ebad485df4d55675c76658edf718f2d5f67009d1957a427736f47107e0  ./package.json
 42cc071449e75dbe46fac9938ef67d3a44b08c02d452441b7ab6f46f4b0d4bd4  ./references/authorization-and-modes.md
 84ff460cfeac5ab4f2becaf31520bbeb2403b4ab0c876cab20cca166e9671ad1  ./references/behavioral-evals.md
 1479d0d0ca5b3f947f255dca3527203a6a9f8224551bed7d79f745fe4488b69c  ./references/capability-adoption.md

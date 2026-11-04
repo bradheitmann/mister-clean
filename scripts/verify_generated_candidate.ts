@@ -21,7 +21,7 @@ import {
   type RepositoryObjectSurfaceCapture,
 } from "../src/closeout/repository-object.js";
 import { materializeRepositoryObjectSurface } from "../src/closeout/repository-materialization.js";
-import { copyIsolatedPnpmTree } from "./release_capsule.mjs";
+import { copyIsolatedPnpmTree } from "./release_capsule.ts";
 
 export type GeneratedCandidateKind = "worktree" | "staged";
 

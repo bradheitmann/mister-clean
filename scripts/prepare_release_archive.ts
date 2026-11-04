@@ -24,16 +24,60 @@ import {
   acquireReleaseArchiveCustody,
   inspectReleaseArchiveCustody,
   releaseArchiveToolEnvironment,
-} from "./release_archive_contract.mjs";
-import { createExternalPnpmArchive, createPortablePackageArchive } from "./release_capsule.mjs";
+} from "./release_archive_contract.ts";
+import type { ClaimedSource, ReleaseArchiveCustody } from "./release_archive_contract.ts";
+import { createExternalPnpmArchive, createPortablePackageArchive } from "./release_capsule.ts";
+
+// CI runs this file with plain `node` (>= 22.18, built-in type stripping), and it
+// spawns verify_packed_cli.ts the same way. Keep every construct erasable.
+
+/** `generate_release_attestation.ts --source-check --json`, the fields read here. */
+interface SourceCheckOutput {
+  status: unknown;
+  source?: { git_commit?: string; git_tag?: string };
+}
+
+/** A source check that passed with a commit, as returned by sourceConsistency(). */
+interface VerifiedSource {
+  status: "pass";
+  source: ClaimedSource;
+}
+
+/** `generate_release_attestation.ts --capsule-write --json`, the fields read here. */
+interface CapsuleAttestationOutput {
+  status: unknown;
+  manifest: unknown;
+}
+
+/** `verify_packed_cli.ts --archive`, the fields read here. */
+interface PackedVerificationOutput {
+  status: unknown;
+  archive_sha256: unknown;
+  package: unknown;
+  claimed_source?: { git_commit?: unknown; git_tag?: unknown };
+  claim_scope: unknown;
+  origin_authenticity: unknown;
+  manifest: unknown;
+  checks: unknown;
+}
+
+interface FingerprintRecord {
+  path: string;
+  mode: string;
+  mtime_ns: string;
+  size: string;
+  type: "directory" | "file" | "symlink";
+  sha256?: string;
+  target?: string;
+}
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function usage() {
-  console.error("usage: node scripts/prepare_release_archive.mjs [--destination <new-directory>]");
+  console.error("usage: node scripts/prepare_release_archive.ts [--destination <new-directory>]");
 }
 
-function option(args, name) {
+function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   if (index < 0) return undefined;
   const value = args[index + 1];
@@ -42,11 +86,11 @@ function option(args, name) {
   return value;
 }
 
-function sha256File(path) {
+function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function assertSourceFileAtCommit(relativePath, commit) {
+function assertSourceFileAtCommit(relativePath: string, commit: string): void {
   const currentPath = join(root, relativePath);
   const committed = execFileSync(
     "git",
@@ -65,29 +109,30 @@ function assertSourceFileAtCommit(relativePath, commit) {
   }
 }
 
-function sourceConsistency() {
+function sourceConsistency(): VerifiedSource {
   const output = execFileSync(
     "bun",
-    [join(root, "scripts", "generate_release_attestation.mjs"), "--source-check", "--root", root, "--json"],
+    [join(root, "scripts", "generate_release_attestation.ts"), "--source-check", "--root", root, "--json"],
     { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   );
-  const result = JSON.parse(output);
+  const result = JSON.parse(output) as SourceCheckOutput;
   if (result.status !== "pass" || !result.source?.git_commit) {
     throw new Error(`release source consistency failed: ${output}`);
   }
   for (const path of [
-    "scripts/prepare_release_archive.mjs",
-    "scripts/release_capsule.mjs",
-    "scripts/verify_packed_cli.mjs",
-    "scripts/publish_release_archive.mjs",
-    "scripts/release_archive_contract.mjs",
+    "scripts/prepare_release_archive.ts",
+    "scripts/release_capsule.ts",
+    "scripts/verify_packed_cli.ts",
+    "scripts/publish_release_archive.ts",
+    "scripts/release_archive_contract.ts",
   ]) assertSourceFileAtCommit(path, result.source.git_commit);
-  return result;
+  // Status and commit were checked above; the tag is the generator's own output.
+  return result as VerifiedSource;
 }
 
-function sourceTreeFingerprint(directory) {
-  const records = [];
-  function visit(absolute, relativePath) {
+function sourceTreeFingerprint(directory: string): string {
+  const records: FingerprintRecord[] = [];
+  function visit(absolute: string, relativePath: string): void {
     for (const entry of readdirSync(absolute, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
       if (entry.name === ".git" || entry.name === "node_modules") continue;
       const path = relativePath === "" ? entry.name : `${relativePath}/${entry.name}`;
@@ -115,16 +160,16 @@ function sourceTreeFingerprint(directory) {
   return createHash("sha256").update(JSON.stringify(records)).digest("hex");
 }
 
-function shellQuote(value) {
+function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
-function inside(parent, candidate) {
+function inside(parent: string, candidate: string): boolean {
   const relation = relative(resolve(parent), resolve(candidate));
   return relation === "" || (!relation.startsWith(`..${sep}`) && relation !== ".." && !isAbsolute(relation));
 }
 
-function projectedRealpath(path) {
+function projectedRealpath(path: string): string {
   let ancestor = resolve(path);
   while (!existsSync(ancestor)) {
     const parent = dirname(ancestor);
@@ -135,7 +180,7 @@ function projectedRealpath(path) {
   return resolve(canonicalAncestor, relative(ancestor, resolve(path)));
 }
 
-function assertDestinationAllowed(requested) {
+function assertDestinationAllowed(requested: string | undefined): void {
   if (requested) {
     if (!isAbsolute(requested)) throw new Error("--destination must be an absolute path");
     const destination = resolve(requested);
@@ -145,7 +190,7 @@ function assertDestinationAllowed(requested) {
   }
 }
 
-function makeDestination(requested, packageVersion) {
+function makeDestination(requested: string | undefined, packageVersion: string): string {
   if (requested) {
     const destination = resolve(requested);
     mkdirSync(destination, { recursive: false, mode: 0o700 });
@@ -156,22 +201,23 @@ function makeDestination(requested, packageVersion) {
   return mkdtempSync(join(parent, `mister-clean-${packageVersion}-`));
 }
 
-const args = process.argv.slice(2);
+// @cloudflare/workers-types declares `process` as `any`; annotate what is read from it.
+const args: string[] = process.argv.slice(2);
 const requestedDestination = option(args, "--destination");
 if (args.length) {
   usage();
   process.exit(2);
 }
 
-const packageData = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const packageData = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string };
 assertDestinationAllowed(requestedDestination);
 const sourceBeforeVerification = sourceConsistency();
 const sourceTreeBefore = sourceTreeFingerprint(root);
 const destination = makeDestination(requestedDestination, packageData.version);
 const staging = mkdtempSync(join(tmpdir(), "mister-clean-pnpm-capsule-"));
-let archivePath;
-let capsuleAttestation;
-let finalCustody;
+let archivePath: string | undefined;
+let capsuleAttestation: CapsuleAttestationOutput | undefined;
+let finalCustody: ReleaseArchiveCustody | undefined;
 try {
   const intermediate = createExternalPnpmArchive({
     sourceRoot: root,
@@ -191,13 +237,13 @@ try {
   }
 
   const capsuleOutput = execFileSync("bun", [
-    join(root, "scripts", "generate_release_attestation.mjs"),
+    join(root, "scripts", "generate_release_attestation.ts"),
     "--capsule-write",
     "--root", join(unpacked, "package"),
     "--source-root", root,
     "--json",
   ], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  capsuleAttestation = JSON.parse(capsuleOutput);
+  capsuleAttestation = JSON.parse(capsuleOutput) as CapsuleAttestationOutput;
   if (capsuleAttestation.status !== "pass") {
     throw new Error(`release capsule attestation failed: ${capsuleOutput}`);
   }
@@ -221,15 +267,15 @@ try {
 if (!archivePath || !sourceBeforeVerification || !capsuleAttestation || !finalCustody) {
   throw new Error("release capsule construction did not produce a complete result");
 }
-let verification;
-let archiveSha256;
+let verification: PackedVerificationOutput;
+let archiveSha256: string;
 try {
   const verificationOutput = execFileSync(
     process.execPath,
-    [join(root, "scripts", "verify_packed_cli.mjs"), "--archive", finalCustody.path],
+    [join(root, "scripts", "verify_packed_cli.ts"), "--archive", finalCustody.path],
     { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   );
-  verification = JSON.parse(verificationOutput);
+  verification = JSON.parse(verificationOutput) as PackedVerificationOutput;
   if (verification.status !== "pass" || verification.archive_sha256 !== finalCustody.archive_sha256) {
     throw new Error(`release archive verification did not bind the custodied bytes: ${verificationOutput}`);
   }
@@ -258,8 +304,8 @@ const publishArgv = [
   scopedRegistryOverride,
   archiveFile,
 ];
-const publisherSource = join(root, "scripts", "publish_release_archive.mjs");
-const publisher = join(destination, "publish_release_archive.mjs");
+const publisherSource = join(root, "scripts", "publish_release_archive.ts");
+const publisher = join(destination, "publish_release_archive.ts");
 copyFileSync(publisherSource, publisher, constants.COPYFILE_EXCL);
 chmodSync(publisher, 0o444);
 const publisherMetadata = lstatSync(publisher);
@@ -270,8 +316,8 @@ if (!publisherMetadata.isFile() || publisherMetadata.isSymbolicLink() || publish
 if (sha256File(publisher) !== sha256File(publisherSource)) {
   throw new Error("retained publisher helper differs from the claimed-source helper bytes");
 }
-const verifierSource = join(root, "scripts", "release_archive_contract.mjs");
-const verifier = join(destination, "release_archive_contract.mjs");
+const verifierSource = join(root, "scripts", "release_archive_contract.ts");
+const verifier = join(destination, "release_archive_contract.ts");
 copyFileSync(verifierSource, verifier, constants.COPYFILE_EXCL);
 chmodSync(verifier, 0o444);
 const verifierMetadata = lstatSync(verifier);
