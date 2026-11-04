@@ -168,3 +168,12 @@ dry-run mode, never the public registry. Finding (O-REL-PUBLISH-DRYRUN-1, next b
 mode. It hard-codes `https://registry.npmjs.org/` in every `pnpm` call and in the receipt binding it enforces, and it
 refuses any receipt bound to another registry. The only fail-closed route today is the one `release_path.test.ts` uses,
 a fake `pnpm` placed first on PATH.
+
+## Owner CI patch superseded (2026-11-04)
+
+The owner's combined workflow patch, committed by the PM as `7aa83ac` against main's post-#63 `ci.yml`, supersedes
+`reports/owner-ci-release-script.patch`, which is removed. It runs `node scripts/prepare_release_archive.ts`, fixes the
+line-42 comment (closing O-LANG-1c), sets `persist-credentials: false` on the verify checkout and adopts charter
+template v3. `ci.yml` names no `.mjs` file. After merging main `6a42b5f` (`4229d6a`) and the patch, two clean
+`build:raw` runs under bun 1.4.0 are identical to each other and to the pre-patch merge build. MANIFEST differs from
+main only in `./package.json` and `./README.md`. `manifest:package:check` PASS; lang-guard `2 untyped file(s): 2 .js`.
