@@ -32,7 +32,6 @@ describe("toolchain pin", () => {
     const workflow = readFileSync(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8");
     const pin = readBunPin(repositoryRoot);
     expect(pin).toMatch(/^\d+\.\d+\.\d+$/u);
-    expect(workflow).toMatch(/uses:\s*oven-sh\/setup-bun@/u);
     expect(ciBunPinErrors(workflow, pin!)).toEqual([]);
     // A bump must change both reviewed places: .bun-version and package.json engines.bun.
     const manifest = JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")) as { engines?: { bun?: string } };
@@ -63,7 +62,11 @@ describe("toolchain pin", () => {
     expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version: \${{ matrix.bun }}\n`), "1.4.0"))
       .toEqual([expect.stringContaining("expression")]);
     expect(ciBunPinErrors(`jobs:\n  r:\n    uses: someone/else/.github/workflows/build.yml@main\n`, "1.4.0"))
-      .toEqual([expect.stringContaining("remote reusable workflow")]);
+      .toEqual(expect.arrayContaining([expect.stringContaining("remote reusable workflow")]));
+    // QA counterexample 3: the sole installer removed and left as a comment.
+    const commentedOut = "jobs:\n  a:\n    steps:\n      # - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n      - run: bun --version\n";
+    expect(ciBunPinErrors(commentedOut, "1.4.0")).toEqual([expect.stringContaining("no oven-sh/setup-bun step")]);
+    expect(ciBunPinErrors("jobs:\n  a:\n    steps:\n      - run: echo hi\n", "1.4.0")).toEqual([expect.stringContaining("no oven-sh/setup-bun step")]);
     expect(ciBunPinErrors("jobs: [unclosed\n", "1.4.0")).toEqual([expect.stringContaining("not parseable")]);
     // Quoted values and trailing comments parse as plain values.
     expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version: "1.4.0" # pinned\n`), "1.4.0")).toEqual([]);

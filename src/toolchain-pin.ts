@@ -46,6 +46,9 @@ export function ciBunPinErrors(workflow: string, pin: string): string[] {
   if (document.errors.length > 0) return [`workflow is not parseable YAML: ${document.errors[0]?.message ?? "unknown error"}`];
   const root = document.toJS() as { jobs?: Record<string, { uses?: unknown; steps?: unknown }> } | null;
   const errors: string[] = [];
+  // Presence comes from the same parsed structure as the per-step checks, so a
+  // removed or commented-out installer cannot pass as "every step is pinned".
+  let setupSteps = 0;
   for (const [jobId, job] of Object.entries(root?.jobs ?? {})) {
     if (typeof job?.uses === "string" && !job.uses.startsWith("./")) {
       errors.push(`job ${jobId} calls the remote reusable workflow ${job.uses}; its setup-bun steps cannot be verified here`);
@@ -54,6 +57,7 @@ export function ciBunPinErrors(workflow: string, pin: string): string[] {
     steps.forEach((raw: unknown, index: number) => {
       const step = raw as { uses?: unknown; with?: unknown } | null;
       if (typeof step?.uses !== "string" || !step.uses.startsWith("oven-sh/setup-bun@")) return;
+      setupSteps += 1;
       const where = `job ${jobId} step ${index + 1} (${step.uses.split("@")[0]})`;
       const inputs = (step.with ?? {}) as Record<string, unknown>;
       const literal = inputs["bun-version"];
@@ -69,6 +73,7 @@ export function ciBunPinErrors(workflow: string, pin: string): string[] {
       else if (literal !== undefined && String(literal) !== pin) errors.push(`${where} pins ${String(literal)}, the repository pins ${pin}`);
     });
   }
+  if (setupSteps === 0) errors.push("the workflow has no oven-sh/setup-bun step, so no step installs the pinned bun");
   return errors;
 }
 

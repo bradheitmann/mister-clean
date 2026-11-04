@@ -1,0 +1,5 @@
+# Owner decision 2026-11-04: one additional repair for the CI-pin proof (stop rule S5)
+
+**Context.** The CI-pin proof guarding the owner-approved CI workflow change (PR #63) failed third-family QA three times, each time on a real gap: (1) under `bun-version-file` the proof checked nothing; (2) keys under `env:` and a `bun-download-url` override passed; (3) a removed setup-bun step left as a comment passed, because presence was checked on raw text. `charter.toml` allows one repair per slice and S5 sends a slice that fails paired QA twice to the owner. The PM did a second repair before escalating — a breach of the stop rules, recorded in the self-clean loop log.
+
+**Decision (owner, 2026-11-04).** One more repair is authorized: setup-bun presence is derived from the same parsed workflow as the per-step checks (at least one step required), with the reviewer's comment-out and missing-step cases as fixtures, followed by one final QA. If that QA rejects, the CI-pin proof is dropped and recorded as an open obligation without a further owner question; the pin stays enforced at build time by the TOOLCHAIN MISMATCH refusal in `manifest --package`.
