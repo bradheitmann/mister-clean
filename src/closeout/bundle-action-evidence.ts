@@ -33,6 +33,7 @@ import {
   owned,
   requireExactObject,
   requireObject,
+  sha256,
   stableEqual,
   text,
   validateRepositoryObject,
@@ -42,6 +43,11 @@ import {
   type JsonObject,
 } from "./bundle-runtime.js";
 import type { CanonicalRootProjection } from "./bundle-detector-evidence.js";
+import {
+  retirementRatifications,
+  RETIREMENT_RATIFICATION_NORMALIZER,
+  RETIREMENT_RULING_MINTED_BY,
+} from "./retirement-ratification.js";
 
 export interface NativeGateControlEvidence {
   readonly control: JsonObject;
@@ -220,6 +226,7 @@ export async function validateBoundExecutionRecords(
     }
   }
 
+  const mintedSources = new Map<string, { readonly path: unknown; readonly sha256: unknown; readonly epath: string }>();
   for (const [index, raw] of array(report.completion_debts).entries()) {
     const debt = object(raw);
     if (!debt) continue;
@@ -246,9 +253,20 @@ export async function validateBoundExecutionRecords(
         for (const field of ["actor", "at", "scope", "rationale"] as const) if (record[field] !== exception[field]) errors.push(`${epath}: ruling disagrees on ${field}`);
         if (record.debt_id !== debt.id) errors.push(`${epath}: ruling debt_id mismatch`);
         if (record.request_sha256 !== object(bundle.criteria_discovery)?.request_sha256) errors.push(`${epath}: ruling must bind the exact operative request`);
+        // A retirement is a repository file any committer can write; the record
+        // prepare mints for it is the tool's, never an operator's own act.
+        const retired = typeof exception.scope === "string" && exception.scope.startsWith("retired root ");
+        if (record.minted_by !== undefined || retired) {
+          if (record.minted_by !== RETIREMENT_RULING_MINTED_BY) errors.push(`${epath}: a retired-root ruling must be the tool-minted record (minted_by ${JSON.stringify(RETIREMENT_RULING_MINTED_BY)}); it is never an operator's own act`);
+          const source = object(record.source);
+          if (!source || typeof source.path !== "string" || typeof source.sha256 !== "string" || !HEX64.test(source.sha256)) errors.push(`${epath}: tool-minted ruling requires source {path, sha256} binding the retirement record`);
+          mintedSources.set(String(debt.id), { path: source?.path, sha256: source?.sha256, epath });
+        }
       }
     }
   }
+
+  if (!allowPlaceholders) await validateRetirementRatifications(report, repo, files, mintedSources, errors);
 
   for (const [name, raw] of Object.entries(object(report.claims) ?? {})) {
     const claim = object(raw);
@@ -270,6 +288,51 @@ export async function validateBoundExecutionRecords(
       }
     }
   }
+}
+
+/**
+ * Ratification of retirements is not verifiable yet (O-RET-2). The regression
+ * validator projects one open decision debt per applied retirement record from
+ * `retirement_applications` and refuses a report that drops or re-keys it.
+ * Here: that debt must stay an open decision over exactly the retired roots,
+ * every retired debt must cite a tool-minted record bound to the same
+ * retirement bytes, and (with a live repository) those bytes must still match.
+ */
+async function validateRetirementRatifications(
+  report: JsonObject,
+  repo: string | undefined,
+  files: FilePort,
+  mintedSources: ReadonlyMap<string, { readonly path: unknown; readonly sha256: unknown; readonly epath: string }>,
+  errors: string[],
+): Promise<void> {
+  const debts = array(report.completion_debts).map(object).filter((debt): debt is JsonObject => !!debt);
+  const ratificationDebts = debts.filter((debt) => debt.normalizer === RETIREMENT_RATIFICATION_NORMALIZER);
+  const expected = retirementRatifications(array(report.retirement_applications));
+  const covered = new Set<string>();
+  for (const ratification of expected) {
+    const path = `$.report.retirement_applications[${JSON.stringify(ratification.record_path)}]`;
+    if (!HEX64.test(ratification.record_sha256)) errors.push(`${path}: record_sha256 must be one lowercase SHA-256 of the retirement record`);
+    for (const debt of ratificationDebts.filter((candidate) => object(candidate.cause_key)?.record_path === ratification.record_path)) {
+      if (debt.state !== "open" || debt.disposition !== "decision_or_coordination_required") {
+        errors.push(`${path}: ratification debt ${String(debt.id)} must stay open with disposition decision_or_coordination_required`);
+      }
+      if (!stableEqual(sortedUnique(array(debt.affected_paths).map(String)), ratification.roots)) {
+        errors.push(`${path}: ratification debt affected_paths must equal the retired roots ${JSON.stringify(ratification.roots)}`);
+      }
+    }
+    for (const id of ratification.debt_ids) {
+      covered.add(id);
+      const source = mintedSources.get(id);
+      if (!source) errors.push(`${path}: retired debt ${id} lacks its tool-minted ruling record`);
+      else if (source.path !== ratification.record_path || source.sha256 !== ratification.record_sha256) errors.push(`${source.epath}: minted source does not bind the applied retirement record`);
+    }
+    if (repo) {
+      const live = `${repo.replace(/\/+$/u, "")}/${ratification.record_path}`;
+      const observed = await files.isFile(live) ? sha256(await files.readBytes(live)) : "absent";
+      if (observed !== ratification.record_sha256) errors.push(`${path}: source sha256 ${ratification.record_sha256} does not match the live retirement record (${observed})`);
+    }
+  }
+  for (const [id, source] of mintedSources) if (!covered.has(id)) errors.push(`${source.epath}: tool-minted ruling for ${id} is not in any retirement application`);
 }
 
 export async function validateNativeGateControlRecord(
