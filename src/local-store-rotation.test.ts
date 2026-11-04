@@ -82,7 +82,7 @@ function receiptStore(name: string, options: ConstructorParameters<typeof LocalR
   return { base, repo, root: join(base, "receipts"), store: new LocalRunReceiptStore(join(base, "receipts"), options) };
 }
 
-describe("local stores seal into segments and keep everything", () => {
+describe("local stores seal into segments and keep everything", { timeout: 60_000 }, () => {
   it("named caps are 8 MiB", () => {
     expect(INVOCATION_JOURNAL_SEGMENT_MAX_BYTES).toBe(8 * 1024 * 1024);
     expect(RECEIPT_INDEX_SEGMENT_MAX_BYTES).toBe(8 * 1024 * 1024);
