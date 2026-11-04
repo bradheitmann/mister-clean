@@ -30934,6 +30934,7 @@ function citationShape(value, path, refusals) {
   return ok;
 }
 var SHORT_SHA = /^[0-9a-f]{7,40}$/u;
+var PROTOTYPE_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
 function manifestCitationShape(value, repository, path, refusals) {
   const citation = object9(value);
   if (!citation) {
@@ -31319,16 +31320,18 @@ function parseEvidenceManifest(text3) {
   if (!nonEmptyString(manifest2.schema)) return "schema is required";
   const pairSets = object9(manifest2.pair_sets);
   if (!pairSets || Object.keys(pairSets).length === 0) return "pair_sets is required";
-  const pairSetsOut = {};
+  const pairSetsOut = /* @__PURE__ */ Object.create(null);
   for (const [name, value] of Object.entries(pairSets)) {
+    if (PROTOTYPE_KEYS.has(name)) return `pair_sets: key ${name} is not allowed`;
     const entry = object9(value);
     if (!entry || typeof entry.base_commit !== "string" || !HEX402.test(entry.base_commit) || typeof entry.sessions !== "string" || parseSessionRange(entry.sessions) === void 0) return `pair_sets.${name} needs base_commit (40 hex) and a sessions range S-nn..S-mm`;
     pairSetsOut[name] = { base_commit: entry.base_commit, sessions: entry.sessions };
   }
   const pins = object9(manifest2.evaluator_pins);
   if (!pins) return "evaluator_pins is required";
-  const pinsOut = {};
+  const pinsOut = /* @__PURE__ */ Object.create(null);
   for (const [commit, value] of Object.entries(pins)) {
+    if (PROTOTYPE_KEYS.has(commit)) return `evaluator_pins: key ${commit} is not allowed`;
     const pin = object9(value);
     const validator = object9(pin?.validator_source);
     const review = object9(pin?.review_source);
