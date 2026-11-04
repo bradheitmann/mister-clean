@@ -70,6 +70,13 @@ mirror, test directory, or language surface appears:
 - keep static fixtures visibly labeled and outside live state, qualification,
   routing, and cleanliness claims.
 
+A repository's declared language policy is a coverage contract too. When
+`.mister-clean/language-policy.json` exists, run
+`mister-clean audit language-policy . --json` before claiming the language
+surface clean: it lists every tracked file in a forbidden language that no
+`allow` or `generated` glob covers. A missing policy is `not_applicable`, not
+clean, and a malformed one is a typed refusal, not a pass.
+
 Passing a root TypeScript configuration that excludes a Svelte app is not a
 passing Svelte typecheck. Passing a Node-launched test subset is not evidence for
 `bun:sqlite`; execute the canonical Bun-native command and preserve the runtime

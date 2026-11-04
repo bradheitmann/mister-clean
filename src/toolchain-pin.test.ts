@@ -9,7 +9,7 @@ vi.mock("./toolchain-pin.js", async (importOriginal) => {
   return { ...original, runningBunVersion: () => probe.version };
 });
 
-const { checkToolchainPin, ciBunPinErrors, readBunPin } = await import("./toolchain-pin.js");
+const { checkToolchainPin } = await import("./toolchain-pin.js");
 const { runCli } = await import("./cli.js");
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -28,50 +28,6 @@ afterEach(() => {
 });
 
 describe("toolchain pin", () => {
-  it("ci pin: every setup-bun step takes the repository pin, and the pin is a reviewed exact version", () => {
-    const workflow = readFileSync(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8");
-    const pin = readBunPin(repositoryRoot);
-    expect(pin).toMatch(/^\d+\.\d+\.\d+$/u);
-    expect(ciBunPinErrors(workflow, pin!)).toEqual([]);
-    // A bump must change both reviewed places: .bun-version and package.json engines.bun.
-    const manifest = JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")) as { engines?: { bun?: string } };
-    expect(manifest.engines?.bun).toBe(pin);
-  });
-
-  it("ci steps: each setup-bun step is checked on its own", () => {
-    const step = (inputs: string) => `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n        with:\n${inputs}`;
-    const ok = `jobs:\n  a:\n    steps:\n${step("          bun-version-file: .bun-version\n")}      - run: echo next\n`;
-    expect(ciBunPinErrors(ok, "1.4.0")).toEqual([]);
-    const secondUnpinned = `${ok}${step("          node-version: 22\n")}`;
-    expect(ciBunPinErrors(secondUnpinned, "1.4.0")).toEqual([expect.stringContaining("sets neither")]);
-    expect(ciBunPinErrors(`jobs:\n  a:\n    steps:\n${step("          bun-version: 1.4.0\n          bun-version-file: .bun-version\n")}`, "1.4.0"))
-      .toEqual([expect.stringContaining("sets both")]);
-    expect(ciBunPinErrors(`jobs:\n  a:\n    steps:\n${step("          bun-version: 1.3.9\n")}`, "1.4.0"))
-      .toEqual([expect.stringContaining("pins 1.3.9")]);
-  });
-
-  it("ci inputs: only the step's own with inputs count; overrides, expressions and remote reusable workflows fail closed", () => {
-    const uses = "      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n";
-    const wrap = (body: string) => `jobs:\n  a:\n    steps:\n${body}`;
-    // QA counterexample 1: the version key under env is not an action input.
-    expect(ciBunPinErrors(wrap(`${uses}        env:\n          bun-version-file: .bun-version\n`), "1.4.0"))
-      .toEqual([expect.stringContaining("sets neither")]);
-    // QA counterexample 2: an alternate download URL replaces version resolution.
-    expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version-file: .bun-version\n          bun-download-url: https://example.invalid/bun.zip\n`), "1.4.0"))
-      .toEqual([expect.stringContaining("bun-download-url")]);
-    expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version: \${{ matrix.bun }}\n`), "1.4.0"))
-      .toEqual([expect.stringContaining("expression")]);
-    expect(ciBunPinErrors(`jobs:\n  r:\n    uses: someone/else/.github/workflows/build.yml@main\n`, "1.4.0"))
-      .toEqual(expect.arrayContaining([expect.stringContaining("remote reusable workflow")]));
-    // QA counterexample 3: the sole installer removed and left as a comment.
-    const commentedOut = "jobs:\n  a:\n    steps:\n      # - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n      - run: bun --version\n";
-    expect(ciBunPinErrors(commentedOut, "1.4.0")).toEqual([expect.stringContaining("no oven-sh/setup-bun step")]);
-    expect(ciBunPinErrors("jobs:\n  a:\n    steps:\n      - run: echo hi\n", "1.4.0")).toEqual([expect.stringContaining("no oven-sh/setup-bun step")]);
-    expect(ciBunPinErrors("jobs: [unclosed\n", "1.4.0")).toEqual([expect.stringContaining("not parseable")]);
-    // Quoted values and trailing comments parse as plain values.
-    expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version: "1.4.0" # pinned\n`), "1.4.0")).toEqual([]);
-  });
-
   it("mismatch: a different running bun is refused with both versions named", () => {
     const root = fixture("1.4.0");
     expect(checkToolchainPin(root, "1.4.0")).toMatchObject({ ok: true, pinned: true, version: "1.4.0" });

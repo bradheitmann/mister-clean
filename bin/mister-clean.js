@@ -7241,7 +7241,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument3(source, options = {}) {
+    function parseDocument2(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -7267,7 +7267,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument3(src, options);
+      const doc = parseDocument2(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
@@ -7303,7 +7303,7 @@ var require_public_api = __commonJS({
     }
     exports.parse = parse;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument3;
+    exports.parseDocument = parseDocument2;
     exports.stringify = stringify;
   }
 });
@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync16, readFileSync as readFileSync20, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
-import { isAbsolute as isAbsolute24, join as join20, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
+import { existsSync as existsSync17, readFileSync as readFileSync21, realpathSync as realpathSync12, statSync as statSync7, writeFileSync as writeFileSync8 } from "fs";
+import { isAbsolute as isAbsolute24, join as join21, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -11050,7 +11050,7 @@ function captureOnce(repository, visited, projection) {
   field(hash, "surface", SURFACE);
   field(hash, "entry_count", u64(BigInt(before.entries.length)));
   for (const entry of before.entries) hashEntry(hash, repository, entry, visited, projection);
-  const sha25612 = hash.digest("hex");
+  const sha25613 = hash.digest("hex");
   const after = surfaceSnapshot(repository);
   const headAfter = gitLine(repository, ["rev-parse", "--verify", "HEAD^{commit}"]);
   if (headAfter !== headBefore || after.signature !== before.signature) {
@@ -11062,7 +11062,7 @@ function captureOnce(repository, visited, projection) {
     head_commit: headBefore,
     surface: SURFACE,
     entry_count: before.entries.length,
-    sha256: sha25612
+    sha256: sha25613
   };
 }
 function captureStable(root, visited, projection) {
@@ -26881,9 +26881,9 @@ async function validateBundleFile(bundlePath, options = {}) {
 }
 
 // src/closeout/prepare.ts
-import { createHash as createHash19 } from "crypto";
-import { existsSync as existsSync9, mkdirSync as mkdirSync2, readFileSync as readFileSync11, writeFileSync as writeFileSync4 } from "fs";
-import { dirname as dirname12, join as join12, resolve as resolve22 } from "path";
+import { createHash as createHash20 } from "crypto";
+import { existsSync as existsSync10, mkdirSync as mkdirSync2, readFileSync as readFileSync12, writeFileSync as writeFileSync4 } from "fs";
+import { dirname as dirname12, join as join13, resolve as resolve22 } from "path";
 
 // src/closeout/retirements.ts
 import { createHash as createHash18 } from "crypto";
@@ -27121,13 +27121,177 @@ function applyPublicSafetyExemptions(findings, entries2) {
   return { findings: kept, exempted };
 }
 
+// src/closeout/language-policy.ts
+import { createHash as createHash19 } from "crypto";
+import { existsSync as existsSync9, readFileSync as readFileSync11 } from "fs";
+import { join as join12, posix as posix2 } from "path";
+var LANGUAGE_POLICY_PATH = ".mister-clean/language-policy.json";
+var LANGUAGE_POLICY_SCHEMA = "mister-clean.language-policy/1";
+var LANG_GUARD_ALLOW_PATH = ".lang-guard-allow";
+var POLICY_KEYS = /* @__PURE__ */ new Set(["schema", "forbid_extensions", "allow", "generated"]);
+var EXTENSION = /^\.[A-Za-z0-9_+-]+$/u;
+var LanguagePolicyInvalidError = class extends Error {
+  constructor(path, reason) {
+    super(`${path}: language policy is invalid: ${reason}`);
+    this.path = path;
+    this.reason = reason;
+    this.name = "LanguagePolicyInvalidError";
+  }
+  code = "language_policy_invalid";
+};
+function sha25610(value) {
+  return createHash19("sha256").update(value).digest("hex");
+}
+function utf82(bytes2, path) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes2);
+  } catch {
+    throw new LanguagePolicyInvalidError(path, "not valid UTF-8");
+  }
+}
+function languagePolicyFindingFingerprint(path, extension) {
+  return sha25610(`language_policy\0forbidden_language\0${path}\0${extension}`);
+}
+function stringList(value, key, required) {
+  if (value === void 0 && !required) return [];
+  if (!Array.isArray(value)) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `${key} must be an array of strings`);
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.trim().length === 0) {
+      throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `${key} entries must be nonempty strings`);
+    }
+  }
+  return [...new Set(value)];
+}
+function parseLanguagePolicy(text3) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text3);
+  } catch {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "not valid JSON");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "expected a JSON object");
+  }
+  const record4 = parsed;
+  const unknownKeys = Object.keys(record4).filter((key) => !POLICY_KEYS.has(key)).sort();
+  if (unknownKeys.length > 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `unknown key(s): ${unknownKeys.join(", ")}`);
+  if (record4.schema !== LANGUAGE_POLICY_SCHEMA) {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `schema must be ${LANGUAGE_POLICY_SCHEMA}`);
+  }
+  const forbid = stringList(record4.forbid_extensions, "forbid_extensions", true);
+  if (forbid.length === 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "forbid_extensions must not be empty");
+  const malformed = forbid.filter((extension) => !EXTENSION.test(extension));
+  if (malformed.length > 0) {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `forbid_extensions entries must look like ".ext": ${malformed.join(", ")}`);
+  }
+  return {
+    forbid_extensions: [...new Set(forbid.map((extension) => extension.toLowerCase()))].sort(),
+    allow: stringList(record4.allow, "allow", false),
+    generated: stringList(record4.generated, "generated", false)
+  };
+}
+function parseLangGuardAllow(text3) {
+  return [...new Set(text3.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#")))];
+}
+function regexLiteral2(character) {
+  return /[\\^$.*+?()[\]{}|/]/u.test(character) ? `\\${character}` : character;
+}
+function globMatcher(pattern) {
+  const portable = pattern.replace(/^\.\//u, "");
+  let result = "^";
+  for (let index = 0; index < portable.length; index += 1) {
+    const character = portable[index] ?? "";
+    if (character === "*" && portable[index + 1] === "*") {
+      index += 1;
+      if (portable[index + 1] === "/") {
+        index += 1;
+        result += "(?:.*/)?";
+      } else result += ".*";
+    } else if (character === "*") result += "[^/]*";
+    else if (character === "?") result += "[^/]";
+    else result += regexLiteral2(character);
+  }
+  if (portable.endsWith("/")) result += ".*";
+  return new RegExp(`${result}$`, "u");
+}
+function anyMatch(matchers, path) {
+  return matchers.some((matcher) => matcher.test(path));
+}
+function languagePolicyCandidatePaths(root) {
+  return trackedShippablePaths(root);
+}
+function auditLanguagePolicy(root) {
+  const policyPath = join12(root, LANGUAGE_POLICY_PATH);
+  const empty = {
+    record_type: "mister-clean.language-policy-audit",
+    schema_version: "1.0",
+    allowed_count: 0,
+    generated_exempt: { count: 0, paths: [] },
+    findings: []
+  };
+  if (!existsSync9(policyPath)) {
+    return { ...empty, status: "not_applicable", exitCode: 0, policy: null, tracked_path_count: 0 };
+  }
+  let bytes2;
+  try {
+    bytes2 = readFileSync11(policyPath);
+  } catch {
+    throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "unreadable");
+  }
+  const policy = parseLanguagePolicy(utf82(bytes2, LANGUAGE_POLICY_PATH));
+  const langGuardPath = join12(root, LANG_GUARD_ALLOW_PATH);
+  let langGuard = null;
+  let langGuardGlobs = [];
+  if (existsSync9(langGuardPath)) {
+    const langGuardBytes = readFileSync11(langGuardPath);
+    langGuardGlobs = parseLangGuardAllow(utf82(langGuardBytes, LANG_GUARD_ALLOW_PATH));
+    langGuard = { path: LANG_GUARD_ALLOW_PATH, sha256: sha25610(langGuardBytes), glob_count: langGuardGlobs.length };
+  }
+  const allow = [...policy.allow, ...langGuardGlobs].map(globMatcher);
+  const generated = policy.generated.map(globMatcher);
+  const forbidden = new Set(policy.forbid_extensions);
+  const tracked = languagePolicyCandidatePaths(root);
+  const findings = [];
+  const generatedPaths = [];
+  let allowedCount = 0;
+  for (const path of tracked) {
+    const extension = posix2.extname(path).toLowerCase();
+    if (!forbidden.has(extension)) continue;
+    if (anyMatch(generated, path)) generatedPaths.push(path);
+    else if (anyMatch(allow, path)) allowedCount += 1;
+    else {
+      findings.push({
+        fingerprint: languagePolicyFindingFingerprint(path, extension),
+        family: "language_policy",
+        rule: "forbidden_language",
+        path,
+        extension
+      });
+    }
+  }
+  return {
+    ...empty,
+    status: findings.length > 0 ? "fail" : "pass",
+    exitCode: findings.length > 0 ? 1 : 0,
+    policy: {
+      ...policy,
+      source: { path: LANGUAGE_POLICY_PATH, sha256: sha25610(bytes2) },
+      lang_guard_allow: langGuard
+    },
+    tracked_path_count: tracked.length,
+    allowed_count: allowedCount,
+    generated_exempt: { count: generatedPaths.length, paths: generatedPaths },
+    findings
+  };
+}
+
 // src/closeout/prepare.ts
 function asObject(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
   return value;
 }
-function sha25610(value) {
-  return createHash19("sha256").update(value).digest("hex");
+function sha25611(value) {
+  return createHash20("sha256").update(value).digest("hex");
 }
 function isoTimestamp3(date) {
   return date.toISOString();
@@ -27138,7 +27302,7 @@ function planningClass(path) {
   return "planning";
 }
 function loadTemplate(root, name) {
-  return structuredClone(readJson(join12(root, "assets", name)));
+  return structuredClone(readJson(join13(root, "assets", name)));
 }
 function unique2(values) {
   return [...new Set(values)];
@@ -27204,8 +27368,8 @@ async function collectPrepareEvidence(options, mode) {
   const executionLease = acquireRepositoryVerificationLease(repository, clock);
   let leaseTransferred = false;
   try {
-    const bundleDirectory = join12(resolve22(options.evidenceHome), "mister-clean", options.runId);
-    if (existsSync9(bundleDirectory)) {
+    const bundleDirectory = join13(resolve22(options.evidenceHome), "mister-clean", options.runId);
+    if (existsSync10(bundleDirectory)) {
       throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
     }
     mkdirSync2(bundleDirectory, { recursive: true });
@@ -27231,20 +27395,20 @@ async function collectPrepareEvidence(options, mode) {
     const left = Number(divergence[0] ?? 0);
     const right = Number(divergence[1] ?? 0);
     let requestBytes;
-    if (options.requestSource !== void 0) requestBytes = readFileSync11(options.requestSource);
+    if (options.requestSource !== void 0) requestBytes = readFileSync12(options.requestSource);
     else if (options.requestText !== void 0) requestBytes = Buffer.from(options.requestText, "utf8");
     else requestBytes = Buffer.from(options.requestRef, "utf8");
-    const requestSha256 = sha25610(requestBytes);
+    const requestSha256 = sha25611(requestBytes);
     let requestSource2 = null;
     let sourceKind = "reference_only";
     if (options.requestSource !== void 0 || options.requestText !== void 0) {
-      const path = join12(bundleDirectory, "operative-request.txt");
+      const path = join13(bundleDirectory, "operative-request.txt");
       writeFileSync4(path, requestBytes);
       requestSource2 = { path: "operative-request.txt", sha256: sha256File2(path) };
       sourceKind = "exact_bytes";
     }
     const criteriaIds2 = unique2(options.criteria ?? []);
-    writeJson(join12(bundleDirectory, "criteria-source.json"), {
+    writeJson(join13(bundleDirectory, "criteria-source.json"), {
       record_type: "mister-clean.criteria-source",
       request_ref: options.requestRef,
       request_sha256: requestSha256,
@@ -27259,16 +27423,16 @@ async function collectPrepareEvidence(options, mode) {
     const unclassifiedPlanningPaths = new Set(
       planningAudit.findings.filter((finding4) => finding4.code === "planning_input_unparsed").map((finding4) => finding4.path)
     );
-    writeJson(join12(bundleDirectory, "planning-audit.json"), planningAudit);
+    writeJson(join13(bundleDirectory, "planning-audit.json"), planningAudit);
     const planningAuditRef = {
       path: "planning-audit.json",
-      sha256: sha256File2(join12(bundleDirectory, "planning-audit.json"))
+      sha256: sha256File2(join13(bundleDirectory, "planning-audit.json"))
     };
     let publicSafetyInputRef;
     let publicSafetyDenylistPath;
     if (options.publicSafetyDenylistPath !== void 0) {
-      const inputPath = join12(bundleDirectory, "public-safety-denylist.txt");
-      writeFileSync4(inputPath, readFileSync11(resolve22(options.publicSafetyDenylistPath)));
+      const inputPath = join13(bundleDirectory, "public-safety-denylist.txt");
+      writeFileSync4(inputPath, readFileSync12(resolve22(options.publicSafetyDenylistPath)));
       publicSafetyDenylistPath = inputPath;
       publicSafetyInputRef = {
         kind: "public_safety_denylist",
@@ -27284,28 +27448,33 @@ async function collectPrepareEvidence(options, mode) {
       repository_object: baselineRepositoryObject,
       ...publicSafetyInputRef === void 0 ? {} : { input_sha256: publicSafetyInputRef.sha256 }
     } : void 0;
-    if (publicSafetyAudit) writeJson(join12(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
+    if (publicSafetyAudit) writeJson(join13(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
     const publicSafetyAuditRef = publicSafetyAudit === void 0 ? void 0 : {
       path: "public-safety-audit.json",
-      sha256: sha256File2(join12(bundleDirectory, "public-safety-audit.json"))
+      sha256: sha256File2(join13(bundleDirectory, "public-safety-audit.json"))
     };
     const githubActionsAudit = {
       ...auditGitHubActionsRepository(repository),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject
     };
-    writeJson(join12(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
+    writeJson(join13(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
     const githubActionsAuditRef = {
       path: "github-actions-audit.json",
-      sha256: sha256File2(join12(bundleDirectory, "github-actions-audit.json"))
+      sha256: sha256File2(join13(bundleDirectory, "github-actions-audit.json"))
     };
+    writeJson(join13(bundleDirectory, "language-policy-audit.json"), {
+      ...auditLanguagePolicy(repository),
+      object: baselineRepositoryObject.sha256,
+      repository_object: baselineRepositoryObject
+    });
     const semanticInputRefs = [];
     let semanticManifestPath;
     let semanticEvidencePackagePath;
     let semanticTrustPolicyPath;
     if (options.semanticManifestPath !== void 0) {
-      const inputPath = join12(bundleDirectory, "semantic-probe-manifest.json");
-      writeFileSync4(inputPath, readFileSync11(resolve22(options.semanticManifestPath)));
+      const inputPath = join13(bundleDirectory, "semantic-probe-manifest.json");
+      writeFileSync4(inputPath, readFileSync12(resolve22(options.semanticManifestPath)));
       semanticManifestPath = inputPath;
       semanticInputRefs.push({
         kind: "semantic_probe_manifest",
@@ -27314,10 +27483,10 @@ async function collectPrepareEvidence(options, mode) {
       });
     }
     if (options.semanticEvidencePackagePath !== void 0 && options.semanticTrustPolicyPath !== void 0) {
-      const packageInputPath = join12(bundleDirectory, "semantic-evidence-package.json");
-      const policyInputPath = join12(bundleDirectory, "semantic-trust-policy.json");
-      writeFileSync4(packageInputPath, readFileSync11(resolve22(options.semanticEvidencePackagePath)));
-      writeFileSync4(policyInputPath, readFileSync11(resolve22(options.semanticTrustPolicyPath)));
+      const packageInputPath = join13(bundleDirectory, "semantic-evidence-package.json");
+      const policyInputPath = join13(bundleDirectory, "semantic-trust-policy.json");
+      writeFileSync4(packageInputPath, readFileSync12(resolve22(options.semanticEvidencePackagePath)));
+      writeFileSync4(policyInputPath, readFileSync12(resolve22(options.semanticTrustPolicyPath)));
       semanticEvidencePackagePath = packageInputPath;
       semanticTrustPolicyPath = policyInputPath;
       semanticInputRefs.push({
@@ -27339,10 +27508,10 @@ async function collectPrepareEvidence(options, mode) {
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject
     };
-    writeJson(join12(bundleDirectory, "semantic-audit.json"), semanticAudit);
+    writeJson(join13(bundleDirectory, "semantic-audit.json"), semanticAudit);
     const semanticAuditRef = {
       path: "semantic-audit.json",
-      sha256: sha256File2(join12(bundleDirectory, "semantic-audit.json"))
+      sha256: sha256File2(join13(bundleDirectory, "semantic-audit.json"))
     };
     const detectorCoverage = createDetectorCoverage({
       baselineRepositoryObject,
@@ -27363,7 +27532,7 @@ async function collectPrepareEvidence(options, mode) {
       }
     });
     const nativeGateDiscovery = discoverNativeGates(repository, baselineRepositoryObject);
-    const nativeGateOutputDirectory = join12(bundleDirectory, "native-gate-output");
+    const nativeGateOutputDirectory = join13(bundleDirectory, "native-gate-output");
     leaseTransferred = true;
     const nativeGateCoverage = await runNativeGates(
       repository,
@@ -27375,8 +27544,8 @@ async function collectPrepareEvidence(options, mode) {
         execution_lease: executionLease
       }
     );
-    writeJson(join12(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
-    writeJson(join12(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
+    writeJson(join13(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
+    writeJson(join13(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
     const nativeGateValidationTime = clock();
     const nativeGateIntegrityErrors = await validateNativeGateCoverage(
       nativeGateCoverage,
@@ -27392,7 +27561,7 @@ async function collectPrepareEvidence(options, mode) {
       nativeGateOutputDirectory,
       { validation_time: nativeGateValidationTime, repository }
     );
-    writeJson(join12(bundleDirectory, "native-gate-validation.json"), {
+    writeJson(join13(bundleDirectory, "native-gate-validation.json"), {
       record_type: "mister-clean.native-gate-validation",
       schema_version: "1.0",
       discovery_sha256: nativeGateDiscovery.catalog_sha256,
@@ -27409,7 +27578,7 @@ async function collectPrepareEvidence(options, mode) {
     const nativeGateRows = nativeGateCoverage.executions.map((execution) => {
       const definition = nativeGateDiscovery.gates.find((gate) => gate.id === execution.gate_id);
       if (!definition) throw new Error(`native gate execution has no discovery definition: ${execution.gate_id}`);
-      const path = `native-gate-${sha25610(Buffer.from(execution.gate_id, "utf8")).slice(0, 16)}.json`;
+      const path = `native-gate-${sha25611(Buffer.from(execution.gate_id, "utf8")).slice(0, 16)}.json`;
       const command = nativeGateCommand(
         execution.command.executable,
         execution.command.argv,
@@ -27434,7 +27603,7 @@ async function collectPrepareEvidence(options, mode) {
         stdout_ref: { ...execution.stdout_ref, path: `native-gate-output/${execution.stdout_ref.path}` },
         stderr_ref: { ...execution.stderr_ref, path: `native-gate-output/${execution.stderr_ref.path}` }
       };
-      writeJson(join12(bundleDirectory, path), record4);
+      writeJson(join13(bundleDirectory, path), record4);
       return {
         id: execution.gate_id,
         kind: execution.kind,
@@ -27448,7 +27617,7 @@ async function collectPrepareEvidence(options, mode) {
         warnings: 0,
         debt: passed ? 0 : 1,
         skipped: execution.state === "skipped" ? 1 : 0,
-        evidence_ref: { path, sha256: sha256File2(join12(bundleDirectory, path)) }
+        evidence_ref: { path, sha256: sha256File2(join13(bundleDirectory, path)) }
       };
     });
     if (nativeGateCoverage.closing_repository_object.sha256 !== baselineRepositoryObject.sha256) {
@@ -27528,7 +27697,7 @@ async function collectPrepareTopology(context) {
       const census = await captureFileCensus({
         repository_root: repository,
         roots: [rootText],
-        output_path: join12(bundleDirectory, `planning-census-${index + 1}.json`)
+        output_path: join13(bundleDirectory, `planning-census-${index + 1}.json`)
       });
       const artifacts = census.entries.map((entry) => ({
         path: entry.path,
@@ -27615,13 +27784,13 @@ async function collectPrepareTopology(context) {
     options.processPort === void 0 ? {} : { processPort: options.processPort }
   );
   const processes = successorProcessRows(processCensus);
-  writeJson(join12(bundleDirectory, "process-census.json"), processCensus);
+  writeJson(join13(bundleDirectory, "process-census.json"), processCensus);
   const processCensusRef = {
     path: "process-census.json",
-    sha256: sha256File2(join12(bundleDirectory, "process-census.json"))
+    sha256: sha256File2(join13(bundleDirectory, "process-census.json"))
   };
   const currentCandidates = ["CURRENT-STATE.md", "docs/CURRENT-STATE.md", "_STATUS.md", "README.md"];
-  const currentPath = currentCandidates.find((candidate) => existsSync9(join12(repository, candidate)));
+  const currentPath = currentCandidates.find((candidate) => existsSync10(join13(repository, candidate)));
   let policyRef = null;
   let targetObservation;
   if (upstream) {
@@ -27636,13 +27805,13 @@ async function collectPrepareTopology(context) {
       observed_at: now
     };
   } else {
-    writeJson(join12(bundleDirectory, "local-target-policy.json"), {
+    writeJson(join13(bundleDirectory, "local-target-policy.json"), {
       record_type: "mister-clean.local-target-policy",
       policy_ref: "no configured upstream; current branch is the conservative local target"
     });
     policyRef = {
       path: "local-target-policy.json",
-      sha256: sha256File2(join12(bundleDirectory, "local-target-policy.json"))
+      sha256: sha256File2(join13(bundleDirectory, "local-target-policy.json"))
     };
     targetObservation = {
       kind: "local_ref_resolution",
@@ -27669,14 +27838,14 @@ async function collectPrepareTopology(context) {
 function stageRetirementRulings(repository, bundleDirectory, retirements) {
   const staged = /* @__PURE__ */ new Set();
   for (const record4 of retirements) {
-    const { path, sha256: sha25612 } = record4.ruling.evidence;
+    const { path, sha256: sha25613 } = record4.ruling.evidence;
     if (staged.has(path)) continue;
-    const bytes2 = readFileSync11(resolve22(repository, path));
-    const observed = createHash19("sha256").update(bytes2).digest("hex");
-    if (observed !== sha25612) {
-      throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25612}`);
+    const bytes2 = readFileSync12(resolve22(repository, path));
+    const observed = createHash20("sha256").update(bytes2).digest("hex");
+    if (observed !== sha25613) {
+      throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25613}`);
     }
-    const target = join12(bundleDirectory, path);
+    const target = join13(bundleDirectory, path);
     mkdirSync2(dirname12(target), { recursive: true });
     writeFileSync4(target, bytes2);
     staged.add(path);
@@ -27689,9 +27858,9 @@ function bindRetirementRulings(debts, bundleDirectory, requestSha256) {
     const scope = String(exception.scope ?? "");
     if (!scope.startsWith("retired root ")) return debt;
     const ruling = exception.ref;
-    const relativePath = join12("retirement-rulings", `${String(debt.id)}.json`);
-    mkdirSync2(join12(bundleDirectory, "retirement-rulings"), { recursive: true });
-    writeJson(join12(bundleDirectory, relativePath), {
+    const relativePath = join13("retirement-rulings", `${String(debt.id)}.json`);
+    mkdirSync2(join13(bundleDirectory, "retirement-rulings"), { recursive: true });
+    writeJson(join13(bundleDirectory, relativePath), {
       record_type: "mister-clean.operator-ruling",
       schema_version: "1.0",
       debt_id: debt.id,
@@ -27704,7 +27873,7 @@ function bindRetirementRulings(debts, bundleDirectory, requestSha256) {
     });
     return {
       ...debt,
-      exception: { ...exception, ref: { path: relativePath, sha256: sha256File2(join12(bundleDirectory, relativePath)) } }
+      exception: { ...exception, ref: { path: relativePath, sha256: sha256File2(join13(bundleDirectory, relativePath)) } }
     };
   });
 }
@@ -27799,7 +27968,7 @@ function assemblePrepareReport(context) {
   );
   const unassignedSemanticFindings = semanticAudit.findings.filter((finding4) => finding4.code === "semantic_probe_unassigned");
   const semanticDebts = semanticAudit.findings.filter((finding4) => finding4.code !== "semantic_probe_unassigned").map((finding4) => baselineDebt(repoId, {
-    id: `DEBT-SEMANTIC-${sha25610(Buffer.from(`${finding4.candidate_id}\0${finding4.code}\0${finding4.refs.join("\0")}\0${finding4.detail.replaceAll(/\s+/g, " ")}`, "utf8")).slice(0, 16).toUpperCase()}`,
+    id: `DEBT-SEMANTIC-${sha25611(Buffer.from(`${finding4.candidate_id}\0${finding4.code}\0${finding4.refs.join("\0")}\0${finding4.detail.replaceAll(/\s+/g, " ")}`, "utf8")).slice(0, 16).toUpperCase()}`,
     class: finding4.code,
     observation_count: 1,
     detector_finding_fingerprints: [semanticFindingFingerprint(finding4.candidate_id, finding4.code)],
@@ -27911,7 +28080,7 @@ function assemblePrepareReport(context) {
     if (!first) throw new Error(`empty GitHub Actions finding group: ${key}`);
     const fingerprints = findings.map((finding4) => finding4.fingerprint).sort();
     return baselineDebt(repoId, {
-      id: `DEBT-GITHUB-ACTIONS-${sha25610(Buffer.from(key, "utf8")).slice(0, 16).toUpperCase()}`,
+      id: `DEBT-GITHUB-ACTIONS-${sha25611(Buffer.from(key, "utf8")).slice(0, 16).toUpperCase()}`,
       class: `github_actions_${first.rule}`,
       severity: first.severity,
       observation_count: findings.length,
@@ -27956,7 +28125,7 @@ function assemblePrepareReport(context) {
         observed_at: execution?.finished_at ?? now,
         evidence_ref: {
           path: "native-gate-validation.json",
-          sha256: sha256File2(join12(bundleDirectory, "native-gate-validation.json"))
+          sha256: sha256File2(join13(bundleDirectory, "native-gate-validation.json"))
         }
       }]
     }, projection.normalizer, projection.cause_key, [
@@ -28052,11 +28221,11 @@ function assemblePrepareReport(context) {
       validation_error_count: nativeGateValidationErrors.length,
       discovery_ref: {
         path: "native-gate-discovery.json",
-        sha256: sha256File2(join12(bundleDirectory, "native-gate-discovery.json"))
+        sha256: sha256File2(join13(bundleDirectory, "native-gate-discovery.json"))
       },
       coverage_ref: {
         path: "native-gate-coverage.json",
-        sha256: sha256File2(join12(bundleDirectory, "native-gate-coverage.json"))
+        sha256: sha256File2(join13(bundleDirectory, "native-gate-coverage.json"))
       }
     }
   });
@@ -28130,7 +28299,7 @@ function assemblePrepareReport(context) {
     closing_object: closingRepositoryObject.sha256,
     closing_repository_object: closingRepositoryObject
   };
-  writeJson(join12(bundleDirectory, "regression-delta.json"), {
+  writeJson(join13(bundleDirectory, "regression-delta.json"), {
     record_type: "mister-clean.regression-delta",
     schema_version: "1.5",
     ...regressionBinding,
@@ -28143,7 +28312,7 @@ function assemblePrepareReport(context) {
     accounting_schema: "1.5",
     evidence_ref: {
       path: "regression-delta.json",
-      sha256: sha256File2(join12(bundleDirectory, "regression-delta.json"))
+      sha256: sha256File2(join13(bundleDirectory, "regression-delta.json"))
     }
   };
   return {
@@ -28224,13 +28393,13 @@ function assemblePrepareBundle(context) {
   coordination.dispatcher = `mister-clean:${options.runId}`;
   coordination.integrator = `mister-clean:${options.runId}`;
   coordination.target = { ref: targetRef, expected_commit: targetCommit, observed_at: now };
-  writeJson(join12(bundleDirectory, "debris-census.json"), {
+  writeJson(join13(bundleDirectory, "debris-census.json"), {
     record_type: "mister-clean.debris-census",
     removed: 0,
     retained: 0,
     unclassified: 0
   });
-  writeJson(join12(bundleDirectory, "independent-review.json"), {
+  writeJson(join13(bundleDirectory, "independent-review.json"), {
     record_type: "mister-clean.independent-review",
     observed_at: now,
     mechanism: "not yet run",
@@ -28255,7 +28424,7 @@ function assemblePrepareBundle(context) {
       source_kind: sourceKind,
       request_source: requestSource2,
       source_refs: [
-        { path: "criteria-source.json", sha256: sha256File2(join12(bundleDirectory, "criteria-source.json")) }
+        { path: "criteria-source.json", sha256: sha256File2(join13(bundleDirectory, "criteria-source.json")) }
       ],
       request_sha256: requestSha256,
       discovered_count: criteriaIds2.length,
@@ -28302,7 +28471,7 @@ function assemblePrepareBundle(context) {
     current_state: currentPath ? {
       state: "candidate_unverified",
       path: currentPath,
-      sha256: sha256File2(join12(repository, currentPath)),
+      sha256: sha256File2(join13(repository, currentPath)),
       commit: head,
       generator: "discovered candidate; requires explicit designation",
       designation: null
@@ -28317,15 +28486,15 @@ function assemblePrepareBundle(context) {
     native_gate_control: {
       discovery_ref: {
         path: "native-gate-discovery.json",
-        sha256: sha256File2(join12(bundleDirectory, "native-gate-discovery.json"))
+        sha256: sha256File2(join13(bundleDirectory, "native-gate-discovery.json"))
       },
       coverage_ref: {
         path: "native-gate-coverage.json",
-        sha256: sha256File2(join12(bundleDirectory, "native-gate-coverage.json"))
+        sha256: sha256File2(join13(bundleDirectory, "native-gate-coverage.json"))
       },
       validation_ref: {
         path: "native-gate-validation.json",
-        sha256: sha256File2(join12(bundleDirectory, "native-gate-validation.json"))
+        sha256: sha256File2(join13(bundleDirectory, "native-gate-validation.json"))
       },
       evidence_root: "native-gate-output",
       required_count: nativeGateDiscovery.required_gate_ids.length,
@@ -28339,7 +28508,7 @@ function assemblePrepareBundle(context) {
       retained: 0,
       unclassified: 0,
       evidence: [
-        { path: "debris-census.json", sha256: sha256File2(join12(bundleDirectory, "debris-census.json")) }
+        { path: "debris-census.json", sha256: sha256File2(join13(bundleDirectory, "debris-census.json")) }
       ]
     },
     handoff: {
@@ -28361,21 +28530,21 @@ function assemblePrepareBundle(context) {
       unresolved: 0,
       evidence_ref: {
         path: "independent-review.json",
-        sha256: sha256File2(join12(bundleDirectory, "independent-review.json"))
+        sha256: sha256File2(join13(bundleDirectory, "independent-review.json"))
       }
     }
   };
-  writeJson(join12(bundleDirectory, "action-manifest.json"), manifest2);
-  writeJson(join12(bundleDirectory, "closeout-report.json"), report);
+  writeJson(join13(bundleDirectory, "action-manifest.json"), manifest2);
+  writeJson(join13(bundleDirectory, "closeout-report.json"), report);
   bundle.manifest = {
     path: "action-manifest.json",
-    sha256: sha256File2(join12(bundleDirectory, "action-manifest.json"))
+    sha256: sha256File2(join13(bundleDirectory, "action-manifest.json"))
   };
   bundle.report = {
     path: "closeout-report.json",
-    sha256: sha256File2(join12(bundleDirectory, "closeout-report.json"))
+    sha256: sha256File2(join13(bundleDirectory, "closeout-report.json"))
   };
-  const bundlePath = join12(bundleDirectory, "closure-bundle.json");
+  const bundlePath = join13(bundleDirectory, "closure-bundle.json");
   writeJson(bundlePath, bundle);
   const verifiedClosingRepositoryObject = captureRepositoryObject(repository);
   if (verifiedClosingRepositoryObject.sha256 !== closingRepositoryObject.sha256) {
@@ -28385,15 +28554,15 @@ function assemblePrepareBundle(context) {
 }
 
 // src/closeout/repository-boundaries.ts
-import { createHash as createHash20 } from "crypto";
+import { createHash as createHash21 } from "crypto";
 import { execFileSync as execFileSync6 } from "child_process";
-import { lstatSync as lstatSync12, readFileSync as readFileSync12 } from "fs";
-import { extname as extname5, join as join13, normalize as normalize3, posix as posix2, resolve as resolve23 } from "path";
+import { lstatSync as lstatSync12, readFileSync as readFileSync13 } from "fs";
+import { extname as extname5, join as join14, normalize as normalize3, posix as posix3, resolve as resolve23 } from "path";
 var SOURCE_EXTENSIONS2 = /* @__PURE__ */ new Set([".bash", ".cjs", ".go", ".js", ".jsx", ".mjs", ".py", ".rs", ".sh", ".ts", ".tsx"]);
 var FORBIDDEN_MAP_KEYS = Object.freeze(["__proto__", "constructor", "prototype"]);
 var INVENTORY_PATH = ".mister-clean/repository-boundaries.json";
 function digest3(value) {
-  return createHash20("sha256").update(value, "utf8").digest("hex");
+  return createHash21("sha256").update(value, "utf8").digest("hex");
 }
 function finding3(rule, path, detail, relatedPaths = []) {
   const related_paths = [...new Set(relatedPaths)].sort();
@@ -28414,9 +28583,9 @@ function candidatePaths(root) {
 }
 function readableText(root, path) {
   try {
-    const metadata = lstatSync12(join13(root, path));
+    const metadata = lstatSync12(join14(root, path));
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1048576) return void 0;
-    return readFileSync12(join13(root, path), "utf8");
+    return readFileSync13(join14(root, path), "utf8");
   } catch {
     return void 0;
   }
@@ -28511,7 +28680,7 @@ function ignoredAcceptancePaths(root, source) {
 }
 function resolveImport(from, specifier, paths) {
   if (!specifier.startsWith(".")) return void 0;
-  const base = posix2.normalize(posix2.join(posix2.dirname(from), specifier));
+  const base = posix3.normalize(posix3.join(posix3.dirname(from), specifier));
   const withoutRuntimeExtension = base.replace(/\.(?:c|m)?js$/u, "");
   for (const candidate of [base, ...[".ts", ".tsx", ".js", ".mjs", ".cjs"].flatMap((extension) => [`${base}${extension}`, `${withoutRuntimeExtension}${extension}`]), ...[".ts", ".tsx", ".js"].map((extension) => `${base}/index${extension}`)]) {
     if (paths.has(candidate)) return candidate;
@@ -28596,7 +28765,7 @@ function externalContracts(root, paths) {
   if (!paths.has(INVENTORY_PATH)) return { count: 0, findings: [] };
   let data;
   try {
-    data = JSON.parse(readFileSync12(join13(root, INVENTORY_PATH), "utf8"));
+    data = JSON.parse(readFileSync13(join14(root, INVENTORY_PATH), "utf8"));
   } catch (error) {
     return { count: 0, findings: [finding3("topology_inventory_invalid", INVENTORY_PATH, error instanceof Error ? error.message : String(error))] };
   }
@@ -28612,7 +28781,7 @@ function externalContracts(root, paths) {
       continue;
     }
     try {
-      const errors = wireContractErrors(contract, JSON.parse(readFileSync12(join13(root, contract.fixture), "utf8")));
+      const errors = wireContractErrors(contract, JSON.parse(readFileSync13(join14(root, contract.fixture), "utf8")));
       if (errors.length > 0) findings.push(finding3("external_producer_contract_invalid", contract.fixture, `${contract.id}: ${errors.join("; ")}`, [INVENTORY_PATH]));
     } catch (error) {
       findings.push(finding3("external_producer_contract_invalid", contract.fixture, error instanceof Error ? error.message : String(error), [INVENTORY_PATH]));
@@ -28657,7 +28826,7 @@ function auditRepositoryBoundaries(rootInput) {
     const inventory = dockerCopySources(readableText(root, dockerPath) ?? "");
     if (!inventory) continue;
     for (const entrypoint of inventory.entrypoints) {
-      const normalizedEntrypoint = posix2.normalize(entrypoint.replace(/^\.\//u, ""));
+      const normalizedEntrypoint = posix3.normalize(entrypoint.replace(/^\.\//u, ""));
       if (!sources.has(normalizedEntrypoint)) continue;
       const missing = [...importClosure(normalizedEntrypoint, sources)].filter((path) => !coveredByCopy(path, inventory.copied));
       if (missing.length > 0) findings.push(finding3("docker_copy_closure_gap", dockerPath, `runtime entrypoint ${normalizedEntrypoint} imports source omitted from declarative COPY inventory`, missing));
@@ -28683,30 +28852,30 @@ function auditRepositoryBoundaries(rootInput) {
 import { randomUUID as randomUUID6 } from "crypto";
 import { execFileSync as execFileSync7 } from "child_process";
 import {
-  existsSync as existsSync10,
+  existsSync as existsSync11,
   mkdirSync as mkdirSync4,
   realpathSync as realpathSync9,
   rmSync as rmSync4,
   writeFileSync as writeFileSync6
 } from "fs";
 import { hostname } from "os";
-import { dirname as dirname14, join as join15, posix as pathPosix2 } from "path";
+import { dirname as dirname14, join as join16, posix as pathPosix2 } from "path";
 
 // src/closeout/action-lifecycle-runtime.ts
-import { createHash as createHash21, randomUUID as randomUUID5 } from "crypto";
+import { createHash as createHash22, randomUUID as randomUUID5 } from "crypto";
 import {
   closeSync as closeSync4,
   copyFileSync,
   mkdirSync as mkdirSync3,
   openSync as openSync4,
-  readFileSync as readFileSync13,
+  readFileSync as readFileSync14,
   realpathSync as realpathSync8,
   renameSync as renameSync2,
   rmSync as rmSync3,
   statSync as statSync3,
   writeFileSync as writeFileSync5
 } from "fs";
-import { dirname as dirname13, isAbsolute as isAbsolute20, join as join14, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
+import { dirname as dirname13, isAbsolute as isAbsolute20, join as join15, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
 var HEX644 = /^[0-9a-f]{64}$/;
 function object6(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
@@ -28748,10 +28917,10 @@ function jsonBytes(value) {
 `;
 }
 function digestBytes(value) {
-  return createHash21("sha256").update(value).digest("hex");
+  return createHash22("sha256").update(value).digest("hex");
 }
 function readJson2(path) {
-  return object6(JSON.parse(readFileSync13(path, "utf8")), path);
+  return object6(JSON.parse(readFileSync14(path, "utf8")), path);
 }
 function portablePath2(base, absolute) {
   return relative16(base, absolute).split(sep16).join("/");
@@ -28807,7 +28976,7 @@ function inferRepository(bundle, report) {
 function loadContext(bundleDirectory) {
   const base = realpathSync8(resolve24(bundleDirectory));
   if (!statSync3(base).isDirectory()) throw new Error(`bundle directory is not a directory: ${base}`);
-  const bundlePath = join14(base, "closure-bundle.json");
+  const bundlePath = join15(base, "closure-bundle.json");
   const bundle = readJson2(bundlePath);
   const reportRef = object6(bundle.report, "$.report");
   const manifestRef = object6(bundle.manifest, "$.manifest");
@@ -28840,10 +29009,10 @@ async function requireValidBundle(context, runtimeAttestation, verifyLive) {
 ${result.errors.join("\n")}`);
 }
 function lockPath(context) {
-  return join14(context.base, ".mister-clean-action.lock.json");
+  return join15(context.base, ".mister-clean-action.lock.json");
 }
 function lifecyclePath(context, id) {
-  return join14(context.base, "action-evidence", id, "lifecycle.json");
+  return join15(context.base, "action-evidence", id, "lifecycle.json");
 }
 function writeExclusive(path, value) {
   mkdirSync3(dirname13(path), { recursive: true, mode: 448 });
@@ -28869,11 +29038,11 @@ async function transactionalWrite(context, values, runtimeAttestation) {
     ...sidecars.map((sidecar) => sidecar.path)
   ];
   if (new Set(paths).size !== paths.length) throw new Error("action transaction contains a duplicate output path");
-  const backupDirectory = join14(context.base, `.action-transaction-${randomUUID5()}`);
+  const backupDirectory = join15(context.base, `.action-transaction-${randomUUID5()}`);
   mkdirSync3(backupDirectory, { recursive: true, mode: 448 });
   for (const path of paths) {
     resolveContained(context.base, portablePath2(context.base, path), "action transaction output");
-    copyFileSync(path, join14(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__")));
+    copyFileSync(path, join15(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__")));
   }
   try {
     if (values.regression) replaceJson(context.regressionPath, values.regression);
@@ -28885,7 +29054,7 @@ async function transactionalWrite(context, values, runtimeAttestation) {
     await requireValidBundle(candidate, runtimeAttestation, true);
   } catch (error) {
     for (const path of paths) {
-      const backup = join14(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__"));
+      const backup = join15(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__"));
       const restore = `${path}.restore-${randomUUID5()}`;
       copyFileSync(backup, restore);
       renameSync2(restore, path);
@@ -29147,9 +29316,9 @@ async function prepareSnapshot(context, evidenceHome, runId, runtimeAttestation,
   const directory = realpathSync9(prepared.bundleDirectory);
   const prefix = portablePath2(context.base, directory);
   const bundle = readJson2(prepared.bundlePath);
-  const report = readJson2(join15(directory, "closeout-report.json"));
-  const manifest2 = readJson2(join15(directory, "action-manifest.json"));
-  const regression = readJson2(join15(directory, "regression-delta.json"));
+  const report = readJson2(join16(directory, "closeout-report.json"));
+  const manifest2 = readJson2(join16(directory, "action-manifest.json"));
+  const regression = readJson2(join16(directory, "regression-delta.json"));
   const detectorCoverage = object6(regression.detector_coverage, "snapshot.regression.detector_coverage");
   const nativeControl = object6(object6(bundle.successor_readiness, "snapshot.successor_readiness").native_gate_control, "snapshot.native_gate_control");
   const discoveryRef = object6(nativeControl.discovery_ref, "snapshot.native_gate_control.discovery_ref");
@@ -29502,7 +29671,7 @@ function ensureCleanWorkingTree(repository) {
 }
 function verifyLock(context, id) {
   const path = lockPath(context);
-  if (!existsSync10(path)) throw new Error("no open Mister Clean action lock exists");
+  if (!existsSync11(path)) throw new Error("no open Mister Clean action lock exists");
   const lock = readJson2(path);
   if (lock.action_id !== id) throw new Error(`action lock belongs to ${JSON.stringify(lock.action_id)}, not ${JSON.stringify(id)}`);
   return lock;
@@ -29527,10 +29696,10 @@ function lifecycleSnapshot(context, lifecycle2) {
   const pre = object6(lifecycle2.pre_snapshot, "lifecycle.pre_snapshot");
   const directory = resolveContained(context.base, pre.directory, "lifecycle.pre_snapshot.directory");
   const prefix = portablePath2(context.base, directory);
-  const bundle = readJson2(join15(directory, "closure-bundle.json"));
-  const report = readJson2(join15(directory, "closeout-report.json"));
-  const manifest2 = readJson2(join15(directory, "action-manifest.json"));
-  const regression = readJson2(join15(directory, "regression-delta.json"));
+  const bundle = readJson2(join16(directory, "closure-bundle.json"));
+  const report = readJson2(join16(directory, "closeout-report.json"));
+  const manifest2 = readJson2(join16(directory, "action-manifest.json"));
+  const regression = readJson2(join16(directory, "regression-delta.json"));
   const detectorCoverage = object6(regression.detector_coverage, "pre.detector_coverage");
   const nativeControl = object6(object6(bundle.successor_readiness, "pre.successor_readiness").native_gate_control, "pre.native_gate_control");
   const discoveryRef = object6(nativeControl.discovery_ref, "pre.native_gate_control.discovery_ref");
@@ -29570,7 +29739,7 @@ async function beginAction(options) {
     throw new Error("the public action lifecycle currently supports CLOSE bundles; GUARD uses its exact-tree commit barrier");
   }
   await requireValidBundle(context, options.runtimeAttestation, true);
-  if (existsSync10(lockPath(context))) throw new Error("another Mister Clean action already owns this evidence home");
+  if (existsSync11(lockPath(context))) throw new Error("another Mister Clean action already owns this evidence home");
   const actions = array4(context.manifest.actions, "$.manifest.actions").map((raw, index) => object6(raw, `$.manifest.actions[${index}]`));
   if (actions.some((row) => row.id === options.id)) throw new Error(`action id already exists: ${options.id}`);
   if (actions.some((row) => row.status === "planned")) throw new Error("an action is already planned; finish it before beginning another");
@@ -29594,9 +29763,9 @@ async function beginAction(options) {
     acquired_at: openedAt
   };
   writeExclusive(lockPath(context), lock);
-  const actionRoot = join15(context.base, "action-evidence", options.id);
+  const actionRoot = join16(context.base, "action-evidence", options.id);
   try {
-    if (existsSync10(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
+    if (existsSync11(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
     mkdirSync4(actionRoot, { recursive: true, mode: 448 });
     const branch = currentBranch(context.repository);
     const beforeHygiene = captureActionHygiene(context.repository, { now });
@@ -29627,7 +29796,7 @@ async function beginAction(options) {
     );
     const pre = await prepareSnapshot(
       context,
-      join15(actionRoot, "pre-snapshot"),
+      join16(actionRoot, "pre-snapshot"),
       "pre",
       options.runtimeAttestation,
       now,
@@ -29834,7 +30003,7 @@ async function finishAction(options) {
   const attemptId = `post-${randomUUID6()}`;
   const post = await prepareSnapshot(
     context,
-    join15(context.base, "action-evidence", options.id, "finish-attempts", attemptId),
+    join16(context.base, "action-evidence", options.id, "finish-attempts", attemptId),
     "post",
     options.runtimeAttestation,
     now,
@@ -30068,13 +30237,13 @@ var nodeCloseoutEngine = {
 };
 
 // src/mister-clean-invocation-journal.ts
-import { appendFileSync, existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync15 } from "fs";
-import { createHash as createHash23, randomUUID as randomUUID7 } from "crypto";
+import { appendFileSync, existsSync as existsSync12, mkdirSync as mkdirSync5, readFileSync as readFileSync16 } from "fs";
+import { createHash as createHash24, randomUUID as randomUUID7 } from "crypto";
 import { dirname as dirname15, isAbsolute as isAbsolute22 } from "path";
 function readMisterCleanInvocationJournal(path) {
   if (!isAbsolute22(path)) throw new Error("Mister Clean invocation journal path must be absolute");
-  if (!existsSync11(path)) return [];
-  const contents = readFileSync15(path, "utf8");
+  if (!existsSync12(path)) return [];
+  const contents = readFileSync16(path, "utf8");
   if (contents.length === 0) return [];
   if (contents.length > 0 && !contents.endsWith("\n")) throw new Error("Mister Clean invocation journal must end with a canonical JSONL newline");
   const started = /* @__PURE__ */ new Map();
@@ -30096,7 +30265,7 @@ function readMisterCleanInvocationJournal(path) {
       if (!current && !legacy || typeof record4.invocation_id !== "string" || typeof record4.command !== "string" || typeof record4.argv_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(record4.argv_sha256) || typeof record4.observed_at !== "string" || record4.identity_provenance !== "UNOBSERVED" || record4.evaluation_run_event_id !== null || current && record4.evaluation_status !== "PENDING_IDENTITY_EVALUATION") throw new Error(`Mister Clean invocation journal has an invalid start receipt at line ${index + 1}`);
       const canonical4 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
       if (line !== canonicalJson(canonical4)) throw new Error(`Mister Clean invocation journal has a non-canonical receipt at line ${index + 1}`);
-      const value = { invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, receipt_sha256: sha25611(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null };
+      const value = { invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, receipt_sha256: sha25612(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null };
       const existing = started.get(value.invocation_id);
       if (existing !== void 0 && canonicalJson(existing) !== canonicalJson(value)) throw new Error(`Mister Clean invocation journal reuses invocation_id with different content at line ${index + 1}`);
       started.set(value.invocation_id, value);
@@ -30124,8 +30293,8 @@ function sameKeys(record4, expected) {
   const keys = Object.keys(record4).sort((left, right) => left.localeCompare(right));
   return keys.length === expected.length && keys.every((key) => expected.includes(key));
 }
-function sha25611(value) {
-  return createHash23("sha256").update(value, "utf8").digest("hex");
+function sha25612(value) {
+  return createHash24("sha256").update(value, "utf8").digest("hex");
 }
 var AppendOnlyLocalMisterCleanInvocationJournal = class {
   #path;
@@ -30143,7 +30312,7 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
       event: "started",
       invocation_id: invocationId,
       command: input.command,
-      argv_sha256: sha25611(canonicalJson(input.argv)),
+      argv_sha256: sha25612(canonicalJson(input.argv)),
       observed_at: input.occurred_at,
       identity_provenance: "UNOBSERVED",
       evaluation_status: "PENDING_IDENTITY_EVALUATION",
@@ -30187,20 +30356,21 @@ function journalFromEnvironment(environment) {
 }
 
 // src/closeout/finding-anchors.ts
-import { createHash as createHash24 } from "crypto";
+import { createHash as createHash25 } from "crypto";
 import { spawnSync as spawnSync6 } from "child_process";
-import { existsSync as existsSync12, readFileSync as readFileSync16, statSync as statSync5 } from "fs";
-import { join as join16 } from "path";
+import { existsSync as existsSync13, readFileSync as readFileSync17, statSync as statSync5 } from "fs";
+import { join as join17 } from "path";
 var RECEIPT_FAMILIES = [
   "planning_graph",
   "public_safety",
   "github_actions",
   "repository_boundaries",
-  "semantic_boundary"
+  "semantic_boundary",
+  "language_policy"
 ];
-var ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy"];
+var ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy", "file"];
 function sha256Text(value) {
-  return createHash24("sha256").update(value, "utf8").digest("hex");
+  return createHash25("sha256").update(value, "utf8").digest("hex");
 }
 function receiptFingerprint(input) {
   return sha256Text([input.family, input.rule, input.path, input.anchor_kind, input.content_sha256].join("\0"));
@@ -30225,9 +30395,9 @@ function posixPath(prefix, path) {
 }
 function workingTreeBlobOids(repository, paths) {
   const regular = [...new Set(paths)].filter((path) => {
-    const absolute = join16(repository, path);
+    const absolute = join17(repository, path);
     try {
-      return existsSync12(absolute) && statSync5(absolute).isFile();
+      return existsSync13(absolute) && statSync5(absolute).isFile();
     } catch {
       return false;
     }
@@ -30258,7 +30428,7 @@ function githubActionsRefText(repository, ref) {
   if (line === null || !Number.isInteger(line) || line < 1) return { text: "", line: null };
   let text3;
   try {
-    text3 = readFileSync16(join16(repository, path), "utf8");
+    text3 = readFileSync17(join17(repository, path), "utf8");
   } catch {
     return { text: "", line };
   }
@@ -30275,6 +30445,10 @@ function receiptFindingsFromAudit(family, audit, context) {
   } else if (family === "public_safety") {
     if (!Array.isArray(record4.findings) || !Array.isArray(record4.unassessed)) {
       throw new Error("public_safety: audit result is not canonical");
+    }
+  } else if (family === "language_policy") {
+    if (record4.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record4.findings)) {
+      throw new Error("language_policy: audit result is not canonical");
     }
   } else {
     const errors = detectorResultShapeErrors(family, audit);
@@ -30331,7 +30505,7 @@ function receiptFindingsFromAudit(family, audit, context) {
       severity = typeof row.severity === "string" ? row.severity : null;
       legacy = asString(row.fingerprint, "github_actions.fingerprint");
       kind = "line_content";
-      const auditRoot = prefix ? join16(context.repository, prefix) : context.repository;
+      const auditRoot = prefix ? join17(context.repository, prefix) : context.repository;
       const refs = [...new Set(row.refs)].sort().map((ref) => githubActionsRefText(auditRoot, ref));
       const texts = refs.map((item) => item.text);
       const lineDigests = texts.map(trimmedLineSha256);
@@ -30350,6 +30524,12 @@ function receiptFindingsFromAudit(family, audit, context) {
       kind = "detail_digest";
       content = sha256Text(asString(row.detail, "repository_boundaries.detail"));
       probe = { kind, blob_oid: blobOid };
+    } else if (family === "language_policy") {
+      rule = asString(row.rule, "language_policy.rule");
+      legacy = asString(row.fingerprint, "language_policy.fingerprint");
+      kind = "file";
+      content = sha256Text(`${rule}\0${asString(row.extension, "language_policy.extension")}`);
+      probe = { kind };
     } else {
       rule = asString(row.code, "semantic_boundary.code");
       legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
@@ -30377,13 +30557,13 @@ function receiptFindingsFromAudit(family, audit, context) {
 }
 
 // src/closeout/second-pass.ts
-import { existsSync as existsSync14, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
-import { dirname as dirname17, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync19, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
+import { dirname as dirname17, join as join19, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
-import { appendFileSync as appendFileSync2, existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync17, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
-import { createHash as createHash25, randomUUID as randomUUID8 } from "crypto";
-import { dirname as dirname16, isAbsolute as isAbsolute23, join as join17, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
+import { appendFileSync as appendFileSync2, existsSync as existsSync14, mkdirSync as mkdirSync6, readFileSync as readFileSync18, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
+import { createHash as createHash26, randomUUID as randomUUID8 } from "crypto";
+import { dirname as dirname16, isAbsolute as isAbsolute23, join as join18, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
 var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
 var RUN_RECEIPT_SCHEMA_VERSION = "1";
 var RECEIPT_INDEX_FILE = "receipts.index.jsonl";
@@ -30434,7 +30614,7 @@ function isRepositoryRelativePath(path) {
   return path === "." || path.split("/").every((part) => part.length > 0 && part !== "..");
 }
 function sha256Hex(value) {
-  return createHash25("sha256").update(value, "utf8").digest("hex");
+  return createHash26("sha256").update(value, "utf8").digest("hex");
 }
 function repositoryIdSha256(repositoryId) {
   return sha256Hex(repositoryId);
@@ -30556,7 +30736,7 @@ function realOrResolved(path) {
   let cursor = resolved;
   for (; ; ) {
     try {
-      return join17(realpathSync10(cursor), ...[...pending].reverse());
+      return join18(realpathSync10(cursor), ...[...pending].reverse());
     } catch {
     }
     const parent = dirname16(cursor);
@@ -30583,7 +30763,7 @@ var LocalRunReceiptStore = class {
     if (containedIn(repository, this.#root)) throw new ReceiptRootInsideRepositoryError(this.#root);
   }
   receiptPath(receipt) {
-    return join17(this.#root, repositoryIdSha256(receipt.repository_id), `${receipt.receipt_id.replace(/^mc-receipt:/u, "")}.json`);
+    return join18(this.#root, repositoryIdSha256(receipt.repository_id), `${receipt.receipt_id.replace(/^mc-receipt:/u, "")}.json`);
   }
   /** Validate, refuse private content, then write the receipt (0600) and append the index line. */
   write(receipt, repository) {
@@ -30609,17 +30789,17 @@ var LocalRunReceiptStore = class {
       observed_at: receipt.observed_at,
       path: relative18(this.#root, path).split(sep18).join("/")
     };
-    appendFileSync2(join17(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}
+    appendFileSync2(join18(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}
 `, { encoding: "utf8", flag: "a", mode: 384 });
     return path;
   }
   /** Read one receipt by id or by path; refuses anything that does not validate. */
   read(reference) {
     const path = reference.startsWith("mc-receipt:") ? this.#pathForId(reference) : resolve26(reference);
-    if (path === void 0 || !existsSync13(path)) throw new RunReceiptInvalidError([`receipt not found: ${reference}`]);
+    if (path === void 0 || !existsSync14(path)) throw new RunReceiptInvalidError([`receipt not found: ${reference}`]);
     let parsed;
     try {
-      parsed = JSON.parse(readFileSync17(path, "utf8"));
+      parsed = JSON.parse(readFileSync18(path, "utf8"));
     } catch {
       throw new RunReceiptInvalidError([`receipt is not valid JSON: ${reference}`]);
     }
@@ -30628,9 +30808,9 @@ var LocalRunReceiptStore = class {
     return parsed;
   }
   index() {
-    const path = join17(this.#root, RECEIPT_INDEX_FILE);
-    if (!existsSync13(path)) return [];
-    const contents = readFileSync17(path, "utf8");
+    const path = join18(this.#root, RECEIPT_INDEX_FILE);
+    if (!existsSync14(path)) return [];
+    const contents = readFileSync18(path, "utf8");
     if (contents.length === 0) return [];
     if (!contents.endsWith("\n")) throw new RunReceiptInvalidError(["receipt index must end with a newline"]);
     return contents.slice(0, -1).split("\n").map((line, index) => {
@@ -30654,7 +30834,7 @@ var LocalRunReceiptStore = class {
   }
   #pathForId(receiptId) {
     const entry = this.index().find((item) => item.receipt_id === receiptId);
-    return entry === void 0 ? void 0 : join17(this.#root, entry.path);
+    return entry === void 0 ? void 0 : join18(this.#root, entry.path);
   }
 };
 function newReceiptId() {
@@ -30665,7 +30845,7 @@ function agentFromCard(reference, source) {
   const path = resolve26(reference);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync17(path, "utf8"));
+    parsed = JSON.parse(readFileSync18(path, "utf8"));
   } catch {
     throw new Error("agent card must be a readable JSON object");
   }
@@ -30676,7 +30856,7 @@ function agentFromCard(reference, source) {
   }
   if (status === "unobserved") return { identity_status: "unobserved", card_ref: null, source: null };
   const explicitId = typeof card.card_id === "string" && card.card_id.length > 0 && !card.card_id.includes("/") ? card.card_id : void 0;
-  const cardRef = explicitId ?? `sha256:${sha256Hex(readFileSync17(path, "utf8"))}`;
+  const cardRef = explicitId ?? `sha256:${sha256Hex(readFileSync18(path, "utf8"))}`;
   return { identity_status: status, card_ref: cardRef, source };
 }
 function agentFromEnvironment(flagValue, environment) {
@@ -30710,6 +30890,7 @@ function gitPortFor(repository) {
 function earlierHolds(git2, head, path, probe, earlierWholeRepoHashes) {
   if (probe.kind === "whole_repo") return earlierWholeRepoHashes.has(probe.content_sha256);
   if (probe.kind === "legacy") return void 0;
+  if (probe.kind === "file") return git2.blobOidAt(head, path) === void 0 ? void 0 : true;
   if (probe.kind === "detail_digest") {
     const oid = git2.blobOidAt(head, path);
     if (oid === void 0) return void 0;
@@ -30797,7 +30978,7 @@ function classifySecondPass(input) {
   return rows.sort((left, right) => left.family.localeCompare(right.family) || left.path.localeCompare(right.path) || left.fingerprint.localeCompare(right.fingerprint));
 }
 function captureReceiptSubject(root, options = {}) {
-  if (!existsSync14(resolve27(root)) || !statSync6(resolve27(root)).isDirectory()) return void 0;
+  if (!existsSync15(resolve27(root)) || !statSync6(resolve27(root)).isDirectory()) return void 0;
   const resolved = realpathSync11(resolve27(root));
   const toplevel = runGit2(resolved, ["rev-parse", "--show-toplevel"], [0, 128]);
   if (toplevel.status !== 0 || toplevel.stdout.length === 0) return void 0;
@@ -30850,6 +31031,7 @@ function runReadOnlyFamilies(capture, root, families, options = {}) {
     else if (family === "public_safety") result = scanTrackedPublicSafetySync(root, trackedShippablePaths(root), loadDenylistSync(options.denylistPath));
     else if (family === "github_actions") result = auditGitHubActionsRepository(root);
     else if (family === "repository_boundaries") result = auditRepositoryBoundaries(root);
+    else if (family === "language_policy") result = auditLanguagePolicy(root);
     else result = auditSemanticRepository(root, { execute: false });
     results[family] = result;
     anchored.push(...receiptFindingsFromAudit(family, result, context));
@@ -30859,11 +31041,11 @@ function runReadOnlyFamilies(capture, root, families, options = {}) {
 var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
 function legacyBaselineFromBundle(reference) {
   const path = resolve27(reference);
-  if (!existsSync14(path)) return void 0;
+  if (!existsSync15(path)) return void 0;
   const directory = statSync6(path).isDirectory() ? path : dirname17(path);
-  const deltaPath = join18(directory, "regression-delta.json");
-  if (!existsSync14(deltaPath)) return void 0;
-  const delta = JSON.parse(readFileSync18(deltaPath, "utf8"));
+  const deltaPath = join19(directory, "regression-delta.json");
+  if (!existsSync15(deltaPath)) return void 0;
+  const delta = JSON.parse(readFileSync19(deltaPath, "utf8"));
   const coverage = delta.detector_coverage;
   const executions = Array.isArray(coverage?.executions) ? coverage.executions : void 0;
   const baseline = coverage?.baseline_repository_object;
@@ -30877,10 +31059,10 @@ function legacyBaselineFromBundle(reference) {
     const family = detectorId;
     families.push(family);
     const resultRef = execution.result_ref;
-    const resultPath = typeof resultRef?.path === "string" ? join18(directory, resultRef.path) : void 0;
+    const resultPath = typeof resultRef?.path === "string" ? join19(directory, resultRef.path) : void 0;
     let fingerprints;
-    if (resultPath !== void 0 && existsSync14(resultPath)) {
-      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync18(resultPath, "utf8")));
+    if (resultPath !== void 0 && existsSync15(resultPath)) {
+      fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync19(resultPath, "utf8")));
     }
     fingerprints ??= Array.isArray(execution.finding_fingerprints) ? execution.finding_fingerprints : [];
     for (const legacy of fingerprints) {
@@ -30981,17 +31163,16 @@ function runSecondPass(input) {
 }
 
 // src/toolchain-pin.ts
-var import_yaml4 = __toESM(require_dist(), 1);
-import { existsSync as existsSync15, readFileSync as readFileSync19 } from "fs";
-import { join as join19, resolve as resolve28 } from "path";
+import { existsSync as existsSync16, readFileSync as readFileSync20 } from "fs";
+import { join as join20, resolve as resolve28 } from "path";
 var BUN_VERSION_FILE = ".bun-version";
 function runningBunVersion() {
   return process.versions.bun ?? null;
 }
 function readBunPin(root) {
-  const path = join19(resolve28(root), BUN_VERSION_FILE);
-  if (!existsSync15(path)) return void 0;
-  const version = readFileSync19(path, "utf8").trim();
+  const path = join20(resolve28(root), BUN_VERSION_FILE);
+  if (!existsSync16(path)) return void 0;
+  const version = readFileSync20(path, "utf8").trim();
   if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
   return version;
 }
@@ -31042,13 +31223,13 @@ function inside2(root, candidate) {
   const rootPath = resolve29(root);
   const candidatePath = resolve29(candidate);
   const relation = relative20(
-    existsSync16(rootPath) ? realpathSync12(rootPath) : rootPath,
-    existsSync16(candidatePath) ? realpathSync12(candidatePath) : candidatePath
+    existsSync17(rootPath) ? realpathSync12(rootPath) : rootPath,
+    existsSync17(candidatePath) ? realpathSync12(candidatePath) : candidatePath
   );
   return relation === "" || !relation.startsWith(`..${sep20}`) && relation !== ".." && !relation.startsWith("/");
 }
 function readJson3(path) {
-  return JSON.parse(readFileSync20(path, "utf8"));
+  return JSON.parse(readFileSync21(path, "utf8"));
 }
 function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -31067,7 +31248,7 @@ async function runSemantic(args, io) {
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
-    if (existsSync16(outputPath)) throw new UsageError("semantic v2 plan output already exists");
+    if (existsSync17(outputPath)) throw new UsageError("semantic v2 plan output already exists");
     const proposal = record3(readJson3(proposalsPath));
     const rawCases = record3(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
@@ -31264,7 +31445,7 @@ async function runValidate(args, io, runtimeAttestation) {
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join20(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join21(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -31310,7 +31491,7 @@ async function runDetect(args, io) {
   const listOnly = removeFlag(args, "--list");
   const json = removeFlag(args, "--json");
   assertNoArgs(args);
-  if (!existsSync16(root) || !statSync7(root).isDirectory()) {
+  if (!existsSync17(root) || !statSync7(root).isDirectory()) {
     io.stderr(`ERROR: not a directory: ${resolve29(root)}`);
     return 2;
   }
@@ -31325,9 +31506,9 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join20(packageRoot(import.meta.url), "references", "stack-adapters.md");
-  if (!existsSync16(reference)) return 0;
-  const text3 = readFileSync20(reference, "utf8");
+  const reference = join21(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  if (!existsSync17(reference)) return 0;
+  const text3 = readFileSync21(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
     const header = `## ${ecosystem}`;
     const start = text3.indexOf(header);
@@ -31340,8 +31521,8 @@ ${text3.slice(start, next < 0 ? void 0 : next).trimEnd()}`);
 }
 async function runAudit(args, io, onResult) {
   const kind = args.shift();
-  if (!(/* @__PURE__ */ new Set(["github-actions", "planning", "public-safety", "repository-boundaries", "semantic"])).has(String(kind))) {
-    throw new UsageError("audit requires github-actions, planning, public-safety, repository-boundaries, or semantic");
+  if (!(/* @__PURE__ */ new Set(["github-actions", "language-policy", "planning", "public-safety", "repository-boundaries", "semantic"])).has(String(kind))) {
+    throw new UsageError("audit requires github-actions, language-policy, planning, public-safety, repository-boundaries, or semantic");
   }
   const root = args[0]?.startsWith("--") === false ? args.shift() : process.cwd();
   if (kind === "planning") {
@@ -31424,6 +31605,26 @@ async function runAudit(args, io, onResult) {
     onResult?.({ root, family: "github_actions", result: result2 });
     return result2.exitCode;
   }
+  if (kind === "language-policy") {
+    const json2 = removeFlag(args, "--json");
+    assertNoArgs(args);
+    let result2;
+    try {
+      result2 = auditLanguagePolicy(root);
+    } catch (error) {
+      if (!(error instanceof LanguagePolicyInvalidError)) throw error;
+      if (json2) io.stdout(JSON.stringify({ code: error.code, path: error.path, reason: error.reason }, null, 2));
+      io.stderr(`ERROR: ${error.message}`);
+      return 2;
+    }
+    if (json2) io.stdout(JSON.stringify(result2, null, 2));
+    else {
+      for (const policyFinding of result2.findings) io.stdout(`${policyFinding.rule}	${policyFinding.path}	${policyFinding.extension}`);
+      io.stdout(`language-policy: ${result2.status.toLocaleUpperCase("und")} tracked=${result2.tracked_path_count} generated_exempt=${result2.generated_exempt.count} allowed=${result2.allowed_count} findings=${result2.findings.length}`);
+    }
+    onResult?.({ root, family: "language_policy", result: result2 });
+    return result2.exitCode;
+  }
   if (kind === "repository-boundaries") {
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
@@ -31471,9 +31672,9 @@ async function runManifest(args, io) {
     }
   }
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join20(resolve29(root), "MANIFEST.sha256");
+  const path = join21(resolve29(root), "MANIFEST.sha256");
   if (check) {
-    if (!existsSync16(path) || readFileSync20(path, "utf8") !== result.content) {
+    if (!existsSync17(path) || readFileSync21(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
       return 1;
     }
@@ -31643,7 +31844,7 @@ async function runSecondPassCommand(args, io, runtimeAttestation, receipts, opti
   return result.exitCode;
 }
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|language-policy|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
 }
 function receiptStoreFromEnvironment(environment) {
   return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));
@@ -31704,11 +31905,12 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "planning_graph", file: "planning-audit.json" },
               { family: "public_safety", file: "public-safety-audit.json" },
               { family: "github_actions", file: "github-actions-audit.json" },
-              { family: "semantic_boundary", file: "semantic-audit.json" }
+              { family: "semantic_boundary", file: "semantic-audit.json" },
+              { family: "language_policy", file: "language-policy-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync16(join20(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join20(bundle, entry.file)) }));
-            const report = record3(readJson3(join20(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join20(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync17(join21(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join21(bundle, entry.file)) }));
+            const report = record3(readJson3(join21(bundle, "closeout-report.json")));
+            const delta = record3(readJson3(join21(bundle, "regression-delta.json")));
             const baselineObject = record3(delta?.baseline_repository_object);
             const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
             writeRunReceipt(io, receipts, {

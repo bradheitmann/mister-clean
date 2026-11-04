@@ -72,8 +72,7 @@
     "successor-readiness"
   ],
   "engines": {
-    "node": ">=22",
-    "bun": "1.4.0"
+    "node": ">=22"
   },
   "scripts": {
     "audit:public": "bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt",

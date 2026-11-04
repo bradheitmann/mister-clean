@@ -35,6 +35,7 @@ import {
 } from "./finding-anchors.js";
 import { auditGitHubActionsRepository } from "./github-actions.js";
 import { loadDenylistSync, publicSafetyValueDigestsInText, scanTrackedPublicSafetySync } from "./inspection.js";
+import { auditLanguagePolicy } from "./language-policy.js";
 import { auditPlanningRepository } from "./planning.js";
 import { auditRepositoryBoundaries } from "./repository-boundaries.js";
 import { captureRepositoryObject } from "./repository-object.js";
@@ -123,6 +124,8 @@ function earlierHolds(
 ): boolean | undefined {
   if (probe.kind === "whole_repo") return earlierWholeRepoHashes.has(probe.content_sha256);
   if (probe.kind === "legacy") return undefined;
+  // A path-level finding (its language): the earlier HEAD held it when it tracked the path.
+  if (probe.kind === "file") return git.blobOidAt(head, path) === undefined ? undefined : true;
   if (probe.kind === "detail_digest") {
     const oid = git.blobOidAt(head, path);
     if (oid === undefined) return undefined;
@@ -344,6 +347,7 @@ export function runReadOnlyFamilies(
     else if (family === "public_safety") result = scanTrackedPublicSafetySync(root, trackedShippablePaths(root), loadDenylistSync(options.denylistPath));
     else if (family === "github_actions") result = auditGitHubActionsRepository(root);
     else if (family === "repository_boundaries") result = auditRepositoryBoundaries(root);
+    else if (family === "language_policy") result = auditLanguagePolicy(root);
     else result = auditSemanticRepository(root, { execute: false });
     results[family] = result;
     anchored.push(...receiptFindingsFromAudit(family, result, context));
