@@ -1,0 +1,3 @@
+
+## Outcome (2026-11-04T21:43Z)
+The owner-authorized final repair (repair 3, tip 8e80c3c0) was REJECTED by MC/QA (third family): strict validation still accepts a subject-role/outcome flip and an invalid second publisher citation as `recomputed` (WAVES.md 21:43:48Z, log d8e23f91…). Per this decision: `proven_on` stays empty, no further repair, Slice Zero is redesigned with the owner. PR #60 closed; the branch is preserved at tag archive/feat/slice-zero-eval-case for the redesign to reopen and compare. Hosted CI was green on the tip; the rejection is about the validator's forgery resistance, not the gates.
