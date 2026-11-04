@@ -19,6 +19,90 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, posix as posixPath, relative, resolve, sep } from "node:path";
 import { TextDecoder } from "node:util";
+import type { BigIntStats } from "node:fs";
+
+// This file ships inside the verified release archive and runs under plain
+// `node` (>= 22.18, built-in type stripping). Keep every construct erasable:
+// no enums, namespaces or parameter properties; type-only imports use
+// `import type`.
+
+/**
+ * The Node Buffer methods this module relies on. Under the repository's
+ * combined Node and Workers type set, Buffer's declared type omits Node's
+ * `equals` and `toString(encoding)`, so byte sources are viewed through this
+ * narrow type. Runtime values are ordinary Node Buffers.
+ */
+export interface NodeBytes extends Uint8Array {
+  equals(other: Uint8Array): boolean;
+  toString(encoding?: "ascii" | "utf8"): string;
+  subarray(start?: number, end?: number): NodeBytes;
+}
+
+type MemberType = "file" | "directory";
+
+interface RawMember {
+  readonly path: string;
+  readonly type: MemberType;
+  readonly size: number;
+  readonly payload: NodeBytes;
+  readonly payload_sha256: string | null;
+}
+
+export interface PublicRawMember {
+  readonly path: string;
+  readonly type: MemberType;
+  readonly size: number;
+  readonly payload_sha256: string | null;
+}
+
+interface ManifestEntry {
+  path: string;
+  sha256: string;
+}
+
+type JsonRecord = Record<string, unknown>;
+
+export interface ClaimedSource {
+  git_commit: string;
+  git_tag: string;
+}
+
+export interface ManifestIdentity {
+  path: string;
+  format: string;
+  entry_count: number;
+  sha256: string;
+}
+
+export interface ArchiveIdentity {
+  package: { name: string; version: string };
+  claimed_source: ClaimedSource;
+  claim_scope: unknown;
+  origin_authenticity: typeof ORIGIN_AUTHENTICITY;
+  manifest: ManifestIdentity;
+}
+
+export interface InspectedReleaseArchive extends ArchiveIdentity {
+  archive_sha256: string;
+}
+
+export interface ReleaseArchiveCustody {
+  readonly source: string;
+  readonly path: string;
+  readonly archive_sha256: string;
+  readonly size_bytes: number;
+  readonly raw_members: readonly PublicRawMember[];
+  readBytes(): NodeBytes;
+  retainAs(destination: string, mode?: number): string;
+  dispose(): void;
+  _inspect(): InspectedReleaseArchive;
+}
+
+interface ArchiveClosure {
+  readonly entries: readonly ManifestEntry[];
+  readonly expectedFiles: Set<string>;
+  readonly identity: ArchiveIdentity;
+}
 
 const ATTESTATION = "RELEASE_ATTESTATION.json";
 const MANIFEST = "MANIFEST.sha256";
@@ -57,23 +141,28 @@ const TAR_BLOCK_BYTES = 512;
 const MAX_UNCOMPRESSED_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const UTF8_FATAL = new TextDecoder("utf-8", { fatal: true });
 
-function sha256Bytes(bytes) {
+/** View a Node Buffer through {@link NodeBytes}; the only byte-type cast in this module. */
+export function nodeBytes(value: Uint8Array): NodeBytes {
+  return value as NodeBytes;
+}
+
+function sha256Bytes(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function sha256File(path) {
+function sha256File(path: string): string {
   return sha256Bytes(readFileSync(path));
 }
 
-function toPosix(path) {
+function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
 
-function isRecord(value) {
+function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function exactKeys(value, expected, path) {
+function exactKeys(value: unknown, expected: readonly string[], path: string): JsonRecord {
   if (!isRecord(value)) throw new Error(`${path}: required object`);
   const actual = Object.keys(value).sort();
   const wanted = [...expected].sort();
@@ -83,7 +172,7 @@ function exactKeys(value, expected, path) {
   return value;
 }
 
-function collectForbiddenKeys(value, path = "$") {
+function collectForbiddenKeys(value: unknown, path = "$"): string[] {
   if (Array.isArray(value)) return value.flatMap((entry, index) => collectForbiddenKeys(entry, `${path}[${index}]`));
   if (!isRecord(value)) return [];
   return Object.entries(value).flatMap(([key, child]) => [
@@ -92,39 +181,39 @@ function collectForbiddenKeys(value, path = "$") {
   ]);
 }
 
-function parseTarOctal(header, start, end, label, allowBlank = false) {
+function parseTarOctal(header: NodeBytes, start: number, end: number, label: string, allowBlank = false): number {
   const field = header.subarray(start, end);
-  if ((field[0] & 0x80) !== 0) throw new Error(`archive uses unsupported base-256 ${label}`);
+  if ((field[0]! & 0x80) !== 0) throw new Error(`archive uses unsupported base-256 ${label}`);
   const text = field.toString("ascii").replaceAll("\0", "").trim();
   if (text === "" && allowBlank) return 0;
   if (!/^[0-7]+$/u.test(text)) throw new Error(`archive member has an invalid ${label} field`);
   return Number.parseInt(text, 8);
 }
 
-function parseTarSize(header) {
+function parseTarSize(header: NodeBytes): number {
   return parseTarOctal(header, 124, 136, "member size");
 }
 
-function parseTarChecksum(header) {
+function parseTarChecksum(header: NodeBytes): number {
   const field = header.subarray(148, 156);
-  if ((field[0] & 0x80) !== 0) throw new Error("archive uses unsupported base-256 checksums");
+  if ((field[0]! & 0x80) !== 0) throw new Error("archive uses unsupported base-256 checksums");
   const text = field.toString("ascii").replaceAll("\0", "").trim();
   if (!/^[0-7]+$/u.test(text)) throw new Error("archive member has an invalid checksum field");
   return Number.parseInt(text, 8);
 }
 
-function assertTarChecksum(header) {
+function assertTarChecksum(header: NodeBytes): void {
   const expected = parseTarChecksum(header);
   let observed = 0;
   for (let index = 0; index < header.length; index += 1) {
-    observed += index >= 148 && index < 156 ? 0x20 : header[index];
+    observed += index >= 148 && index < 156 ? 0x20 : header[index]!;
   }
   if (observed !== expected) {
     throw new Error(`archive member checksum mismatch: expected ${expected}, observed ${observed}`);
   }
 }
 
-function decodeTarField(field, label) {
+function decodeTarField(field: NodeBytes, label: string): string {
   const nul = field.indexOf(0);
   const content = nul < 0 ? field : field.subarray(0, nul);
   if (nul >= 0 && field.subarray(nul).some((byte) => byte !== 0)) {
@@ -137,7 +226,7 @@ function decodeTarField(field, label) {
   }
 }
 
-function canonicalArchivePath(raw, type) {
+function canonicalArchivePath(raw: string, type: MemberType): string {
   if (raw.length === 0) throw new Error("archive member has an empty path");
   if (/[\u0000-\u001f\u007f]/u.test(raw)) throw new Error(`archive member contains a control character: ${JSON.stringify(raw)}`);
   if (isAbsolute(raw) || raw.includes("\\")) throw new Error(`unsafe archive member: ${JSON.stringify(raw)}`);
@@ -160,16 +249,16 @@ function canonicalArchivePath(raw, type) {
   return path;
 }
 
-function asciiCaseFold(value) {
+function asciiCaseFold(value: string): string {
   return value.replace(/[A-Z]/gu, (character) => character.toLowerCase());
 }
 
 /** Authoritative raw USTAR census over one already-custodied byte string. */
-function inspectRawUstarBytes(archiveBytes) {
-  const tar = gunzipSync(archiveBytes, { maxOutputLength: MAX_UNCOMPRESSED_ARCHIVE_BYTES });
-  const members = [];
-  const seen = new Set();
-  const semanticPaths = new Map();
+function inspectRawUstarBytes(archiveBytes: Uint8Array): readonly RawMember[] {
+  const tar = nodeBytes(gunzipSync(archiveBytes, { maxOutputLength: MAX_UNCOMPRESSED_ARCHIVE_BYTES }));
+  const members: RawMember[] = [];
+  const seen = new Set<string>();
+  const semanticPaths = new Map<string, string>();
   let offset = 0;
   let terminated = false;
   while (offset + TAR_BLOCK_BYTES <= tar.length) {
@@ -196,7 +285,7 @@ function inspectRawUstarBytes(archiveBytes) {
     parseTarOctal(header, 136, 148, "mtime", true);
     parseTarOctal(header, 329, 337, "device major", true);
     parseTarOctal(header, 337, 345, "device minor", true);
-    const rawType = header[156];
+    const rawType = header[156]!;
     const type = rawType === 0 || rawType === 0x30
       ? "file"
       : rawType === 0x35
@@ -233,7 +322,7 @@ function inspectRawUstarBytes(archiveBytes) {
     if (!tar.subarray(payloadEnd, paddedEnd).every((byte) => byte === 0)) {
       throw new Error(`archive member has non-zero payload padding: ${JSON.stringify(path)}`);
     }
-    const payload = Buffer.from(tar.subarray(payloadStart, payloadEnd));
+    const payload = nodeBytes(Buffer.from(tar.subarray(payloadStart, payloadEnd)));
     members.push(Object.freeze({
       path,
       type,
@@ -248,7 +337,7 @@ function inspectRawUstarBytes(archiveBytes) {
   return Object.freeze(members);
 }
 
-function publicRawMembers(members) {
+function publicRawMembers(members: readonly RawMember[]): readonly PublicRawMember[] {
   return Object.freeze(members.map(({ path, type, size, payload_sha256 }) => Object.freeze({
     path,
     type,
@@ -257,7 +346,7 @@ function publicRawMembers(members) {
   })));
 }
 
-export function releaseArchiveToolEnvironment(custodyPath, cwd = dirname(custodyPath)) {
+export function releaseArchiveToolEnvironment(custodyPath: string, cwd: string = dirname(custodyPath)): Readonly<Record<string, string>> {
   const custodyDirectory = dirname(resolve(custodyPath));
   const workingDirectory = resolve(cwd);
   return Object.freeze({
@@ -278,7 +367,7 @@ export function releaseArchiveToolEnvironment(custodyPath, cwd = dirname(custody
   });
 }
 
-function sameOpenedFile(before, after) {
+function sameOpenedFile(before: BigIntStats, after: BigIntStats): boolean {
   return before.dev === after.dev
     && before.ino === after.ino
     && before.size === after.size
@@ -291,11 +380,11 @@ function sameOpenedFile(before, after) {
  * Read a caller-named archive exactly once, close that descriptor, and move all
  * subsequent authority to a private O_EXCL custody copy of those exact bytes.
  */
-export function acquireReleaseArchiveCustody(archive) {
+export function acquireReleaseArchiveCustody(archive: string): ReleaseArchiveCustody {
   const source = isAbsolute(archive) ? archive : join(process.cwd(), archive);
   const descriptor = openSync(source, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
-  let bytes;
-  let before;
+  let bytes: Uint8Array;
+  let before: BigIntStats;
   try {
     before = fstatSync(descriptor, { bigint: true });
     if (!before.isFile() || before.nlink !== 1n) {
@@ -333,7 +422,7 @@ export function acquireReleaseArchiveCustody(archive) {
   const assertLive = () => {
     if (disposed) throw new Error("release archive custody has already been disposed");
   };
-  const retainAs = (destination, mode = 0o444) => {
+  const retainAs = (destination: string, mode = 0o444): string => {
     assertLive();
     const output = openSync(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, mode);
     let retainFailure;
@@ -360,7 +449,7 @@ export function acquireReleaseArchiveCustody(archive) {
     raw_members: publicRawMembers(members),
     readBytes() {
       assertLive();
-      return Buffer.from(bytes);
+      return nodeBytes(Buffer.from(bytes));
     },
     retainAs,
     dispose() {
@@ -376,7 +465,7 @@ export function acquireReleaseArchiveCustody(archive) {
   return Object.freeze(custody);
 }
 
-function assertSafeCustodyListings(path, rawMembers) {
+function assertSafeCustodyListings(path: string, rawMembers: readonly PublicRawMember[]): readonly PublicRawMember[] {
   const names = execFileSync("tar", ["-tzf", path], {
     encoding: "utf8",
     env: releaseArchiveToolEnvironment(path),
@@ -404,7 +493,7 @@ function assertSafeCustodyListings(path, rawMembers) {
 }
 
 /** Compatibility wrapper. New release flows should retain one custody object. */
-export function inspectRawUstarMembers(archive) {
+export function inspectRawUstarMembers(archive: string): readonly PublicRawMember[] {
   const custody = acquireReleaseArchiveCustody(archive);
   try {
     return custody.raw_members;
@@ -414,7 +503,7 @@ export function inspectRawUstarMembers(archive) {
 }
 
 /** Compatibility wrapper. New release flows should retain one custody object. */
-export function assertSafeArchiveMembers(archive) {
+export function assertSafeArchiveMembers(archive: string): readonly PublicRawMember[] {
   const custody = acquireReleaseArchiveCustody(archive);
   try {
     return assertSafeCustodyListings(custody.path, custody.raw_members);
@@ -423,9 +512,9 @@ export function assertSafeArchiveMembers(archive) {
   }
 }
 
-function regularFiles(root) {
-  const files = [];
-  function visit(directory) {
+function regularFiles(root: string): string[] {
+  const files: string[] = [];
+  function visit(directory: string): void {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const absolute = join(directory, entry.name);
       const path = toPosix(relative(root, absolute));
@@ -440,9 +529,9 @@ function regularFiles(root) {
   return files.sort();
 }
 
-function parseManifest(text) {
-  const entries = [];
-  const paths = new Set();
+function parseManifest(text: string): ManifestEntry[] {
+  const entries: ManifestEntry[] = [];
+  const paths = new Set<string>();
   for (const [index, line] of text.trimEnd().split("\n").filter(Boolean).entries()) {
     const match = /^([0-9a-f]{64})  \.\/(.+)$/u.exec(line);
     if (!match) throw new Error(`${MANIFEST}:${index + 1}: invalid manifest row`);
@@ -452,12 +541,18 @@ function parseManifest(text) {
     }
     if (paths.has(path)) throw new Error(`${MANIFEST}:${index + 1}: duplicate path`);
     paths.add(path);
-    entries.push({ path, sha256 });
+    // Both groups are mandatory in the pattern, so a match always binds them.
+    entries.push({ path, sha256: sha256! });
   }
   return entries;
 }
 
-function validateAttestation(packageBytes, attestationBytes, entries, manifestBytes) {
+function validateAttestation(
+  packageBytes: NodeBytes,
+  attestationBytes: NodeBytes,
+  entries: readonly ManifestEntry[],
+  manifestBytes: NodeBytes,
+): ArchiveIdentity {
   const packageData = exactKeys(
     JSON.parse(packageBytes.toString("utf8")),
     ["name", "version", "description", "type", "license", "bin", "exports", "files", "repository", "homepage", "bugs", "keywords", "engines", "scripts", "dependencies", "devDependencies"],
@@ -467,21 +562,22 @@ function validateAttestation(packageBytes, attestationBytes, entries, manifestBy
     throw new Error("archive package identity is not @bradheitmann/mister-clean with a version");
   }
 
-  const attestation = JSON.parse(attestationBytes.toString("utf8"));
-  const forbidden = collectForbiddenKeys(attestation);
+  const attestationValue: unknown = JSON.parse(attestationBytes.toString("utf8"));
+  const forbidden = collectForbiddenKeys(attestationValue);
   if (forbidden.length) throw new Error(`${ATTESTATION}: forbidden publication fields ${forbidden.join(", ")}`);
-  exactKeys(attestation, [
+  const attestation = exactKeys(attestationValue, [
     "record_type", "schema_version", "package", "claimed_source", "claim_scope", "manifest", "required_entrypoints",
   ], ATTESTATION);
   if (attestation.record_type !== "mister-clean.release-attestation" || attestation.schema_version !== "1.1") {
     throw new Error(`${ATTESTATION}: unsupported record type or schema`);
   }
-  exactKeys(attestation.package, ["name", "version"], `${ATTESTATION}.package`);
-  if (attestation.package.name !== packageData.name || attestation.package.version !== packageData.version) {
+  const attestedPackage = exactKeys(attestation.package, ["name", "version"], `${ATTESTATION}.package`);
+  if (attestedPackage.name !== packageData.name || attestedPackage.version !== packageData.version) {
     throw new Error(`${ATTESTATION}: package identity differs from package.json`);
   }
   const source = exactKeys(attestation.claimed_source, ["git_commit", "git_tag"], `${ATTESTATION}.claimed_source`);
-  if (!/^[0-9a-f]{40}$/u.test(source.git_commit) || source.git_tag !== `v${packageData.version}`) {
+  // RegExp#test applies ToString to its argument; String() makes that explicit for the type checker.
+  if (!/^[0-9a-f]{40}$/u.test(String(source.git_commit)) || source.git_tag !== `v${packageData.version}`) {
     throw new Error(`${ATTESTATION}: invalid tagged source identity`);
   }
   if (JSON.stringify(attestation.claim_scope) !== JSON.stringify(EXPECTED_SCOPE)) {
@@ -494,11 +590,13 @@ function validateAttestation(packageBytes, attestationBytes, entries, manifestBy
     || manifest.sha256 !== sha256Bytes(manifestBytes)) {
     throw new Error(`${ATTESTATION}: manifest binding differs from archive bytes`);
   }
-  if (!Array.isArray(attestation.required_entrypoints)) throw new Error(`${ATTESTATION}: required_entrypoints must be an array`);
+  const requiredEntrypoints: unknown = attestation.required_entrypoints;
+  if (!Array.isArray(requiredEntrypoints)) throw new Error(`${ATTESTATION}: required_entrypoints must be an array`);
   const entryByPath = new Map(entries.map((entry) => [`./${entry.path}`, entry.sha256]));
-  const entrypointPaths = attestation.required_entrypoints.map((entry, index) => {
-    exactKeys(entry, ["path", "sha256"], `${ATTESTATION}.required_entrypoints[${index}]`);
-    if (entryByPath.get(entry.path) !== entry.sha256) {
+  const entrypointPaths = (requiredEntrypoints as readonly unknown[]).map((value, index) => {
+    const entry = exactKeys(value, ["path", "sha256"], `${ATTESTATION}.required_entrypoints[${index}]`);
+    // Every map key is a string, so a non-string path finds nothing, as Map#get would.
+    if ((typeof entry.path === "string" ? entryByPath.get(entry.path) : undefined) !== entry.sha256) {
       throw new Error(`${ATTESTATION}: required entrypoint differs from manifest ${String(entry.path)}`);
     }
     return entry.path;
@@ -508,7 +606,8 @@ function validateAttestation(packageBytes, attestationBytes, entries, manifestBy
   }
   return {
     package: { name: packageData.name, version: packageData.version },
-    claimed_source: source,
+    // Validated above: exactly these two keys, a 40-hex commit and the version's tag.
+    claimed_source: source as unknown as ClaimedSource,
     claim_scope: attestation.claim_scope,
     origin_authenticity: ORIGIN_AUTHENTICITY,
     manifest: {
@@ -520,9 +619,9 @@ function validateAttestation(packageBytes, attestationBytes, entries, manifestBy
   };
 }
 
-function rawArchiveClosure(members) {
-  const files = new Map();
-  const directories = new Set();
+function rawArchiveClosure(members: readonly RawMember[]): ArchiveClosure {
+  const files = new Map<string, RawMember>();
+  const directories = new Set<string>();
   for (const member of members) {
     if (member.type === "directory") directories.add(member.path);
     else files.set(member.path.slice("package/".length), member);
@@ -573,7 +672,7 @@ function rawArchiveClosure(members) {
   return Object.freeze({ entries: Object.freeze(entries), expectedFiles, identity });
 }
 
-function inspectCustodiedArchive(custodyPath, archiveBytes, members) {
+function inspectCustodiedArchive(custodyPath: string, archiveBytes: Uint8Array, members: readonly RawMember[]): InspectedReleaseArchive {
   const closure = rawArchiveClosure(members);
   assertSafeCustodyListings(custodyPath, publicRawMembers(members));
   const temporary = mkdtempSync(join(tmpdir(), "mister-clean-release-contract-"));
@@ -605,7 +704,7 @@ function inspectCustodiedArchive(custodyPath, archiveBytes, members) {
   }
 }
 
-export function inspectReleaseArchiveCustody(custody) {
+export function inspectReleaseArchiveCustody(custody: ReleaseArchiveCustody): InspectedReleaseArchive {
   if (!custody || typeof custody._inspect !== "function") {
     throw new Error("inspectReleaseArchiveCustody requires live release archive custody");
   }
@@ -613,7 +712,7 @@ export function inspectReleaseArchiveCustody(custody) {
 }
 
 /** Compatibility wrapper. New release flows should retain one custody object. */
-export function inspectReleaseArchive(archive) {
+export function inspectReleaseArchive(archive: string): InspectedReleaseArchive {
   const custody = acquireReleaseArchiveCustody(archive);
   try {
     return inspectReleaseArchiveCustody(custody);

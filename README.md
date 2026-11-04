@@ -393,7 +393,7 @@ newer.
 
 On the final clean tagged checkout, `bun run release:check` produces and tests
 one retained Bun-generated, read-only archive. Publish only that receipt-bound
-archive with the receipt's `publish_release_archive.mjs` command. Verification
+archive with the receipt's `publish_release_archive.ts` command. Verification
 and publication each acquire the caller-named archive once, close that source
 descriptor, and perform parsing, extraction, installation, hashing, and the
 fixed `pnpm publish --access public` invocation only against one private

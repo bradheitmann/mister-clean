@@ -72,7 +72,7 @@
     "successor-readiness"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
     "audit:public": "bun scripts/verify_public_package.ts . --denylist-file config/public-package-identifiers.txt",
@@ -102,16 +102,16 @@
     "package:import:check": "node scripts/verify_package_exports.mjs",
     "package:source-surface:check": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 pnpm exec -- bun ./node_modules/vitest/vitest.mjs run --allowOnly=false src/control-plane/runtime/public-surface.test.ts",
     "package:surface:check": "pnpm exec -- bun ./node_modules/vitest/vitest.mjs run --allowOnly=false src/control-plane/runtime/package-surface.test.ts",
-    "pack:smoke": "node scripts/prepare_release_archive.mjs",
+    "pack:smoke": "node scripts/prepare_release_archive.ts",
     "prepack": "node -e \"console.error('Direct source packing is disabled; use the externally built archive from bun run release:check.'); process.exit(1)\"",
     "report:case-study": "bun scripts/render_case_study_report.mjs",
     "report:scorecard": "bun run build:scorecard && bun scripts/render_model_scorecard.mjs",
     "report:case-study-suite": "bun run report:scorecard && bun run report:case-study",
     "report:history": "bun scripts/generate_codebase_history.mjs",
-    "release:attestation:check": "bun scripts/generate_release_attestation.mjs --check",
-    "release:attestation:source-check": "bun scripts/generate_release_attestation.mjs --source-check",
-    "release:attestation:write": "bun scripts/generate_release_attestation.mjs --write",
-    "release:check": "bun run ci:check && node scripts/prepare_release_archive.mjs",
+    "release:attestation:check": "bun scripts/generate_release_attestation.ts --check",
+    "release:attestation:source-check": "bun scripts/generate_release_attestation.ts --source-check",
+    "release:attestation:write": "bun scripts/generate_release_attestation.ts --write",
+    "release:check": "bun run ci:check && node scripts/prepare_release_archive.ts",
     "sync:cli": "bun scripts/sync_cli.mjs",
     "sync:cli:check": "bun scripts/sync_cli.mjs --check",
     "test": "MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun run build:verified && bun run test:node && bun run test:bun && bun run control-plane:check",

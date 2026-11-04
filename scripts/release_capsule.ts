@@ -16,7 +16,23 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { assertSafeArchiveMembers } from "./release_archive_contract.mjs";
+import { assertSafeArchiveMembers } from "./release_archive_contract.ts";
+
+// Runs under plain `node` when prepare_release_archive.ts imports it (>= 22.18,
+// built-in type stripping). Keep every construct erasable.
+
+/** One row of a dependency-tree snapshot; which optional fields appear depends on the entry type. */
+interface DependencyRow {
+  path: string;
+  mode: number;
+  mtime_ns?: string;
+  type: "directory" | "file" | "symlink";
+  size?: number;
+  sha256?: string;
+  target?: string;
+}
+
+type InheritedEnvironment = Readonly<Record<string, string | undefined>>;
 
 const METADATA_FREE_ENV = Object.freeze({
   COPYFILE_DISABLE: "1",
@@ -37,7 +53,11 @@ const WINDOWS_LOCATOR_KEYS = Object.freeze([
  * markers. Every writable home/cache/temp/config location is rebased beneath
  * the external capsule boundary.
  */
-export function releaseProcessEnvironment(capsuleRoot, inherited = process.env, cwd = capsuleRoot) {
+export function releaseProcessEnvironment(
+  capsuleRoot: string,
+  inherited: InheritedEnvironment = process.env,
+  cwd: string = capsuleRoot,
+): Record<string, string> {
   const capsule = resolve(capsuleRoot);
   const workingDirectory = resolve(cwd);
   if (!contained(capsule, workingDirectory)) {
@@ -53,7 +73,7 @@ export function releaseProcessEnvironment(capsuleRoot, inherited = process.env, 
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     chmodSync(directory, 0o700);
   }
-  const environment = {
+  const environment: Record<string, string> = {
     ...METADATA_FREE_ENV,
     NODE_ENV: "production",
     BUN_ENV: "production",
@@ -93,16 +113,16 @@ export function releaseProcessEnvironment(capsuleRoot, inherited = process.env, 
   return environment;
 }
 
-function codePointOrder(left, right) {
+function codePointOrder(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function contained(root, path) {
+function contained(root: string, path: string): boolean {
   const relationship = relative(root, path);
   return relationship === "" || (!isAbsolute(relationship) && relationship !== ".." && !relationship.startsWith(`..${sep}`));
 }
 
-function filesystemEntryExists(path) {
+function filesystemEntryExists(path: string): boolean {
   try {
     lstatSync(path);
     return true;
@@ -112,13 +132,13 @@ function filesystemEntryExists(path) {
   }
 }
 
-function sha256File(path) {
+function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function snapshotDependencyTree(root, includeMtime) {
-  const rows = [];
-  function visit(directory) {
+function snapshotDependencyTree(root: string, includeMtime: boolean): DependencyRow[] {
+  const rows: DependencyRow[] = [];
+  function visit(directory: string): void {
     const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) => codePointOrder(left.name, right.name));
     for (const entry of entries) {
       const absolute = join(directory, entry.name);
@@ -145,12 +165,12 @@ function snapshotDependencyTree(root, includeMtime) {
   return rows;
 }
 
-function assertRelativeContainedSymlink(root, path) {
+function assertRelativeContainedSymlink(root: string, path: string): void {
   const target = readlinkSync(path);
   if (isAbsolute(target)) throw new Error(`dependency symlink target is absolute: ${relative(root, path)}`);
   const lexicalTarget = resolve(dirname(path), target);
   if (!contained(root, lexicalTarget)) throw new Error(`dependency symlink target escapes lexically: ${relative(root, path)}`);
-  let canonicalTarget;
+  let canonicalTarget: string;
   try {
     canonicalTarget = realpathSync(path);
   } catch {
@@ -162,7 +182,10 @@ function assertRelativeContainedSymlink(root, path) {
 }
 
 /** Copy pnpm's relative-link topology without leaving a write path to source. */
-export function copyIsolatedPnpmTree(sourceRoot, destinationRoot) {
+export function copyIsolatedPnpmTree(
+  sourceRoot: string,
+  destinationRoot: string,
+): Readonly<{ source: string; source_integrity: readonly DependencyRow[] }> {
   const source = resolve(sourceRoot);
   const destination = resolve(destinationRoot);
   const sourceMetadata = lstatSync(source);
@@ -177,7 +200,7 @@ export function copyIsolatedPnpmTree(sourceRoot, destinationRoot) {
   const sourceIdentity = snapshotDependencyTree(source, false);
   const sourceIntegrity = snapshotDependencyTree(source, true);
   mkdirSync(destination, { mode: sourceMetadata.mode & 0o7777 });
-  function copyDirectory(sourceDirectory, destinationDirectory) {
+  function copyDirectory(sourceDirectory: string, destinationDirectory: string): void {
     const entries = readdirSync(sourceDirectory, { withFileTypes: true }).sort((left, right) => codePointOrder(left.name, right.name));
     for (const entry of entries) {
       const sourcePath = join(sourceDirectory, entry.name);
@@ -224,7 +247,12 @@ export function copyIsolatedPnpmTree(sourceRoot, destinationRoot) {
  * or mutating the source checkout. The staged index must reconstruct the exact
  * source commit tree before any generated byte is allowed to exist.
  */
-function initializeExactCapsuleGitBoundary({ source, commit, buildRoot, environment }) {
+function initializeExactCapsuleGitBoundary({ source, commit, buildRoot, environment }: {
+  source: string;
+  commit: string;
+  buildRoot: string;
+  environment: Record<string, string>;
+}): void {
   execFileSync("git", ["--no-optional-locks", "init", "--quiet", buildRoot], { env: environment, stdio: "pipe" });
   execFileSync("git", ["--no-optional-locks", "-C", buildRoot, "add", "--all", "--force"], { env: environment, stdio: "pipe" });
   const expectedTree = execFileSync("git", ["--no-optional-locks", "-C", source, "rev-parse", `${commit}^{tree}`], {
@@ -257,7 +285,11 @@ export function createExternalPnpmArchive({
   sourceRoot,
   commit,
   staging,
-}) {
+}: {
+  sourceRoot: string;
+  commit: string;
+  staging: string;
+}): string {
   const source = resolve(sourceRoot);
   const external = resolve(staging);
   const sourceTar = join(external, "source-tree.tar");
@@ -276,7 +308,7 @@ export function createExternalPnpmArchive({
   initializeExactCapsuleGitBoundary({ source, commit, buildRoot, environment: buildEnvironment });
 
   const externalDependencies = join(buildRoot, "node_modules");
-  let capsuleFailure = null;
+  let capsuleFailure: unknown = null;
   try {
     execFileSync("pnpm", ["install", "--frozen-lockfile", "--config.production=false", "--ignore-scripts"], {
       cwd: buildRoot,
@@ -294,7 +326,7 @@ export function createExternalPnpmArchive({
   } catch (error) {
     capsuleFailure = error;
   }
-  let cleanupFailure = null;
+  let cleanupFailure: unknown = null;
   try {
     rmSync(externalDependencies, { recursive: true, force: true });
   } catch (error) {
@@ -314,13 +346,14 @@ export function createExternalPnpmArchive({
   });
   const archives = readdirSync(external).filter((name) => name.endsWith(".tgz"));
   if (archives.length !== 1) throw new Error(`expected one pnpm archive, found ${archives.length}`);
-  const archive = resolve(external, archives[0]);
+  // Exactly one archive name was found above.
+  const archive = resolve(external, archives[0]!);
   assertSafeArchiveMembers(archive);
   return archive;
 }
 
 /** Create a package archive while suppressing platform metadata at the writer. */
-export function createPortablePackageArchive({ packageParent, archive }) {
+export function createPortablePackageArchive({ packageParent, archive }: { packageParent: string; archive: string }): string {
   const metadataFlags = process.platform === "darwin"
     ? ["--no-xattrs", "--no-mac-metadata"]
     : [];

@@ -28,13 +28,14 @@ import {
   assertSafeArchiveMembers,
   inspectReleaseArchive,
   inspectReleaseArchiveCustody,
-} from "./release_archive_contract.mjs";
+  nodeBytes,
+} from "./release_archive_contract.ts";
 import {
   copyIsolatedPnpmTree,
   createExternalPnpmArchive,
   createPortablePackageArchive,
   releaseProcessEnvironment,
-} from "./release_capsule.mjs";
+} from "./release_capsule.ts";
 import {
   createReleaseAttestation,
   generateAttestedPackageManifest,
@@ -43,32 +44,47 @@ import {
 import { CLEAN_CI_MATRIX } from "./run_clean_ci.ts";
 import { createFixtureRepository } from "../src/test-support/fixture-repo.ts";
 
+/** A raw USTAR member written by writeUstarFixture; type is the one-character typeflag. */
+interface UstarMember {
+  path: string;
+  type?: string;
+  content?: string;
+}
+
+/** The repository package.json as the fixtures read and rewrite it. */
+interface PackageJsonFixture {
+  name: string;
+  version: string;
+  scripts: Record<string, string>;
+  [key: string]: unknown;
+}
+
 const RELEASE_FIXTURE_IDENTITY = { name: "Release Fixture", email: "release-fixture.invalid" };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const verifier = join(root, "scripts", "verify_packed_cli.mjs");
-const preparer = join(root, "scripts", "prepare_release_archive.mjs");
-const publisher = join(root, "scripts", "publish_release_archive.mjs");
-const archiveContract = join(root, "scripts", "release_archive_contract.mjs");
-const attestationGenerator = join(root, "scripts", "generate_release_attestation.mjs");
+const verifier = join(root, "scripts", "verify_packed_cli.ts");
+const preparer = join(root, "scripts", "prepare_release_archive.ts");
+const publisher = join(root, "scripts", "publish_release_archive.ts");
+const archiveContract = join(root, "scripts", "release_archive_contract.ts");
+const attestationGenerator = join(root, "scripts", "generate_release_attestation.ts");
 const npmjsRegistry = "https://registry.npmjs.org/";
 const scopedRegistryOverride = `--config.@bradheitmann:registry=${npmjsRegistry}`;
-const temporaryRoots = [];
+const temporaryRoots: string[] = [];
 
-function temporaryRoot() {
+function temporaryRoot(): string {
   const path = mkdtempSync(join(tmpdir(), "mister-clean-release-path-test-"));
   temporaryRoots.push(path);
   return path;
 }
 
-function writeFrozenPnpmLock(root) {
+function writeFrozenPnpmLock(root: string): void {
   execFileSync("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], {
     cwd: root,
     stdio: "pipe",
   });
 }
 
-function archiveFixture(configure) {
+function archiveFixture(configure?: (packageRoot: string) => void): string {
   const temporary = temporaryRoot();
   const packageRoot = join(temporary, "package");
   mkdirSync(packageRoot);
@@ -83,14 +99,14 @@ function archiveFixture(configure) {
   return archive;
 }
 
-function writeTarChecksum(header) {
+function writeTarChecksum(header: ReturnType<typeof Buffer.alloc>): void {
   header.fill(0x20, 148, 156);
-  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  const checksum = header.reduce((sum: number, byte: number) => sum + byte, 0);
   header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
 }
 
-function writeUstarFixture(archive, members) {
-  const blocks = [];
+function writeUstarFixture(archive: string, members: readonly UstarMember[]): string {
+  const blocks: Buffer[] = [];
   for (const member of members) {
     const bytes = Buffer.from(member.content ?? "", "utf8");
     const header = Buffer.alloc(512);
@@ -111,16 +127,19 @@ function writeUstarFixture(archive, members) {
   return archive;
 }
 
-function rewriteUstarFixture(archive, mutate) {
+function rewriteUstarFixture(archive: string, mutate: (tar: ReturnType<typeof Buffer.alloc>) => void): string {
   const tar = Buffer.from(gunzipSync(readFileSync(archive)));
   mutate(tar);
   writeFileSync(archive, gzipSync(tar));
   return archive;
 }
 
-function validReleaseArchiveFixture(configurePackageData, configureFinalTree) {
+function validReleaseArchiveFixture(
+  configurePackageData?: (packageData: PackageJsonFixture) => void,
+  configureFinalTree?: (packageRoot: string) => void,
+): string {
   return archiveFixture((packageRoot) => {
-    const packageData = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    const packageData = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as PackageJsonFixture;
     packageData.version = "9.9.9-test";
     packageData.dependencies = {};
     packageData.devDependencies = {};
@@ -171,16 +190,16 @@ function validReleaseArchiveFixture(configurePackageData, configureFinalTree) {
   });
 }
 
-function sha256File(path) {
+function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function copyRepositoryObject(source, destination) {
+function copyRepositoryObject(source: string, destination: string): void {
   mkdirSync(destination);
-  const paths = execFileSync("git", ["-C", source, "ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+  const paths = nodeBytes(execFileSync("git", ["-C", source, "ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
     encoding: "buffer",
     stdio: ["ignore", "pipe", "pipe"],
-  }).toString("utf8").split("\0").filter(Boolean);
+  })).toString("utf8").split("\0").filter(Boolean);
   for (const path of paths) {
     const from = join(source, path);
     const to = join(destination, path);
@@ -189,7 +208,7 @@ function copyRepositoryObject(source, destination) {
     try {
       metadata = lstatSync(from);
     } catch (error) {
-      if (error && typeof error === "object" && error.code === "ENOENT") continue;
+      if (error && typeof error === "object" && (error as { code?: unknown }).code === "ENOENT") continue;
       throw error;
     }
     if (metadata.isSymbolicLink()) symlinkSync(readlinkSync(from), to);
@@ -198,7 +217,7 @@ function copyRepositoryObject(source, destination) {
   }
 }
 
-function registryDigests(path) {
+function registryDigests(path: string): { integrity: string; shasum: string } {
   const bytes = readFileSync(path);
   return {
     integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
@@ -207,7 +226,7 @@ function registryDigests(path) {
 }
 
 afterEach(() => {
-  while (temporaryRoots.length) rmSync(temporaryRoots.pop(), { recursive: true, force: true });
+  while (temporaryRoots.length) rmSync(temporaryRoots.pop()!, { recursive: true, force: true });
 });
 
 describe("release archive boundary", () => {
@@ -326,7 +345,7 @@ describe("release archive boundary", () => {
       { path: "package/package.json", content: "{}\n" },
     ];
     const checksum = writeUstarFixture(join(temporaryRoot(), "checksum.tgz"), members);
-    rewriteUstarFixture(checksum, (tar) => { tar[0] ^= 1; });
+    rewriteUstarFixture(checksum, (tar) => { tar[0]! ^= 1; });
     expect(() => assertSafeArchiveMembers(checksum)).toThrow(/checksum mismatch/u);
 
     const base256 = writeUstarFixture(join(temporaryRoot(), "base256.tgz"), members);
@@ -382,7 +401,7 @@ describe("release archive boundary", () => {
     }, working);
     expect(environment.PATH).toBe("/trusted/bin");
     for (const key of ["HOME", "PWD", "OLDPWD", "INIT_CWD", "TMPDIR", "XDG_CONFIG_HOME", "BUN_INSTALL", "PNPM_HOME"]) {
-      expect(environment[key].startsWith(capsule), `${key}=${environment[key]}`).toBe(true);
+      expect(environment[key]!.startsWith(capsule), `${key}=${environment[key]}`).toBe(true);
     }
     for (const forbidden of [
       "NODE_OPTIONS", "TAR_OPTIONS", "npm_config_userconfig", "HTTPS_PROXY", "NPM_TOKEN",
@@ -547,7 +566,7 @@ describe("release archive boundary", () => {
     for (const row of distRows) {
       const path = row.path?.slice(2);
       expect(path).toBeTruthy();
-      expect(sha256File(join(packageRoot, path))).toBe(row.sha256);
+      expect(sha256File(join(packageRoot, path!))).toBe(row.sha256);
     }
     expect(existsSync(join(packageRoot, ".git"))).toBe(false);
   }, 120_000);
@@ -585,8 +604,8 @@ describe("release archive boundary", () => {
     writeFileSync(join(consumer, "package.json"), '{"name":"consumer","version":"1.0.0","private":true}\n', "utf8");
     execFileSync("pnpm", ["add", "--ignore-scripts", portable], { cwd: consumer, stdio: "pipe" });
     const installed = join(consumer, "node_modules", "@bradheitmann", "mister-clean");
-    const actual = [];
-    const visit = (directory, prefix = "") => {
+    const actual: string[] = [];
+    const visit = (directory: string, prefix = ""): void => {
       for (const entry of readdirSync(directory, { withFileTypes: true })) {
         const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
         const absolute = join(directory, entry.name);
@@ -641,7 +660,7 @@ describe("release archive boundary", () => {
       "generated:check",
       "generated:postbuild:check",
     ]);
-    expect(scripts["release:check"]).toContain("prepare_release_archive.mjs");
+    expect(scripts["release:check"]).toContain("prepare_release_archive.ts");
     expect(scripts.prepack).toContain("Direct source packing is disabled");
     expect(scripts.prepack).not.toMatch(/bun run build|release:attestation:write/u);
     const verifiedBuild = readFileSync(join(root, "scripts", "run_verified_build.ts"), "utf8");
@@ -656,7 +675,7 @@ describe("release archive boundary", () => {
     for (const workflow of workflows) {
       const source = readFileSync(join(root, ".github", "workflows", workflow), "utf8");
       for (const match of source.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s#]+)/gmu)) {
-        const reference = match[1];
+        const reference = match[1]!;
         if (reference.startsWith("./")) continue;
         expect(reference, `${workflow}: mutable action ${reference}`).toMatch(/^[^@\s]+@[0-9a-f]{40}$/u);
       }
@@ -664,7 +683,7 @@ describe("release archive boundary", () => {
         const image = match[1];
         expect(image, `${workflow}: mutable container ${image}`).toMatch(/@sha256:[0-9a-f]{64}$/u);
       }
-      const visit = (value, path = "$") => {
+      const visit = (value: unknown, path = "$"): void => {
         if (Array.isArray(value)) {
           value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
           return;
@@ -772,7 +791,7 @@ describe("release archive boundary", () => {
       ["dist/stdio.js", "export const fixture = true;\n"],
       ["MANIFEST.sha256", "pre-pack placeholder\n"],
       ["RELEASE_ATTESTATION.json", "{}\n"],
-    ]) {
+    ] as const) {
       mkdirSync(dirname(join(source, path)), { recursive: true });
       writeFileSync(join(source, path), content, "utf8");
     }
@@ -783,7 +802,7 @@ describe("release archive boundary", () => {
     });
     const archives = readdirSync(packed).filter((name) => name.endsWith(".tgz"));
     expect(archives).toHaveLength(1);
-    const intermediate = join(packed, archives[0]);
+    const intermediate = join(packed, archives[0]!);
     execFileSync("tar", ["-xzf", intermediate, "-C", unpacked], { stdio: "pipe" });
     const capsule = join(unpacked, "package");
     const packedPackageBytes = readFileSync(join(capsule, "package.json"), "utf8");
@@ -829,7 +848,7 @@ describe("release archive boundary", () => {
         ["bin/mister-clean.js", "#!/usr/bin/env node\n"],
         ["dist/public.js", "export const fixture = true;\n"],
         ["dist/stdio.js", "export const fixture = true;\n"],
-      ]) {
+      ] as const) {
         mkdirSync(dirname(join(packageRoot, path)), { recursive: true });
         writeFileSync(join(packageRoot, path), content, "utf8");
       }
@@ -873,8 +892,8 @@ describe("release archive boundary", () => {
     const archive = archiveFixture();
     const retainedRoot = dirname(archive);
     chmodSync(archive, 0o444);
-    const retainedPublisher = join(retainedRoot, "publish_release_archive.mjs");
-    const retainedVerifier = join(retainedRoot, "release_archive_contract.mjs");
+    const retainedPublisher = join(retainedRoot, "publish_release_archive.ts");
+    const retainedVerifier = join(retainedRoot, "release_archive_contract.ts");
     copyFileSync(publisher, retainedPublisher);
     copyFileSync(archiveContract, retainedVerifier);
     chmodSync(retainedPublisher, 0o444);
@@ -893,12 +912,12 @@ describe("release archive boundary", () => {
       },
       publisher: {
         entrypoint: {
-          path: "publish_release_archive.mjs",
+          path: "publish_release_archive.ts",
           sha256: sha256File(retainedPublisher),
           size_bytes: readFileSync(retainedPublisher).length,
         },
         verifier: {
-          path: "release_archive_contract.mjs",
+          path: "release_archive_contract.ts",
           sha256: sha256File(retainedVerifier),
           size_bytes: readFileSync(retainedVerifier).length,
         },
@@ -923,10 +942,10 @@ describe("release archive boundary", () => {
     const archive = archiveFixture();
     const retainedRoot = dirname(archive);
     chmodSync(archive, 0o444);
-    const retainedPublisher = join(retainedRoot, "publish_release_archive.mjs");
+    const retainedPublisher = join(retainedRoot, "publish_release_archive.ts");
     copyFileSync(publisher, retainedPublisher);
     chmodSync(retainedPublisher, 0o444);
-    const retainedVerifier = join(retainedRoot, "release_archive_contract.mjs");
+    const retainedVerifier = join(retainedRoot, "release_archive_contract.ts");
     copyFileSync(archiveContract, retainedVerifier);
     chmodSync(retainedVerifier, 0o444);
     const fakeBin = join(retainedRoot, "fake-bin");
@@ -958,12 +977,12 @@ describe("release archive boundary", () => {
       },
       publisher: {
         entrypoint: {
-          path: "publish_release_archive.mjs",
+          path: "publish_release_archive.ts",
           sha256: sha256File(retainedPublisher),
           size_bytes: readFileSync(retainedPublisher).length,
         },
         verifier: {
-          path: "release_archive_contract.mjs",
+          path: "release_archive_contract.ts",
           sha256: sha256File(retainedVerifier),
           size_bytes: readFileSync(retainedVerifier).length,
         },
@@ -1006,8 +1025,8 @@ describe("release archive boundary", () => {
 
     const archiveName = "mister-clean-9.9.9-test.tgz";
     const capsuleArchive = join(sourceCapsule, archiveName);
-    const capsulePublisher = join(sourceCapsule, "publish_release_archive.mjs");
-    const capsuleVerifier = join(sourceCapsule, "release_archive_contract.mjs");
+    const capsulePublisher = join(sourceCapsule, "publish_release_archive.ts");
+    const capsuleVerifier = join(sourceCapsule, "release_archive_contract.ts");
     copyFileSync(sourceArchive, capsuleArchive);
     copyFileSync(publisher, capsulePublisher);
     copyFileSync(archiveContract, capsuleVerifier);
@@ -1030,13 +1049,13 @@ describe("release archive boundary", () => {
       },
       publisher: {
         entrypoint: {
-          path: "publish_release_archive.mjs",
+          path: "publish_release_archive.ts",
           sha256: sha256File(capsulePublisher),
           size_bytes: readFileSync(capsulePublisher).length,
           mode: "0444",
         },
         verifier: {
-          path: "release_archive_contract.mjs",
+          path: "release_archive_contract.ts",
           sha256: sha256File(capsuleVerifier),
           size_bytes: readFileSync(capsuleVerifier).length,
           mode: "0444",
@@ -1053,13 +1072,13 @@ describe("release archive boundary", () => {
           scopedRegistryOverride,
           archiveName,
         ],
-        shell_command: "node './publish_release_archive.mjs' --receipt './release-archive-receipt.json'",
+        shell_command: "node './publish_release_archive.ts' --receipt './release-archive-receipt.json'",
       },
     };
     const sourceReceipt = join(sourceCapsule, "release-archive-receipt.json");
     writeFileSync(sourceReceipt, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
 
-    for (const filename of [archiveName, "publish_release_archive.mjs", "release_archive_contract.mjs", "release-archive-receipt.json"]) {
+    for (const filename of [archiveName, "publish_release_archive.ts", "release_archive_contract.ts", "release-archive-receipt.json"]) {
       copyFileSync(join(sourceCapsule, filename), join(relocated, filename));
       chmodSync(join(relocated, filename), 0o644);
     }
@@ -1113,13 +1132,13 @@ describe("release archive boundary", () => {
     });
     expect(publication).not.toHaveProperty("published_at");
     expect(JSON.stringify(publication)).not.toContain(rootPath);
-    const calls = readFileSync(argvLog, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    const calls = readFileSync(argvLog, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
     expect(calls).toHaveLength(4);
     expect(calls.every((call) => call.includes(scopedRegistryOverride))).toBe(true);
     expect(calls.every((call) => call.includes(npmjsRegistry))).toBe(true);
     const publishCall = calls.find((call) => call[0] === "publish");
     expect(publishCall).toBeDefined();
-    const publishedArchive = publishCall.find((argument) => argument.endsWith(".tgz"));
+    const publishedArchive = publishCall!.find((argument) => argument.endsWith(".tgz"));
     expect(publishedArchive).toContain("mister-clean-archive-custody-");
     expect(publishedArchive).not.toContain(relocated);
   });

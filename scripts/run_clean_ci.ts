@@ -24,7 +24,7 @@ import {
   type RepositoryObject,
   type RepositoryObjectSurfaceCapture,
 } from "../src/closeout/repository-object.js";
-import { releaseProcessEnvironment } from "./release_capsule.mjs";
+import { releaseProcessEnvironment } from "./release_capsule.ts";
 
 export const CLEAN_CI_MATRIX = Object.freeze([
   "test:node",
@@ -291,7 +291,7 @@ function parseArguments(args: readonly string[]): void {
 if (import.meta.main) {
   try {
     parseArguments(process.argv.slice(2));
-    const receipt = await runCleanCi(resolve(import.meta.dir, ".."));
+    const receipt = await runCleanCi(resolve(import.meta.dirname, ".."));
     process.stdout.write(
       `clean ci: PASS (${receipt.matrix.length} matrix commands; RepositoryObject ${receipt.source_repository_object.sha256})\n`,
     );
