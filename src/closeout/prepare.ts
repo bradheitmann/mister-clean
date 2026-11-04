@@ -44,7 +44,16 @@ import {
   applyRetirements,
   readPublicSafetyExemptions,
   readRetirements,
+  type RetirementApplication,
 } from "./retirements.js";
+import {
+  retirementRatificationCauseKey,
+  retirementRatificationObservationId,
+  retirementRatifications,
+  RETIREMENT_RATIFICATION_NORMALIZER,
+  RETIREMENT_RATIFICATION_NOTE,
+  RETIREMENT_RULING_MINTED_BY,
+} from "./retirement-ratification.js";
 import { validateNativeGateCoverage } from "./native-gate-validation.js";
 import { acquireRepositoryVerificationLease } from "./execution-lease.js";
 import {
@@ -703,21 +712,35 @@ function stageRetirementRulings(
 /**
  * The bundle validator accepts an accepted_exception only through a
  * `mister-clean.operator-ruling` record that names the debt and binds the run's
- * operative request. A retirement covers many debts under one owner ruling, so
+ * operative request. A retirement covers many debts under one cited ruling, so
  * each retired debt gets its own small record inside the bundle that repeats
  * the exception fields and cites the staged ruling by path and digest; the
  * debt's exception ref then points at that record.
+ *
+ * The record is written by this tool, not by an operator, and says so:
+ * `minted_by` marks it tool-minted and `source` binds the retirement record's
+ * bytes. The validator never reads it as an owner's act.
  */
 function bindRetirementRulings(
   debts: readonly JsonObject[],
   bundleDirectory: string,
   requestSha256: string,
+  applications: readonly RetirementApplication[],
+  retirements: ReturnType<typeof readRetirements>,
 ): JsonObject[] {
+  const sourceByDebt = new Map<string, { path: string; sha256: string }>();
+  for (const application of applications) {
+    const record = retirements.find((candidate) => candidate.record_path === application.record_path);
+    if (!record) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
+    for (const id of application.debt_ids) sourceByDebt.set(id, { path: record.record_path, sha256: record.record_sha256 });
+  }
   return debts.map((debt) => {
     const exception = debt.exception as JsonObject | undefined;
     if (debt.state !== "accepted_exception" || !exception) return debt as JsonObject;
     const scope = String(exception.scope ?? "");
     if (!scope.startsWith("retired root ")) return debt as JsonObject;
+    const source = sourceByDebt.get(String(debt.id));
+    if (!source) throw new Error(`retired debt ${String(debt.id)} has no retirement application`);
     const ruling = exception.ref as { path: string; sha256: string };
     const relativePath = join("retirement-rulings", `${String(debt.id)}.json`);
     mkdirSync(join(bundleDirectory, "retirement-rulings"), { recursive: true });
@@ -731,6 +754,8 @@ function bindRetirementRulings(
       rationale: exception.rationale,
       request_sha256: requestSha256,
       ruling_ref: { path: ruling.path, sha256: ruling.sha256 },
+      minted_by: RETIREMENT_RULING_MINTED_BY,
+      source,
     });
     return {
       ...debt,
@@ -1036,7 +1061,36 @@ function assemblePrepareReport(
     ...nativeRootDebts,
   ];
   const retirementOutcome = applyRetirements(completionDebts as unknown as JsonObject[], retirements);
-  const appliedDebts = bindRetirementRulings(retirementOutcome.debts, bundleDirectory, requestSha256);
+  // No verifiable ratification route exists yet (O-RET-2): each applied
+  // retirement record leaves one open owner decision, so the retired debts can
+  // stay compact as accepted_exception while the run still cannot be CLEAN.
+  const retirementApplications = retirementOutcome.applications.map((application) => {
+    const record = retirements.find((candidate) => candidate.record_path === application.record_path);
+    if (!record) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
+    return { ...application, record_sha256: record.record_sha256 };
+  });
+  const ratificationDebts = retirementRatifications(retirementApplications).map((ratification) => {
+    const record = retirements.find((candidate) => candidate.record_path === ratification.record_path);
+    if (!record) throw new Error(`retirement application cites an unread record: ${ratification.record_path}`);
+    return baselineDebt(repoId, {
+      id: `DEBT-RETIREMENT-RATIFICATION-${sha256(Buffer.from(record.record_path, "utf8")).slice(0, 16).toUpperCase()}`,
+      class: "retirement_ratification",
+      observation_count: 1,
+      affected_paths: [...ratification.roots],
+      affected_refs: [record.record_path, record.ruling.evidence.path],
+      repair_boundary: `decision:${record.record_path}`,
+      procedure: `${RETIREMENT_RATIFICATION_NOTE}. ${ratification.debt_ids.length} debt(s) under ${ratification.roots.join(", ")} are held as accepted_exception on the strength of ${record.record_path}, which names ${JSON.stringify(record.ruling.author)} but which any committer can write. An owner must ratify the retirement, or it must be withdrawn, before the run can be CLEAN.`,
+      state: "open",
+      disposition: "decision_or_coordination_required",
+      evidence: [],
+    }, RETIREMENT_RATIFICATION_NORMALIZER, retirementRatificationCauseKey(ratification) as CanonicalJsonValue, [
+      retirementRatificationObservationId(ratification.record_sha256),
+    ]);
+  });
+  const appliedDebts = [
+    ...bindRetirementRulings(retirementOutcome.debts, bundleDirectory, requestSha256, retirementOutcome.applications, retirements),
+    ...(ratificationDebts as unknown as JsonObject[]),
+  ];
   const acceptedExceptions = appliedDebts.filter((debt) => debt.state === "accepted_exception").length;
   const rootDebtRows: RootDebtAccountingRow[] = appliedDebts.map((debt) => ({
     debt_key: debt.debt_key as string,
@@ -1072,7 +1126,7 @@ function assemblePrepareReport(
     })),
     verdict: "NOT_CLEAN",
     debt_census: { discovered: appliedDebts.length, paid: 0, accepted_exception: acceptedExceptions },
-    retirement_applications: retirementOutcome.applications,
+    retirement_applications: retirementApplications,
     public_safety_debt_accounting: {
       debt_count: publicSafetyRootDebts.length,
       exempted_finding_count: publicSafetyExemptions.exempted.length,
@@ -1128,7 +1182,10 @@ function assemblePrepareReport(
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
       state: "open",
       evidence: [{ kind: "debt_census", object: baselineRepositoryObject.sha256, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${publicSafetyRootDebts.length} public safety, ${githubActionsRootDebts.length} GitHub Actions, ${semanticDebts.length} semantic, ${nativeRootDebts.length} native gate)`, observed_at: now }],
-      notes: ["Executable planning, public-safety, workflow-governance, semantic, and native-gate audits found payable successor-readiness debt."],
+      notes: [
+        "Executable planning, public-safety, workflow-governance, semantic, and native-gate audits found payable successor-readiness debt.",
+        ...(ratificationDebts.length > 0 ? [`${RETIREMENT_RATIFICATION_NOTE} (${ratificationDebts.length} retirement record(s)).`] : []),
+      ],
     });
   }
   if (planningDebts.length > 0) {

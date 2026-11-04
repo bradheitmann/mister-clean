@@ -1,5 +1,6 @@
 /** Action-chain and root-debt regression accounting for closure bundles. */
 import { REGRESSION_COUNT_FIELDS, REGRESSION_POLICY } from "./records.js";
+import { retirementRatificationProjections } from "./retirement-ratification.js";
 import {
   DETECTOR_COVERAGE_SCHEMA_VERSION,
   detectorById,
@@ -855,6 +856,16 @@ export async function validateModernRegressionClosure(
         regressionRepoId,
       )) addExpectedRoot(projection);
     }
+  }
+
+  // Retirement ratification is an owner decision no evidence can settle yet
+  // (O-RET-2): each applied retirement projects one open root debt.
+  for (const projection of retirementRatificationProjections(array(report.retirement_applications), regressionRepoId)) {
+    for (const id of projection.observation_ids) {
+      detectorObservationIds.add(id);
+      baselineObservationIds.add(id);
+    }
+    addExpectedRoot(projection);
   }
 
   const successorNativeEvidence = await validateNativeGateControlRecord(
