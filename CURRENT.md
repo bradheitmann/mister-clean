@@ -1,50 +1,50 @@
 ---
 artifact_type: maintenance
-maint_id: MC-CURRENT-7.3
-title: Mister Clean 7.3 current state
+maint_id: MC-CURRENT-7.5
+title: Mister Clean 7.5 current state
 status: active
 timezone: UTC
 owner: repository maintainer; operated by the project PM
 contract: references/control-plane-product-spec.md
 current_projection_source: machine
 current_projection_command: mister-clean inspect repository-object . --json
-current_release: 7.3.0
-current_release_commit: fca67edf224a6877f3d181307392ea1f36336016
-current_step: self-clean loop cycle 1 (the installed 7.3.0 judges this repository; findings are remediated on lanes and re-judged by second-pass)
-next_step: the field study of the skill across the owner's repositories, using run receipts and second-pass
-closing_gate: exact-object hosted CI, second-family QA on the exact tip, annotated tag, verified release archive
+current_release: 7.5.0
+current_release_commit: the commit tagged v7.5.0 (`git rev-list -n 1 v7.5.0`); this file cannot name its own commit
+current_step: 7.5.0 released from a commit the installed 7.4.0 judged CLEAN, with an independent signed attestation for its executable surfaces
+next_step: 7.6.0 batch (see charter/STATE.md), then the field study of the skill across the owner's repositories
+closing_gate: exact-object hosted CI, second-family QA on the exact tip, independent semantic attestation, CLEAN closure bundle, annotated tag, verified release archive
 ---
 
-# Mister Clean 7.3 current state
+# Mister Clean 7.5 current state
 
-**Released: 7.3.0** (tag `v7.3.0`, commit `fca67edf`; CI tag run 41592441023; verified archive
-`bradheitmann-mister-clean-7.3.0.tgz` and its receipt on the GitHub release). 7.2.0 (`e1f0090`,
-tag `v7.2.0`) preceded it the same day; v7.1.0 remains a Git source release without a CI archive.
-No npm publication is asserted by this file; the receipt's `publish.status` is `not_executed`.
+**Released: 7.5.0** (annotated tag `v7.5.0`; the CI tag run builds the verified archive
+`bradheitmann-mister-clean-7.5.0.tgz` and its receipt on the GitHub release). 7.4.0 (`a1f39ebb`,
+tag `v7.4.0`) preceded it. No npm publication is asserted by this file.
 
-What 7.3.0 adds over 7.2.0: run receipts (`mister-clean.run-receipt/1`, written under the
-state root, repository-relative paths and digests only) and `mister-clean second-pass`, which
-classifies an earlier run's findings from Git. What 7.2.0 added over 7.0.2: the bounded Git
-listing in `prepare` on large repositories, the repository planning config
-(`.mister-clean/planning.json`), nested-checkout exclusion, subdirectory stack markers, and the
-dependency-advisory clearances. The full list is in each release's notes and in
-`charter/STATE.md`.
+What 7.5.0 adds over 7.4.0: retirement rulings staged into bundles and never treated as owner
+authority when tool-minted; language-policy audit and root debts; sealed, digest-checked segments
+for the invocation journal and the run-receipt store; the executable-surface detector following
+hosted CI steps as native routes; `scripts/attest_sign.ts` for independent semantic attestations;
+rustup and Go toolchain locators in the gate environment; release and build scripts in strict
+TypeScript. The full list is in the release notes on the GitHub release and in `charter/STATE.md`.
 
 ## How a successor verifies this projection
 
 - `node bin/mister-clean.js attest <installed-root> --json --strict` on an installed release
-  reports `claimed_source.git_commit` and `git_tag`; compare with the values above.
+  reports `claimed_source.git_commit` and `git_tag`; compare with `git rev-list -n 1 v7.5.0`.
 - `charter/STATE.md` carries the proven / not-proven ledger, the exact last-green and last-red
-  commands, and the next three bounded items; its first lines name the HEAD it was written at.
+  commands, and the next three bounded items.
 - `git tag --points-at <commit>` and the CI tag run bind the release to the object.
+- Attestation keys and trust policies live in Doppler, never in this repository
+  (`charter/owner-decisions/2026-11-04-semantic-attestation-trust.md`).
 
 ## Standing obligations (detail and owners in `charter/STATE.md`)
 
-Toolchain pin for reproducible packaged bytes (bun 1.4.0 today; O-TOOLCHAIN-1), one snapshot per
-run for native gates on large workspaces (O-GATE-SNAPSHOT-1), temp cleanup in product and tests
-(O-TMP-1), the external semantic-attestation route for `runtime_attested` candidates, the data
-product and starter eval set (O-DATA-1, owner decision 2026-11-03), and Slice Zero
-(`charter/charter.toml`), which is being made real by the eval-case validator lane.
+Slice Zero redesign with the owner (`charter/charter.toml`, `proven_on` empty); the 7.6.0 batch:
+public-safety credential rules from PM-ODIN, the three release-closure scripts no CI step runs,
+the remaining static script notes behind the opaque `ci:check` capsule, the packaged
+`attest-inspect` helper, suite overlap and load-aware tests, and the capsule's package-manager
+download.
 
 The product contract remains
 [`references/control-plane-product-spec.md`](references/control-plane-product-spec.md).
