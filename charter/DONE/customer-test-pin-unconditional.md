@@ -10,7 +10,7 @@ Slice: `customer-tests/model-atlas/registry-join.ts` checked the export's sha256
 3. A non-fixture artifact without a sha argument is checked semantically and the output says UNPINNED.
    - reopen: `… -t "unpinned"`
    - mutant: drop the label → RED.
-4. Re-pin: `registry-join.json` names 2026.11.03-2 with sha256 657f8150c7867d9795dc71c50ee6920757e04194ad2e0b902c8122bd52100556 (publisher's PINS.tsv row, producing commit ae93b43); the fixture is the publisher's file byte for byte; both declared mutants still fail.
+4. (Moved out of this slice: the re-pin to 2026.11.03-2 changes the export version Slice Zero's eval-case validator requires card refs to cite, so it lands as one coordinated re-pin + re-bind lane after Slice Zero merges.) The vendored fixture still validates with no argument and with the correct argument.
    - reopen: `bun customer-tests/model-atlas/registry-join.ts customer-tests/model-atlas/fixtures/model-atlas.export-2026.11.03-2.json` exits 0; each mutant patch applied → exits 1.
    - mutant: n/a (the declared mutants are the negative controls).
 5. Regression: field-eval card bindings unaffected (no card or route id changed between 03-1 and 03-2); skill-contract; tsc covers the new test; charter strict; audit:public.
