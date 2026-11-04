@@ -26883,7 +26883,7 @@ async function validateBundleFile(bundlePath, options = {}) {
 // src/closeout/prepare.ts
 import { createHash as createHash19 } from "crypto";
 import { existsSync as existsSync9, mkdirSync as mkdirSync2, readFileSync as readFileSync11, writeFileSync as writeFileSync4 } from "fs";
-import { join as join12, resolve as resolve22 } from "path";
+import { dirname as dirname12, join as join12, resolve as resolve22 } from "path";
 
 // src/closeout/retirements.ts
 import { createHash as createHash18 } from "crypto";
@@ -27666,6 +27666,48 @@ async function collectPrepareTopology(context) {
     targetObservation
   };
 }
+function stageRetirementRulings(repository, bundleDirectory, retirements) {
+  const staged = /* @__PURE__ */ new Set();
+  for (const record4 of retirements) {
+    const { path, sha256: sha25612 } = record4.ruling.evidence;
+    if (staged.has(path)) continue;
+    const bytes2 = readFileSync11(resolve22(repository, path));
+    const observed = createHash19("sha256").update(bytes2).digest("hex");
+    if (observed !== sha25612) {
+      throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25612}`);
+    }
+    const target = join12(bundleDirectory, path);
+    mkdirSync2(dirname12(target), { recursive: true });
+    writeFileSync4(target, bytes2);
+    staged.add(path);
+  }
+}
+function bindRetirementRulings(debts, bundleDirectory, requestSha256) {
+  return debts.map((debt) => {
+    const exception = debt.exception;
+    if (debt.state !== "accepted_exception" || !exception) return debt;
+    const scope = String(exception.scope ?? "");
+    if (!scope.startsWith("retired root ")) return debt;
+    const ruling = exception.ref;
+    const relativePath = join12("retirement-rulings", `${String(debt.id)}.json`);
+    mkdirSync2(join12(bundleDirectory, "retirement-rulings"), { recursive: true });
+    writeJson(join12(bundleDirectory, relativePath), {
+      record_type: "mister-clean.operator-ruling",
+      schema_version: "1.0",
+      debt_id: debt.id,
+      actor: exception.actor,
+      at: exception.at,
+      scope: exception.scope,
+      rationale: exception.rationale,
+      request_sha256: requestSha256,
+      ruling_ref: { path: ruling.path, sha256: ruling.sha256 }
+    });
+    return {
+      ...debt,
+      exception: { ...exception, ref: { path: relativePath, sha256: sha256File2(join12(bundleDirectory, relativePath)) } }
+    };
+  });
+}
 function assemblePrepareReport(context) {
   const {
     options,
@@ -27750,6 +27792,7 @@ function assemblePrepareReport(context) {
   const semanticCommand = options.semanticEvidencePackagePath !== void 0 ? "mister-clean audit semantic . --evidence-package semantic-evidence-package.json --trust-policy semantic-trust-policy.json --json" : options.semanticManifestPath === void 0 ? "mister-clean audit semantic . --json" : `mister-clean audit semantic . --manifest semantic-probe-manifest.json${options.executeSemanticProbes ? " --execute" : ""} --json`;
   const publicSafetyCommand = `mister-clean audit public-safety . --tracked${publicSafetyInputRef === void 0 ? "" : " --denylist-file public-safety-denylist.txt"} --json`;
   const retirements = readRetirements(repository);
+  stageRetirementRulings(repository, bundleDirectory, retirements);
   const publicSafetyExemptions = applyPublicSafetyExemptions(
     publicSafetyAudit?.findings ?? [],
     readPublicSafetyExemptions(repository)
@@ -27929,7 +27972,7 @@ function assemblePrepareReport(context) {
     ...nativeRootDebts
   ];
   const retirementOutcome = applyRetirements(completionDebts, retirements);
-  const appliedDebts = retirementOutcome.debts;
+  const appliedDebts = bindRetirementRulings(retirementOutcome.debts, bundleDirectory, requestSha256);
   const acceptedExceptions = appliedDebts.filter((debt) => debt.state === "accepted_exception").length;
   const rootDebtRows = appliedDebts.map((debt) => ({
     debt_key: debt.debt_key,
@@ -28647,7 +28690,7 @@ import {
   writeFileSync as writeFileSync6
 } from "fs";
 import { hostname } from "os";
-import { dirname as dirname13, join as join15, posix as pathPosix2 } from "path";
+import { dirname as dirname14, join as join15, posix as pathPosix2 } from "path";
 
 // src/closeout/action-lifecycle-runtime.ts
 import { createHash as createHash21, randomUUID as randomUUID5 } from "crypto";
@@ -28663,7 +28706,7 @@ import {
   statSync as statSync3,
   writeFileSync as writeFileSync5
 } from "fs";
-import { dirname as dirname12, isAbsolute as isAbsolute20, join as join14, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
+import { dirname as dirname13, isAbsolute as isAbsolute20, join as join14, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
 var HEX644 = /^[0-9a-f]{64}$/;
 function object6(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
@@ -28729,7 +28772,7 @@ function digestRef2(base, path) {
 }
 function writeEvidenceRecord(context, path, record4) {
   const absolute = resolveContained(context.base, path, "action evidence path");
-  mkdirSync3(dirname12(absolute), { recursive: true, mode: 448 });
+  mkdirSync3(dirname13(absolute), { recursive: true, mode: 448 });
   writeFileSync5(absolute, jsonBytes(record4), { encoding: "utf8", mode: 384, flag: "wx" });
   return digestRef2(context.base, path);
 }
@@ -28803,7 +28846,7 @@ function lifecyclePath(context, id) {
   return join14(context.base, "action-evidence", id, "lifecycle.json");
 }
 function writeExclusive(path, value) {
-  mkdirSync3(dirname12(path), { recursive: true, mode: 448 });
+  mkdirSync3(dirname13(path), { recursive: true, mode: 448 });
   const descriptor = openSync4(path, "wx", 384);
   try {
     writeFileSync5(descriptor, jsonBytes(value), "utf8");
@@ -29266,7 +29309,7 @@ function rowObservationIds(row) {
 function writeDebtResult(context, id, row, after, status, observedAt) {
   const path = `action-evidence/${id}/debt-results/${text2(row.debt_key, "debt_key")}.json`;
   const absolute = resolveContained(context.base, path, "debt result path");
-  mkdirSync4(dirname13(absolute), { recursive: true, mode: 448 });
+  mkdirSync4(dirname14(absolute), { recursive: true, mode: 448 });
   const command = `mister-clean action finish ${JSON.stringify(context.base)} --id ${JSON.stringify(id)} --status ${status}`;
   const result = "root debt absent from the post-action registered detector/native observation set";
   writeFileSync6(absolute, jsonBytes({
@@ -30027,7 +30070,7 @@ var nodeCloseoutEngine = {
 // src/mister-clean-invocation-journal.ts
 import { appendFileSync, existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync15 } from "fs";
 import { createHash as createHash23, randomUUID as randomUUID7 } from "crypto";
-import { dirname as dirname14, isAbsolute as isAbsolute22 } from "path";
+import { dirname as dirname15, isAbsolute as isAbsolute22 } from "path";
 function readMisterCleanInvocationJournal(path) {
   if (!isAbsolute22(path)) throw new Error("Mister Clean invocation journal path must be absolute");
   if (!existsSync11(path)) return [];
@@ -30089,7 +30132,7 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
   constructor(path) {
     if (!isAbsolute22(path)) throw new Error("MISTER_CLEAN_INVOCATION_JOURNAL_PATH must be an absolute machine-local path");
     this.#path = path;
-    mkdirSync5(dirname14(path), { recursive: true });
+    mkdirSync5(dirname15(path), { recursive: true });
     this.#assertExistingIntegrity();
   }
   recordStart(input) {
@@ -30335,12 +30378,12 @@ function receiptFindingsFromAudit(family, audit, context) {
 
 // src/closeout/second-pass.ts
 import { existsSync as existsSync14, readFileSync as readFileSync18, realpathSync as realpathSync11, statSync as statSync6 } from "fs";
-import { dirname as dirname16, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+import { dirname as dirname17, join as join18, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
 import { appendFileSync as appendFileSync2, existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync17, realpathSync as realpathSync10, writeFileSync as writeFileSync7 } from "fs";
 import { createHash as createHash25, randomUUID as randomUUID8 } from "crypto";
-import { dirname as dirname15, isAbsolute as isAbsolute23, join as join17, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
+import { dirname as dirname16, isAbsolute as isAbsolute23, join as join17, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
 var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
 var RUN_RECEIPT_SCHEMA_VERSION = "1";
 var RECEIPT_INDEX_FILE = "receipts.index.jsonl";
@@ -30516,7 +30559,7 @@ function realOrResolved(path) {
       return join17(realpathSync10(cursor), ...[...pending].reverse());
     } catch {
     }
-    const parent = dirname15(cursor);
+    const parent = dirname16(cursor);
     if (parent === cursor) return resolved;
     pending.push(cursor.slice(parent.length + 1));
     cursor = parent;
@@ -30550,7 +30593,7 @@ var LocalRunReceiptStore = class {
     const violations = receiptPrivacyViolations(receipt);
     if (violations.length > 0) throw new ReceiptPrivacyError(violations);
     const path = this.receiptPath(receipt);
-    mkdirSync6(dirname15(path), { recursive: true, mode: 448 });
+    mkdirSync6(dirname16(path), { recursive: true, mode: 448 });
     writeFileSync7(path, `${canonicalJson(receipt)}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
     const entry = {
@@ -30817,7 +30860,7 @@ var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "publi
 function legacyBaselineFromBundle(reference) {
   const path = resolve27(reference);
   if (!existsSync14(path)) return void 0;
-  const directory = statSync6(path).isDirectory() ? path : dirname16(path);
+  const directory = statSync6(path).isDirectory() ? path : dirname17(path);
   const deltaPath = join18(directory, "regression-delta.json");
   if (!existsSync14(deltaPath)) return void 0;
   const delta = JSON.parse(readFileSync18(deltaPath, "utf8"));
