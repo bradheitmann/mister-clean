@@ -21,10 +21,29 @@ import {
 } from "./closeout/finding-anchors.js";
 import { publicSafetyValueDigestsInText } from "./closeout/inspection.js";
 import type { RepositoryObject } from "./closeout/repository-object.js";
+import {
+  openSegments,
+  readLiveSegment,
+  readSealedSegment,
+  readSegmentKeys,
+  sealLiveSegmentIfFull,
+  segmentLayout,
+  type SealedSegment,
+  type SegmentLayout,
+  type SegmentSummary,
+} from "./sealed-segments.js";
 
 export const RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
 export const RUN_RECEIPT_SCHEMA_VERSION = "1";
 export const RECEIPT_INDEX_FILE = "receipts.index.jsonl";
+
+/**
+ * Most bytes the live receipt-index segment may hold. A write that would cross
+ * it seals the live index segment first (owner decision 2026-11-04: keep
+ * everything; sealed segments are never deleted). 8 MiB is about 25,000 index entries. Receipt files
+ * themselves are never moved, rewritten or pruned.
+ */
+export const RECEIPT_INDEX_SEGMENT_MAX_BYTES = 8 * 1024 * 1024;
 
 export type ReceiptMode = "CLOSE" | "AUDIT" | "SECOND_PASS";
 export type ReceiptVerdict = "CLEAN" | "NOT_CLEAN" | "AUDIT_ONLY";
@@ -273,13 +292,48 @@ function containedIn(root: string, candidate: string): boolean {
   return relation === "" || (!relation.startsWith(`..${sep}`) && relation !== ".." && !isAbsolute(relation));
 }
 
-/** Machine-local receipt custody: one directory per repository identity plus one index. */
+/** Parse one index segment's lines; positions name the segment once the index has sealed any. */
+function indexEntries(text: string, label: string, live: boolean): ReceiptIndexEntry[] {
+  if (text.length === 0) return [];
+  if (!text.endsWith("\n")) throw new RunReceiptInvalidError([live ? "receipt index must end with a newline" : `receipt index segment ${label} must end with a newline`]);
+  return text.slice(0, -1).split("\n").map((line, index) => {
+    const at = live ? `line ${index + 1}` : `line ${index + 1} of ${label}`;
+    let parsed: unknown;
+    try { parsed = JSON.parse(line); } catch { throw new RunReceiptInvalidError([`receipt index is not valid JSONL at ${at}`]); }
+    const record = object(parsed);
+    if (!record || typeof record.receipt_id !== "string" || typeof record.repository_id_sha256 !== "string" || typeof record.path !== "string") {
+      throw new RunReceiptInvalidError([`receipt index has an invalid entry at ${at}`]);
+    }
+    return record as unknown as ReceiptIndexEntry;
+  });
+}
+
+/** Manifest summary of a sealed index segment: observed_at range, repository digests, receipt ids. */
+function summarizeReceiptIndexSegment(lines: readonly string[]): SegmentSummary {
+  const entries = indexEntries(lines.length === 0 ? "" : `${lines.join("\n")}\n`, "segment", false);
+  return {
+    records: entries.length,
+    first: entries[0]?.observed_at ?? null,
+    last: entries.at(-1)?.observed_at ?? null,
+    groups: entries.map((entry) => entry.repository_id_sha256),
+    keys: entries.map((entry) => entry.receipt_id),
+  };
+}
+
+/** Machine-local receipt custody: one directory per repository identity plus one segmented index. */
 export class LocalRunReceiptStore {
   readonly #root: string;
+  readonly #index: SegmentLayout;
+  readonly #segmentMaxBytes: number;
+  readonly #betweenSealSteps: (() => void) | undefined;
 
-  constructor(root: string) {
+  /** `segmentMaxBytes` and `betweenSealSteps` exist for tests (a small cap; a crash between sealing steps). */
+  constructor(root: string, options: { readonly segmentMaxBytes?: number; readonly betweenSealSteps?: () => void } = {}) {
     if (!isAbsolute(root)) throw new Error("receipt root must be an absolute machine-local path");
     this.#root = root;
+    this.#index = segmentLayout(join(root, RECEIPT_INDEX_FILE));
+    this.#segmentMaxBytes = options.segmentMaxBytes ?? RECEIPT_INDEX_SEGMENT_MAX_BYTES;
+    this.#betweenSealSteps = options.betweenSealSteps;
   }
 
   get root(): string { return this.#root; }
@@ -316,6 +370,12 @@ export class LocalRunReceiptStore {
       observed_at: receipt.observed_at,
       path: relative(this.#root, path).split(sep).join("/"),
     };
+    sealLiveSegmentIfFull(this.#index, {
+      incomingBytes: new TextEncoder().encode(`${canonicalJson(entry)}\n`).byteLength,
+      maxSize: this.#segmentMaxBytes,
+      summarize: summarizeReceiptIndexSegment,
+      betweenSealSteps: this.#betweenSealSteps,
+    });
     appendFileSync(join(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}\n`, { encoding: "utf8", flag: "a", mode: 0o600 });
     return path;
   }
@@ -333,32 +393,39 @@ export class LocalRunReceiptStore {
     return parsed as RunReceipt;
   }
 
+  /** Every index entry in append order: sealed segments (digest-checked) one at a time, then the live one. */
   index(): ReceiptIndexEntry[] {
-    const path = join(this.#root, RECEIPT_INDEX_FILE);
-    if (!existsSync(path)) return [];
-    const contents = readFileSync(path, "utf8");
-    if (contents.length === 0) return [];
-    if (!contents.endsWith("\n")) throw new RunReceiptInvalidError(["receipt index must end with a newline"]);
-    return contents.slice(0, -1).split("\n").map((line, index) => {
-      let parsed: unknown;
-      try { parsed = JSON.parse(line); } catch { throw new RunReceiptInvalidError([`receipt index is not valid JSONL at line ${index + 1}`]); }
-      const record = object(parsed);
-      if (!record || typeof record.receipt_id !== "string" || typeof record.repository_id_sha256 !== "string" || typeof record.path !== "string") {
-        throw new RunReceiptInvalidError([`receipt index has an invalid entry at line ${index + 1}`]);
-      }
-      return record as unknown as ReceiptIndexEntry;
-    });
+    return this.#entries(() => true);
   }
 
-  /** Index entries for one repository identity, oldest first. */
+  /** Index entries for one repository identity, oldest first. Sealed segments
+   * holding no entry for the repository are not read. */
   forRepository(repositoryId: string): ReceiptIndexEntry[] {
     const sha = repositoryIdSha256(repositoryId);
-    return this.index().filter((entry) => entry.repository_id_sha256 === sha)
+    return this.#entries((segment) => segment.groups.includes(sha)).filter((entry) => entry.repository_id_sha256 === sha)
       .sort((left, right) => left.observed_at.localeCompare(right.observed_at) || left.receipt_id.localeCompare(right.receipt_id));
   }
 
+  #entries(include: (segment: SealedSegment) => boolean): ReceiptIndexEntry[] {
+    const manifest = openSegments(this.#index, summarizeReceiptIndexSegment);
+    const entries: ReceiptIndexEntry[] = [];
+    for (const segment of manifest.segments) {
+      if (include(segment)) entries.push(...indexEntries(readSealedSegment(this.#index, segment), segment.file, false));
+    }
+    entries.push(...indexEntries(readLiveSegment(this.#index), RECEIPT_INDEX_FILE, true));
+    return entries;
+  }
+
+  /** Lookup by id: the live segment, then each sealed segment's key index
+   * (newest first); only the one sealed segment that holds the id is read. */
   #pathForId(receiptId: string): string | undefined {
-    const entry = this.index().find((item) => item.receipt_id === receiptId);
+    const manifest = openSegments(this.#index, summarizeReceiptIndexSegment);
+    let entry = indexEntries(readLiveSegment(this.#index), RECEIPT_INDEX_FILE, true).find((item) => item.receipt_id === receiptId);
+    for (const segment of [...manifest.segments].reverse()) {
+      if (entry !== undefined) break;
+      if (!readSegmentKeys(this.#index, segment).includes(receiptId)) continue;
+      entry = indexEntries(readSealedSegment(this.#index, segment), segment.file, false).find((item) => item.receipt_id === receiptId);
+    }
     return entry === undefined ? undefined : join(this.#root, entry.path);
   }
 }
