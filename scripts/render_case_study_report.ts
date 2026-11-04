@@ -4,7 +4,229 @@ import { copyFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { freezeInputs, prepareReportOutput, publishedScorecard, writeReceiptManifest } from "./report_snapshot.mjs";
+import { freezeInputs, prepareReportOutput, publishedScorecard, writeReceiptManifest } from "./report_snapshot.js";
+import type { ScorecardSnapshotInput } from "./report_snapshot.js";
+
+// The three inputs are local, untracked JSON projections; these types name only the fields
+// this renderer reads.
+interface HistoryState {
+  ordinal: number;
+  commit: string;
+  shortCommit: string;
+  date: string;
+  subject: string;
+  files: number;
+  bytes: number;
+  kib: number;
+  deltaBytes: number;
+  deltaFiles: number;
+}
+
+interface CodebaseHistory {
+  metric: { definition: string };
+  repository: { head: string };
+  summary: {
+    stateCount: number;
+    first: HistoryState;
+    last: HistoryState;
+    largestGrowth: HistoryState;
+    largestReduction: HistoryState;
+  };
+  states: HistoryState[];
+}
+
+interface CaseStudyScorecard {
+  snapshot: ScorecardSnapshotInput;
+  tuples: Array<{
+    id: string;
+    model: string;
+    reasoning: string;
+    harness: string;
+    band?: string;
+    rating: string;
+    caveat: string;
+    qualificationState?: string;
+    taskClasses: string[];
+    evidence: string[];
+  }>;
+}
+
+interface PhysicalCount {
+  files: number;
+  physicalLines: number;
+}
+
+interface CensusCategory {
+  id: string;
+  label: string;
+  files: number;
+  bytes: number;
+  physicalLines: number;
+}
+
+interface CensusSurface {
+  categories: CensusCategory[];
+  total: { files: number; bytes: number; physicalLines: number };
+}
+
+interface Percentiles {
+  p95: number;
+  max: number;
+}
+
+interface ComplexityPanel {
+  currentAssessment: string;
+  heuristic: string;
+}
+
+interface CaseStudyState {
+  distributionClassification: string;
+  snapshot: { generatedAt: string; scope: string; verdict: string };
+  debt: {
+    rootRepairUnits: number;
+    rawFindings: number;
+    symptomOnly: number;
+    measurementNote: string;
+    artifactCount: number;
+    counts: {
+      unfinished_completion_marker: number;
+      planning_input_unparsed: number;
+      acceptance_cascade_unexecuted: number;
+      lifecycle_state_unknown: number;
+    };
+  };
+  repository: {
+    commit: string;
+    aheadOfOrigin: number;
+    behindOrigin: number;
+    worktrees: number;
+    dirtyTracked: number;
+    dirtyTrackedUniquePaths: number;
+    dirtyWorktrees: number;
+    untracked: number;
+    stashes: number;
+  };
+  skill: {
+    version: string;
+    publishedVersion: string;
+    commit: string;
+    status: string;
+    repositoryClean: boolean;
+    workingTreePathCount: number;
+    linkedHarnessRegistries: number;
+    canonicalInstallMatches?: boolean;
+    openGaps: string[];
+    workingSourceEvidence: { targetedTests: string };
+  };
+  ci: {
+    main: { commit: string; ci: string; cd: string; ciRun: string; cdRun: string; observedAt: string };
+    activeRemediation: {
+      status: string;
+      currentStagedTree: string;
+      stagedPathCount: number;
+      stagedDiff: string;
+      observedChecks: string;
+      writerReceipt: { manifestSha256: string; summarySha256: string; payloadEntriesVerified: string };
+    };
+    freshHostedQa: {
+      model: string;
+      reasoning: string;
+      harness: string;
+      status: string;
+      findings: string[];
+      targetTree: string;
+      reportSha256: string;
+      manifestSha256: string;
+    };
+    currentHostedQa: {
+      model: string;
+      reasoning: string;
+      harness: string;
+      status: string;
+      targetTree: string;
+      dispatchSha256: string;
+    };
+  };
+  processDebt: {
+    incident: { processGroups: number; reportedAge: string };
+    established: string;
+    notEstablished: string;
+    skillResponse: string;
+  };
+  learnings: Array<{ title: string; detail: string }>;
+  complexity: {
+    snapshotCommit: string;
+    thresholdLabel: string;
+    committed: CensusSurface;
+    ignored: CensusSurface;
+    method: {
+      committedBytes: string;
+      ignoredBytes: string;
+      physicalLines: string;
+      classification: string;
+      staticAnalyzerClassification: string;
+    };
+    structuralShape: ComplexityPanel & {
+      productionPhysicalLinesP95: number;
+      productionPhysicalLinesMax: number;
+      productionFiles: number;
+      productionFilesOver500PhysicalLines: number;
+      productionFilesOver1000PhysicalLines: number;
+      sourceComponents: { total: number };
+      workspaceCounts: { rootPackageJson: number; pnpmWorkspaceYaml: number };
+      staticAnalyzer: {
+        functions: number;
+        functionLengthPhysicalLines: Percentiles;
+        cyclomaticComplexity: Percentiles;
+        dependencyCycles: number;
+        unresolvedRelativeImports: number;
+        topHotspot: { path: string; symbol: string; physicalLines: number; cyclomaticComplexity: number };
+      };
+    };
+    dependencyVendorBoundary: ComplexityPanel & {
+      trackedVendoredPackages: number;
+      trackedVendorShareBytesPercent: number;
+      ignoredDependencyToTrackedTreeRatio: number;
+      externalDirectRuntimeDependencies: number;
+      trackedVendorBytes: number;
+      trackedVendorPhysicalLines: number;
+      ignoredDependencyBytes: number;
+    };
+    duplicationChangeAmplification: ComplexityPanel & {
+      duplicateTsconfigCopies: number;
+      redundantDuplicateBytes: number;
+      componentsPerCommit: Percentiles;
+      filesPerCommit: Percentiles & { p50: number };
+    };
+    compositionPlanningDrift: ComplexityPanel & {
+      ratiosByPhysicalLines: {
+        planningToProduction: number;
+        publicDocsToProduction: number;
+        committedDocsToProduction: number;
+        ignoredLocalEvidenceToProduction: number;
+        testsToProduction: number;
+      };
+      documentationSurfaces: {
+        committedPublicAndPlanning: PhysicalCount;
+        production: PhysicalCount;
+        ignoredLocalEvidencePlanning: PhysicalCount;
+        allObservedDocumentationContext: { physicalLines: number; physicalLineRatioToProduction: number; boundary: string };
+      };
+      recentFirstParentWindow: { planningNetPhysicalLines: number; productionPlusTestsNetPhysicalLines: number };
+      activePlanning: PhysicalCount;
+      doneAndArchivedPlanning: PhysicalCount;
+    };
+    buildContextFinalSurface: ComplexityPanel & {
+      trackedDockerfiles: number;
+      dockerignoreFiles: number;
+      dockerCopyDirectives: number;
+      finalImageInventory: string;
+      compressedGitArchiveBytes: number;
+      nonGitWorkingTreeLogicalPaths: number;
+      nonGitWorkingTreeLogicalPathBytes: number;
+    };
+  };
+}
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const assetRoot = join(root, "assets", "codebase-state-dashboard");
@@ -20,33 +242,33 @@ const instrumentPath = join(assetRoot, "index.html");
 const productMarkPath = join(assetRoot, "product-mark.svg");
 const outputProductMarkPath = join(outputRoot, "product-mark.svg");
 const frozen = freezeInputs([historyPath, statePath, scorecardPath, scorecardTemplatePath, tokenPath, instrumentPath, productMarkPath]);
-const history = JSON.parse(frozen.bytes.get(historyPath).toString("utf8"));
-const state = JSON.parse(frozen.bytes.get(statePath).toString("utf8"));
-const rawScorecard = JSON.parse(frozen.bytes.get(scorecardPath).toString("utf8"));
+const history = JSON.parse(frozen.bytes.get(historyPath)!.toString("utf8")) as CodebaseHistory;
+const state = JSON.parse(frozen.bytes.get(statePath)!.toString("utf8")) as CaseStudyState;
+const rawScorecard = JSON.parse(frozen.bytes.get(scorecardPath)!.toString("utf8")) as CaseStudyScorecard;
 const scorecard = publishedScorecard(rawScorecard, {
-  "model-scorecard.html": frozen.hashes["model-scorecard.html"],
-  "okgo-model-scorecard.json": frozen.hashes["okgo-model-scorecard.json"],
+  "model-scorecard.html": frozen.hashes["model-scorecard.html"]!,
+  "okgo-model-scorecard.json": frozen.hashes["okgo-model-scorecard.json"]!,
 });
 prepareReportOutput(assetRoot, outputRoot);
 if (resolve(productMarkPath) !== resolve(outputProductMarkPath)) copyFileSync(productMarkPath, outputProductMarkPath);
 const receipt = writeReceiptManifest(outputRoot, scorecard, { repositoryPath: targetRepositoryPath });
-const instrument = frozen.bytes.get(instrumentPath).toString("utf8");
+const instrument = frozen.bytes.get(instrumentPath)!.toString("utf8");
 const baseStyles = instrument.match(/<style>([\s\S]*?)<\/style>/)?.[1];
 if (!baseStyles) throw new Error("Could not extract dashboard base styles");
 
-const escapeHtml = (value) => String(value)
+const escapeHtml = (value: unknown) => String(value)
   .replaceAll("&", "&amp;")
   .replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;");
 const integer = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-const date = (value) => new Date(value).toLocaleString("en-US", {
+const date = (value: string) => new Date(value).toLocaleString("en-US", {
   dateStyle: "medium",
   timeStyle: "short",
   timeZone: "America/Denver",
 });
-const signedKiB = (bytes) => `${bytes >= 0 ? "+" : ""}${decimal.format(bytes / 1024)}`;
+const signedKiB = (bytes: number) => `${bytes >= 0 ? "+" : ""}${decimal.format(bytes / 1024)}`;
 
 const chart = (() => {
   const width = 900;
@@ -57,8 +279,8 @@ const chart = (() => {
   const maximum = Math.max(...values);
   const floor = Math.max(0, minimum - (maximum - minimum) * 0.04);
   const range = Math.max(1, maximum - floor);
-  const x = (index) => inset.left + (index / Math.max(1, history.states.length - 1)) * (width - inset.left - inset.right);
-  const y = (value) => inset.top + ((maximum - value) / range) * (height - inset.top - inset.bottom);
+  const x = (index: number) => inset.left + (index / Math.max(1, history.states.length - 1)) * (width - inset.left - inset.right);
+  const y = (value: number) => inset.top + ((maximum - value) / range) * (height - inset.top - inset.bottom);
   const path = history.states.map((entry, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(2)} ${y(entry.bytes).toFixed(2)}`).join(" ");
   const markers = [history.summary.first, history.summary.largestGrowth, history.summary.largestReduction, history.summary.last]
     .filter((entry, index, all) => all.findIndex((item) => item.commit === entry.commit) === index)
@@ -84,12 +306,12 @@ const commitRows = history.states.map((entry) => `
     <td class="${entry.deltaBytes < 0 ? "state-verified" : entry.deltaBytes > 0 ? "state-active" : ""}">${signedKiB(entry.deltaBytes)}</td>
   </tr>`).join("");
 
-const statusClass = (value) => /failure|blocked|not clean/i.test(value)
+const statusClass = (value: string) => /failure|blocked|not clean/i.test(value)
   ? "state-open"
   : /complete|strong|excellent|exceptional|synchronized/i.test(value)
     ? "state-verified"
     : "state-active";
-const qualificationLabels = {
+const qualificationLabels: Record<string, string> = {
   disqualified: "Disqualified",
   diagnostic_only: "Diagnostic only",
   qualified: "Qualified",
@@ -122,35 +344,35 @@ const installedCopiesMatch = state.skill.canonicalInstallMatches === true;
 const installCopy = installedCopiesMatch
   ? "Canonical installed copies match this source snapshot."
   : "Canonical installed copies do not yet match this working source; changes remain unreleased.";
-const mebibytes = (value) => `${decimal.format(value / (1024 * 1024))} MiB`;
+const mebibytes = (value: number) => `${decimal.format(value / (1024 * 1024))} MiB`;
 const percent = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const complexity = state.complexity;
-const assertReport = (condition, message) => {
+const assertReport: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`Case-study report invariant failed: ${message}`);
 };
-const categoryTotal = (categories, field) => categories.reduce((sum, entry) => sum + entry[field], 0);
+const categoryTotal = (categories: CensusCategory[], field: "files" | "bytes" | "physicalLines") => categories.reduce((sum, entry) => sum + entry[field], 0);
 assertReport(complexity?.snapshotCommit === state.repository.commit, "complexity census is not bound to the repository snapshot");
 assertReport(complexity.thresholdLabel === "local governance heuristic, not industry truth", "complexity threshold label changed");
 for (const surface of [complexity.committed, complexity.ignored]) {
-  for (const field of ["files", "bytes", "physicalLines"]) {
+  for (const field of ["files", "bytes", "physicalLines"] as const) {
     assertReport(categoryTotal(surface.categories, field) === surface.total[field], `${field} category sum does not match its surface total`);
   }
 }
 assertReport(complexity.committed.categories.length === 8, "committed census must contain eight mutually exclusive categories");
 assertReport(complexity.ignored.categories.length === 4, "ignored census must contain four mutually exclusive classes");
-const committedCategory = (id) => complexity.committed.categories.find((entry) => entry.id === id);
-const ignoredCategory = (id) => complexity.ignored.categories.find((entry) => entry.id === id);
+const committedCategory = (id: string) => complexity.committed.categories.find((entry) => entry.id === id);
+const ignoredCategory = (id: string) => complexity.ignored.categories.find((entry) => entry.id === id);
 const productionCategory = committedCategory("production_code");
 const publicDocsCategory = committedCategory("markdown_public_docs");
 const planningCategory = committedCategory("planning_protocol_docs");
 const ignoredEvidenceCategory = ignoredCategory("ignored_local_evidence_planning");
 assertReport(productionCategory && publicDocsCategory && planningCategory && ignoredEvidenceCategory, "documentation ratio categories are incomplete");
-const round3 = (value) => Math.round(value * 1000) / 1000;
+const round3 = (value: number) => Math.round(value * 1000) / 1000;
 assertReport(complexity.compositionPlanningDrift.ratiosByPhysicalLines.committedDocsToProduction === round3((publicDocsCategory.physicalLines + planningCategory.physicalLines) / productionCategory.physicalLines), "committed documentation ratio is stale");
 assertReport(complexity.compositionPlanningDrift.ratiosByPhysicalLines.ignoredLocalEvidenceToProduction === round3(ignoredEvidenceCategory.physicalLines / productionCategory.physicalLines), "ignored local-evidence ratio is stale");
 assertReport(complexity.compositionPlanningDrift.documentationSurfaces.allObservedDocumentationContext.physicalLines === publicDocsCategory.physicalLines + planningCategory.physicalLines + ignoredEvidenceCategory.physicalLines, "cross-surface documentation total is stale");
 
-const censusRows = (surface) => surface.categories.map((entry) => `
+const censusRows = (surface: CensusSurface) => surface.categories.map((entry) => `
   <tr>
     <td><strong>${escapeHtml(entry.label)}</strong><span class="table-sub">${escapeHtml(entry.id)}</span></td>
     <td>${integer.format(entry.files)}</td>
@@ -248,7 +470,7 @@ const html = `<!doctype html>
         <strong>OKGO · MAIN · ${history.repository.head.slice(0, 7)}</strong>
         <span>${escapeHtml(date(state.snapshot.generatedAt))} MDT</span>
         <span>${escapeHtml(state.snapshot.scope)}</span>
-        <span>SOURCES ${frozen.hashes["okgo-case-study-state.json"].slice(0, 12)} · RECEIPTS ${receipt.digest.slice(0, 12)} · ${receipt.bindingSummary.content_or_commit_bound} BOUND / ${receipt.bindingSummary.assertion_only} ASSERTION ONLY</span>
+        <span>SOURCES ${frozen.hashes["okgo-case-study-state.json"]!.slice(0, 12)} · RECEIPTS ${receipt.digest.slice(0, 12)} · ${receipt.bindingSummary.content_or_commit_bound} BOUND / ${receipt.bindingSummary.assertion_only} ASSERTION ONLY</span>
       </div>
     </div>
   </header>

@@ -7241,7 +7241,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument2(source, options = {}) {
+    function parseDocument3(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -7267,7 +7267,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument2(src, options);
+      const doc = parseDocument3(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
@@ -7303,7 +7303,7 @@ var require_public_api = __commonJS({
     }
     exports.parse = parse;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument2;
+    exports.parseDocument = parseDocument3;
     exports.stringify = stringify;
   }
 });
@@ -30938,6 +30938,7 @@ function runSecondPass(input) {
 }
 
 // src/toolchain-pin.ts
+var import_yaml4 = __toESM(require_dist(), 1);
 import { existsSync as existsSync15, readFileSync as readFileSync19 } from "fs";
 import { join as join19, resolve as resolve28 } from "path";
 var BUN_VERSION_FILE = ".bun-version";

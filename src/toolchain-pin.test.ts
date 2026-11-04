@@ -51,6 +51,24 @@ describe("toolchain pin", () => {
       .toEqual([expect.stringContaining("pins 1.3.9")]);
   });
 
+  it("ci inputs: only the step's own with inputs count; overrides, expressions and remote reusable workflows fail closed", () => {
+    const uses = "      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n";
+    const wrap = (body: string) => `jobs:\n  a:\n    steps:\n${body}`;
+    // QA counterexample 1: the version key under env is not an action input.
+    expect(ciBunPinErrors(wrap(`${uses}        env:\n          bun-version-file: .bun-version\n`), "1.4.0"))
+      .toEqual([expect.stringContaining("sets neither")]);
+    // QA counterexample 2: an alternate download URL replaces version resolution.
+    expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version-file: .bun-version\n          bun-download-url: https://example.invalid/bun.zip\n`), "1.4.0"))
+      .toEqual([expect.stringContaining("bun-download-url")]);
+    expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version: \${{ matrix.bun }}\n`), "1.4.0"))
+      .toEqual([expect.stringContaining("expression")]);
+    expect(ciBunPinErrors(`jobs:\n  r:\n    uses: someone/else/.github/workflows/build.yml@main\n`, "1.4.0"))
+      .toEqual([expect.stringContaining("remote reusable workflow")]);
+    expect(ciBunPinErrors("jobs: [unclosed\n", "1.4.0")).toEqual([expect.stringContaining("not parseable")]);
+    // Quoted values and trailing comments parse as plain values.
+    expect(ciBunPinErrors(wrap(`${uses}        with:\n          bun-version: "1.4.0" # pinned\n`), "1.4.0")).toEqual([]);
+  });
+
   it("mismatch: a different running bun is refused with both versions named", () => {
     const root = fixture("1.4.0");
     expect(checkToolchainPin(root, "1.4.0")).toMatchObject({ ok: true, pinned: true, version: "1.4.0" });
