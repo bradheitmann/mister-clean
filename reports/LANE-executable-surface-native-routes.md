@@ -67,8 +67,18 @@ command" notes, 4 "unresolved declared runtime target" (`./dist/control-plane.js
 `./dist/planning.js`, `./dist/public.js`, `dist/stdio.js`), 16 "release input
 closure requires native evidence" and 14 "runtime dependency closure" reasons.
 
-**After (this branch):** the candidate is still listed, but with exactly three
-obligations and nothing else:
+**After (this branch, measured on the tip with `audit semantic . --json`,
+evidence split on `;`):** the candidate is still listed. Counts, main → tip:
+
+| reason class | main 24954d2 | tip |
+|---|---|---|
+| `unsupported command` / `unsupported shell syntax` notes from the static recognizer | 37 | 26 |
+| `unresolved declared runtime target` | 4 | 0 |
+| `release input closure requires native evidence` | 16 | 3 |
+| `validation route unestablished` + `runtime dependency closure requires native evidence` | 25 | 0 |
+
+(QA counted 34 → 21 for the first row with a different split; the direction
+and the other rows agree.) The three release obligations that remain are:
 
 ```
 release input closure requires native evidence: deploy
@@ -78,10 +88,15 @@ release input closure requires native evidence: prepack
 
 All four dist targets resolve (`declared target … built by ci.yml#verify step
 'Build the tagged checkout in place for the release source check' (if:
-startsWith(github.ref, 'refs/tags/v')) -> build:raw (tsup tsup.config.ts)`), 98
-files have named native routes, zero "unsupported command", zero "validation
-route unestablished", zero "runtime dependency closure". The three that remain
-are real gaps under fail-closed, not detector weaknesses: `deploy` ends in
+startsWith(github.ref, 'refs/tags/v')) -> build:raw (tsup tsup.config.ts)`) and
+98 files have named native routes. The 26 remaining static notes belong to
+scripts no credited workflow step reaches (`build`, `build:verified`,
+`check`, `generated:*`, `pack:check`, `release:*`, `test`, `test:node`, …):
+the untagged `verify` job runs only `pnpm run ci:check`, a bun capsule script
+whose internal build and test matrix the detector does not read, so those
+scripts are reached only through that opaque capsule and their static
+diagnostics stay in the evidence. The three obligations are real gaps under
+fail-closed, not detector weaknesses: `deploy` ends in
 `wrangler deploy` (an unmodelled tool whose inputs come from its own config),
 `pack:check` ends in `pnpm … pack --dry-run` (unmodelled tool), and `prepack`
 is an inline `node -e "…"` (quoted inline interpreter; also outside the
