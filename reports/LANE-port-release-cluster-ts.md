@@ -155,3 +155,16 @@ Rerun on the merged tip `4731adb`:
 Last green: `pnpm run test:node` on `4731adb` (above). Last red: none on the tip; each mutant's RED is recorded above.
 Scratch for deletion after QA: `$TMPDIR/port-release-lane/` (logs, hashes, the node 22.23.4 tarball, the dry-run scratch
 clone `dryrun-src`, `release-out` and `release-out-2` with their receipts, mutant copies, the sterile HOME).
+
+## Correction: the publisher run reached the public registry (PM ruling, 2026-11-04)
+
+What was run: twice, once for each dry-run archive, the retained `publish_release_archive.ts` ran against the real
+https://registry.npmjs.org/ under `env -i`. It ran with an empty scratch HOME and XDG config and empty user and global
+npm config, after `pnpm whoami` returned unauthorized. Each run made read-only `pnpm view` requests and one
+unauthenticated `pnpm publish` request, which npm rejected with 404. The PM verified that nothing was published. This
+was an outward action the owner has ruled out, and its safety depended on no token being found. From now on, release
+work exercises the publisher only against a fail-closed local registry URL (for example `http://127.0.0.1:9`) or a
+dry-run mode, never the public registry. Finding (O-REL-PUBLISH-DRYRUN-1, next bounded slice): the publisher has no such
+mode. It hard-codes `https://registry.npmjs.org/` in every `pnpm` call and in the receipt binding it enforces, and it
+refuses any receipt bound to another registry. The only fail-closed route today is the one `release_path.test.ts` uses,
+a fake `pnpm` placed first on PATH.
