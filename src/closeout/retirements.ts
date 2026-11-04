@@ -40,6 +40,8 @@ export interface RetirementRuling {
 
 export interface RetirementRecord {
   readonly record_path: string;
+  /** SHA-256 of the retirement record's own bytes, as read. */
+  readonly record_sha256: string;
   readonly slug: string;
   readonly roots: readonly string[];
   readonly ruling: RetirementRuling;
@@ -183,6 +185,7 @@ export function readRetirements(repository: string): RetirementRecord[] {
     }
     records.push({
       record_path: relativePath,
+      record_sha256: sha256FileBytes(join(repository, relativePath)),
       slug: String(record.slug),
       roots: [...new Set(normalizedRoots)].sort(),
       ruling: {

@@ -20685,6 +20685,41 @@ async function evidenceRef(files, base, ref, path, errors, allowPlaceholders, cl
   return loaded.data;
 }
 
+// src/closeout/retirement-ratification.ts
+var RETIREMENT_RATIFICATION_NORMALIZER = "mister-clean/retirement-ratification@1";
+var RETIREMENT_RULING_MINTED_BY = "mister-clean prepare";
+var RETIREMENT_RATIFICATION_NOTE = "retirement ratification: not verifiable (O-RET-2) \u2014 owner decision required";
+function retirementRatifications(applications) {
+  const grouped = /* @__PURE__ */ new Map();
+  for (const raw of applications) {
+    const application = object5(raw);
+    if (!application || typeof application.record_path !== "string") continue;
+    const group = grouped.get(application.record_path) ?? { record_sha256: typeof application.record_sha256 === "string" ? application.record_sha256 : "", roots: /* @__PURE__ */ new Set(), debt_ids: /* @__PURE__ */ new Set() };
+    if (group.record_sha256 !== application.record_sha256) group.record_sha256 = "";
+    if (typeof application.root === "string") group.roots.add(application.root);
+    for (const id of array2(application.debt_ids) ?? []) if (typeof id === "string") group.debt_ids.add(id);
+    grouped.set(application.record_path, group);
+  }
+  return [...grouped.entries()].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([record_path, group]) => ({ record_path, record_sha256: group.record_sha256, roots: [...group.roots].sort(), debt_ids: [...group.debt_ids].sort() }));
+}
+function retirementRatificationCauseKey(ratification) {
+  return { record_path: ratification.record_path, record_sha256: ratification.record_sha256 };
+}
+function retirementRatificationObservationId(recordSha256) {
+  return canonicalObservationId({ source_id: RETIREMENT_RATIFICATION_NORMALIZER, source_native_fingerprint: recordSha256 });
+}
+function retirementRatificationProjections(applications, repoId) {
+  return retirementRatifications(applications).filter((ratification) => /^[0-9a-f]{64}$/u.test(ratification.record_sha256)).map((ratification) => {
+    const causeKey = retirementRatificationCauseKey(ratification);
+    return {
+      debt_key: canonicalRootDebtKey({ repo_id: repoId, normalizer: RETIREMENT_RATIFICATION_NORMALIZER, cause_key: causeKey }),
+      normalizer: RETIREMENT_RATIFICATION_NORMALIZER,
+      cause_key: causeKey,
+      observation_ids: [retirementRatificationObservationId(ratification.record_sha256)]
+    };
+  });
+}
+
 // src/closeout/bundle-action-evidence.ts
 function nativeGateRootProjections(evidence, repoId) {
   const observationIds = [];
@@ -20864,6 +20899,7 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
       }
     }
   }
+  const mintedSources = /* @__PURE__ */ new Map();
   for (const [index, raw] of array2(report.completion_debts).entries()) {
     const debt = object5(raw);
     if (!debt) continue;
@@ -20894,9 +20930,17 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
         for (const field2 of ["actor", "at", "scope", "rationale"]) if (record4[field2] !== exception[field2]) errors.push(`${epath}: ruling disagrees on ${field2}`);
         if (record4.debt_id !== debt.id) errors.push(`${epath}: ruling debt_id mismatch`);
         if (record4.request_sha256 !== object5(bundle.criteria_discovery)?.request_sha256) errors.push(`${epath}: ruling must bind the exact operative request`);
+        const retired = typeof exception.scope === "string" && exception.scope.startsWith("retired root ");
+        if (record4.minted_by !== void 0 || retired) {
+          if (record4.minted_by !== RETIREMENT_RULING_MINTED_BY) errors.push(`${epath}: a retired-root ruling must be the tool-minted record (minted_by ${JSON.stringify(RETIREMENT_RULING_MINTED_BY)}); it is never an operator's own act`);
+          const source = object5(record4.source);
+          if (!source || typeof source.path !== "string" || typeof source.sha256 !== "string" || !HEX643.test(source.sha256)) errors.push(`${epath}: tool-minted ruling requires source {path, sha256} binding the retirement record`);
+          mintedSources.set(String(debt.id), { path: source?.path, sha256: source?.sha256, epath });
+        }
       }
     }
   }
+  if (!allowPlaceholders) await validateRetirementRatifications(report, repo, files, mintedSources, errors);
   for (const [name, raw] of Object.entries(object5(report.claims) ?? {})) {
     const claim = object5(raw);
     if (claim?.state !== "established") continue;
@@ -20917,6 +20961,36 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
       }
     }
   }
+}
+async function validateRetirementRatifications(report, repo, files, mintedSources, errors) {
+  const debts = array2(report.completion_debts).map(object5).filter((debt) => !!debt);
+  const ratificationDebts = debts.filter((debt) => debt.normalizer === RETIREMENT_RATIFICATION_NORMALIZER);
+  const expected = retirementRatifications(array2(report.retirement_applications));
+  const covered = /* @__PURE__ */ new Set();
+  for (const ratification of expected) {
+    const path = `$.report.retirement_applications[${JSON.stringify(ratification.record_path)}]`;
+    if (!HEX643.test(ratification.record_sha256)) errors.push(`${path}: record_sha256 must be one lowercase SHA-256 of the retirement record`);
+    for (const debt of ratificationDebts.filter((candidate) => object5(candidate.cause_key)?.record_path === ratification.record_path)) {
+      if (debt.state !== "open" || debt.disposition !== "decision_or_coordination_required") {
+        errors.push(`${path}: ratification debt ${String(debt.id)} must stay open with disposition decision_or_coordination_required`);
+      }
+      if (!stableEqual2(sortedUnique(array2(debt.affected_paths).map(String)), ratification.roots)) {
+        errors.push(`${path}: ratification debt affected_paths must equal the retired roots ${JSON.stringify(ratification.roots)}`);
+      }
+    }
+    for (const id of ratification.debt_ids) {
+      covered.add(id);
+      const source = mintedSources.get(id);
+      if (!source) errors.push(`${path}: retired debt ${id} lacks its tool-minted ruling record`);
+      else if (source.path !== ratification.record_path || source.sha256 !== ratification.record_sha256) errors.push(`${source.epath}: minted source does not bind the applied retirement record`);
+    }
+    if (repo) {
+      const live = `${repo.replace(/\/+$/u, "")}/${ratification.record_path}`;
+      const observed = await files.isFile(live) ? sha2569(await files.readBytes(live)) : "absent";
+      if (observed !== ratification.record_sha256) errors.push(`${path}: source sha256 ${ratification.record_sha256} does not match the live retirement record (${observed})`);
+    }
+  }
+  for (const [id, source] of mintedSources) if (!covered.has(id)) errors.push(`${source.epath}: tool-minted ruling for ${id} is not in any retirement application`);
 }
 async function validateNativeGateControlRecord(controlValue, path, closingRepositoryObject, base, files, requirePassing, required, allowPlaceholders, clock, errors) {
   if (controlValue === void 0) {
@@ -22926,6 +23000,13 @@ async function validateModernRegressionClosure(context, state) {
         regressionRepoId
       )) addExpectedRoot(projection);
     }
+  }
+  for (const projection of retirementRatificationProjections(array2(report.retirement_applications), regressionRepoId)) {
+    for (const id of projection.observation_ids) {
+      detectorObservationIds2.add(id);
+      baselineObservationIds.add(id);
+    }
+    addExpectedRoot(projection);
   }
   const successorNativeEvidence = await validateNativeGateControlRecord(
     object5(bundle.successor_readiness)?.native_gate_control,
@@ -27002,6 +27083,7 @@ function readRetirements(repository) {
     }
     records.push({
       record_path: relativePath,
+      record_sha256: sha256FileBytes(join11(repository, relativePath)),
       slug: String(record4.slug),
       roots: [...new Set(normalizedRoots)].sort(),
       ruling: {
@@ -27851,12 +27933,20 @@ function stageRetirementRulings(repository, bundleDirectory, retirements) {
     staged.add(path);
   }
 }
-function bindRetirementRulings(debts, bundleDirectory, requestSha256) {
+function bindRetirementRulings(debts, bundleDirectory, requestSha256, applications, retirements) {
+  const sourceByDebt = /* @__PURE__ */ new Map();
+  for (const application of applications) {
+    const record4 = retirements.find((candidate) => candidate.record_path === application.record_path);
+    if (!record4) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
+    for (const id of application.debt_ids) sourceByDebt.set(id, { path: record4.record_path, sha256: record4.record_sha256 });
+  }
   return debts.map((debt) => {
     const exception = debt.exception;
     if (debt.state !== "accepted_exception" || !exception) return debt;
     const scope = String(exception.scope ?? "");
     if (!scope.startsWith("retired root ")) return debt;
+    const source = sourceByDebt.get(String(debt.id));
+    if (!source) throw new Error(`retired debt ${String(debt.id)} has no retirement application`);
     const ruling = exception.ref;
     const relativePath = join13("retirement-rulings", `${String(debt.id)}.json`);
     mkdirSync2(join13(bundleDirectory, "retirement-rulings"), { recursive: true });
@@ -27869,7 +27959,9 @@ function bindRetirementRulings(debts, bundleDirectory, requestSha256) {
       scope: exception.scope,
       rationale: exception.rationale,
       request_sha256: requestSha256,
-      ruling_ref: { path: ruling.path, sha256: ruling.sha256 }
+      ruling_ref: { path: ruling.path, sha256: ruling.sha256 },
+      minted_by: RETIREMENT_RULING_MINTED_BY,
+      source
     });
     return {
       ...debt,
@@ -28141,7 +28233,33 @@ function assemblePrepareReport(context) {
     ...nativeRootDebts
   ];
   const retirementOutcome = applyRetirements(completionDebts, retirements);
-  const appliedDebts = bindRetirementRulings(retirementOutcome.debts, bundleDirectory, requestSha256);
+  const retirementApplications = retirementOutcome.applications.map((application) => {
+    const record4 = retirements.find((candidate) => candidate.record_path === application.record_path);
+    if (!record4) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
+    return { ...application, record_sha256: record4.record_sha256 };
+  });
+  const ratificationDebts = retirementRatifications(retirementApplications).map((ratification) => {
+    const record4 = retirements.find((candidate) => candidate.record_path === ratification.record_path);
+    if (!record4) throw new Error(`retirement application cites an unread record: ${ratification.record_path}`);
+    return baselineDebt(repoId, {
+      id: `DEBT-RETIREMENT-RATIFICATION-${sha25611(Buffer.from(record4.record_path, "utf8")).slice(0, 16).toUpperCase()}`,
+      class: "retirement_ratification",
+      observation_count: 1,
+      affected_paths: [...ratification.roots],
+      affected_refs: [record4.record_path, record4.ruling.evidence.path],
+      repair_boundary: `decision:${record4.record_path}`,
+      procedure: `${RETIREMENT_RATIFICATION_NOTE}. ${ratification.debt_ids.length} debt(s) under ${ratification.roots.join(", ")} are held as accepted_exception on the strength of ${record4.record_path}, which names ${JSON.stringify(record4.ruling.author)} but which any committer can write. An owner must ratify the retirement, or it must be withdrawn, before the run can be CLEAN.`,
+      state: "open",
+      disposition: "decision_or_coordination_required",
+      evidence: []
+    }, RETIREMENT_RATIFICATION_NORMALIZER, retirementRatificationCauseKey(ratification), [
+      retirementRatificationObservationId(ratification.record_sha256)
+    ]);
+  });
+  const appliedDebts = [
+    ...bindRetirementRulings(retirementOutcome.debts, bundleDirectory, requestSha256, retirementOutcome.applications, retirements),
+    ...ratificationDebts
+  ];
   const acceptedExceptions = appliedDebts.filter((debt) => debt.state === "accepted_exception").length;
   const rootDebtRows = appliedDebts.map((debt) => ({
     debt_key: debt.debt_key,
@@ -28177,7 +28295,7 @@ function assemblePrepareReport(context) {
     })),
     verdict: "NOT_CLEAN",
     debt_census: { discovered: appliedDebts.length, paid: 0, accepted_exception: acceptedExceptions },
-    retirement_applications: retirementOutcome.applications,
+    retirement_applications: retirementApplications,
     public_safety_debt_accounting: {
       debt_count: publicSafetyRootDebts.length,
       exempted_finding_count: publicSafetyExemptions.exempted.length
@@ -28233,7 +28351,10 @@ function assemblePrepareReport(context) {
     Object.assign(asObject(asObject(report.dimensions, "closeout-report.dimensions").completion_debt, "closeout-report.dimensions.completion_debt"), {
       state: "open",
       evidence: [{ kind: "debt_census", object: baselineRepositoryObject.sha256, command: "mister-clean prepare closeout census", result: `${completionDebts.length} total root debts (${planningDebts.length} planning, ${publicSafetyRootDebts.length} public safety, ${githubActionsRootDebts.length} GitHub Actions, ${semanticDebts.length} semantic, ${nativeRootDebts.length} native gate)`, observed_at: now }],
-      notes: ["Executable planning, public-safety, workflow-governance, semantic, and native-gate audits found payable successor-readiness debt."]
+      notes: [
+        "Executable planning, public-safety, workflow-governance, semantic, and native-gate audits found payable successor-readiness debt.",
+        ...ratificationDebts.length > 0 ? [`${RETIREMENT_RATIFICATION_NOTE} (${ratificationDebts.length} retirement record(s)).`] : []
+      ]
     });
   }
   if (planningDebts.length > 0) {
