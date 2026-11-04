@@ -9,7 +9,7 @@ vi.mock("./toolchain-pin.js", async (importOriginal) => {
   return { ...original, runningBunVersion: () => probe.version };
 });
 
-const { checkToolchainPin, readBunPin } = await import("./toolchain-pin.js");
+const { checkToolchainPin, ciBunPinErrors, readBunPin } = await import("./toolchain-pin.js");
 const { runCli } = await import("./cli.js");
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -28,15 +28,27 @@ afterEach(() => {
 });
 
 describe("toolchain pin", () => {
-  it("ci pin: .bun-version equals the bun-version CI installs", () => {
+  it("ci pin: every setup-bun step takes the repository pin, and the pin is a reviewed exact version", () => {
     const workflow = readFileSync(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8");
-    // Every setup-bun step either reads .bun-version directly or names the same literal.
-    const literals = [...workflow.matchAll(/^\s*bun-version:\s*([0-9.]+)\s*$/gmu)].map((match) => match[1]);
-    const fromFile = [...workflow.matchAll(/^\s*bun-version-file:\s*\.bun-version\s*$/gmu)].length;
-    const setups = [...workflow.matchAll(/uses:\s*oven-sh\/setup-bun@/gu)].length;
-    expect(setups).toBeGreaterThan(0);
-    expect(literals.length + fromFile).toBe(setups);
-    for (const ciPin of literals) expect(readBunPin(repositoryRoot)).toBe(ciPin);
+    const pin = readBunPin(repositoryRoot);
+    expect(pin).toMatch(/^\d+\.\d+\.\d+$/u);
+    expect(workflow).toMatch(/uses:\s*oven-sh\/setup-bun@/u);
+    expect(ciBunPinErrors(workflow, pin!)).toEqual([]);
+    // A bump must change both reviewed places: .bun-version and package.json engines.bun.
+    const manifest = JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")) as { engines?: { bun?: string } };
+    expect(manifest.engines?.bun).toBe(pin);
+  });
+
+  it("ci steps: each setup-bun step is checked on its own", () => {
+    const step = (inputs: string) => `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n        with:\n${inputs}`;
+    const ok = `jobs:\n  a:\n    steps:\n${step("          bun-version-file: .bun-version\n")}      - run: echo next\n`;
+    expect(ciBunPinErrors(ok, "1.4.0")).toEqual([]);
+    const secondUnpinned = `${ok}${step("          node-version: 22\n")}`;
+    expect(ciBunPinErrors(secondUnpinned, "1.4.0")).toEqual([expect.stringContaining("sets neither")]);
+    expect(ciBunPinErrors(`jobs:\n  a:\n    steps:\n${step("          bun-version: 1.4.0\n          bun-version-file: .bun-version\n")}`, "1.4.0"))
+      .toEqual([expect.stringContaining("sets both")]);
+    expect(ciBunPinErrors(`jobs:\n  a:\n    steps:\n${step("          bun-version: 1.3.9\n")}`, "1.4.0"))
+      .toEqual([expect.stringContaining("pins 1.3.9")]);
   });
 
   it("mismatch: a different running bun is refused with both versions named", () => {

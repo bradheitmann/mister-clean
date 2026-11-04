@@ -28,6 +28,40 @@ export function readBunPin(root: string): string | undefined {
 }
 
 /**
+ * Every `oven-sh/setup-bun` step in a workflow must take its version from the
+ * pin: exactly one of `bun-version-file: .bun-version` or a `bun-version`
+ * literal equal to the pin. Steps are checked one by one (a step with neither
+ * input falls back to the action's default, not the pin; with both, the
+ * literal silently wins), so a count over the whole file cannot hide one.
+ */
+export function ciBunPinErrors(workflow: string, pin: string): string[] {
+  const lines = workflow.split("\n");
+  const errors: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (!/uses:\s*oven-sh\/setup-bun@/u.test(line)) continue;
+    const stepIndent = /^\s*-\s/u.test(line) ? line.indexOf("-") : line.search(/\S/u);
+    let literal: string | undefined;
+    let fromFile: string | undefined;
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const candidate = lines[next] ?? "";
+      if (candidate.trim() === "") continue;
+      if (candidate.search(/\S/u) <= stepIndent) break;
+      const version = candidate.match(/^\s*bun-version:\s*['"]?([^'"\s#]+)['"]?\s*(?:#.*)?$/u);
+      if (version) literal = version[1];
+      const file = candidate.match(/^\s*bun-version-file:\s*['"]?([^'"\s#]+)['"]?\s*(?:#.*)?$/u);
+      if (file) fromFile = file[1];
+    }
+    const where = `setup-bun step at line ${index + 1}`;
+    if (literal !== undefined && fromFile !== undefined) errors.push(`${where} sets both bun-version and bun-version-file (the literal wins silently)`);
+    else if (literal === undefined && fromFile === undefined) errors.push(`${where} sets neither bun-version nor bun-version-file (falls back to the action default)`);
+    else if (fromFile !== undefined && fromFile !== BUN_VERSION_FILE) errors.push(`${where} reads ${fromFile}, not ${BUN_VERSION_FILE}`);
+    else if (literal !== undefined && literal !== pin) errors.push(`${where} pins ${literal}, the repository pins ${pin}`);
+  }
+  return errors;
+}
+
+/**
  * A null `actual` (not running under bun) is not refused: only a bun build can
  * produce the packaged bytes, and other runtimes merely read them.
  */
