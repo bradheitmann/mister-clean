@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
@@ -79,6 +79,11 @@ function fixture(): string {
   ].join("\n"));
   mkdirSync(join(root, "node_modules"));
   command(root, "bun", ["run", "build:raw"]);
+  // The fixture stands in for this repository, so it carries this repository's
+  // owner-authored language-policy allow file (copied, never written here):
+  // without it a host language hook refuses the fixture's generated bundles.
+  const ownerAllow = join(import.meta.dirname, "..", ".lang-guard-allow");
+  if (existsSync(ownerAllow)) copyFileSync(ownerAllow, join(root, ".lang-guard-allow"));
   createFixtureRepository(root, {
     branch: "main",
     identity: { name: "Generated Fixture", email: "generated-fixture.invalid" },

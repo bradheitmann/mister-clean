@@ -8,9 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { applyHermeticHookPolicy } from "./test-support/fixture-repo.js";
 
-// The report renderer is intentionally plain ESM so Bun can run it without a build step.
-// @ts-expect-error no declaration file is shipped for this local renderer module
-const { publishedScorecard, writeReceiptManifest } = await import("../scripts/report_snapshot.mjs");
+const { publishedScorecard, writeReceiptManifest } = await import("../scripts/report_snapshot.js");
 
 function git(repository: string, ...args: string[]): string {
   return execFileSync("/usr/bin/git", ["-C", repository, ...args], { encoding: "utf8" }).trim();
@@ -80,7 +78,7 @@ describe("model-evidence report snapshots", () => {
       expect(index.manifests.filter((entry: { current: boolean }) => entry.current)).toHaveLength(1);
 
       const unbound = structuredClone(scorecard);
-      unbound.tuples[0].evidence = ["descriptive evidence with no binding"];
+      unbound.tuples[0]!.evidence = ["descriptive evidence with no binding"];
       expect(() => writeReceiptManifest(assetRoot, unbound, { repositoryPath: repository })).toThrow(/explicitly labeled assertion-only/);
 
       const partialTarget = structuredClone(scorecard);
