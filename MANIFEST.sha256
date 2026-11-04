@@ -1,5 +1,5 @@
 adbaeddc8382452218c96e50d045bbd9a3a4ee76f97d74f10b79c0c6efb453a8  ./LICENSE
-7d192b6a905cd1552eaf1c61ac17dc60127aafb5221263b0cef0ecd78539f18a  ./README.md
+c6ab41a1032400a2cf755c87473fc87eab1d19cfec142481cf2a6e18db760f62  ./README.md
 1c4bdca67124f577bebe87528e852a44f48d772a71255b68e9780c52b153b803  ./SECURITY.md
 24f6ac6e0783688f382864fc36d801f370779ef20e6de7fb74340f572d0faf6e  ./SKILL.md
 5e575cbe7a53b8b85aa0b0924eabf338e88669aaf368ae2cbff48a7c6eccf80e  ./THIRD_PARTY_NOTICES.md
@@ -28,9 +28,9 @@ b97a3d54909032f9f5dccba9a3b36dfc08fc065a0abd7af7a41ea4dd887180d9  ./assets/codeb
 b32333bbd5e144d2e2c736df9ce0cd977f73ed50d53c57bcee7051e9ad8c7ce6  ./assets/codebase-state-dashboard/product-mark.svg
 2b280962cfe5fdaf4513877c3d65184c8f71ddadb75f000f8b52b7a40bf57ada  ./assets/codebase-state-dashboard/tsconfig.scorecard.json
 ad4137f8e86b7ff051d650ee37a6c33757154a5698c798526ce0fa47b9d91e46  ./assets/regression-delta.json
-1053a245e6971f5f207a385c3359d97c863ca0755756face5e66cb1813651a8f  ./bin/mister-clean.js
+f6acd844d7b6cf08ee9b8c5136839b3a59bbee790593618584fc02e707a69d26  ./bin/mister-clean.js
 a512a7f3940e1d875ebe4485a8e676e557c6279305b9d55c3529c6ddcd5752cf  ./dist/control-plane.d.ts
-b94336915979cd3a7420574b03d4f5d03dbd6c54a15de5961d0609a0e9dac7d5  ./dist/control-plane.js
+0606fa5d6cf7616a0977348a9af3699f3d33734c4816f61576e6556fdc3963fa  ./dist/control-plane.js
 20afd4527ea2b6486b48ff858e84a93c847f7fbfb5ea3022e79585657272c2f8  ./dist/control-plane/assets/CormorantGaramond-Medium-B9HO_40Y.ttf
 4a58ed5d5e7dbaf8a033a810efc7afc4ac39ca390237a1188f14f9c73e9dd7dc  ./dist/control-plane/assets/CormorantGaramond-SemiBold-DK5mJ7_1.ttf
 6c222ed2c3660524dd0c14fb745e00fee65c5361ab28f60fba6730bf4e648763  ./dist/control-plane/assets/Inter-Medium-DRfMpRcT.otf
@@ -47,9 +47,9 @@ eed988e3e89d825caf37c2db520b760decce9664e29572af20a73af8e521995d  ./dist/control
 20c2f4014c2b14c6076d6b4f63ed0b112df7d08b5abd98e631c0a548db5f5220  ./dist/planning.d.ts
 d079be0c4fbef7e61b643f2cd5991ed856c35d2279f153fcbef32d144eef3303  ./dist/planning.js
 3ae6b5a0a37ccefb99acb0e1413da1780ba64e1b52792e7ab36328eaf83b77ce  ./dist/public.d.ts
-ed0b1f5333bf5a44ea247a18f51f9f5431692bc64d89d21122081457dbbcaf69  ./dist/public.js
+88a82bf5230d4c4e854f562b26abf4bee331947d34879b89ff21d293cc85888a  ./dist/public.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
-1c06f7a419a98233483cffa2d3caa5e695a962b21667a7204f1feadfd1b03a53  ./dist/stdio.js
+bcde43da9417baa3c468e20203d793073da7e9479cfd710a838fc7e1153e8bcb  ./dist/stdio.js
 e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md
@@ -74,7 +74,7 @@ a75458b2c8600f0d2c3857e56fe04e588deeecfe4781f8636407c9e5d3ac756f  ./references/p
 4c6e5d57633c79e5afdd7155a5604838f74203c13ec038912fae1fd787300081  ./references/stack-adapters.md
 894f878afd2df43372a44675837c03d309493dbdaec5bb9f8912b07fc7ff0e83  ./references/successor-readiness.md
 24717eb2c3e0d52428fdd0663150e6759be3a3b25075ac5077ec8960355868b7  ./references/tool-liveness.md
-561add51cce082012a9f6c2e29a11e5c570338bca442d48be60c182d20eb356c  ./references/verification-and-claims.md
+10feeabe97123934a5f5f6bb473d499295587b90a2ad8bbb6e3432f422e9d4ab  ./references/verification-and-claims.md
 7b717dae2bf106ce3c9c90c6562e8d1b33d3ad4a0d1f19bfd526f6c26f4bd215  ./references/verification-doctrine.md
 d16a2e5468b5ac6dc0d660a9440749fd5a6534a2a345306dc05d22fd2c092518  ./references/write-lane-isolation.md
 aa3d91e08e67b69b53900dd5e4a7c6fc4a05354b3d319ed30e39dca9daaab7fe  ./templates/hygiene-report.md

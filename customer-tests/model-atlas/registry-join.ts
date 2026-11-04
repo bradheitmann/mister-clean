@@ -14,13 +14,15 @@
  *   `unknown`), so an agent card can bind a level or record that it cannot.
  *
  * Usage: bun customer-tests/model-atlas/registry-join.ts <export.json> [<sha256>]
- * The sha256 is checked only when given: the runner passes it for the pinned
+ * The vendored fixture named in registry-join.json is ALWAYS checked against its
+ * recorded sha256 (an argument, if given, must equal it). Other artifacts: the runner passes it for the pinned
  * artifact and omits it for the artifact published from the focus repository's
  * current main, so the semantic checks below decide that run (and the mutant).
  * Exit 0 when every requirement holds, 1 otherwise (each failure printed).
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 const EXPECTED_SCHEMA = "model-atlas.export/1";
 const RECORD_ID = /^[a-z0-9][a-z0-9.-]*$/u;
@@ -61,6 +63,19 @@ export function parseRegistryRef(ref: string): { readonly id: string; readonly v
   const at = ref.lastIndexOf("@");
   if (at <= 0 || at === ref.length - 1) return undefined;
   return { id: ref.slice(0, at), version: ref.slice(at + 1) };
+}
+
+/**
+ * The sha256 the customer test pins for an artifact path: the vendored fixture
+ * named in registry-join.json is always pinned to that file's recorded sha256,
+ * whether or not the caller passes one. Any other path (the publisher's current
+ * main, which the shared protocol runs unpinned by design) has no pin.
+ */
+export function pinnedSha256For(path: string, specPath = join(import.meta.dirname, "registry-join.json")): string | undefined {
+  const spec = JSON.parse(readFileSync(specPath, "utf8")) as { fixture?: string; artifact?: { sha256?: string } };
+  if (!spec.fixture || !spec.artifact?.sha256) return undefined;
+  const repositoryRoot = resolve(import.meta.dirname, "..", "..");
+  return resolve(path) === resolve(repositoryRoot, spec.fixture) ? spec.artifact.sha256 : undefined;
 }
 
 export function checkExport(bytes: Uint8Array, expectedSha256: string | undefined): readonly string[] {
@@ -120,8 +135,15 @@ if (import.meta.main) {
     console.error("usage: registry-join.ts <export.json> [<sha256>]");
     process.exit(2);
   }
-  const failures = checkExport(readFileSync(path), sha256);
+  const pinned = pinnedSha256For(path);
+  const failures: string[] = [];
+  if (pinned !== undefined && sha256 !== undefined && sha256 !== pinned) {
+    failures.push(`sha256 argument ${sha256} differs from the pin in registry-join.json (${pinned})`);
+  }
+  const expected = sha256 ?? pinned;
+  failures.push(...checkExport(readFileSync(path), expected));
   for (const failure of failures) console.error(`FAIL ${failure}`);
-  console.log(failures.length === 0 ? "PASS registry-join" : `FAIL registry-join (${failures.length})`);
+  const label = expected === undefined ? " (UNPINNED: semantic checks only)" : "";
+  console.log(failures.length === 0 ? `PASS registry-join${label}` : `FAIL registry-join (${failures.length})${label}`);
   process.exit(failures.length === 0 ? 0 : 1);
 }

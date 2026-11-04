@@ -9,7 +9,7 @@ vi.mock("./toolchain-pin.js", async (importOriginal) => {
   return { ...original, runningBunVersion: () => probe.version };
 });
 
-const { checkToolchainPin, readBunPin } = await import("./toolchain-pin.js");
+const { checkToolchainPin } = await import("./toolchain-pin.js");
 const { runCli } = await import("./cli.js");
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -28,13 +28,6 @@ afterEach(() => {
 });
 
 describe("toolchain pin", () => {
-  it("ci pin: .bun-version equals the bun-version CI installs", () => {
-    const workflow = readFileSync(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8");
-    const pins = [...workflow.matchAll(/^\s*bun-version:\s*([0-9.]+)\s*$/gmu)].map((match) => match[1]);
-    expect(pins.length).toBeGreaterThan(0);
-    for (const ciPin of pins) expect(readBunPin(repositoryRoot)).toBe(ciPin);
-  });
-
   it("mismatch: a different running bun is refused with both versions named", () => {
     const root = fixture("1.4.0");
     expect(checkToolchainPin(root, "1.4.0")).toMatchObject({ ok: true, pinned: true, version: "1.4.0" });

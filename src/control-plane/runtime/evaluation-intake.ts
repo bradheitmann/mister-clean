@@ -76,6 +76,25 @@ export const denyEvaluationIntake: EvaluationIntakePort = Object.freeze({
   async outcome() { throw new ControlPlaneFault("PRECONDITION_FAILED", "Machine-local evaluation intake is not configured"); },
 });
 
+/** Most collector-bound dispatch receipts one running intake holds at once.
+ * A machine-local intake serves a handful of concurrently dispatched runs, so
+ * 1024 leaves wide headroom while capping what runs that never report an
+ * outcome can pin for the life of the process. */
+export const CAPTURED_DISPATCH_RECEIPTS_MAX_ENTRIES = 1024;
+
+/** Fail-closed refusal: the run's dispatch identity was bound by this intake's
+ * collector, but the receipt is no longer held (evicted at capacity, or
+ * released by an earlier outcome). The outcome must not fall back to the
+ * caller-supplied lease. */
+export class CapturedDispatchReceiptUnavailableFault extends ControlPlaneFault {
+  readonly run_event_id: string;
+  constructor(runEventId: string) {
+    super("PRECONDITION_FAILED", "Evaluation outcome refused: this intake no longer holds the collector-bound dispatch receipt for the run");
+    this.name = "CapturedDispatchReceiptUnavailableFault";
+    this.run_event_id = runEventId;
+  }
+}
+
 export class SqliteMachineLocalEvaluationIntake implements EvaluationIntakePort {
   readonly configured = true;
   readonly #database: OpenControlPlaneDatabase;
@@ -87,9 +106,13 @@ export class SqliteMachineLocalEvaluationIntake implements EvaluationIntakePort 
   /** Dynamic capture receipts remain local to this running intake. After a
    * restart, a caller cannot replay the old lease into quality credit. */
   readonly #capturedDispatchReceipts = new Map<string, { readonly identity_lease: import("../contracts/agent-evaluation.js").AgentIdentityLease; readonly receipt: VerifiedEvaluationIdentityReceipt }>();
+  /** Receipt-verification rows at or below this rowid predate this intake, so
+   * their outcomes keep the restart behaviour described above. */
+  readonly #receiptVerificationRowidAtStartup: number;
 
   constructor(database: OpenControlPlaneDatabase, registrationAuthority: LogicalProjectRegistrationAuthority = denyLogicalProjectRegistration, invocationJournalPath: string | null = null, identityReceiptAuthority: EvaluationIdentityReceiptAuthority = denyEvaluationIdentityReceipt, capabilityEvaluatorAdapter: CapabilityEvaluatorAdapter | null = null, identityObservationAdapter: EvaluationIdentityObservationAdapter | null = null) {
     if (invocationJournalPath !== null && !isAbsolute(invocationJournalPath)) throw new Error("Mister Clean invocation journal path must be absolute");
+    this.#receiptVerificationRowidAtStartup = database.database.query<{ high: number }>("SELECT COALESCE(MAX(rowid), 0) AS high FROM evaluation_identity_receipt_verifications").get()?.high ?? 0;
     this.#database = database; this.#registrationAuthority = registrationAuthority; this.#invocationJournalPath = invocationJournalPath; this.#identityReceiptAuthority = identityReceiptAuthority; this.#capabilityEvaluatorAdapter = capabilityEvaluatorAdapter; this.#identityObservationAdapter = identityObservationAdapter;
   }
 
@@ -106,6 +129,20 @@ export class SqliteMachineLocalEvaluationIntake implements EvaluationIntakePort 
       } else merged.push(evidence as RetainedEvaluationEvidence);
     }
     return { observation: capture.observation, retainedEvidence: merged, capture };
+  }
+
+  /** Number of collector-bound dispatch receipts currently held. */
+  get capturedDispatchReceiptCount(): number { return this.#capturedDispatchReceipts.size; }
+
+  /** True when this intake's collector bound the run's dispatch identity after
+   * this intake started. If the receipt is not held, it was evicted or already
+   * released, and the outcome is refused rather than re-derived. */
+  #dispatchBoundByThisCollector(runEventId: string): boolean {
+    if (this.#identityObservationAdapter === null) return false;
+    return this.#database.database.query<{ bound: number }>(
+      `SELECT 1 AS bound FROM evaluation_identity_receipt_verifications
+       WHERE run_event_id = ? AND phase = 'pre_dispatch' AND observer_actor_id = ? AND identity_assurance = 'active_harness_selection' AND rowid > ?`,
+    ).get(runEventId, this.#identityObservationAdapter.observer_actor_id, this.#receiptVerificationRowidAtStartup) !== null;
   }
 
   /** Reconciliation records unobserved CLI facts only. It never promotes a
@@ -169,7 +206,16 @@ export class SqliteMachineLocalEvaluationIntake implements EvaluationIntakePort 
       if (error instanceof Error && /already bound to an immutable evaluation trial source/.test(error.message)) throw new ControlPlaneFault("CONFLICT", error.message);
       throw error;
     }
-    if (capturedDispatchReceipt !== null) this.#capturedDispatchReceipts.set(result.run_event_id, { identity_lease: effectiveStartLease, receipt: capturedDispatchReceipt });
+    if (capturedDispatchReceipt !== null) {
+      // Evict in insertion order: the oldest run is the one least likely to
+      // still report. Its later outcome is refused, never re-derived.
+      while (this.#capturedDispatchReceipts.size >= CAPTURED_DISPATCH_RECEIPTS_MAX_ENTRIES) {
+        const oldest = this.#capturedDispatchReceipts.keys().next();
+        if (oldest.done === true) break;
+        this.#capturedDispatchReceipts.delete(oldest.value);
+      }
+      this.#capturedDispatchReceipts.set(result.run_event_id, { identity_lease: effectiveStartLease, receipt: capturedDispatchReceipt });
+    }
     return { run_event_id: result.run_event_id, repository_id: result.repository_id, evaluation_required: result.evaluation_required, qualification_at_dispatch: result.qualification_at_dispatch };
   }
 
@@ -180,47 +226,51 @@ export class SqliteMachineLocalEvaluationIntake implements EvaluationIntakePort 
     const outcomeRunEventId = outcome.run_event_id;
     const run = this.#database.database.query<{ capability_id: string }>("SELECT capability_id FROM agent_run_events WHERE run_event_id = ?").get(outcomeRunEventId);
     if (run === null) throw new ControlPlaneFault("PRECONDITION_FAILED", "Evaluation outcome requires a previously recorded run");
-    const execution = executeCapabilityEvaluators({
-      capability_id: parseRepositoryCapabilityId(run.capability_id),
-      worker_actor_id: outcome.worker_actor_id,
-      author_actor_id: outcome.author_actor_id,
-      retained_evidence: input.retained_evidence,
-      adapter: this.#capabilityEvaluatorAdapter,
-    });
-    let evaluations;
-    try { evaluations = admitCapabilityEvaluatorExecution(execution); } catch (error) {
-      throw new ControlPlaneFault("PRECONDITION_FAILED", error instanceof Error ? error.message : String(error));
-    }
-    const invocationIds = this.#database.database.query<{ invocation_id: string }>("SELECT invocation_id FROM evaluation_run_invocations WHERE run_event_id = ? ORDER BY invocation_id").all(outcomeRunEventId).map((row) => row.invocation_id);
     const callerLease = outcome.identity_lease;
     const capturedDispatch = this.#capturedDispatchReceipts.get(outcomeRunEventId);
+    if (capturedDispatch === undefined && this.#dispatchBoundByThisCollector(outcomeRunEventId)) throw new CapturedDispatchReceiptUnavailableFault(outcomeRunEventId);
     if (capturedDispatch !== undefined && (callerLease.identity_lease_id !== capturedDispatch.identity_lease.identity_lease_id
       || callerLease.execution_route_id !== capturedDispatch.identity_lease.execution_route_id
       || canonicalJson(callerLease.requested_tuple) !== canonicalJson(capturedDispatch.identity_lease.requested_tuple))) {
       throw new ControlPlaneFault("PRECONDITION_FAILED", "Evaluation outcome cannot replace the collector-bound dispatch identity lease");
     }
-    const originalLease = capturedDispatch === undefined
-      ? callerLease
-      : { ...callerLease, pre_dispatch: capturedDispatch.identity_lease.pre_dispatch };
-    const preDispatchReceipt = capturedDispatch?.receipt ?? this.#identityReceiptAuthority.authorize({ phase: "pre_dispatch", run_event_id: outcomeRunEventId, identity_lease: originalLease, invocation_ids: invocationIds, retained_evidence: input.retained_evidence });
-    const capturedPreEvaluation = this.#identityObservationAdapter === null
-      ? { observation: null, retainedEvidence: input.retained_evidence, capture: { observation: null, evidence: [] } }
-      : await this.#captureIdentity({ phase: "pre_evaluation", run_event_id: outcomeRunEventId, requested_tuple: originalLease.requested_tuple, execution_route_id: originalLease.execution_route_id, invocation_ids: invocationIds, retained_evidence: input.retained_evidence }, input.retained_evidence);
-    const observedPreEvaluation = capturedPreEvaluation.observation;
-    const effectiveOutcomeLease = { ...originalLease, pre_dispatch: preDispatchReceipt === null ? null : originalLease.pre_dispatch, pre_evaluation: observedPreEvaluation };
-    const capturedEvaluationReceipt = this.#identityObservationAdapter === null
-      ? null
-      : issueCapturedEvaluationIdentityReceipt({ phase: "pre_evaluation", run_event_id: outcomeRunEventId, identity_lease: effectiveOutcomeLease, invocation_ids: invocationIds }, this.#identityObservationAdapter, capturedPreEvaluation.capture);
-    const preEvaluationReceipt = capturedEvaluationReceipt ?? this.#identityReceiptAuthority.authorize({ phase: "pre_evaluation", run_event_id: outcomeRunEventId, identity_lease: effectiveOutcomeLease, invocation_ids: invocationIds, retained_evidence: capturedPreEvaluation.retainedEvidence });
-    const result = recordMachineLocalEvaluationOutcome(this.#database, {
-      ...outcome,
-      identity_lease: effectiveOutcomeLease,
-      evaluations,
-      evaluator_execution_receipts: execution.execution_receipts,
-      pre_evaluation_receipt_verification: preEvaluationReceipt,
-      retained_evidence: capturedPreEvaluation.retainedEvidence,
-    } as EvaluationOutcomeInput);
-    this.#capturedDispatchReceipts.delete(outcomeRunEventId);
-    return { run_event_id: result.run_event_id, contributes_quality_credit: result.contributes_quality_credit, qualification_after_outcome: result.qualification_after_outcome };
+    try {
+      const execution = executeCapabilityEvaluators({
+        capability_id: parseRepositoryCapabilityId(run.capability_id),
+        worker_actor_id: outcome.worker_actor_id,
+        author_actor_id: outcome.author_actor_id,
+        retained_evidence: input.retained_evidence,
+        adapter: this.#capabilityEvaluatorAdapter,
+      });
+      let evaluations;
+      try { evaluations = admitCapabilityEvaluatorExecution(execution); } catch (error) {
+        throw new ControlPlaneFault("PRECONDITION_FAILED", error instanceof Error ? error.message : String(error));
+      }
+      const invocationIds = this.#database.database.query<{ invocation_id: string }>("SELECT invocation_id FROM evaluation_run_invocations WHERE run_event_id = ? ORDER BY invocation_id").all(outcomeRunEventId).map((row) => row.invocation_id);
+      const originalLease = capturedDispatch === undefined
+        ? callerLease
+        : { ...callerLease, pre_dispatch: capturedDispatch.identity_lease.pre_dispatch };
+      const preDispatchReceipt = capturedDispatch?.receipt ?? this.#identityReceiptAuthority.authorize({ phase: "pre_dispatch", run_event_id: outcomeRunEventId, identity_lease: originalLease, invocation_ids: invocationIds, retained_evidence: input.retained_evidence });
+      const capturedPreEvaluation = this.#identityObservationAdapter === null
+        ? { observation: null, retainedEvidence: input.retained_evidence, capture: { observation: null, evidence: [] } }
+        : await this.#captureIdentity({ phase: "pre_evaluation", run_event_id: outcomeRunEventId, requested_tuple: originalLease.requested_tuple, execution_route_id: originalLease.execution_route_id, invocation_ids: invocationIds, retained_evidence: input.retained_evidence }, input.retained_evidence);
+      const observedPreEvaluation = capturedPreEvaluation.observation;
+      const effectiveOutcomeLease = { ...originalLease, pre_dispatch: preDispatchReceipt === null ? null : originalLease.pre_dispatch, pre_evaluation: observedPreEvaluation };
+      const capturedEvaluationReceipt = this.#identityObservationAdapter === null
+        ? null
+        : issueCapturedEvaluationIdentityReceipt({ phase: "pre_evaluation", run_event_id: outcomeRunEventId, identity_lease: effectiveOutcomeLease, invocation_ids: invocationIds }, this.#identityObservationAdapter, capturedPreEvaluation.capture);
+      const preEvaluationReceipt = capturedEvaluationReceipt ?? this.#identityReceiptAuthority.authorize({ phase: "pre_evaluation", run_event_id: outcomeRunEventId, identity_lease: effectiveOutcomeLease, invocation_ids: invocationIds, retained_evidence: capturedPreEvaluation.retainedEvidence });
+      const result = recordMachineLocalEvaluationOutcome(this.#database, {
+        ...outcome,
+        identity_lease: effectiveOutcomeLease,
+        evaluations,
+        evaluator_execution_receipts: execution.execution_receipts,
+        pre_evaluation_receipt_verification: preEvaluationReceipt,
+        retained_evidence: capturedPreEvaluation.retainedEvidence,
+      } as EvaluationOutcomeInput);
+      return { run_event_id: result.run_event_id, contributes_quality_credit: result.contributes_quality_credit, qualification_after_outcome: result.qualification_after_outcome };
+    } finally {
+      this.#capturedDispatchReceipts.delete(outcomeRunEventId);
+    }
   }
 }
