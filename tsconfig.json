@@ -25,6 +25,8 @@
     "env.d.ts",
     "customer-tests/**/*.ts",
     "ablations/**/*.ts",
+    "scripts/attest_sign.ts",
+    "scripts/attest_sign.test.ts",
     "scripts/sync_cli.ts",
     "scripts/verify_package_exports.ts",
     "scripts/build_model_scorecard_interactions.ts",
