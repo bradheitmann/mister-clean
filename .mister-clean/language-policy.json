@@ -1,0 +1,9 @@
+{
+  "schema": "mister-clean.language-policy/1",
+  "forbid_extensions": [".py", ".pyi", ".pyw", ".pyx", ".ipynb", ".js", ".mjs", ".cjs", ".jsx"],
+  "allow": [],
+  "generated": [
+    "bin/mister-clean.js",
+    "assets/codebase-state-dashboard/model-scorecard-interactions.js"
+  ]
+}
