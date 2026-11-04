@@ -19,18 +19,58 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import {
   acquireReleaseArchiveCustody,
   inspectReleaseArchiveCustody,
+  nodeBytes,
   ORIGIN_AUTHENTICITY,
   releaseArchiveToolEnvironment,
-} from "./release_archive_contract.mjs";
+} from "./release_archive_contract.ts";
+
+// prepare_release_archive.ts runs this file with plain `node` (>= 22.18, built-in
+// type stripping). Keep every construct erasable.
+
+interface ManifestRow {
+  path: string;
+  sha256: string;
+}
+
+/** RELEASE_ATTESTATION.json, the fields read here; the digest and count are checked before use. */
+interface ReleaseAttestationInput {
+  package: unknown;
+  claimed_source: unknown;
+  claim_scope: unknown;
+  manifest?: { sha256?: unknown; entry_count?: unknown };
+  required_entrypoints: Array<{ path: unknown; sha256: unknown }>;
+}
+
+interface PackageTree {
+  attestation: ReleaseAttestationInput;
+  entryCount: number;
+}
+
+/** regression-delta.json from the installed `prepare`, the fields read here. */
+interface RegressionInput {
+  schema_version: unknown;
+  detector_coverage: {
+    runtime_identity?: {
+      status?: unknown;
+      package?: unknown;
+      claimed_source?: unknown;
+      manifest?: unknown;
+      claim_scope?: unknown;
+      entrypoint?: unknown;
+    };
+    runtime_identity_sha256?: unknown;
+    executions: Array<{ runtime_identity_sha256?: unknown }>;
+  };
+}
 
 const RELEASE_ATTESTATION_FILE = "RELEASE_ATTESTATION.json";
 const MANIFEST_FILE = "MANIFEST.sha256";
 
 function usage() {
-  console.error("usage: node scripts/verify_packed_cli.mjs --archive <absolute-path.tgz>");
+  console.error("usage: node scripts/verify_packed_cli.ts --archive <absolute-path.tgz>");
 }
 
-function option(args, name) {
+function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   if (index < 0) return undefined;
   const value = args[index + 1];
@@ -39,21 +79,21 @@ function option(args, name) {
   return value;
 }
 
-function sha256Bytes(bytes) {
+function sha256Bytes(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function sha256File(path) {
+function sha256File(path: string): string {
   return sha256Bytes(readFileSync(path));
 }
 
-function toPosix(path) {
+function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
 
-function regularFiles(root) {
-  const files = [];
-  function visit(directory) {
+function regularFiles(root: string): string[] {
+  const files: string[] = [];
+  function visit(directory: string): void {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const absolute = join(directory, entry.name);
       const path = toPosix(relative(root, absolute));
@@ -68,13 +108,14 @@ function regularFiles(root) {
   return files.sort();
 }
 
-function parseManifest(text) {
-  const entries = [];
-  const paths = new Set();
+function parseManifest(text: string): ManifestRow[] {
+  const entries: ManifestRow[] = [];
+  const paths = new Set<string>();
   for (const [index, line] of text.trimEnd().split("\n").filter(Boolean).entries()) {
     const match = /^([0-9a-f]{64})  \.\/(.+)$/u.exec(line);
     if (!match) throw new Error(`${MANIFEST_FILE}:${index + 1}: invalid manifest row`);
-    const [, sha256, path] = match;
+    // Both groups are mandatory in the pattern, so a match always binds them.
+    const [, sha256, path] = match as RegExpExecArray & [string, string, string];
     if (isAbsolute(path) || path.includes("\\") || path.split("/").includes("..")) {
       throw new Error(`${MANIFEST_FILE}:${index + 1}: unsafe path ${JSON.stringify(path)}`);
     }
@@ -85,20 +126,21 @@ function parseManifest(text) {
   return entries;
 }
 
-function declarationExports(path) {
+function declarationExports(path: string): (string | undefined)[] {
   const source = readFileSync(path, "utf8");
   if (/export\s+(?:default|\*)/u.test(source)) {
     throw new Error(`${path}: wildcard or default declaration exports are forbidden`);
   }
   const blocks = [...source.matchAll(/^export\s*\{([^}]*)\};?$/gmu)];
   if (blocks.length !== 1) throw new Error(`${path}: expected one exact declaration export block`);
-  return blocks[0][1].split(",").map((entry) => {
+  // Exactly one block matched above, and its group is mandatory.
+  return blocks[0]![1]!.split(",").map((entry) => {
     const normalized = entry.trim().replace(/^type\s+/u, "");
     return normalized.split(/\s+as\s+/u).at(-1);
   }).filter(Boolean).sort();
 }
 
-function assertExactDeclarationSurfaces(unpacked) {
+function assertExactDeclarationSurfaces(unpacked: string): void {
   const rootExports = declarationExports(join(unpacked, "dist", "public.d.ts"));
   if (JSON.stringify(rootExports) !== JSON.stringify(["createMisterCleanServer"])) {
     throw new Error(`unexpected root declaration exports: ${JSON.stringify(rootExports)}`);
@@ -117,7 +159,7 @@ function assertExactDeclarationSurfaces(unpacked) {
   }
 }
 
-function assertExactPackageTree(unpacked) {
+function assertExactPackageTree(unpacked: string): PackageTree {
   const attestationPath = join(unpacked, RELEASE_ATTESTATION_FILE);
   const manifestPath = join(unpacked, MANIFEST_FILE);
   if (!existsSync(attestationPath)) throw new Error(`archive is missing required ${RELEASE_ATTESTATION_FILE}`);
@@ -131,7 +173,7 @@ function assertExactPackageTree(unpacked) {
     throw new Error(`${MANIFEST_FILE} must be a regular file`);
   }
 
-  const manifestBytes = readFileSync(manifestPath);
+  const manifestBytes = nodeBytes(readFileSync(manifestPath));
   const entries = parseManifest(manifestBytes.toString("utf8"));
   const expected = new Set([
     ...entries.map((entry) => entry.path),
@@ -152,7 +194,7 @@ function assertExactPackageTree(unpacked) {
     }
   }
 
-  const attestation = JSON.parse(readFileSync(attestationPath, "utf8"));
+  const attestation = JSON.parse(readFileSync(attestationPath, "utf8")) as ReleaseAttestationInput;
   if (attestation?.manifest?.sha256 !== sha256Bytes(manifestBytes)) {
     throw new Error("release attestation does not bind the exact MANIFEST.sha256 bytes");
   }
@@ -162,12 +204,12 @@ function assertExactPackageTree(unpacked) {
   return { attestation, entryCount: entries.length };
 }
 
-async function within(milliseconds, label, promise) {
-  let timer;
+async function within<T>(milliseconds: number, label: string, promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
-      new Promise((_, reject) => {
+      new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error(`${label} exceeded ${milliseconds}ms`)), milliseconds);
       }),
     ]);
@@ -176,7 +218,7 @@ async function within(milliseconds, label, promise) {
   }
 }
 
-async function smokeStdioMcp(installedMcp, consumer) {
+async function smokeStdioMcp(installedMcp: string, consumer: string): Promise<void> {
   const transport = new StdioClientTransport({ command: installedMcp, cwd: consumer, stderr: "pipe" });
   let stderr = "";
   transport.stderr?.on("data", (chunk) => {
@@ -194,14 +236,14 @@ async function smokeStdioMcp(installedMcp, consumer) {
       name: "mister_clean_attestation",
       arguments: { response_format: "json" },
     }));
-    if (attestation.isError || attestation.structuredContent?.status !== "pass") {
+    if (attestation.isError || (attestation.structuredContent as { status?: unknown } | undefined)?.status !== "pass") {
       throw new Error(`installed MCP returned invalid runtime attestation: ${JSON.stringify(attestation.structuredContent)}`);
     }
     const materials = await within(10_000, "MCP material call", client.callTool({
       name: "mister_clean_list_materials",
       arguments: { limit: 1, offset: 0, response_format: "json" },
     }));
-    if (materials.isError || materials.structuredContent?.count !== 1) {
+    if (materials.isError || (materials.structuredContent as { count?: unknown } | undefined)?.count !== 1) {
       throw new Error(`installed MCP material call failed: ${JSON.stringify(materials.structuredContent)}`);
     }
   } catch (error) {
@@ -211,7 +253,7 @@ async function smokeStdioMcp(installedMcp, consumer) {
   }
 }
 
-function smokeInstalledPrepare(installedCli, packageTree, temporaryRoot) {
+function smokeInstalledPrepare(installedCli: string, packageTree: PackageTree, temporaryRoot: string): void {
   const repository = join(temporaryRoot, "prepare-repository");
   const evidenceHome = join(temporaryRoot, "prepare-evidence");
   mkdirSync(repository);
@@ -235,19 +277,19 @@ function smokeInstalledPrepare(installedCli, packageTree, temporaryRoot) {
     throw new Error(`installed prepare did not return an absolute bundle directory: ${output}`);
   }
   const regressionPath = join(bundleDirectory, "regression-delta.json");
-  const regression = JSON.parse(readFileSync(regressionPath, "utf8"));
+  const regression = JSON.parse(readFileSync(regressionPath, "utf8")) as RegressionInput;
   const coverage = regression.detector_coverage;
   const runtime = coverage?.runtime_identity;
   const expectedEntrypoint = packageTree.attestation.required_entrypoints
     .find((entrypoint) => entrypoint.path === "./bin/mister-clean.js");
-  if (regression.schema_version !== "1.5"
+  if (regression.schema_version !== "1.6"
     || runtime?.status !== "release_attested"
     || JSON.stringify(runtime.package) !== JSON.stringify(packageTree.attestation.package)
     || JSON.stringify(runtime.claimed_source) !== JSON.stringify(packageTree.attestation.claimed_source)
     || JSON.stringify(runtime.manifest) !== JSON.stringify(packageTree.attestation.manifest)
     || JSON.stringify(runtime.claim_scope) !== JSON.stringify(packageTree.attestation.claim_scope)
     || JSON.stringify(runtime.entrypoint) !== JSON.stringify(expectedEntrypoint)) {
-    throw new Error("installed prepare did not bind schema 1.5 to the exact release package identity");
+    throw new Error("installed prepare did not bind schema 1.6 to the exact release package identity");
   }
   if (!coverage.runtime_identity_sha256
     || !coverage.executions.every((execution) => execution.runtime_identity_sha256 === coverage.runtime_identity_sha256)) {
@@ -263,7 +305,7 @@ function smokeInstalledPrepare(installedCli, packageTree, temporaryRoot) {
   }
 }
 
-function smokeInstalledPlanning(consumer, installed, temporaryRoot) {
+function smokeInstalledPlanning(consumer: string, installed: string, temporaryRoot: string): void {
   const smoke = join(consumer, "planning-smoke.mjs");
   writeFileSync(smoke, [
     'import * as planning from "@bradheitmann/mister-clean/planning";',
@@ -290,7 +332,7 @@ function smokeInstalledPlanning(consumer, installed, temporaryRoot) {
   ].join("\n")], { cwd: consumer, encoding: "utf8" });
 }
 
-function smokeInstalledControlPlane(consumer) {
+function smokeInstalledControlPlane(consumer: string): void {
   const namespaceSmoke = join(consumer, "control-plane-namespace-smoke.mjs");
   writeFileSync(namespaceSmoke, [
     'import * as surface from "@bradheitmann/mister-clean/control-plane";',
@@ -514,8 +556,9 @@ function smokeInstalledControlPlane(consumer) {
   }
 }
 
-async function main() {
-  const args = process.argv.slice(2);
+async function main(): Promise<void> {
+  // @cloudflare/workers-types declares `process` as `any`; annotate what is read from it.
+  const args: string[] = process.argv.slice(2);
   const archiveValue = option(args, "--archive");
   if (!archiveValue || args.length) {
     usage();
@@ -525,7 +568,7 @@ async function main() {
   if (!isAbsolute(archiveValue)) throw new Error("--archive must be an absolute path");
   const archive = resolve(archiveValue);
   const custody = acquireReleaseArchiveCustody(archive);
-  let temporaryRoot;
+  let temporaryRoot: string | undefined;
   try {
     const archiveSha256 = custody.archive_sha256;
     const archiveIdentity = inspectReleaseArchiveCustody(custody);

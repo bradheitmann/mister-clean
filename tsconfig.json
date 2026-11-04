@@ -14,6 +14,7 @@
     "ignoreDeprecations": "6.0",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "rewriteRelativeImportExtensions": true,
     "types": [
       "@cloudflare/workers-types",
       "node",
@@ -25,6 +26,8 @@
     "env.d.ts",
     "customer-tests/**/*.ts",
     "ablations/**/*.ts",
+    "scripts/attest_sign.ts",
+    "scripts/attest_sign.test.ts",
     "scripts/sync_cli.ts",
     "scripts/verify_package_exports.ts",
     "scripts/build_model_scorecard_interactions.ts",
@@ -35,6 +38,13 @@
     "scripts/render_case_study_report.ts",
     "scripts/test-tmp-root.ts",
     "scripts/test-tmp-root.test.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "scripts/prepare_release_archive.ts",
+    "scripts/publish_release_archive.ts",
+    "scripts/release_archive_contract.ts",
+    "scripts/release_capsule.ts",
+    "scripts/generate_release_attestation.ts",
+    "scripts/verify_packed_cli.ts",
+    "scripts/release_path.test.ts"
   ]
 }

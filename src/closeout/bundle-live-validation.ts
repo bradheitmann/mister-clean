@@ -5,11 +5,13 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { captureRelevantProcessCensus, successorProcessRows } from "./action-hygiene.js";
 import {
+  DETECTOR_COVERAGE_SCHEMA_VERSION,
   createDetectorRunPolicy,
   findingFingerprintsFromAudit,
   requiredDetectorIdsForPolicy,
   sortedUnique,
 } from "./detector-coverage.js";
+import { auditLanguagePolicy } from "./language-policy.js";
 import { canonicalObservationId } from "./regression-accounting.js";
 import { auditGitHubActionsRepository } from "./github-actions.js";
 import { loadDenylist, scanTrackedPublicSafetySync } from "./inspection.js";
@@ -246,7 +248,10 @@ async function validateLiveDetectors(
     if (!stableEqual(coverage?.run_policy, liveRunPolicy)) {
       errors.push("$.live_detector_coverage.run_policy: recorded applicability differs from the live tracked shippable surface");
     }
-    const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy) ?? [];
+    // Rerun the universe of the registry the bundle bound: a 1.5 bundle (registry 5)
+    // never ran language_policy, a 1.6 bundle (registry 6) must rerun it.
+    const liveRegistryVersion = coverage?.registry_version === "5" ? "5" : DETECTOR_COVERAGE_SCHEMA_VERSION;
+    const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy, liveRegistryVersion) ?? [];
     const executionFor = (detectorId: string): JsonObject | undefined => array(coverage?.executions)
       .map(object)
       .find((execution) => execution?.detector_id === detectorId);
@@ -311,6 +316,17 @@ async function validateLiveDetectors(
         "public_safety",
         findingFingerprintsFromAudit("public_safety", publicSafetyResult),
       ]);
+    }
+    if (liveRequiredDetectorIds.includes("language_policy")) {
+      let languagePolicyFingerprints: readonly string[] | undefined;
+      try {
+        languagePolicyFingerprints = findingFingerprintsFromAudit("language_policy", auditLanguagePolicy(repo));
+      } catch (error) {
+        errors.push(`$.live_detector_coverage.language_policy: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (languagePolicyFingerprints !== undefined || !errors.some((error) => error.startsWith("$.live_detector_coverage.language_policy:"))) {
+        liveDetectorFindings.push(["language_policy", languagePolicyFingerprints]);
+      }
     }
     for (const [detectorId, fingerprints] of liveDetectorFindings) {
       if (!fingerprints) {

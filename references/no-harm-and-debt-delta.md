@@ -175,9 +175,13 @@ subject, and evidence location. Human-readable wording is not identity.
 ## 4. Regression-delta record
 
 The closeout report binds a digest-referenced
-`mister-clean.regression-delta` schema-1.5 sidecar minted by `mister-clean
-prepare`. Schemas 1.2 through 1.4 remain legacy-readable for honest NOT CLEAN
-records; none can establish CLEAN. The packaged 1.4 JSON is an illustrative
+`mister-clean.regression-delta` schema-1.6 sidecar minted by `mister-clean
+prepare`. Schema 1.6 is schema 1.5 bound to detector registry 6, which adds
+the always-required `language_policy` family; its accounting is unchanged.
+Each schema binds exactly one registry: 1.6 binds 6, 1.5 binds the frozen 5
+that every 7.0 to 7.5 bundle carries, and a 1.5 record claiming registry 6 is
+refused. Schema 1.5 bundles stay valid. Schemas 1.2 through 1.4 remain
+legacy-readable for honest NOT CLEAN records; none can establish CLEAN. The packaged 1.4 JSON is an illustrative
 template only. It cannot be promoted by filling placeholders or relabeling its
 verdict.
 

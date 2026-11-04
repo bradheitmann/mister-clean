@@ -2,7 +2,7 @@
 import { isAbsolute } from "node:path";
 
 import {
-  DETECTOR_COVERAGE_SCHEMA_VERSION,
+  REGRESSION_DELTA_SCHEMA_VERSION,
   detectorApplicabilityForPolicy,
   detectorById,
   detectorRegistrySha256,
@@ -11,10 +11,13 @@ import {
   detectorRuntimeIdentityErrors,
   detectorRuntimeIdentitySha256,
   findingFingerprintsFromAudit,
+  isRuntimeBoundRegressionSchema,
   planningFindingFingerprint,
+  registryVersionForRegressionSchema,
   requiredDetectorIdsForPolicy,
   semanticFindingFingerprint,
   sortedUnique,
+  type DetectorRegistryVersion,
   type DetectorRuntimeIdentity,
 } from "./detector-coverage.js";
 import {
@@ -136,6 +139,21 @@ export function detectorRootProjections(
         fingerprints: [finding.fingerprint],
       });
     }
+  } else if (detectorId === "language_policy") {
+    // One root debt per tracked forbidden-language path.
+    for (const rawFinding of array(result.findings)) {
+      const finding = object(rawFinding);
+      if (!finding || typeof finding.fingerprint !== "string") continue;
+      rows.push({
+        normalizer: "mister-clean/language-policy-root@1",
+        causeKey: {
+          detector_family: "language_policy",
+          path: finding.path,
+          extension: finding.extension,
+        },
+        fingerprints: [finding.fingerprint],
+      });
+    }
   } else if (detectorId === "github_actions") {
     const grouped = new Map<string, JsonObject[]>();
     for (const rawFinding of array(result.findings)) {
@@ -181,6 +199,7 @@ export async function validateBaselineReplayOrigin(
   baselineObject: unknown,
   baselineRepositoryObject: JsonObject | undefined,
   runtimeIdentitySha256: unknown,
+  registryVersion: DetectorRegistryVersion,
   repoId: string,
   base: string,
   files: FilePort,
@@ -220,13 +239,13 @@ export async function validateBaselineReplayOrigin(
     errors.push(`${path}.baseline_repository_object: must equal the immutable regression baseline repository object`);
   }
   const detectorId = String(replay.detector_id ?? "");
-  const detector = detectorById(detectorId, DETECTOR_COVERAGE_SCHEMA_VERSION);
+  const detector = detectorById(detectorId, registryVersion);
   if (!detector) errors.push(`${path}.detector_id: must name a canonical detector family`);
   const causalDetector = String(object(debt.cause_key)?.detector_family ?? "");
   if (detector && detectorId !== causalDetector) {
     errors.push(`${path}.detector_id: must equal the debt causal detector family`);
   }
-  if (replay.detector_registry_sha256 !== detectorRegistrySha256(DETECTOR_COVERAGE_SCHEMA_VERSION)) {
+  if (replay.detector_registry_sha256 !== detectorRegistrySha256(registryVersion)) {
     errors.push(`${path}.detector_registry_sha256: must equal the canonical detector registry`);
   }
   if (replay.runtime_identity_sha256 !== runtimeIdentitySha256) {
@@ -392,15 +411,15 @@ export async function validateDetectorCoverage(
 ): Promise<void> {
   const path = "$.report.regression_control.evidence_ref.detector_coverage";
   const schemaVersion = String(record.schema_version ?? "");
-  if (!new Set(["1.3", "1.4", "1.5"]).has(schemaVersion)) {
-    if (clean) errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 runtime and repository-object coverage");
+  if (!new Set(["1.3", "1.4", "1.5", REGRESSION_DELTA_SCHEMA_VERSION]).has(schemaVersion)) {
+    if (clean) errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 or later runtime and repository-object coverage");
     return;
   }
-  if (clean && schemaVersion !== "1.5") {
-    errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 runtime and repository-object coverage");
+  const requiresRuntimeIdentity = isRuntimeBoundRegressionSchema(schemaVersion);
+  if (clean && !requiresRuntimeIdentity) {
+    errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 or later runtime and repository-object coverage");
   }
-  const requiresRepositoryObjects = schemaVersion === "1.4" || schemaVersion === "1.5";
-  const requiresRuntimeIdentity = schemaVersion === "1.5";
+  const requiresRepositoryObjects = schemaVersion === "1.4" || requiresRuntimeIdentity;
   const coverage = requireObject(record.detector_coverage, [
     "registry_version", "registry_sha256", "run_policy", "run_policy_sha256", "applicability",
     ...(requiresRuntimeIdentity ? ["runtime_identity", "runtime_identity_sha256"] : []),
@@ -408,7 +427,8 @@ export async function validateDetectorCoverage(
     "executions", "finding_fingerprints",
   ], path, errors);
   if (!coverage) return;
-  const expectedCoverageVersion = requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1";
+  // Exactly the registry the schema binds: 1.6 -> 6, 1.5 -> the frozen 5, older -> 1.
+  const expectedCoverageVersion = registryVersionForRegressionSchema(schemaVersion);
   if (coverage.registry_version !== expectedCoverageVersion) {
     errors.push(`${path}.registry_version: expected ${expectedCoverageVersion}`);
   }
@@ -682,6 +702,8 @@ export interface RegressionComparatorInputs {
   readonly requiresRepositoryObjects: boolean;
   readonly requiresRuntimeIdentity: boolean;
   readonly requiresDetectorCoverage: boolean;
+  /** The one detector registry the record's schema binds. */
+  readonly registryVersion: DetectorRegistryVersion;
   readonly coverageRuntimeIdentitySha256: unknown;
   readonly actionRequiredDetectorIds: readonly string[];
   readonly base: string;
@@ -719,6 +741,7 @@ export async function validateRegressionComparatorEvidence(
     requiresRepositoryObjects,
     requiresRuntimeIdentity,
     requiresDetectorCoverage,
+    registryVersion,
     coverageRuntimeIdentitySha256,
     actionRequiredDetectorIds,
     base,
@@ -758,7 +781,7 @@ export async function validateRegressionComparatorEvidence(
     if (requiresDetectorCoverage) {
       const spec = detectorById(
         String(comparator.detector_id ?? ""),
-        requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1",
+        registryVersion,
       );
       if (!spec) errors.push(`${comparatorPath}.detector_id: must name a canonical detector family`);
       else {
@@ -872,7 +895,7 @@ export async function validateRegressionComparatorEvidence(
       if (modern && registeredDetectorId) {
         const sourceId = detectorById(
           registeredDetectorId,
-          requiresRuntimeIdentity ? DETECTOR_COVERAGE_SCHEMA_VERSION : "1",
+          registryVersion,
         )?.detector;
         const target = expectedPhase === "before"
           ? beforeObservationIds

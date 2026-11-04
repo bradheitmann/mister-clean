@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import type { StdioOptions } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -14,14 +15,66 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
 
+import type { ReleaseArchiveCustody } from "./release_archive_contract.ts";
+
+// This file ships inside the verified release archive and runs under plain
+// `node` (>= 22.18, built-in type stripping). Keep every construct erasable:
+// no enums, namespaces or parameter properties; type-only imports use
+// `import type`.
+
+/** One receipt-bound retained program. Values are untrusted until checked. */
+interface ProgramBinding {
+  path: unknown;
+  sha256: unknown;
+  size_bytes: unknown;
+}
+
+/**
+ * The fields of release-archive-receipt.json this publisher reads. The receipt is
+ * untrusted input: leaves are `unknown` and every one is checked at runtime
+ * before it is relied on.
+ */
+interface ReleaseArchiveReceiptInput {
+  record_type: unknown;
+  schema_version: unknown;
+  status: unknown;
+  package: { name: unknown; version: unknown };
+  claimed_source: unknown;
+  claim_scope: unknown;
+  origin_authenticity: unknown;
+  manifest: unknown;
+  archive: { path: unknown; created_absolute_path: unknown; sha256: unknown; size_bytes: unknown };
+  publisher: { entrypoint: ProgramBinding | undefined; verifier: ProgramBinding | undefined };
+  publish: { tool: unknown; registry: unknown; concurrency_policy: unknown; cwd_policy: unknown; argv: unknown };
+}
+
+interface RetainedProgram {
+  digest: string;
+  path: string;
+  size_bytes: number;
+}
+
+type RegistryObservation =
+  | { status: "absent" }
+  | { status: "present"; version: unknown; integrity: unknown; shasum: unknown };
+
+interface ExpectedRegistryArchive {
+  version: unknown;
+  integrity: string;
+  shasum: string;
+}
+
+/** The receipt-bound verifier module, imported by URL; its exports are checked before use. */
+type ArchiveVerifierModule = Partial<typeof import("./release_archive_contract.ts")>;
+
 const NPMJS_REGISTRY = "https://registry.npmjs.org/";
 const SCOPED_REGISTRY_OVERRIDE = `--config.@bradheitmann:registry=${NPMJS_REGISTRY}`;
 
 function usage() {
-  console.error("usage: node publish_release_archive.mjs --receipt <release-archive-receipt.json>");
+  console.error("usage: node publish_release_archive.ts --receipt <release-archive-receipt.json>");
 }
 
-function option(args, name) {
+function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   if (index < 0) return undefined;
   const value = args[index + 1];
@@ -30,18 +83,18 @@ function option(args, name) {
   return value;
 }
 
-function sha256File(path) {
+function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function archiveRegistryDigests(bytes) {
+function archiveRegistryDigests(bytes: Uint8Array): { integrity: string; shasum: string } {
   return {
     integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
     shasum: createHash("sha1").update(bytes).digest("hex"),
   };
 }
 
-function assertNeutralPublishCwd(path) {
+function assertNeutralPublishCwd(path: string): string {
   const canonical = realpathSync(path);
   for (let cursor = canonical; ; cursor = dirname(cursor)) {
     for (const marker of ["package.json", "pnpm-workspace.yaml", "pnpm-workspace.yml"]) {
@@ -55,7 +108,7 @@ function assertNeutralPublishCwd(path) {
   return canonical;
 }
 
-function assertArchiveLocation(receipt, receiptPath) {
+function assertArchiveLocation(receipt: ReleaseArchiveReceiptInput, receiptPath: string): { path: string } {
   const archive = receipt?.archive;
   if (receipt?.record_type !== "mister-clean.release-archive-receipt"
     || receipt?.schema_version !== "1.1"
@@ -86,7 +139,12 @@ function assertArchiveLocation(receipt, receiptPath) {
   return { path };
 }
 
-function assertRetainedProgram(binding, receiptPath, expectedFile, label) {
+function assertRetainedProgram(
+  binding: ProgramBinding | undefined,
+  receiptPath: string,
+  expectedFile: string,
+  label: string,
+): RetainedProgram {
   if (!binding || typeof binding.path !== "string" || isAbsolute(binding.path) || dirname(binding.path) !== ".") {
     throw new Error(`receipt does not bind one relocatable ${label} filename`);
   }
@@ -108,7 +166,10 @@ function assertRetainedProgram(binding, receiptPath, expectedFile, label) {
   return { digest, path, size_bytes: metadata.size };
 }
 
-function assertPublisher(receipt, receiptPath) {
+function assertPublisher(
+  receipt: ReleaseArchiveReceiptInput,
+  receiptPath: string,
+): { entrypoint: RetainedProgram; verifier: RetainedProgram } {
   const retained = realpathSync(dirname(receiptPath));
   const actualEntrypoint = realpathSync(resolve(fileURLToPath(import.meta.url)));
   const entrypoint = assertRetainedProgram(
@@ -120,13 +181,13 @@ function assertPublisher(receipt, receiptPath) {
   const verifier = assertRetainedProgram(
     receipt?.publisher?.verifier,
     receiptPath,
-    realpathSync(join(retained, "release_archive_contract.mjs")),
+    realpathSync(join(retained, "release_archive_contract.ts")),
     "archive verifier",
   );
   return { entrypoint, verifier };
 }
 
-function pnpm(args, cwd, stdio = ["ignore", "pipe", "pipe"]) {
+function pnpm(args: string[], cwd: string, stdio: StdioOptions = ["ignore", "pipe", "pipe"]) {
   const result = spawnSync("pnpm", args, { cwd, encoding: "utf8", stdio });
   if (result.error) throw result.error;
   return result;
@@ -137,9 +198,9 @@ function pnpm(args, cwd, stdio = ["ignore", "pipe", "pipe"]) {
 // prints a JSON error object with code ERR_PNPM_PACKAGE_NOT_FOUND and
 // "No matching version found for <spec>". Only these exact shapes count as
 // "absent"; every other non-zero exit stays a hard failure.
-function registryReportsAbsent(stdout, diagnostic) {
+function registryReportsAbsent(stdout: string, diagnostic: string): boolean {
   try {
-    const parsed = JSON.parse(stdout);
+    const parsed = JSON.parse(stdout) as { error?: { code?: unknown; message?: unknown } } | null;
     const code = parsed?.error?.code;
     const message = String(parsed?.error?.message ?? "");
     if (code === "ERR_PNPM_PACKAGE_NOT_FOUND" || code === "ERR_PNPM_NO_MATCHING_VERSION"
@@ -150,7 +211,7 @@ function registryReportsAbsent(stdout, diagnostic) {
   return /\bE404\b|404 Not Found|is not in this registry|ERR_PNPM_PACKAGE_NOT_FOUND|No matching version found/iu.test(diagnostic);
 }
 
-function observeRegistry(spec, cwd) {
+function observeRegistry(spec: string, cwd: string): RegistryObservation {
   const result = pnpm([
     "view", spec, "version", "dist.integrity", "dist.shasum", "--json",
     "--registry", NPMJS_REGISTRY, SCOPED_REGISTRY_OVERRIDE,
@@ -160,9 +221,9 @@ function observeRegistry(spec, cwd) {
     if (registryReportsAbsent(String(result.stdout), diagnostic)) return { status: "absent" };
     throw new Error(`registry observation failed before publication truth was established: ${diagnostic.trim()}`);
   }
-  let value;
+  let value: Record<string, unknown>;
   try {
-    value = JSON.parse(String(result.stdout));
+    value = JSON.parse(String(result.stdout)) as Record<string, unknown>;
   } catch {
     throw new Error("registry observation did not return JSON");
   }
@@ -174,7 +235,11 @@ function observeRegistry(spec, cwd) {
   };
 }
 
-function assertExactRegistryArchive(observation, expected, spec) {
+function assertExactRegistryArchive(
+  observation: RegistryObservation,
+  expected: ExpectedRegistryArchive,
+  spec: string,
+): asserts observation is Extract<RegistryObservation, { status: "present" }> {
   if (observation.status !== "present"
     || observation.version !== expected.version
     || observation.integrity !== expected.integrity
@@ -183,19 +248,21 @@ function assertExactRegistryArchive(observation, expected, spec) {
   }
 }
 
-const args = process.argv.slice(2);
+// @cloudflare/workers-types declares `process` as `any`; annotate what is read from it.
+const args: string[] = process.argv.slice(2);
 const receiptValue = option(args, "--receipt");
 if (!receiptValue || args.length || (!isAbsolute(receiptValue) && dirname(receiptValue) !== ".")) {
   usage();
   process.exit(2);
 }
 
-const receiptPath = resolve(receiptValue);
+// process.exit above does not return, so the value is present here.
+const receiptPath = resolve(receiptValue!);
 const receiptMetadata = lstatSync(receiptPath);
 if (!receiptMetadata.isFile() || receiptMetadata.isSymbolicLink() || receiptMetadata.nlink !== 1) {
   throw new Error("release receipt must be a unique regular file");
 }
-const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as ReleaseArchiveReceiptInput;
 if ((receiptMetadata.mode & 0o777) !== 0o444) chmodSync(receiptPath, 0o444);
 const sourceReceipt = {
   path: basename(receiptPath),
@@ -206,19 +273,19 @@ const archiveLocation = assertArchiveLocation(receipt, receiptPath);
 const retainedPrograms = assertPublisher(receipt, receiptPath);
 const verifierModuleUrl = pathToFileURL(retainedPrograms.verifier.path);
 verifierModuleUrl.searchParams.set("sha256", retainedPrograms.verifier.digest);
-const verifierModule = await import(verifierModuleUrl.href);
+const verifierModule: ArchiveVerifierModule = await import(verifierModuleUrl.href);
 if (typeof verifierModule.acquireReleaseArchiveCustody !== "function"
   || typeof verifierModule.inspectReleaseArchiveCustody !== "function") {
   throw new Error("receipt-bound archive verifier does not export the custody contract");
 }
-const custody = verifierModule.acquireReleaseArchiveCustody(archiveLocation.path);
+const custody: ReleaseArchiveCustody = verifierModule.acquireReleaseArchiveCustody(archiveLocation.path);
 if (custody.archive_sha256 !== receipt.archive.sha256 || custody.size_bytes !== receipt.archive.size_bytes) {
   custody.dispose();
   throw new Error("release archive digest differs from its verification receipt");
 }
 try {
 const archiveIdentity = verifierModule.inspectReleaseArchiveCustody(custody);
-for (const field of ["package", "claimed_source", "claim_scope", "origin_authenticity", "manifest"]) {
+for (const field of ["package", "claimed_source", "claim_scope", "origin_authenticity", "manifest"] as const) {
   if (JSON.stringify(receipt[field]) !== JSON.stringify(archiveIdentity[field])) {
     throw new Error(`receipt ${field} differs from the independently verified release archive`);
   }
@@ -284,7 +351,7 @@ if (sha256File(receiptPath) !== sourceReceipt.sha256) {
   throw new Error("release receipt changed during publication");
 }
 const afterPrograms = assertPublisher(receipt, receiptPath);
-for (const field of ["entrypoint", "verifier"]) {
+for (const field of ["entrypoint", "verifier"] as const) {
   if (afterPrograms[field].digest !== retainedPrograms[field].digest) {
     throw new Error(`retained ${field} changed during publication`);
   }
@@ -305,12 +372,13 @@ writeFileSync(publicationReceiptPath, `${JSON.stringify({
   archive: { path: receipt.archive.path, sha256: custody.archive_sha256, size_bytes: receipt.archive.size_bytes },
   retained_programs: {
     entrypoint: {
-      path: receipt.publisher.entrypoint.path,
+      // assertPublisher has already rejected a missing binding.
+      path: receipt.publisher.entrypoint!.path,
       sha256: retainedPrograms.entrypoint.digest,
       size_bytes: retainedPrograms.entrypoint.size_bytes,
     },
     verifier: {
-      path: receipt.publisher.verifier.path,
+      path: receipt.publisher.verifier!.path,
       sha256: retainedPrograms.verifier.digest,
       size_bytes: retainedPrograms.verifier.size_bytes,
     },

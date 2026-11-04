@@ -180,7 +180,7 @@ describe("prepareCloseout", { timeout: 60_000 }, async () => {
     const resultRef = execution.result_ref as Record<string, unknown>;
     const result = json(join(prepared.bundleDirectory, String(resultRef.path)));
 
-    expect(regression.schema_version).toBe("1.5");
+    expect(regression.schema_version).toBe("1.6");
     expect(regression.baseline_object).toBe(expected.sha256);
     expect(regression.baseline_repository_object).toEqual(expected);
     expect(regression.closing_object).toBe(expected.sha256);
@@ -241,7 +241,7 @@ describe("prepareCloseout", { timeout: 60_000 }, async () => {
     expect(ref.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("emits schema 1.5 detector coverage with frozen inputs, repository-object binding, and honest source-runtime identity", async () => {
+  it("emits schema 1.6 detector coverage with frozen inputs, repository-object binding, and honest source-runtime identity", async () => {
     const { base, evidence, repo } = fixture("detector-coverage");
     const denylist = join(base, "denylist.txt");
     const semanticManifest = join(base, "semantic-probes.json");
@@ -266,12 +266,12 @@ describe("prepareCloseout", { timeout: 60_000 }, async () => {
     const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
     const debts = report.completion_debts as Array<Record<string, unknown>>;
 
-    expect(regression.schema_version).toBe("1.5");
+    expect(regression.schema_version).toBe("1.6");
     expect(coverage.runtime_identity).toMatchObject({
       status: "source_development",
       claim_scope: { covers: "source_entrypoint_regular_file_bytes_only" },
     });
-    expect(coverage.required_detector_ids).toEqual(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
+    expect(coverage.required_detector_ids).toEqual(["planning_graph", "public_safety", "github_actions", "semantic_boundary", "language_policy"]);
     expect(coverage.run_policy).toEqual({
       schema_version: "1",
       public_safety: {
@@ -369,7 +369,7 @@ describe("prepareCloseout", { timeout: 60_000 }, async () => {
     const coverage = regression.detector_coverage as Record<string, unknown>;
     const report = json(join(prepared.bundleDirectory, "closeout-report.json"));
 
-    expect(coverage.required_detector_ids).toEqual(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
+    expect(coverage.required_detector_ids).toEqual(["planning_graph", "public_safety", "github_actions", "semantic_boundary", "language_policy"]);
     expect(coverage.applicability).toContainEqual({
       detector_id: "public_safety", disposition: "required", basis: "tracked_shippable_surface",
     });

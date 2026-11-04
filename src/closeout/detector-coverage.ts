@@ -26,7 +26,9 @@ import {
   type FileRuntimeAttestationBinding,
 } from "../runtime-binding.js";
 
-export const DETECTOR_COVERAGE_SCHEMA_VERSION = "5";
+export const DETECTOR_COVERAGE_SCHEMA_VERSION = "6";
+/** Regression-delta schema each runtime-bound registry version is written under. */
+export const REGRESSION_DELTA_SCHEMA_VERSION = "1.6";
 export const DETECTOR_RUN_POLICY_VERSION = "1";
 // Frozen compatibility identity. Never recompute v1 from a later registry.
 const DETECTOR_REGISTRY_V1_SHA256 = "803e6d35762a802e980c874a4e8783c219234fdcaef9b9f2c570df9ba3d66f50";
@@ -34,8 +36,11 @@ const DETECTOR_REGISTRY_V2_SHA256 = "bd49c47b93786e215c9e02e6850e55ea9f19c5ff996
 const DETECTOR_REGISTRY_V3_SHA256 = "856ea127812f22aa50f0b566fae1350bf5d8c13db5c29548eff112d63027e47e";
 const DETECTOR_REGISTRY_V4_SHA256 = "2a6687eac140f4277510c11648f3b0bbf06b104390d8a992b2c021999458c1b1";
 const DETECTOR_REGISTRY_V5_SHA256 = "35d8e9e9595c124bdf68eb363621533c99e920e454a6d49749702479f9647ee6";
+const DETECTOR_REGISTRY_V6_SHA256 = "0dac946a95de2c084c76502f7274fad45d757750c8277a052adbfde6a9965317";
 
-export const CLOSEOUT_DETECTORS = [
+// Frozen schema-5 registry (regression delta 1.5, every 7.0-7.5 bundle). Never
+// edit: a 1.5 bundle is validated against exactly these definitions.
+const DETECTOR_REGISTRY_V5 = [
   {
     id: "planning_graph",
     scope: ".",
@@ -59,6 +64,19 @@ export const CLOSEOUT_DETECTORS = [
     scope: ".",
     command: "mister-clean audit semantic . --json",
     detector: "mister-clean/semantic_boundary@1",
+  },
+] as const;
+
+// Schema 6 (regression delta 1.6): schema 5 plus the declared language policy,
+// always required; a repository without a policy yields a not_applicable
+// result with zero fingerprints, never a missing execution.
+export const CLOSEOUT_DETECTORS = [
+  ...DETECTOR_REGISTRY_V5,
+  {
+    id: "language_policy",
+    scope: "tracked_shippable",
+    command: "mister-clean audit language-policy . --json",
+    detector: "mister-clean/language_policy@1",
   },
 ] as const;
 
@@ -112,10 +130,19 @@ const DETECTOR_REGISTRY_V4 = [
 ] as const;
 
 export type DetectorId = (typeof CLOSEOUT_DETECTORS)[number]["id"];
-export type DetectorRegistryVersion = "1" | "2" | "3" | "4" | typeof DETECTOR_COVERAGE_SCHEMA_VERSION;
+export type DetectorRegistryVersion = "1" | "2" | "3" | "4" | "5" | typeof DETECTOR_COVERAGE_SCHEMA_VERSION;
+/** Registry versions a runtime-bound (1.5+) regression delta may carry. */
+export type RuntimeBoundRegistryVersion = "5" | typeof DETECTOR_COVERAGE_SCHEMA_VERSION;
 
-function detectorRegistry(version: DetectorRegistryVersion): typeof CLOSEOUT_DETECTORS {
-  return (version === "1"
+export interface DetectorSpec {
+  readonly id: DetectorId;
+  readonly scope: "." | "tracked_shippable";
+  readonly command: string;
+  readonly detector: string;
+}
+
+function detectorRegistry(version: DetectorRegistryVersion): readonly DetectorSpec[] {
+  return version === "1"
     ? DETECTOR_REGISTRY_V1
     : version === "2"
       ? DETECTOR_REGISTRY_V2
@@ -123,7 +150,25 @@ function detectorRegistry(version: DetectorRegistryVersion): typeof CLOSEOUT_DET
         ? DETECTOR_REGISTRY_V3
         : version === "4"
           ? DETECTOR_REGISTRY_V4
-          : CLOSEOUT_DETECTORS) as typeof CLOSEOUT_DETECTORS;
+          : version === "5"
+            ? DETECTOR_REGISTRY_V5
+            : CLOSEOUT_DETECTORS;
+}
+
+/**
+ * The one registry version a regression-delta schema binds: 1.6 binds 6, 1.5
+ * binds the frozen 5 (every 7.0-7.5 bundle), and 1.3/1.4 bind the frozen 1.
+ * There is no either-or: a 1.5 bundle can never claim registry 6.
+ */
+export function registryVersionForRegressionSchema(schemaVersion: string): DetectorRegistryVersion {
+  if (schemaVersion === REGRESSION_DELTA_SCHEMA_VERSION) return DETECTOR_COVERAGE_SCHEMA_VERSION;
+  if (schemaVersion === "1.5") return "5";
+  return "1";
+}
+
+/** Regression-delta schemas that bind a runtime identity (1.5 and later). */
+export function isRuntimeBoundRegressionSchema(schemaVersion: string): boolean {
+  return schemaVersion === "1.5" || schemaVersion === REGRESSION_DELTA_SCHEMA_VERSION;
 }
 
 export interface DetectorRunPolicy {
@@ -207,7 +252,7 @@ export interface DetectorCoverageExecution {
 }
 
 export interface DetectorCoverage {
-  readonly registry_version: typeof DETECTOR_COVERAGE_SCHEMA_VERSION;
+  readonly registry_version: RuntimeBoundRegistryVersion;
   readonly registry_sha256: string;
   /** Bound policy that independently determines the required subset. */
   readonly run_policy: DetectorRunPolicy;
@@ -732,6 +777,44 @@ function validatePublicSafetyResult(record: Record<string, unknown>, errors: str
   if (record.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
 
+/** Same formula as `languagePolicyFindingFingerprint` in language-policy.ts. */
+export function languagePolicyFingerprint(path: string, extension: string): string {
+  return digest(`language_policy\0forbidden_language\0${path}\0${extension}`);
+}
+
+function validateLanguagePolicyResult(record: Record<string, unknown>, errors: string[]): void {
+  requireFields(record, [
+    "allowed_count", "exitCode", "findings", "generated_exempt", "policy", "record_type", "schema_version",
+    "status", "tracked_path_count",
+  ], "$", errors);
+  if (record.record_type !== "mister-clean.language-policy-audit") errors.push("$.record_type: expected mister-clean.language-policy-audit");
+  if (record.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
+  if (!nonnegativeInteger(record.tracked_path_count)) errors.push("$.tracked_path_count: expected nonnegative integer");
+  if (!nonnegativeInteger(record.allowed_count)) errors.push("$.allowed_count: expected nonnegative integer");
+  const generated = object(record.generated_exempt);
+  if (!generated || !nonnegativeInteger(generated.count) || !Array.isArray(generated.paths)
+    || generated.paths.length !== generated.count || generated.paths.some((path) => !nonempty(path))) {
+    errors.push("$.generated_exempt: expected { count, paths } with one path per count");
+  }
+  const findings = Array.isArray(record.findings) ? record.findings : [];
+  if (!Array.isArray(record.findings)) errors.push("$.findings: expected array");
+  for (const [index, value] of findings.entries()) {
+    const row = object(value);
+    requireFields(row, ["extension", "family", "fingerprint", "path", "rule"], `$.findings[${index}]`, errors);
+    if (!row || row.family !== "language_policy" || row.rule !== "forbidden_language"
+      || !nonempty(row.path) || !nonempty(row.extension) || !hexSha256(row.fingerprint)
+      || row.fingerprint !== languagePolicyFingerprint(String(row.path), String(row.extension))) {
+      errors.push(`$.findings[${index}]: invalid canonical language-policy finding`);
+    }
+  }
+  const declared = record.policy !== null;
+  if (declared && !object(record.policy)) errors.push("$.policy: expected object or null");
+  const expectedStatus = !declared ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
+  if (record.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
+  if (!declared && (findings.length > 0 || generated?.count !== 0)) errors.push("$: an undeclared policy carries no findings and no exemptions");
+  if (record.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
+}
+
 /**
  * Validate the whole canonical detector result, including internal accounting.
  * A fingerprint-only fragment is evidence of neither coverage nor execution.
@@ -744,6 +827,7 @@ export function detectorResultShapeErrors(detectorId: string, value: unknown): s
   else if (detectorId === "semantic_boundary") validateSemanticResult(record, errors);
   else if (detectorId === "public_safety") validatePublicSafetyResult(record, errors);
   else if (detectorId === "github_actions") validateGitHubActionsResult(record, errors);
+  else if (detectorId === "language_policy") validateLanguagePolicyResult(record, errors);
   else errors.push(`$: unknown detector ${detectorId}`);
   return errors;
 }
@@ -761,7 +845,9 @@ export function detectorRegistrySha256(version: DetectorRegistryVersion = DETECT
         ? DETECTOR_REGISTRY_V3_SHA256
         : version === "4"
           ? DETECTOR_REGISTRY_V4_SHA256
-          : DETECTOR_REGISTRY_V5_SHA256;
+          : version === "5"
+            ? DETECTOR_REGISTRY_V5_SHA256
+            : DETECTOR_REGISTRY_V6_SHA256;
   const actual = digest(JSON.stringify({ version, detectors: detectorRegistry(version) }));
   if (actual !== expected) {
     throw new Error(`detector registry ${version} changed without a schema-version bump`);
@@ -834,7 +920,7 @@ export function detectorApplicabilityForPolicy(
 export function detectorById(
   id: string,
   version: DetectorRegistryVersion = DETECTOR_COVERAGE_SCHEMA_VERSION,
-): (typeof CLOSEOUT_DETECTORS)[number] | undefined {
+): DetectorSpec | undefined {
   return detectorRegistry(version).find((detector) => detector.id === id);
 }
 
@@ -922,7 +1008,7 @@ export function findingFingerprintsFromAudit(detectorId: string, value: unknown)
           : "";
       if (row.fingerprint !== expected) return undefined;
       fingerprints.push(row.fingerprint);
-    } else if (detectorId === "github_actions") {
+    } else if (detectorId === "github_actions" || detectorId === "language_policy") {
       if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint)) return undefined;
       fingerprints.push(row.fingerprint);
     } else return undefined;
@@ -943,10 +1029,16 @@ export function createDetectorCoverage(input: {
   readonly githubActionsRef: DigestRef;
   readonly semanticAudit: SemanticAuditResult;
   readonly semanticRef: DigestRef;
+  /** Required under registry 6; absent under the frozen registry 5. */
+  readonly languagePolicyAudit?: unknown;
+  readonly languagePolicyRef?: DigestRef;
   readonly inputRefs?: Partial<Record<DetectorId, readonly DetectorInputRef[]>>;
+  /** Registry to mint under: the current 6 by default, or the frozen 5 that 1.5 bundles carry. */
+  readonly registryVersion?: RuntimeBoundRegistryVersion;
 }): DetectorCoverage {
-  const requiredDetectorIds = requiredDetectorIdsForPolicy(input.runPolicy);
-  const applicability = detectorApplicabilityForPolicy(input.runPolicy);
+  const registryVersion = input.registryVersion ?? DETECTOR_COVERAGE_SCHEMA_VERSION;
+  const requiredDetectorIds = requiredDetectorIdsForPolicy(input.runPolicy, registryVersion);
+  const applicability = detectorApplicabilityForPolicy(input.runPolicy, registryVersion);
   if (!requiredDetectorIds || !applicability) throw new Error("invalid detector run policy");
   const runtimeIdentity = runtimeIdentityRecord(createDetectorRuntimeIdentity(input.runtimeAttestation));
   const runtimeIdentitySha256 = detectorRuntimeIdentitySha256(runtimeIdentity);
@@ -955,6 +1047,11 @@ export function createDetectorCoverage(input: {
     semantic_boundary: { audit: input.semanticAudit, ref: input.semanticRef, exitCode: input.semanticAudit.exitCode },
     github_actions: { audit: input.githubActionsAudit, ref: input.githubActionsRef, exitCode: input.githubActionsAudit.exitCode },
   };
+  if (requiredDetectorIds.includes("language_policy")) {
+    const audit = object(input.languagePolicyAudit);
+    if (!audit || !input.languagePolicyRef) throw new Error("registry 6 requires a language-policy audit result and digest reference");
+    results.language_policy = { audit, ref: input.languagePolicyRef, exitCode: Number(audit.exitCode) };
+  }
   if (input.runPolicy.public_safety.disposition === "required") {
     if (!input.publicSafetyAudit || !input.publicSafetyRef) throw new Error("public-safety policy requires an audit result and digest reference");
     results.public_safety = {
@@ -963,7 +1060,7 @@ export function createDetectorCoverage(input: {
       exitCode: input.publicSafetyAudit.exitCode,
     };
   }
-  const executions = CLOSEOUT_DETECTORS.filter((spec) => requiredDetectorIds.includes(spec.id)).map((spec) => {
+  const executions = detectorRegistry(registryVersion).filter((spec) => requiredDetectorIds.includes(spec.id)).map((spec) => {
     const result = results[spec.id];
     if (!result) throw new Error(`missing ${spec.id} detector result`);
     const findingFingerprints = findingFingerprintsFromAudit(spec.id, result.audit);
@@ -988,8 +1085,8 @@ export function createDetectorCoverage(input: {
     };
   });
   return {
-    registry_version: DETECTOR_COVERAGE_SCHEMA_VERSION,
-    registry_sha256: detectorRegistrySha256(),
+    registry_version: registryVersion,
+    registry_sha256: detectorRegistrySha256(registryVersion),
     run_policy: input.runPolicy,
     run_policy_sha256: detectorRunPolicySha256(input.runPolicy),
     runtime_identity: runtimeIdentity,
