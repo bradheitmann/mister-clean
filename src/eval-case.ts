@@ -332,6 +332,8 @@ function citationShape(value: unknown, path: string, refusals: EvalCaseRefusal[]
 }
 
 const SHORT_SHA = /^[0-9a-f]{7,40}$/u;
+/** Keys a parsed object map must never carry: they would reach the prototype. */
+const PROTOTYPE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
 /** An evidence-manifest citation: seam equal to the citing field's repository, a short-or-full commit, a bare file name, a sha256. */
 function manifestCitationShape(value: unknown, repository: unknown, path: string, refusals: EvalCaseRefusal[]): value is EvidenceManifestCitation {
@@ -771,16 +773,18 @@ export function parseEvidenceManifest(text: string): EvidenceManifest | string {
   if (!nonEmptyString(manifest.schema)) return "schema is required";
   const pairSets = object(manifest.pair_sets);
   if (!pairSets || Object.keys(pairSets).length === 0) return "pair_sets is required";
-  const pairSetsOut: Record<string, { base_commit: string; sessions: string }> = {};
+  const pairSetsOut: Record<string, { base_commit: string; sessions: string }> = Object.create(null) as Record<string, { base_commit: string; sessions: string }>;
   for (const [name, value] of Object.entries(pairSets)) {
+    if (PROTOTYPE_KEYS.has(name)) return `pair_sets: key ${name} is not allowed`;
     const entry = object(value);
     if (!entry || typeof entry.base_commit !== "string" || !HEX40.test(entry.base_commit) || typeof entry.sessions !== "string" || parseSessionRange(entry.sessions) === undefined) return `pair_sets.${name} needs base_commit (40 hex) and a sessions range S-nn..S-mm`;
     pairSetsOut[name] = { base_commit: entry.base_commit, sessions: entry.sessions };
   }
   const pins = object(manifest.evaluator_pins);
   if (!pins) return "evaluator_pins is required";
-  const pinsOut: Record<string, EvidenceManifest["evaluator_pins"][string]> = {};
+  const pinsOut: Record<string, EvidenceManifest["evaluator_pins"][string]> = Object.create(null) as Record<string, EvidenceManifest["evaluator_pins"][string]>;
   for (const [commit, value] of Object.entries(pins)) {
+    if (PROTOTYPE_KEYS.has(commit)) return `evaluator_pins: key ${commit} is not allowed`;
     const pin = object(value);
     const validator = object(pin?.validator_source);
     const review = object(pin?.review_source);
