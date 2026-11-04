@@ -52,3 +52,6 @@ Owner's words: "Approve all." This covers the policies below, each trusting one 
 | holden-mcp | SEAT:codex-cli:gpt-6-luna:openai | f9d1e027ffa6df48095d6c5085d23dd023f53fe5ea6f45d35e1db129ff8839d5 |
 
 Each repository's own charter records its row. holden-mcp sits outside this workspace and was included at the owner's request.
+
+## Amendment 2026-11-04: odin key revoked
+The odin row above (key `odin-attest-ed25519-20261104`, policy `2dce0771…`) is revoked: its private key was printed to a reviewer seat. See charter/incidents/2026-11-04-odin-attestation-key-exposure.md. Odin's replacement policy (`cc052efd…`, key `odin-attest-ed25519-20261104b`) is not active until the owner approves it. That incident record also holds the binding rule that agents inspect an `attest` config only through the read-only `attest-inspect` helper.
