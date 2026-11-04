@@ -177,3 +177,23 @@ line-42 comment (closing O-LANG-1c), sets `persist-credentials: false` on the ve
 template v3. `ci.yml` names no `.mjs` file. After merging main `6a42b5f` (`4229d6a`) and the patch, two clean
 `build:raw` runs under bun 1.4.0 are identical to each other and to the pre-patch merge build. MANIFEST differs from
 main only in `./package.json` and `./README.md`. `manifest:package:check` PASS; lang-guard `2 untyped file(s): 2 .js`.
+
+## Full test:node on 6424b77 (after main 6a42b5f and the owner patch): RED, every red classified environment
+
+`pnpm run test:node` once on `6424b77` (host load 46 to 93 from other workloads, against 10 to 12 for the earlier
+runs): `Test Files  6 failed | 53 passed (59)`, `Tests  10 failed | 915 passed (925)`, `Duration  2959.06s`, exit 1.
+Rule S6 (full suite green on exact bytes) is therefore NOT met on this tip. None of the reds is caused by this lane.
+
+| Red | Count | Classification | Evidence |
+|---|---|---|---|
+| `src/closeout/bundle.test.ts`, three native-gate tests | 3 | environment (load budget) | 30 s in-test timeouts. Same sha at load 12: all three pass. |
+| `src/cli.test.ts` GUARD authority, `src/closeout/planning.test.ts` acceptance vocabulary | 2 | environment (load budget) | 15 s timeouts. Rerun of both files on the same sha: pass. |
+| `src/closeout/execution-lease.test.ts` successor admission | 1 | environment (load) | `recorded process group PID … is alive but its process birth identity cannot be verified`. Rerun of the file: pass. |
+| `scripts/run_clean_ci.test.ts` "waits for a rejected supervised run" | 1 | environment (load budget) | 116 s under load. Same sha at load 12: pass. |
+| `scripts/run_clean_ci.test.ts` "cold clone" and "bounded Node-matrix timeout" | 2 | pre-existing on main in this environment | Reproduced at load 12 to 15 on this sha and on a detached baseline at origin/main `6a42b5f`, with the same messages on both (`supervised command exited 128: pnpm`; `expected 'rejected' to be 'fulfilled'`; marker `expected false to be true`). Both passed on `4731adb` at load 11 to 12. |
+| `scripts/release_path.test.ts` real build in external capsule | 1 | environment (load budget), also red on main | `Test timed out in 120000ms` then `Hook timed out in 10000ms` on this sha (load 16 to 18) and on origin/main `6a42b5f` (358 s, load 16 to 20). It passed on `4731adb` at load 11 to 12. |
+
+Last green: `pnpm run test:node` on `4731adb` (915/915). Last red: `pnpm run test:node` on `6424b77` (above). The
+targeted reproduction commands are recorded under `$TMPDIR/port-release-lane/logs/` (`branch-targeted.log`,
+`base-targeted.log`, `branch-release-path.log`, `base-release-path.log`, `rerun3.log`). Recommendation: one more full
+suite on this exact tip when host load is back near 10 to 12, before QA dispatch.
