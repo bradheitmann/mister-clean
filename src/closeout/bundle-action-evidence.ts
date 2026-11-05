@@ -48,6 +48,7 @@ import {
   RETIREMENT_RATIFICATION_NORMALIZER,
   RETIREMENT_RULING_MINTED_BY,
 } from "./retirement-ratification.js";
+import { hardenedRemoteUrl } from "./git-hardening.js";
 
 export interface NativeGateControlEvidence {
   readonly control: JsonObject;
@@ -279,6 +280,14 @@ export async function validateBoundExecutionRecords(
         if (repo && !allowPlaceholders && (await git.run(repo, ["cat-file", "-e", `${String(evidence.commit ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push(`${epath}: commit does not exist in live repository`);
       } else if (name === "pushed" && evidence.kind === "remote_ref_resolution") {
         if (repo && !allowPlaceholders) {
+          // Same boundary as the live target proof: the bundle names the remote, so its
+          // transport is resolved under the hardened config and refused unless https or ssh.
+          try {
+            await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git);
+          } catch (error) {
+            errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
+            continue;
+          }
           const result = await git.run(repo, ["ls-remote", String(evidence.remote ?? ""), String(evidence.ref ?? "")], [0, 2, 128]);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
