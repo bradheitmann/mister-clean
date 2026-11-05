@@ -69,10 +69,26 @@ a timeout, and not the final bytes; superseded by run 2.
 | `cargo:tools:campaign-observer:test` | `failed` (`nonzero_exit`, exit 101) | `source: "default"`, `timeout_ms: 600000` | 17 s | `error: rustc 1.88.0 is not supported … requires rustc 1.89`: this host's rustup default toolchain is 1.88.0 (`rustup show`), the crate declares `rust-version = "1.89"` and no `rust-toolchain.toml`; hosted CI's runner rustc is newer and passes. Environment class (operator host toolchain), not the candidate and not this lane; #56's locators are in place (the gate reached cargo). |
 | `cargo:tools:campaign-query:test` | `passed` | `source: "default"`, `timeout_ms: 600000` | 14 s | — |
 
-So the budget mechanism does what the finding needed: the judge's own gate
-now runs to completion under a declared, capped, recorded budget. "Both cargo
-gates pass" is not shown on this host because of its 1.88 default toolchain;
-it is for hosted CI to show.
+**Toolchain pin (PM ruling, part of this lane).** `tools/campaign-observer`
+and `tools/campaign-query` each gained a `rust-toolchain.toml` pinning
+`1.95.0` (installed here; satisfies `rust-version = "1.89"`), so the cargo
+gates no longer depend on the operator host's default toolchain. Both tools'
+`cargo test --locked` pass directly under the pin (observer 15 tests, query 2).
+`manifest:package:check` still PASS (the tools are not packaged), so no
+rebuild.
+
+**Run 3 (clone at 691fd5b, the final bytes of this lane):** coverage `1.5`,
+validation **`pass`** (no errors), `prepare` exit 0.
+
+| gate | state | budget evidence | ran |
+|---|---|---|---|
+| `node:.:ci-check` | **`passed`** (exit 0) | `source: "repository"`, `timeout_ms: 2400000`, `default_timeout_ms: 600000`, path + sha256 + reason | 00:06:54 → 00:21:48 (14 min 54 s) |
+| `cargo:tools:campaign-observer:test` | **`passed`** | `source: "default"`, `timeout_ms: 600000` | 57 s |
+| `cargo:tools:campaign-query:test` | **`passed`** | `source: "default"`, `timeout_ms: 600000` | 5 s |
+
+Proof 4 holds on the final bytes: the judge's own gate runs to completion
+under a declared, capped, recorded budget (it would have been `timed_out` at
+10:00 under the former default), and both cargo gates pass.
 
 ## Gates (worktree, `PATH=$TMPDIR/bun140/bin:$PATH`, bun 1.4.0)
 
