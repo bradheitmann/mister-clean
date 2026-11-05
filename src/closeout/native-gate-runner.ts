@@ -1,10 +1,10 @@
-/** Sandboxed, sequential execution of one discovered native-gate catalog. */
+/** Snapshot-isolated (not OS-sandboxed), sequential execution of one discovered native-gate catalog. */
 import { randomUUID } from "node:crypto";
 import { spawnSync, type ChildProcess } from "node:child_process";
-import { accessSync, constants, existsSync, lstatSync, realpathSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import {
@@ -157,9 +157,62 @@ export function toolchainLocators(
   return locators;
 }
 
-export function scrubbedEnvironment(home: string): NodeJS.ProcessEnv {
+/**
+ * The toolchain a gate may reach by name. Each is resolved once, against the
+ * operator's PATH at the first gate of this process; the gate PATH holds only
+ * their directories, so a credential CLI elsewhere on the operator's PATH
+ * (doppler, op, gh, aws, gcloud) is not reachable by name. A credential CLI
+ * installed beside a toolchain executable stays reachable; that needs an OS
+ * sandbox. `cc` is the C and Rust linker; its directory also carries the POSIX
+ * utilities (basename, env, sed) that build scripts expect.
+ */
+export const GATE_TOOLCHAIN = ["node", "bun", "pnpm", "npm", "cargo", "rustc", "rustup", "go", "git", "sh", "cc"] as const;
+
+let resolvedGateToolchain: readonly ResolvedExecutable[] | undefined;
+
+/** The minimal gate PATH: toolchain directories (plus the gate executable's), in operator-PATH order. */
+export function minimalGatePath(
+  pathValue: string,
+  toolchain: readonly ResolvedExecutable[],
+  gateExecutable?: ResolvedExecutable,
+): string {
+  const wanted = new Set([...toolchain, ...(gateExecutable ? [gateExecutable] : [])].map((executable) => dirname(executable.invoked)));
+  const ordered = pathValue.split(delimiter).filter((directory) => wanted.has(directory));
+  return [...new Set([...ordered, ...wanted])].join(delimiter);
+}
+
+function gateToolchain(): readonly ResolvedExecutable[] {
+  resolvedGateToolchain ??= GATE_TOOLCHAIN.flatMap((name) => {
+    const executable = resolveExecutable(name, process.env.PATH ?? "");
+    return executable ? [executable] : [];
+  });
+  return resolvedGateToolchain;
+}
+
+/** Where a gate's CARGO_HOME lives inside its disposable home. */
+export function scrubbedCargoHome(home: string): string {
+  return join(home, "cargo-home");
+}
+
+/**
+ * Give the gate a CARGO_HOME that keeps the operator's registry and git caches
+ * readable (symlinked) and holds nothing else: no credentials, credentials.toml,
+ * config or installed binaries.
+ */
+export function materializeScrubbedCargoHome(home: string, operatorCargoHome = toolchainLocators().CARGO_HOME): void {
+  if (operatorCargoHome === undefined) return;
+  const target = scrubbedCargoHome(home);
+  mkdirSync(target, { recursive: true, mode: 0o700 });
+  for (const cache of ["registry", "git"]) {
+    const source = join(operatorCargoHome, cache);
+    if (existsSync(source) && !existsSync(join(target, cache))) symlinkSync(source, join(target, cache), "dir");
+  }
+}
+
+export function scrubbedEnvironment(home: string, gateExecutable?: ResolvedExecutable): NodeJS.ProcessEnv {
+  const locators = toolchainLocators();
   const env: NodeJS.ProcessEnv = {
-    PATH: process.env.PATH ?? "",
+    PATH: minimalGatePath(process.env.PATH ?? "", gateToolchain(), gateExecutable),
     HOME: home,
     USERPROFILE: home,
     TMPDIR: home,
@@ -175,12 +228,19 @@ export function scrubbedEnvironment(home: string): NodeJS.ProcessEnv {
     BUN_INSTALL_CACHE_DIR: join(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
     GOPROXY: "off",
-    ...toolchainLocators(),
+    ...locators,
+    ...(locators.CARGO_HOME === undefined ? {} : { CARGO_HOME: scrubbedCargoHome(home) }),
   };
   for (const name of ["LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"] as const) {
     if (process.env[name] !== undefined) env[name] = process.env[name];
   }
   return env;
+}
+
+/** The environment one gate runs in: scrubbed, minimal PATH, credential-free CARGO_HOME. */
+function gateEnvironment(home: string, executable: ResolvedExecutable): NodeJS.ProcessEnv {
+  materializeScrubbedCargoHome(home);
+  return scrubbedEnvironment(home, executable);
 }
 
 export function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): boolean {
@@ -536,7 +596,7 @@ async function executeGateUnderDeadline(
       invokedExecutable,
       gate.command.argv,
       cwd,
-      scrubbedEnvironment(snapshot.home),
+      gateEnvironment(snapshot.home, executable),
       options.timeout_ms,
       options.max_output_bytes,
       options.termination_grace_ms,

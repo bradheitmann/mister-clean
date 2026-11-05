@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:f
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveExecutable, scrubbedEnvironment, toolchainLocators } from "./native-gate-runner.js";
+import { resolveExecutable, scrubbedCargoHome, scrubbedEnvironment, toolchainLocators } from "./native-gate-runner.js";
 
 const roots: string[] = [];
 function scratch(): string {
@@ -30,7 +30,10 @@ describe("toolchain locators in the scrubbed gate environment", () => {
     expect(env.HOME).toBe(home);
     expect(env.CARGO_NET_OFFLINE).toBe("true");
     expect(env.GOPROXY).toBe("off");
-    for (const [name, value] of Object.entries(toolchainLocators())) expect(env[name]).toBe(value);
+    // CARGO_HOME is the gate's own credential-free copy (master-gate S1); the other locators pass through.
+    for (const [name, value] of Object.entries(toolchainLocators())) {
+      expect(env[name]).toBe(name === "CARGO_HOME" ? scrubbedCargoHome(home) : value);
+    }
   });
 
   it("defaults: only conventional directories that exist under the operator's home are used", () => {
