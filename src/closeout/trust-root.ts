@@ -49,13 +49,17 @@ function validIsoTimestamp(value: unknown): value is string {
   return typeof value === "string" && ISO_TIMESTAMP.test(value) && !Number.isNaN(Date.parse(value));
 }
 
-/** Judge pins from repeatable flags plus the environment; sorted and unique. A malformed pin is refused. */
+/**
+ * Judge pins, sorted and unique. Explicit flags replace the environment pin;
+ * the environment applies only when no flag is given. A malformed pin is refused.
+ */
 export function trustPolicyPins(flags: readonly string[], environment: NodeJS.ProcessEnv): string[] {
   const pins = new Set<string>();
   for (const value of flags) {
     if (!HEX64.test(value)) throw new Error(`${TRUST_POLICY_PIN_FLAG} requires a lowercase SHA-256 hex digest`);
     pins.add(value);
   }
+  if (flags.length > 0) return [...pins].sort();
   for (const value of (environment[TRUST_POLICY_PIN_ENV] ?? "").split(/[\s,]+/u).filter(Boolean)) {
     if (!HEX64.test(value)) throw new Error(`${TRUST_POLICY_PIN_ENV} must hold lowercase SHA-256 hex digests separated by commas or whitespace`);
     pins.add(value);

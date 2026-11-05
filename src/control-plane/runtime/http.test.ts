@@ -63,7 +63,7 @@ describe("loopback HTTP control-plane adapter", () => {
     const producer = { load: async () => parseCanonicalLiveSnapshot(live) };
     const adapter = await startLoopbackHttpAdapter({ service: handler(), authenticator: new StaticBearerAuthenticator(token), app_root: directory, snapshot_producer: producer });
     try {
-      const session = await fetch(new URL("session", adapter.app_url!));
+      const session = await fetch(new URL("session", adapter.app_url!), { headers: { Authorization: `Bearer ${token}` } });
       const response = await fetch(new URL("control-plane/snapshot.json", adapter.app_url!), { headers: { Cookie: session.headers.get("set-cookie")! } });
       expect(response.status).toBe(200);
       const wire = await response.json();
@@ -95,7 +95,7 @@ describe("loopback HTTP control-plane adapter", () => {
       expect(await page.text()).toContain("control plane");
       const crossOrigin = await fetch(appUrl, { headers: { Origin: "https://example.invalid" } });
       expect(crossOrigin.status).toBe(403);
-      const session = await fetch(new URL("session", appUrl));
+      const session = await fetch(new URL("session", appUrl), { headers: { Authorization: `Bearer ${token}` } });
       expect(session.status).toBe(204);
       const cookie = session.headers.get("set-cookie");
       expect(cookie).toMatch(/HttpOnly/);
@@ -117,7 +117,7 @@ describe("loopback HTTP control-plane adapter", () => {
     try {
       const cookies: string[] = [];
       for (let index = 0; index < 65; index += 1) {
-        const response = await fetch(new URL("session", adapter.app_url!));
+        const response = await fetch(new URL("session", adapter.app_url!), { headers: { Authorization: `Bearer ${token}` } });
         cookies.push(response.headers.get("set-cookie")!);
       }
       expect(await fetch(new URL("control-plane/snapshot.json", adapter.app_url!), { headers: { Cookie: cookies[0]! } }).then((response) => response.status)).toBe(401);
@@ -279,6 +279,52 @@ describe("loopback HTTP control-plane adapter", () => {
       expect(service.calls).toBe(0);
     } finally {
       await adapter.close();
+    }
+  });
+});
+
+describe("loopback HTTP control-plane session auth", () => {
+  it("session auth: GET /session refuses without the bearer token that guards /rpc", async () => {
+    const directory = await mkdtemp("/tmp/mc-http-session-auth-");
+    await writeFile(join(directory, "index.html"), "ok", "utf8");
+    const adapter = await startLoopbackHttpAdapter({ service: handler(), authenticator: new StaticBearerAuthenticator(token), app_root: directory });
+    try {
+      const anonymous = await fetch(new URL("session", adapter.app_url!));
+      expect(anonymous.status).toBe(401);
+      expect(anonymous.headers.get("set-cookie")).toBeNull();
+      const wrong = await fetch(new URL("session", adapter.app_url!), { headers: { Authorization: "Bearer not-the-local-control-plane-token-0000" } });
+      expect(wrong.status).toBe(401);
+      expect(wrong.headers.get("set-cookie")).toBeNull();
+      const granted = await fetch(new URL("session", adapter.app_url!), { headers: { Authorization: `Bearer ${token}` } });
+      expect(granted.status).toBe(204);
+      expect(granted.headers.get("set-cookie")).toMatch(/HttpOnly/);
+    } finally {
+      await adapter.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("session auth: snapshot.json is unreadable without a session minted under the bearer token", async () => {
+    const directory = await mkdtemp("/tmp/mc-http-session-snapshot-");
+    await writeFile(join(directory, "index.html"), "ok", "utf8");
+    const live = { ...structuredClone(demoSnapshot), source: "live" as const, source_label: "session auth fixture" };
+    const adapter = await startLoopbackHttpAdapter({
+      service: handler(),
+      authenticator: new StaticBearerAuthenticator(token),
+      app_root: directory,
+      snapshot_producer: { load: async () => parseCanonicalLiveSnapshot(live) },
+    });
+    try {
+      const anonymous = await fetch(new URL("session", adapter.app_url!));
+      const cookie = anonymous.headers.get("set-cookie");
+      const unauthenticated = await fetch(new URL("control-plane/snapshot.json", adapter.app_url!), cookie === null ? {} : { headers: { Cookie: cookie } });
+      expect(unauthenticated.status).toBe(401);
+      const granted = await fetch(new URL("session", adapter.app_url!), { headers: { Authorization: `Bearer ${token}` } });
+      const snapshot = await fetch(new URL("control-plane/snapshot.json", adapter.app_url!), { headers: { Cookie: granted.headers.get("set-cookie")! } });
+      expect(snapshot.status).toBe(200);
+    } finally {
+      await adapter.close();
+      await rm(directory, { recursive: true, force: true });
     }
   });
 });

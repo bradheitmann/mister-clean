@@ -19,6 +19,7 @@ import { TextDecoder } from "node:util";
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import { repositoryIdentity } from "./repository.js";
+import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 
 const HEX_OBJECT = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
 const OPERATION_PATHS = [
@@ -264,9 +265,9 @@ function gitBytes(repository: string, args: readonly string[], input?: Uint8Arra
       writeFileSync(inputPath, input, { mode: 0o600, flag: "wx" });
       inputDescriptor = openSync(inputPath, "r");
     }
-    return execFileSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+    return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
       encoding: "buffer",
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
       killSignal: "SIGKILL",
       maxBuffer: 128 * 1024 * 1024,
       stdio: [inputDescriptor ?? "ignore", "pipe", "pipe"],

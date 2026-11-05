@@ -9,6 +9,8 @@ export interface SnapshotSourceOptions {
   readonly url?: string;
   readonly fetcher?: typeof fetch;
   readonly headers?: HeadersInit;
+  /** The runtime's bearer token; `/session` mints a browser session only under it. */
+  readonly sessionToken?: string;
 }
 
 export class UnavailableSnapshotSource implements ControlPlaneSnapshotSource {
@@ -23,12 +25,14 @@ export class SameOriginSnapshotSource implements ControlPlaneSnapshotSource {
   readonly #sessionUrl: string;
   readonly #fetcher: typeof fetch;
   readonly #headers: HeadersInit;
+  readonly #sessionToken: string | undefined;
 
   constructor(options: SnapshotSourceOptions = {}) {
     this.#url = options.url ?? import.meta.env.VITE_CONTROL_PLANE_SNAPSHOT_ENDPOINT ?? "./control-plane/snapshot.json";
     this.#sessionUrl = "./session";
     this.#fetcher = options.fetcher ?? fetch;
     this.#headers = options.headers ?? { accept: "application/json" };
+    this.#sessionToken = options.sessionToken;
   }
 
   async load(signal?: AbortSignal): Promise<ControlPlaneSnapshot> {
@@ -36,6 +40,7 @@ export class SameOriginSnapshotSource implements ControlPlaneSnapshotSource {
     if (signal) init.signal = signal;
     if (!this.#url) throw new Error("Control-plane evidence is unavailable: no accepted snapshot endpoint is configured");
     const sessionInit: RequestInit = { method: "GET", credentials: "same-origin" };
+    if (this.#sessionToken !== undefined) sessionInit.headers = { authorization: `Bearer ${this.#sessionToken}` };
     if (signal !== undefined) sessionInit.signal = signal;
     const session = await this.#fetcher.call(globalThis, this.#sessionUrl, sessionInit);
     if (!session.ok) throw new Error(`Control-plane evidence unavailable: browser session (${session.status})`);
@@ -47,6 +52,14 @@ export class SameOriginSnapshotSource implements ControlPlaneSnapshotSource {
     if (snapshot.source !== "live") throw new Error("Snapshot is missing a live evidence binding");
     return snapshot;
   }
+}
+
+/**
+ * The operator opens the app as `<app_url>#session_token=<bearer>`. A fragment
+ * never reaches the server or the Referer header.
+ */
+export function sessionTokenFromFragment(hash: string): string | undefined {
+  return new URLSearchParams(hash.replace(/^#/u, "")).get("session_token") ?? undefined;
 }
 
 export function sourceForLocation(search: string, source: ControlPlaneSnapshotSource = new SameOriginSnapshotSource()): ControlPlaneSnapshotSource {

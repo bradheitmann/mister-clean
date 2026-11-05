@@ -34,7 +34,8 @@ import {
 } from "./closeout/semantic-v2.js";
 import { TRUST_POLICY_PIN_FLAG, trustPolicyPins, validateReceiptVerdict } from "./closeout/trust-root.js";
 import type { FileRuntimeAttestationBinding } from "./runtime-binding.js";
-import { canonicalJson, sha256Bytes } from "./canonical-json.js";
+import { canonicalJson } from "./canonical-json.js";
+import type { ValidatedBundleBinding } from "./closeout/bundle-runtime.js";
 import type { MisterCleanRunLifecycle } from "./mister-clean-lifecycle.js";
 import { journalFromEnvironment, type MisterCleanInvocationJournal } from "./mister-clean-invocation-journal.js";
 import {
@@ -337,20 +338,6 @@ interface ValidatedBundle {
   readonly validation: ReceiptValidation;
 }
 
-/** The verdict and subject commit the bundle's digest-bound report declares; undefined when unreadable. */
-function boundReport(bundlePath: string): { readonly verdict: unknown; readonly commit: string | null } | undefined {
-  try {
-    const bundle = record(readJson(bundlePath));
-    const reportPath = record(bundle?.report)?.path;
-    if (typeof reportPath !== "string") return undefined;
-    const report = record(readJson(resolve(dirname(resolve(bundlePath)), reportPath)));
-    const commit = record(report?.repo)?.commit;
-    return { verdict: report?.verdict, commit: typeof commit === "string" ? commit : null };
-  } catch {
-    return undefined;
-  }
-}
-
 async function runValidate(
   args: string[],
   io: CliIO,
@@ -403,6 +390,7 @@ async function runValidate(
   }
 
   if (kind === "bundle") {
+    let bound: ValidatedBundleBinding | undefined;
     const result = await nodeCloseoutEngine.validateBundle(path, {
       allowPlaceholders: template,
       verifyLive: !structural,
@@ -411,20 +399,20 @@ async function runValidate(
       ...(acceptedEvaluatorPath === undefined ? {} : { acceptedEvaluatorPath }),
       ...(guardAuthorityPath === undefined ? {} : { guardAuthorityPath }),
       trustPolicyPins: pins,
+      onValidated: (binding) => { bound = binding; },
     });
     if (result.failureKind === "load") {
       result.errors.forEach((error) => io.stderr(`ERROR: ${error}`));
       return 2;
     }
     // The VALIDATE receipt is the only machine record of CLEAN.
-    if (!template) {
-      const bound = boundReport(path);
+    if (!template && bound !== undefined) {
       onValidated?.({
         root: repo ?? dirname(resolve(path)),
-        verdict: validateReceiptVerdict({ ok: result.ok, live: !structural, reportVerdict: bound?.verdict }),
+        verdict: validateReceiptVerdict({ ok: result.ok, live: !structural, reportVerdict: bound.report_verdict }),
         validation: {
-          bundle_sha256: sha256Bytes(readFileSync(path)),
-          subject_commit: bound?.commit ?? null,
+          bundle_sha256: bound.bundle_sha256,
+          subject_commit: bound.subject_commit,
           trust_policy_pins: pins,
           trust_policy_pins_used: [...(result.trustPolicyPinsUsed ?? [])],
           live: !structural,

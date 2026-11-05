@@ -13,6 +13,7 @@ import {
   type BigIntStats,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 
 export interface RepositoryObject {
   readonly record_type: "mister-clean.repository-object";
@@ -81,9 +82,9 @@ function errorMessage(error: unknown): string {
 }
 
 function gitBytes(repository: string, args: readonly string[]): Buffer {
-  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
     encoding: null,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
     maxBuffer: MAX_GIT_OUTPUT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -122,10 +123,10 @@ function gitCheckIgnored(repository: string, path: string, directory: boolean): 
   const candidate = directory ? `${path}/` : path;
   const result = spawnSync(
     "git",
-    ["--no-optional-locks", "-C", repository, "check-ignore", "--quiet", "--no-index", "--", candidate],
+    hardenedGitArgs(["--no-optional-locks", "-C", repository, "check-ignore", "--quiet", "--no-index", "--", candidate]),
     {
       encoding: null,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
       maxBuffer: MAX_GIT_OUTPUT_BYTES,
       stdio: ["ignore", "pipe", "pipe"],
     },

@@ -64,6 +64,8 @@ function processAlive(pid, group = false) {
   catch (error) { return Boolean(error && error.code === "EPERM"); }
 }
 
+// ps by absolute path: the supervisor runs in the gate environment, whose
+// PATH is only the gate's toolchain shims (master-gate S1).
 function processIdentity(pid) {
   if (!processAlive(pid)) return undefined;
   try {
@@ -74,7 +76,7 @@ function processIdentity(pid) {
       const fields = stat.slice(close + 2).trim().split(/\s+/);
       return fields[19] ? "linux-proc-start:" + fields[19] : undefined;
     }
-    const started = execFileSync("ps", ["-o", "lstart=", "-o", "comm=", "-p", String(pid)], {
+    const started = execFileSync("/bin/ps", ["-o", "lstart=", "-o", "comm=", "-p", String(pid)], {
       encoding: "utf8", env: { ...process.env, LC_ALL: "C", TZ: "UTC" }, stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return started ? "ps-lstart:" + started : undefined;
@@ -186,7 +188,7 @@ function custodyProcessIds() {
     return ids.filter((pid) => pid !== process.pid && processAlive(pid));
   }
   try {
-    const output = execFileSync("ps", ["eww", "-axo", "pid=,command="], {
+    const output = execFileSync("/bin/ps", ["eww", "-axo", "pid=,command="], {
       encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 16 * 1024 * 1024,
     });

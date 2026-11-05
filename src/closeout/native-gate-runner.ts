@@ -1,10 +1,10 @@
-/** Sandboxed, sequential execution of one discovered native-gate catalog. */
+/** Snapshot-isolated (not OS-sandboxed), sequential execution of one discovered native-gate catalog. */
 import { randomUUID } from "node:crypto";
 import { spawnSync, type ChildProcess } from "node:child_process";
-import { accessSync, constants, existsSync, lstatSync, realpathSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import {
@@ -154,12 +154,113 @@ export function toolchainLocators(
     const candidate = join(operatorHome, conventional);
     if (existsSync(candidate)) locators[name] = candidate;
   }
+  // A rustup install on PATH names its own homes when the environment does not
+  // (a capsule that replaces HOME and drops RUSTUP_HOME): rustup lives in
+  // <CARGO_HOME>/bin, and RUSTUP_HOME is the sibling rustup or .rustup that
+  // holds settings.toml. Only directories that exist are used.
+  const rustup = environment.PATH === undefined ? undefined : resolveExecutable("rustup", environment.PATH);
+  if (rustup !== undefined) {
+    const cargoHome = dirname(dirname(rustup.resolved));
+    if (locators.CARGO_HOME === undefined && basename(dirname(rustup.resolved)) === "bin") locators.CARGO_HOME = cargoHome;
+    if (locators.RUSTUP_HOME === undefined) {
+      const rustupHome = ["rustup", ".rustup"].map((name) => join(dirname(cargoHome), name))
+        .find((candidate) => existsSync(join(candidate, "settings.toml")));
+      if (rustupHome !== undefined) locators.RUSTUP_HOME = rustupHome;
+    }
+  }
   return locators;
 }
 
-export function scrubbedEnvironment(home: string): NodeJS.ProcessEnv {
+/**
+ * The toolchain a gate may reach by name. Each is resolved once, against the
+ * operator's PATH at the first gate of this process. A gate's whole PATH is
+ * one shim directory in its disposable home holding a symlink per resolved
+ * executable (to its real path), so no other program in a toolchain's
+ * directory (op, gh, gcloud beside node in Homebrew) is reachable by name.
+ * `cc` is the C and Rust linker.
+ */
+export const GATE_TOOLCHAIN = ["node", "bun", "pnpm", "npm", "cargo", "rustc", "rustup", "go", "git", "sh", "cc"] as const;
+
+/**
+ * POSIX utilities a build script expects by name (rm -rf dist, basename, sed),
+ * plus the linker's assembler and archiver. These are shims too; a directory
+ * is never added whole. None is a credential CLI.
+ */
+export const GATE_POSIX_UTILITIES = [
+  "ar", "as", "awk", "basename", "cat", "chmod", "cmp", "cp", "cut", "date", "diff", "dirname", "env", "expr",
+  "false", "find", "grep", "head", "ld", "ln", "ls", "mkdir", "mktemp", "mv", "printf", "pwd", "rm", "rmdir",
+  "sed", "sleep", "sort", "tail", "tee", "touch", "tr", "true", "uname", "uniq", "wc", "xargs",
+] as const;
+
+let resolvedGateToolchain: readonly ResolvedExecutable[] | undefined;
+
+/** Directory-based PATH, used only on Windows, where per-gate symlinks need privileges. */
+export function minimalGatePath(
+  pathValue: string,
+  toolchain: readonly ResolvedExecutable[],
+  gateExecutable?: ResolvedExecutable,
+): string {
+  const wanted = new Set([...toolchain, ...(gateExecutable ? [gateExecutable] : [])].map((executable) => dirname(executable.invoked)));
+  const ordered = pathValue.split(delimiter).filter((directory) => wanted.has(directory));
+  return [...new Set([...ordered, ...wanted])].join(delimiter);
+}
+
+function gateToolchain(): readonly ResolvedExecutable[] {
+  resolvedGateToolchain ??= [...GATE_TOOLCHAIN, ...GATE_POSIX_UTILITIES].flatMap((name) => {
+    const executable = resolveExecutable(name, process.env.PATH ?? "");
+    return executable ? [executable] : [];
+  });
+  return resolvedGateToolchain;
+}
+
+/** The shim directory that is a gate's whole PATH. */
+export function gateShimDirectory(home: string): string {
+  return join(home, "toolchain-bin");
+}
+
+/**
+ * Fill the gate's shim directory: one symlink per resolved toolchain
+ * executable, plus the gate's own executable, each named as invoked (so
+ * multi-call proxies like rustup dispatch correctly) and pointing at the
+ * resolved real path.
+ */
+export function materializeGateShims(home: string, gateExecutable?: ResolvedExecutable): void {
+  const directory = gateShimDirectory(home);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const entries = new Map<string, string>();
+  for (const executable of gateToolchain()) entries.set(basename(executable.invoked), executable.resolved);
+  if (gateExecutable) entries.set(basename(gateExecutable.invoked), gateExecutable.resolved);
+  for (const [name, target] of entries) {
+    if (!existsSync(join(directory, name))) symlinkSync(target, join(directory, name));
+  }
+}
+
+/** Where a gate's CARGO_HOME lives inside its disposable home. */
+export function scrubbedCargoHome(home: string): string {
+  return join(home, "cargo-home");
+}
+
+/**
+ * Give the gate a CARGO_HOME that keeps the operator's registry and git caches
+ * readable (symlinked) and holds nothing else: no credentials, credentials.toml,
+ * config or installed binaries.
+ */
+export function materializeScrubbedCargoHome(home: string, operatorCargoHome = toolchainLocators().CARGO_HOME): void {
+  if (operatorCargoHome === undefined) return;
+  const target = scrubbedCargoHome(home);
+  mkdirSync(target, { recursive: true, mode: 0o700 });
+  for (const cache of ["registry", "git"]) {
+    const source = join(operatorCargoHome, cache);
+    if (existsSync(source) && !existsSync(join(target, cache))) symlinkSync(source, join(target, cache), "dir");
+  }
+}
+
+export function scrubbedEnvironment(home: string, gateExecutable?: ResolvedExecutable): NodeJS.ProcessEnv {
+  const locators = toolchainLocators();
   const env: NodeJS.ProcessEnv = {
-    PATH: process.env.PATH ?? "",
+    PATH: process.platform === "win32"
+      ? minimalGatePath(process.env.PATH ?? "", gateToolchain(), gateExecutable)
+      : gateShimDirectory(home),
     HOME: home,
     USERPROFILE: home,
     TMPDIR: home,
@@ -175,12 +276,20 @@ export function scrubbedEnvironment(home: string): NodeJS.ProcessEnv {
     BUN_INSTALL_CACHE_DIR: join(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
     GOPROXY: "off",
-    ...toolchainLocators(),
+    ...locators,
+    ...(locators.CARGO_HOME === undefined ? {} : { CARGO_HOME: scrubbedCargoHome(home) }),
   };
   for (const name of ["LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"] as const) {
     if (process.env[name] !== undefined) env[name] = process.env[name];
   }
   return env;
+}
+
+/** The environment one gate runs in: scrubbed, minimal PATH, credential-free CARGO_HOME. */
+function gateEnvironment(home: string, executable: ResolvedExecutable): NodeJS.ProcessEnv {
+  if (process.platform !== "win32") materializeGateShims(home, executable);
+  materializeScrubbedCargoHome(home);
+  return scrubbedEnvironment(home, executable);
 }
 
 export function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): boolean {
@@ -536,7 +645,7 @@ async function executeGateUnderDeadline(
       invokedExecutable,
       gate.command.argv,
       cwd,
-      scrubbedEnvironment(snapshot.home),
+      gateEnvironment(snapshot.home, executable),
       options.timeout_ms,
       options.max_output_bytes,
       options.termination_grace_ms,

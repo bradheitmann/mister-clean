@@ -22,6 +22,7 @@ import {
   semanticFindingFingerprint,
 } from "./detector-coverage.js";
 import { GIT_OUTPUT_LIMIT_BYTES } from "./repository.js";
+import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 
 export const RECEIPT_FAMILIES = [
   "planning_graph",
@@ -129,9 +130,9 @@ export function workingTreeBlobOids(repository: string, paths: readonly string[]
   }).sort();
   const oids = new Map<string, string>();
   if (regular.length === 0) return oids;
-  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, "hash-object", "--stdin-paths"], {
+  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "hash-object", "--stdin-paths"]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     input: `${regular.join("\n")}\n`,
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["pipe", "pipe", "pipe"],

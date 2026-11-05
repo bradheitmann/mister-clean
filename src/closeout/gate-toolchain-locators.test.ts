@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveExecutable, scrubbedEnvironment, toolchainLocators } from "./native-gate-runner.js";
+import { resolveExecutable, scrubbedCargoHome, scrubbedEnvironment, toolchainLocators } from "./native-gate-runner.js";
 
 const roots: string[] = [];
 function scratch(): string {
@@ -30,7 +30,10 @@ describe("toolchain locators in the scrubbed gate environment", () => {
     expect(env.HOME).toBe(home);
     expect(env.CARGO_NET_OFFLINE).toBe("true");
     expect(env.GOPROXY).toBe("off");
-    for (const [name, value] of Object.entries(toolchainLocators())) expect(env[name]).toBe(value);
+    // CARGO_HOME is the gate's own credential-free copy (master-gate S1); the other locators pass through.
+    for (const [name, value] of Object.entries(toolchainLocators())) {
+      expect(env[name]).toBe(name === "CARGO_HOME" ? scrubbedCargoHome(home) : value);
+    }
   });
 
   it("defaults: only conventional directories that exist under the operator's home are used", () => {
@@ -41,6 +44,22 @@ describe("toolchain locators in the scrubbed gate environment", () => {
       RUSTUP_HOME: join(operatorHome, ".rustup"),
       GOPATH: join(operatorHome, "go"),
       GOMODCACHE: join(operatorHome, "go", "pkg", "mod"),
+    });
+  });
+
+  it("derived: a rustup install found on PATH yields its CARGO_HOME and sibling RUSTUP_HOME when the environment names neither", () => {
+    // The Linux judge capsule replaces HOME and drops RUSTUP_HOME; the rustup
+    // docker layout keeps /usr/local/cargo/bin/rustup beside /usr/local/rustup.
+    const root = scratch();
+    mkdirSync(join(root, "cargo", "bin"), { recursive: true });
+    writeFileSync(join(root, "cargo", "bin", "rustup"), "#!/bin/sh\n");
+    chmodSync(join(root, "cargo", "bin", "rustup"), 0o755);
+    mkdirSync(join(root, "rustup"));
+    writeFileSync(join(root, "rustup", "settings.toml"), "default_toolchain = \"fixture\"\n");
+    const real = realpathSync(root);
+    expect(toolchainLocators({ HOME: "/nonexistent-home", PATH: join(root, "cargo", "bin") }, "/nonexistent-home")).toEqual({
+      CARGO_HOME: join(real, "cargo"),
+      RUSTUP_HOME: join(real, "rustup"),
     });
   });
 

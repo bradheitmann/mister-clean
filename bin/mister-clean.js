@@ -7362,7 +7362,7 @@ var require_dist = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync18, readFileSync as readFileSync22, realpathSync as realpathSync12, statSync as statSync8, writeFileSync as writeFileSync9 } from "fs";
-import { dirname as dirname19, isAbsolute as isAbsolute24, join as join22, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
+import { dirname as dirname20, isAbsolute as isAbsolute24, join as join22, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -7394,6 +7394,48 @@ function mintServerAttestationBinding(binding) {
 }
 function isVerifiedServerAttestationBinding(value) {
   return !!value && typeof value === "object" && verifiedRuntimeBindings.has(value);
+}
+
+// src/closeout/git-hardening.ts
+import { spawnSync } from "child_process";
+var FIXED_OVERRIDES = [
+  "core.fsmonitor=false",
+  "core.untrackedCache=false",
+  "core.hooksPath=/dev/null",
+  "core.sshCommand=ssh",
+  "diff.external=",
+  "credential.helper="
+];
+var DRIVER_KEYS = "^(filter\\..+\\.(clean|smudge|process)|remote\\..+\\.uploadpack)$";
+function hardenedGitEnv(environment = process.env) {
+  return { ...environment, GIT_CONFIG_NOSYSTEM: "1" };
+}
+function driverOverrides(repository) {
+  const result = spawnSync("git", [
+    ...FIXED_OVERRIDES.flatMap((override) => ["-c", override]),
+    "-C",
+    repository,
+    "config",
+    "--name-only",
+    "--get-regexp",
+    DRIVER_KEYS
+  ], { encoding: "utf8", env: hardenedGitEnv(), stdio: ["ignore", "pipe", "ignore"], timeout: 1e4 });
+  if (result.status !== 0 || typeof result.stdout !== "string") return [];
+  const overrides = [];
+  for (const key of result.stdout.split("\n").filter(Boolean)) {
+    if (key.startsWith("remote.")) {
+      overrides.push(`${key}=git-upload-pack`);
+    } else {
+      overrides.push(`${key}=`, `${key.slice(0, key.lastIndexOf("."))}.required=false`);
+    }
+  }
+  return overrides;
+}
+function hardenedGitArgs(args, cwd) {
+  const at = args.indexOf("-C");
+  const repository = at >= 0 ? args[at + 1] : cwd;
+  const overrides = [...FIXED_OVERRIDES, ...repository === void 0 ? [] : driverOverrides(repository)];
+  return [...overrides.flatMap((override) => ["-c", override]), ...args];
 }
 
 // src/attestation.ts
@@ -7730,9 +7772,9 @@ async function verifyReleaseAttestation(root, options = {}) {
   };
 }
 function runGit(root, args) {
-  return execFileSync("git", ["--no-optional-locks", "-C", root, ...args], {
+  return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", root, ...args]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: ["ignore", "pipe", "pipe"]
   }).trim();
 }
@@ -7822,7 +7864,7 @@ function isSourceDevelopmentEntrypoint(root, moduleUrl) {
 }
 
 // src/closeout/bundle.ts
-import { basename as basename12, dirname as dirname11, isAbsolute as isAbsolute18, resolve as resolve20 } from "path";
+import { basename as basename12, dirname as dirname12, isAbsolute as isAbsolute18, resolve as resolve20 } from "path";
 
 // src/census.ts
 import { constants } from "fs";
@@ -10169,7 +10211,7 @@ function validateManifest(data, allowPlaceholders = false) {
 
 // src/closeout/repository.ts
 import { createHash as createHash4 } from "crypto";
-import { execFileSync as execFileSync2, spawnSync } from "child_process";
+import { execFileSync as execFileSync2, spawnSync as spawnSync2 } from "child_process";
 import {
   existsSync as existsSync2,
   lstatSync,
@@ -10434,9 +10476,9 @@ function gitOutputFailure(args, error, bufferedBytes, limit) {
 }
 function runGit2(repository, args, allowedStatuses = [0], options = {}) {
   const limit = options.max_buffer_bytes ?? GIT_OUTPUT_LIMIT_BYTES;
-  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const result = spawnSync2("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: limit,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -10452,9 +10494,9 @@ function runGit2(repository, args, allowedStatuses = [0], options = {}) {
   return { status, stdout, stderr };
 }
 function gitNullPaths(repository, args) {
-  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const result = spawnSync2("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -10638,7 +10680,7 @@ import { resolve as resolve5 } from "path";
 
 // src/closeout/repository-object.ts
 import { createHash as createHash5 } from "crypto";
-import { spawnSync as spawnSync2 } from "child_process";
+import { spawnSync as spawnSync3 } from "child_process";
 import {
   closeSync,
   constants as constants2,
@@ -10663,9 +10705,9 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 function gitBytes(repository, args) {
-  const result = spawnSync2("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const result = spawnSync3("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
     encoding: null,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
     maxBuffer: MAX_GIT_OUTPUT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -10696,12 +10738,12 @@ function gitLine(repository, args) {
 }
 function gitCheckIgnored(repository, path, directory) {
   const candidate = directory ? `${path}/` : path;
-  const result = spawnSync2(
+  const result = spawnSync3(
     "git",
-    ["--no-optional-locks", "-C", repository, "check-ignore", "--quiet", "--no-index", "--", candidate],
+    hardenedGitArgs(["--no-optional-locks", "-C", repository, "check-ignore", "--quiet", "--no-index", "--", candidate]),
     {
       encoding: null,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
       maxBuffer: MAX_GIT_OUTPUT_BYTES,
       stdio: ["ignore", "pipe", "pipe"]
     }
@@ -14216,7 +14258,7 @@ import { isDeepStrictEqual } from "util";
 // src/closeout/semantic.ts
 var import_yaml2 = __toESM(require_dist(), 1);
 import { createHash as createHash8 } from "crypto";
-import { spawnSync as spawnSync3 } from "child_process";
+import { spawnSync as spawnSync4 } from "child_process";
 import { existsSync as existsSync3, lstatSync as lstatSync4, readFileSync as readFileSync3, readlinkSync as readlinkSync2 } from "fs";
 import { basename as basename6, dirname as dirname5, extname as extname4, isAbsolute as isAbsolute5, relative as relative6, resolve as resolve7, sep as sep6 } from "path";
 var TEXT_EXTENSIONS2 = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
@@ -14836,9 +14878,9 @@ function semanticCandidateSetSha256(candidates) {
 }
 function repositoryObjectPaths(repository) {
   const root = resolve7(repository);
-  const listed = spawnSync3("git", ["--no-optional-locks", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
+  const listed = spawnSync4("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -14981,8 +15023,8 @@ function structuredRecordId(record5) {
 }
 function ignoredByRepository(root, portablePath3) {
   if (isAbsolute5(portablePath3) || portablePath3 === ".." || portablePath3.startsWith("../")) return false;
-  const result = spawnSync3("git", ["--no-optional-locks", "-C", root, "check-ignore", "-q", "--", portablePath3], {
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+  const result = spawnSync4("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "check-ignore", "-q", "--", portablePath3]), {
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: "ignore"
   });
   return result.status === 0;
@@ -15609,7 +15651,7 @@ function auditSemanticRepository(repository, options = {}) {
         }
         const [command, ...args] = definition.command;
         if (!command) continue;
-        const result = spawnSync3(command, args, {
+        const result = spawnSync4(command, args, {
           cwd: root,
           encoding: "utf8",
           env: {
@@ -17111,9 +17153,9 @@ function gitBytes2(repository, args, input, allowed = [0]) {
       writeFileSync2(inputPath, input, { mode: 384, flag: "wx" });
       inputDescriptor = openSync2(inputPath, "r");
     }
-    return execFileSync3("git", ["--no-optional-locks", "-C", repository, ...args], {
+    return execFileSync3("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
       encoding: "buffer",
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
       killSignal: "SIGKILL",
       maxBuffer: 128 * 1024 * 1024,
       stdio: [inputDescriptor ?? "ignore", "pipe", "pipe"],
@@ -17853,7 +17895,7 @@ function assertActionHygieneDelta(delta, before, after, label = "action hygiene 
 
 // src/closeout/native-gates.ts
 import { createHash as createHash13 } from "crypto";
-import { spawn, spawnSync as spawnSync4 } from "child_process";
+import { spawn, spawnSync as spawnSync5 } from "child_process";
 import { createReadStream } from "fs";
 import {
   closeSync as closeSync3,
@@ -17986,10 +18028,10 @@ function gitCommonDirectory(repository) {
   const root = realpathSync4(resolve10(repository));
   const output = execFileSync4(
     "git",
-    ["--no-optional-locks", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    hardenedGitArgs(["--no-optional-locks", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"]),
     {
       encoding: "utf8",
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
       stdio: ["ignore", "pipe", "pipe"]
     }
   ).trim();
@@ -18595,16 +18637,16 @@ var NativeGateGitTimeoutError = class extends Error {
   }
 };
 function gitEnvironment() {
-  return { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
+  return hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
 }
 function gitFailure(args, status, signal, stderr) {
   const detail = UTF8_LENIENT.decode(stderr).trim();
   return new Error(detail || `git ${args.join(" ")} exited ${String(status)}${signal ? ` (${signal})` : ""}`);
 }
 function gitBytes3(repository, args, timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS) {
-  const result = spawnSync4(
+  const result = spawnSync5(
     "git",
-    ["--no-optional-locks", "-C", repository, ...args],
+    hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]),
     {
       encoding: null,
       env: gitEnvironment(),
@@ -18637,7 +18679,7 @@ function gitLine3(repository, args, timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS) {
 async function gitBytesWithInput(repository, args, input, timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS) {
   assertPositiveInteger("git timeout", timeoutMs);
   return await new Promise((resolveBytes, rejectBytes) => {
-    const child = spawn("git", ["--no-optional-locks", "-C", repository, ...args], {
+    const child = spawn("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
       env: gitEnvironment(),
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
@@ -18876,12 +18918,12 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
   }
 }
 function trackedPaths2(repository) {
-  const result = spawnSync4(
+  const result = spawnSync5(
     "git",
-    ["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"],
+    hardenedGitArgs(["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"]),
     {
       encoding: null,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
       maxBuffer: MAX_GIT_OUTPUT_BYTES2,
       stdio: ["ignore", "pipe", "pipe"]
     }
@@ -20955,18 +20997,18 @@ var nodeFilePort = {
 var nodeGitPort = {
   async run(repo, args, allowed = [0]) {
     try {
-      const environment = { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
+      const environment = hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
       let result;
       if (args.length === 1 && args[0] === "write-tree") {
         const temporary = await mkdtemp2(join7(tmpdir3(), "mc-readonly-index-"));
         try {
-          const sourceIndex = (await execFileAsync("git", ["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "index"], { encoding: "utf8", env: environment })).stdout.trim();
-          const sourceObjects = (await execFileAsync("git", ["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects"], { encoding: "utf8", env: environment })).stdout.trim();
+          const sourceIndex = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "index"]), { encoding: "utf8", env: environment })).stdout.trim();
+          const sourceObjects = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects"]), { encoding: "utf8", env: environment })).stdout.trim();
           const externalIndex = join7(temporary, "index");
           const externalObjects = join7(temporary, "objects");
           await mkdir2(externalObjects, { recursive: true });
           await copyFile(sourceIndex, externalIndex);
-          result = await execFileAsync("git", ["--no-optional-locks", "-C", repo, "write-tree"], {
+          result = await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "write-tree"]), {
             encoding: "utf8",
             env: {
               ...environment,
@@ -20979,7 +21021,7 @@ var nodeGitPort = {
           await rm2(temporary, { recursive: true, force: true });
         }
       } else {
-        result = await execFileAsync("git", ["--no-optional-locks", "-C", repo, ...args], { encoding: "utf8", env: environment });
+        result = await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, ...args]), { encoding: "utf8", env: environment });
       }
       return { code: 0, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
     } catch (error) {
@@ -23630,7 +23672,7 @@ async function validateRegressionDelta(bundle, report, manifest2, base, files, c
 // src/closeout/bundle-live-validation.ts
 import { mkdtemp as mkdtemp3, rm as rm4 } from "fs/promises";
 import { tmpdir as tmpdir5 } from "os";
-import { dirname as dirname10, isAbsolute as isAbsolute17, join as join11, resolve as resolve19 } from "path";
+import { dirname as dirname11, isAbsolute as isAbsolute17, join as join11, resolve as resolve19 } from "path";
 
 // src/closeout/language-policy.ts
 import { createHash as createHash16 } from "crypto";
@@ -24232,17 +24274,17 @@ function auditTrustedUpstream(workflow) {
   return findings;
 }
 function trackedWorkflowPaths(repository) {
-  return execFileSync5("git", ["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"], {
+  return execFileSync5("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   }).split("\0").filter((path) => /\.ya?ml$/iu.test(path)).sort();
 }
 function auditGitHubActionsRepository(root) {
-  const repository = resolve14(execFileSync5("git", ["--no-optional-locks", "-C", root, "rev-parse", "--show-toplevel"], {
+  const repository = resolve14(execFileSync5("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "rev-parse", "--show-toplevel"]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: ["ignore", "pipe", "pipe"]
   }).trim());
   const paths = trackedWorkflowPaths(repository);
@@ -24680,11 +24722,11 @@ async function generatePackageManifest(root) {
 
 // src/closeout/native-gate-runner.ts
 import { randomUUID as randomUUID4 } from "crypto";
-import { spawnSync as spawnSync5 } from "child_process";
-import { accessSync as accessSync2, constants as constants4, existsSync as existsSync7, lstatSync as lstatSync10, realpathSync as realpathSync6 } from "fs";
+import { spawnSync as spawnSync6 } from "child_process";
+import { accessSync as accessSync2, constants as constants4, existsSync as existsSync7, lstatSync as lstatSync10, mkdirSync as mkdirSync2, realpathSync as realpathSync6, symlinkSync } from "fs";
 import { lstat as lstat6, mkdir as mkdir3, realpath as realpath6, rm as rm3, writeFile as writeFile2 } from "fs/promises";
 import { homedir, tmpdir as tmpdir4 } from "os";
-import { delimiter as delimiter2, isAbsolute as isAbsolute14, join as join10, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
+import { basename as basename11, delimiter as delimiter2, dirname as dirname9, isAbsolute as isAbsolute14, join as join10, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
 
 // src/closeout/execution-supervisor.ts
 import {
@@ -24743,6 +24785,8 @@ function processAlive(pid, group = false) {
   catch (error) { return Boolean(error && error.code === "EPERM"); }
 }
 
+// ps by absolute path: the supervisor runs in the gate environment, whose
+// PATH is only the gate's toolchain shims (master-gate S1).
 function processIdentity(pid) {
   if (!processAlive(pid)) return undefined;
   try {
@@ -24753,7 +24797,7 @@ function processIdentity(pid) {
       const fields = stat.slice(close + 2).trim().split(/\s+/);
       return fields[19] ? "linux-proc-start:" + fields[19] : undefined;
     }
-    const started = execFileSync("ps", ["-o", "lstart=", "-o", "comm=", "-p", String(pid)], {
+    const started = execFileSync("/bin/ps", ["-o", "lstart=", "-o", "comm=", "-p", String(pid)], {
       encoding: "utf8", env: { ...process.env, LC_ALL: "C", TZ: "UTC" }, stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return started ? "ps-lstart:" + started : undefined;
@@ -24865,7 +24909,7 @@ function custodyProcessIds() {
     return ids.filter((pid) => pid !== process.pid && processAlive(pid));
   }
   try {
-    const output = execFileSync("ps", ["eww", "-axo", "pid=,command="], {
+    const output = execFileSync("/bin/ps", ["eww", "-axo", "pid=,command="], {
       encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 16 * 1024 * 1024,
     });
@@ -25118,11 +25162,102 @@ function toolchainLocators(environment = process.env, operatorHome = environment
     const candidate = join10(operatorHome, conventional);
     if (existsSync7(candidate)) locators[name] = candidate;
   }
+  const rustup = environment.PATH === void 0 ? void 0 : resolveExecutable("rustup", environment.PATH);
+  if (rustup !== void 0) {
+    const cargoHome = dirname9(dirname9(rustup.resolved));
+    if (locators.CARGO_HOME === void 0 && basename11(dirname9(rustup.resolved)) === "bin") locators.CARGO_HOME = cargoHome;
+    if (locators.RUSTUP_HOME === void 0) {
+      const rustupHome = ["rustup", ".rustup"].map((name) => join10(dirname9(cargoHome), name)).find((candidate) => existsSync7(join10(candidate, "settings.toml")));
+      if (rustupHome !== void 0) locators.RUSTUP_HOME = rustupHome;
+    }
+  }
   return locators;
 }
-function scrubbedEnvironment(home) {
+var GATE_TOOLCHAIN = ["node", "bun", "pnpm", "npm", "cargo", "rustc", "rustup", "go", "git", "sh", "cc"];
+var GATE_POSIX_UTILITIES = [
+  "ar",
+  "as",
+  "awk",
+  "basename",
+  "cat",
+  "chmod",
+  "cmp",
+  "cp",
+  "cut",
+  "date",
+  "diff",
+  "dirname",
+  "env",
+  "expr",
+  "false",
+  "find",
+  "grep",
+  "head",
+  "ld",
+  "ln",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "mv",
+  "printf",
+  "pwd",
+  "rm",
+  "rmdir",
+  "sed",
+  "sleep",
+  "sort",
+  "tail",
+  "tee",
+  "touch",
+  "tr",
+  "true",
+  "uname",
+  "uniq",
+  "wc",
+  "xargs"
+];
+var resolvedGateToolchain;
+function minimalGatePath(pathValue, toolchain, gateExecutable) {
+  const wanted = new Set([...toolchain, ...gateExecutable ? [gateExecutable] : []].map((executable) => dirname9(executable.invoked)));
+  const ordered = pathValue.split(delimiter2).filter((directory) => wanted.has(directory));
+  return [.../* @__PURE__ */ new Set([...ordered, ...wanted])].join(delimiter2);
+}
+function gateToolchain() {
+  resolvedGateToolchain ??= [...GATE_TOOLCHAIN, ...GATE_POSIX_UTILITIES].flatMap((name) => {
+    const executable = resolveExecutable(name, process.env.PATH ?? "");
+    return executable ? [executable] : [];
+  });
+  return resolvedGateToolchain;
+}
+function gateShimDirectory(home) {
+  return join10(home, "toolchain-bin");
+}
+function materializeGateShims(home, gateExecutable) {
+  const directory = gateShimDirectory(home);
+  mkdirSync2(directory, { recursive: true, mode: 448 });
+  const entries2 = /* @__PURE__ */ new Map();
+  for (const executable of gateToolchain()) entries2.set(basename11(executable.invoked), executable.resolved);
+  if (gateExecutable) entries2.set(basename11(gateExecutable.invoked), gateExecutable.resolved);
+  for (const [name, target] of entries2) {
+    if (!existsSync7(join10(directory, name))) symlinkSync(target, join10(directory, name));
+  }
+}
+function scrubbedCargoHome(home) {
+  return join10(home, "cargo-home");
+}
+function materializeScrubbedCargoHome(home, operatorCargoHome = toolchainLocators().CARGO_HOME) {
+  if (operatorCargoHome === void 0) return;
+  const target = scrubbedCargoHome(home);
+  mkdirSync2(target, { recursive: true, mode: 448 });
+  for (const cache of ["registry", "git"]) {
+    const source = join10(operatorCargoHome, cache);
+    if (existsSync7(source) && !existsSync7(join10(target, cache))) symlinkSync(source, join10(target, cache), "dir");
+  }
+}
+function scrubbedEnvironment(home, gateExecutable) {
+  const locators = toolchainLocators();
   const env = {
-    PATH: process.env.PATH ?? "",
+    PATH: process.platform === "win32" ? minimalGatePath(process.env.PATH ?? "", gateToolchain(), gateExecutable) : gateShimDirectory(home),
     HOME: home,
     USERPROFILE: home,
     TMPDIR: home,
@@ -25138,18 +25273,24 @@ function scrubbedEnvironment(home) {
     BUN_INSTALL_CACHE_DIR: join10(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
     GOPROXY: "off",
-    ...toolchainLocators()
+    ...locators,
+    ...locators.CARGO_HOME === void 0 ? {} : { CARGO_HOME: scrubbedCargoHome(home) }
   };
   for (const name of ["LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"]) {
     if (process.env[name] !== void 0) env[name] = process.env[name];
   }
   return env;
 }
+function gateEnvironment(home, executable) {
+  if (process.platform !== "win32") materializeGateShims(home, executable);
+  materializeScrubbedCargoHome(home);
+  return scrubbedEnvironment(home, executable);
+}
 function signalProcessTree(child, signal) {
   if (!child.pid) return true;
   try {
     if (process.platform === "win32") {
-      const result = spawnSync5("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+      const result = spawnSync6("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
         encoding: null,
         env: scrubbedEnvironment(tmpdir4()),
         stdio: ["ignore", "ignore", "ignore"],
@@ -25444,7 +25585,7 @@ async function executeGateUnderDeadline(repository, gate, discoveryObject, evide
       invokedExecutable,
       gate.command.argv,
       cwd,
-      scrubbedEnvironment(snapshot.home),
+      gateEnvironment(snapshot.home, executable),
       options.timeout_ms,
       options.max_output_bytes,
       options.termination_grace_ms,
@@ -25641,6 +25782,7 @@ function trustPolicyPins(flags, environment) {
     if (!HEX644.test(value)) throw new Error(`${TRUST_POLICY_PIN_FLAG} requires a lowercase SHA-256 hex digest`);
     pins.add(value);
   }
+  if (flags.length > 0) return [...pins].sort();
   for (const value of (environment[TRUST_POLICY_PIN_ENV] ?? "").split(/[\s,]+/u).filter(Boolean)) {
     if (!HEX644.test(value)) throw new Error(`${TRUST_POLICY_PIN_ENV} must hold lowercase SHA-256 hex digests separated by commas or whitespace`);
     pins.add(value);
@@ -26364,7 +26506,7 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
 }
 
 // src/closeout/bundle-guard-authority.ts
-import { dirname as dirname9, isAbsolute as isAbsolute16, relative as relative15, resolve as resolve18, sep as sep14 } from "path";
+import { dirname as dirname10, isAbsolute as isAbsolute16, relative as relative15, resolve as resolve18, sep as sep14 } from "path";
 function guardAuthorityDigest(value) {
   return typeof value === "string" && HEX643.test(value);
 }
@@ -26619,7 +26761,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
     manifest2,
     bundle,
     guard,
-    dirname9(resolve18(bundlePath)),
+    dirname10(resolve18(bundlePath)),
     repo,
     worktrees,
     errors
@@ -26635,7 +26777,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
       manifest2,
       bundle,
       guard,
-      dirname9(resolve18(bundlePath)),
+      dirname10(resolve18(bundlePath)),
       repo,
       worktrees,
       errors
@@ -26650,7 +26792,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
   }
   const beforeEvidence = await guardEvidenceSnapshot(
     ports.files,
-    dirname9(resolve18(bundlePath)),
+    dirname10(resolve18(bundlePath)),
     loaded.envelope,
     manifest2,
     errors
@@ -26743,7 +26885,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
     manifest2,
     bundle,
     guard,
-    dirname9(resolve18(bundlePath)),
+    dirname10(resolve18(bundlePath)),
     repo,
     afterWorktrees,
     errors
@@ -26760,7 +26902,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
       manifest2,
       bundle,
       guard,
-      dirname9(resolve18(bundlePath)),
+      dirname10(resolve18(bundlePath)),
       repo,
       afterWorktrees,
       errors
@@ -26769,7 +26911,7 @@ async function validateGuardLiveAuthority(bundle, report, manifest2, bundlePath,
   }
   const afterEvidence = await guardEvidenceSnapshot(
     ports.files,
-    dirname9(resolve18(bundlePath)),
+    dirname10(resolve18(bundlePath)),
     loaded.envelope,
     manifest2,
     errors
@@ -26980,7 +27122,7 @@ async function validateLiveSuccessorFiles(successor, manifest2, repo, subject, f
 async function loadLiveRegressionBoundary(report, bundlePath, repo, files, errors) {
   const regressionRecord = (await loadRef(
     files,
-    dirname10(resolve19(bundlePath)),
+    dirname11(resolve19(bundlePath)),
     object5(report.regression_control)?.evidence_ref,
     "$.report.regression_control.evidence_ref",
     errors,
@@ -26999,7 +27141,7 @@ async function loadLiveRegressionBoundary(report, bundlePath, repo, files, error
   return { closingRepositoryObject, coverage };
 }
 async function ownerSignedExceptions(report, bundlePath, files, trust, errors) {
-  const base = dirname10(resolve19(bundlePath));
+  const base = dirname11(resolve19(bundlePath));
   const signed = [];
   for (const [index, rawDebt] of array2(report.completion_debts).entries()) {
     const debt = object5(rawDebt);
@@ -27029,7 +27171,7 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
     const execution = executionFor(detectorId);
     const input = array2(execution?.input_refs).map(object5).find((ref) => ref?.kind === kind);
     if (!input) return void 0;
-    return contained(files, dirname10(resolve19(bundlePath)), input.path);
+    return contained(files, dirname11(resolve19(bundlePath)), input.path);
   };
   const publicSafetyDenylist = await frozenInput("public_safety", "public_safety_denylist");
   const semanticManifest = await frozenInput("semantic_boundary", "semantic_probe_manifest");
@@ -27114,7 +27256,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
     const nativeControl = object5(successor.native_gate_control);
     const recordedDiscovery = nativeControl ? (await loadRef(
       files,
-      dirname10(resolve19(bundlePath)),
+      dirname11(resolve19(bundlePath)),
       nativeControl.discovery_ref,
       "$.live_native_gates.recorded_discovery_ref",
       errors,
@@ -27122,7 +27264,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
     )).data : void 0;
     const recordedCoverage = nativeControl ? (await loadRef(
       files,
-      dirname10(resolve19(bundlePath)),
+      dirname11(resolve19(bundlePath)),
       nativeControl.coverage_ref,
       "$.live_native_gates.recorded_coverage_ref",
       errors,
@@ -27266,7 +27408,7 @@ async function discoverBundlePlanningRoots(repo, files) {
   const directories = rows.filter((row) => row.kind === "directory");
   const childrenByDirectory = /* @__PURE__ */ new Map();
   for (const row of directories) {
-    const parent = dirname11(row.relative);
+    const parent = dirname12(row.relative);
     const children = childrenByDirectory.get(parent) ?? /* @__PURE__ */ new Set();
     children.add(basename12(row.relative).toLocaleLowerCase("und"));
     childrenByDirectory.set(parent, children);
@@ -27574,7 +27716,7 @@ async function validateChangeInventory(bundle, report, manifest2, repo, git2, ba
     if (!stableEqual2([...live.entries()].sort(), [...reported.entries()].sort())) errors.push(`${path}.changes: live start-to-subject diff differs`);
   }
 }
-async function validateBundleUnsafe(data, bundlePath, options = {}) {
+async function validateBundleUnsafe(data, bundlePath, options = {}, bound = {}) {
   const errors = [];
   const clock = evidenceClock(options, errors);
   const allowPlaceholders = options.allowPlaceholders ?? false;
@@ -27586,12 +27728,15 @@ async function validateBundleUnsafe(data, bundlePath, options = {}) {
   if (bundle.record_type !== "mister-clean.closure-bundle") errors.push("$.record_type: expected mister-clean.closure-bundle");
   if (bundle.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
   for (const field2 of ["run_id", "request_ref"]) if (!text(bundle[field2])) errors.push(`$.${field2}: required`);
-  const base = dirname11(resolve20(bundlePath));
+  const base = dirname12(resolve20(bundlePath));
   const reportLoad = await loadRef(ports.files, base, bundle.report, "$.report", errors, allowPlaceholders);
   const manifestLoad = await loadRef(ports.files, base, bundle.manifest, "$.manifest", errors, allowPlaceholders);
   const report = reportLoad.data;
   const manifest2 = manifestLoad.data;
   if (!report || !manifest2) return { errors, ok: errors.length === 0 };
+  bound.verdict = report.verdict;
+  const subjectCommit = object5(report.repo)?.commit;
+  bound.commit = typeof subjectCommit === "string" ? subjectCommit : null;
   if (clock) {
     validateEvidenceClock(report, "$.report", clock, errors);
     validateEvidenceClock(manifest2, "$.manifest", clock, errors);
@@ -27697,9 +27842,9 @@ async function validateBundleUnsafe(data, bundlePath, options = {}) {
     ...trust.used.size === 0 ? {} : { trustPolicyPinsUsed: [...trust.used].sort() }
   };
 }
-async function validateBundle(data, bundlePath, options = {}) {
+async function validateBundleCapturing(data, bundlePath, options, bound) {
   try {
-    return await validateBundleUnsafe(data, bundlePath, options);
+    return await validateBundleUnsafe(data, bundlePath, options, bound);
   } catch (error) {
     return {
       errors: [`$: validation input could not be safely inspected: ${error instanceof Error ? error.message : String(error)}`],
@@ -27710,8 +27855,12 @@ async function validateBundle(data, bundlePath, options = {}) {
 async function validateBundleFile(bundlePath, options = {}) {
   const ports = options.ports ?? nodeBundlePorts;
   try {
-    const data = JSON.parse(await ports.files.readText(bundlePath));
-    return validateBundle(data, bundlePath, { ...options, ports });
+    const bytes2 = await ports.files.readBytes(bundlePath);
+    const data = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes2));
+    const bound = {};
+    const result = await validateBundleCapturing(data, bundlePath, { ...options, ports }, bound);
+    options.onValidated?.({ bundle_sha256: sha2569(bytes2), report_verdict: bound.verdict, subject_commit: bound.commit ?? null });
+    return result;
   } catch (error) {
     return { errors: [error instanceof Error ? error.message : String(error)], failureKind: "load", ok: false };
   }
@@ -27719,8 +27868,8 @@ async function validateBundleFile(bundlePath, options = {}) {
 
 // src/closeout/prepare.ts
 import { createHash as createHash21 } from "crypto";
-import { existsSync as existsSync10, mkdirSync as mkdirSync2, readFileSync as readFileSync12, writeFileSync as writeFileSync4 } from "fs";
-import { dirname as dirname12, join as join13, resolve as resolve22 } from "path";
+import { existsSync as existsSync10, mkdirSync as mkdirSync3, readFileSync as readFileSync12, writeFileSync as writeFileSync4 } from "fs";
+import { dirname as dirname13, join as join13, resolve as resolve22 } from "path";
 
 // src/closeout/retirements.ts
 import { createHash as createHash20 } from "crypto";
@@ -28046,7 +28195,7 @@ async function collectPrepareEvidence(options, mode) {
     if (existsSync10(bundleDirectory)) {
       throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
     }
-    mkdirSync2(bundleDirectory, { recursive: true });
+    mkdirSync3(bundleDirectory, { recursive: true });
     const templates = options.templateRoot ?? packageRoot();
     const head = baselineRepositoryObject.head_commit;
     const branch = git(repository, "branch", "--show-current") || "detached";
@@ -28529,7 +28678,7 @@ function stageRetirementRulings(repository, bundleDirectory, retirements) {
       throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25614}`);
     }
     const target = join13(bundleDirectory, path);
-    mkdirSync2(dirname12(target), { recursive: true });
+    mkdirSync3(dirname13(target), { recursive: true });
     writeFileSync4(target, bytes2);
     staged.add(path);
   }
@@ -28550,7 +28699,7 @@ function bindRetirementRulings(debts, bundleDirectory, requestSha256, applicatio
     if (!source) throw new Error(`retired debt ${String(debt.id)} has no retirement application`);
     const ruling = exception.ref;
     const relativePath = join13("retirement-rulings", `${String(debt.id)}.json`);
-    mkdirSync2(join13(bundleDirectory, "retirement-rulings"), { recursive: true });
+    mkdirSync3(join13(bundleDirectory, "retirement-rulings"), { recursive: true });
     writeJson(join13(bundleDirectory, relativePath), {
       record_type: "mister-clean.operator-ruling",
       schema_version: "1.0",
@@ -29335,9 +29484,9 @@ function finding3(rule, path, detail, relatedPaths = []) {
   });
 }
 function candidatePaths(root) {
-  return execFileSync6("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], {
+  return execFileSync6("git", hardenedGitArgs(["-C", root, "ls-files", "-co", "--exclude-standard", "-z"]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES
   }).split("\0").filter(Boolean).sort();
 }
@@ -29382,8 +29531,8 @@ function unsafeParsedMaps(source) {
 }
 function ignored(root, path) {
   try {
-    execFileSync6("git", ["-C", root, "check-ignore", "-q", "--", path], {
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    execFileSync6("git", hardenedGitArgs(["-C", root, "check-ignore", "-q", "--", path]), {
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
       stdio: "ignore"
     });
     return true;
@@ -29613,20 +29762,20 @@ import { randomUUID as randomUUID6 } from "crypto";
 import { execFileSync as execFileSync7 } from "child_process";
 import {
   existsSync as existsSync11,
-  mkdirSync as mkdirSync4,
+  mkdirSync as mkdirSync5,
   realpathSync as realpathSync9,
   rmSync as rmSync4,
   writeFileSync as writeFileSync6
 } from "fs";
 import { hostname } from "os";
-import { dirname as dirname14, join as join16, posix as pathPosix2 } from "path";
+import { dirname as dirname15, join as join16, posix as pathPosix2 } from "path";
 
 // src/closeout/action-lifecycle-runtime.ts
 import { createHash as createHash23, randomUUID as randomUUID5 } from "crypto";
 import {
   closeSync as closeSync4,
   copyFileSync,
-  mkdirSync as mkdirSync3,
+  mkdirSync as mkdirSync4,
   openSync as openSync4,
   readFileSync as readFileSync14,
   realpathSync as realpathSync8,
@@ -29635,7 +29784,7 @@ import {
   statSync as statSync3,
   writeFileSync as writeFileSync5
 } from "fs";
-import { dirname as dirname13, isAbsolute as isAbsolute20, join as join15, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
+import { dirname as dirname14, isAbsolute as isAbsolute20, join as join15, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
 var HEX645 = /^[0-9a-f]{64}$/;
 function object6(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
@@ -29701,7 +29850,7 @@ function digestRef2(base, path) {
 }
 function writeEvidenceRecord(context, path, record5) {
   const absolute = resolveContained(context.base, path, "action evidence path");
-  mkdirSync3(dirname13(absolute), { recursive: true, mode: 448 });
+  mkdirSync4(dirname14(absolute), { recursive: true, mode: 448 });
   writeFileSync5(absolute, jsonBytes(record5), { encoding: "utf8", mode: 384, flag: "wx" });
   return digestRef2(context.base, path);
 }
@@ -29775,7 +29924,7 @@ function lifecyclePath(context, id) {
   return join15(context.base, "action-evidence", id, "lifecycle.json");
 }
 function writeExclusive(path, value) {
-  mkdirSync3(dirname13(path), { recursive: true, mode: 448 });
+  mkdirSync4(dirname14(path), { recursive: true, mode: 448 });
   const descriptor = openSync4(path, "wx", 384);
   try {
     writeFileSync5(descriptor, jsonBytes(value), "utf8");
@@ -29799,7 +29948,7 @@ async function transactionalWrite(context, values, runtimeAttestation) {
   ];
   if (new Set(paths).size !== paths.length) throw new Error("action transaction contains a duplicate output path");
   const backupDirectory = join15(context.base, `.action-transaction-${randomUUID5()}`);
-  mkdirSync3(backupDirectory, { recursive: true, mode: 448 });
+  mkdirSync4(backupDirectory, { recursive: true, mode: 448 });
   for (const path of paths) {
     resolveContained(context.base, portablePath2(context.base, path), "action transaction output");
     copyFileSync(path, join15(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__")));
@@ -29879,9 +30028,9 @@ var SPECIALIZED_ACTION_PROTOCOLS = {
 };
 function currentBranch(repository) {
   try {
-    return execFileSync7("git", ["--no-optional-locks", "-C", repository, "symbolic-ref", "--quiet", "--short", "HEAD"], {
+    return execFileSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "symbolic-ref", "--quiet", "--short", "HEAD"]), {
       encoding: "utf8",
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" })
     }).trim();
   } catch {
     throw new Error("action begin requires a named branch; a modifying lifecycle cannot honestly assign a detached worktree");
@@ -30238,7 +30387,7 @@ function rowObservationIds(row) {
 function writeDebtResult(context, id, row, after, status, observedAt) {
   const path = `action-evidence/${id}/debt-results/${text2(row.debt_key, "debt_key")}.json`;
   const absolute = resolveContained(context.base, path, "debt result path");
-  mkdirSync4(dirname14(absolute), { recursive: true, mode: 448 });
+  mkdirSync5(dirname15(absolute), { recursive: true, mode: 448 });
   const command = `mister-clean action finish ${JSON.stringify(context.base)} --id ${JSON.stringify(id)} --status ${status}`;
   const result = "root debt absent from the post-action registered detector/native observation set";
   writeFileSync6(absolute, jsonBytes({
@@ -30361,9 +30510,9 @@ function writeActionResult(context, lifecycle2, after, status, observedAt, hygie
   };
 }
 function gitLines(repository, args) {
-  const output = execFileSync7("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const output = execFileSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" })
   }).trim();
   return output ? output.split("\n") : [];
 }
@@ -30423,9 +30572,9 @@ function actionRows(regression) {
   });
 }
 function ensureCleanWorkingTree(repository) {
-  const status = execFileSync7("git", ["--no-optional-locks", "-C", repository, "status", "--porcelain=v1", "--untracked-files=all"], {
+  const status = execFileSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "status", "--porcelain=v1", "--untracked-files=all"]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" })
   });
   if (status.trim()) throw new Error("action finish requires a clean working tree; commit or otherwise resolve the action's repository changes first");
 }
@@ -30526,7 +30675,7 @@ async function beginAction(options) {
   const actionRoot = join16(context.base, "action-evidence", options.id);
   try {
     if (existsSync11(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
-    mkdirSync4(actionRoot, { recursive: true, mode: 448 });
+    mkdirSync5(actionRoot, { recursive: true, mode: 448 });
     const branch = currentBranch(context.repository);
     const beforeHygiene = captureActionHygiene(context.repository, { now });
     if (beforeHygiene.processes.status !== "complete") {
@@ -31000,14 +31149,14 @@ var nodeCloseoutEngine = {
 };
 
 // src/mister-clean-invocation-journal.ts
-import { appendFileSync, existsSync as existsSync13, mkdirSync as mkdirSync5, readFileSync as readFileSync17 } from "fs";
+import { appendFileSync, existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync17 } from "fs";
 import { createHash as createHash26, randomUUID as randomUUID7 } from "crypto";
-import { basename as basename14, dirname as dirname16, isAbsolute as isAbsolute22 } from "path";
+import { basename as basename14, dirname as dirname17, isAbsolute as isAbsolute22 } from "path";
 
 // src/sealed-segments.ts
 import { chmodSync as chmodSync2, existsSync as existsSync12, readFileSync as readFileSync16, renameSync as renameSync4, statSync as statSync5, writeFileSync as writeFileSync7 } from "fs";
 import { createHash as createHash25 } from "crypto";
-import { basename as basename13, dirname as dirname15, join as join17 } from "path";
+import { basename as basename13, dirname as dirname16, join as join17 } from "path";
 var SEGMENT_MANIFEST_RECORD_TYPE = "mister-clean.segment-manifest";
 var SEGMENT_MANIFEST_SCHEMA_VERSION = "1";
 var SealedSegmentTamperedError = class extends Error {
@@ -31028,7 +31177,7 @@ var SegmentStoreInvalidError = class extends Error {
   }
 };
 function segmentLayout(livePath) {
-  const directory = dirname15(livePath);
+  const directory = dirname16(livePath);
   const name = basename13(livePath);
   const base = name.endsWith(".jsonl") ? name.slice(0, -".jsonl".length) : name;
   const ordinal = (value) => String(value).padStart(6, "0");
@@ -31229,7 +31378,7 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
     this.#segments = segmentLayout(path);
     this.#segmentMaxBytes = options.segmentMaxBytes ?? INVOCATION_JOURNAL_SEGMENT_MAX_BYTES;
     this.#betweenSealSteps = options.betweenSealSteps;
-    mkdirSync5(dirname16(path), { recursive: true });
+    mkdirSync6(dirname17(path), { recursive: true });
     this.#assertExistingIntegrity();
   }
   recordStart(input) {
@@ -31296,7 +31445,7 @@ function journalFromEnvironment(environment) {
 
 // src/closeout/finding-anchors.ts
 import { createHash as createHash27 } from "crypto";
-import { spawnSync as spawnSync6 } from "child_process";
+import { spawnSync as spawnSync7 } from "child_process";
 import { existsSync as existsSync14, readFileSync as readFileSync18, statSync as statSync6 } from "fs";
 import { join as join18 } from "path";
 var RECEIPT_FAMILIES = [
@@ -31343,9 +31492,9 @@ function workingTreeBlobOids(repository, paths) {
   }).sort();
   const oids = /* @__PURE__ */ new Map();
   if (regular.length === 0) return oids;
-  const result = spawnSync6("git", ["--no-optional-locks", "-C", repository, "hash-object", "--stdin-paths"], {
+  const result = spawnSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "hash-object", "--stdin-paths"]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     input: `${regular.join("\n")}
 `,
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
@@ -31497,12 +31646,12 @@ function receiptFindingsFromAudit(family, audit, context) {
 
 // src/closeout/second-pass.ts
 import { existsSync as existsSync16, readFileSync as readFileSync20, realpathSync as realpathSync11, statSync as statSync7 } from "fs";
-import { dirname as dirname18, join as join20, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+import { dirname as dirname19, join as join20, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
-import { appendFileSync as appendFileSync2, existsSync as existsSync15, mkdirSync as mkdirSync6, readFileSync as readFileSync19, realpathSync as realpathSync10, writeFileSync as writeFileSync8 } from "fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync15, mkdirSync as mkdirSync7, readFileSync as readFileSync19, realpathSync as realpathSync10, writeFileSync as writeFileSync8 } from "fs";
 import { createHash as createHash28, randomUUID as randomUUID8 } from "crypto";
-import { dirname as dirname17, isAbsolute as isAbsolute23, join as join19, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
+import { dirname as dirname18, isAbsolute as isAbsolute23, join as join19, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
 var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
 var RUN_RECEIPT_SCHEMA_VERSION = "1";
 var RECEIPT_INDEX_FILE = "receipts.index.jsonl";
@@ -31695,7 +31844,7 @@ function realOrResolved(path) {
       return join19(realpathSync10(cursor), ...[...pending].reverse());
     } catch {
     }
-    const parent = dirname17(cursor);
+    const parent = dirname18(cursor);
     if (parent === cursor) return resolved;
     pending.push(cursor.slice(parent.length + 1));
     cursor = parent;
@@ -31765,7 +31914,7 @@ var LocalRunReceiptStore = class {
     const violations = receiptPrivacyViolations(receipt);
     if (violations.length > 0) throw new ReceiptPrivacyError(violations);
     const path = this.receiptPath(receipt);
-    mkdirSync6(dirname17(path), { recursive: true, mode: 448 });
+    mkdirSync7(dirname18(path), { recursive: true, mode: 448 });
     writeFileSync8(path, `${canonicalJson(receipt)}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
     const entry = {
@@ -32044,7 +32193,7 @@ var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "publi
 function legacyBaselineFromBundle(reference) {
   const path = resolve27(reference);
   if (!existsSync16(path)) return void 0;
-  const directory = statSync7(path).isDirectory() ? path : dirname18(path);
+  const directory = statSync7(path).isDirectory() ? path : dirname19(path);
   const deltaPath = join20(directory, "regression-delta.json");
   if (!existsSync16(deltaPath)) return void 0;
   const delta = JSON.parse(readFileSync20(deltaPath, "utf8"));
@@ -32416,18 +32565,6 @@ async function runAction(args, io, runtimeAttestation) {
   io.stdout(`${status.toLocaleUpperCase("und")} action=${result.actionId} object=${result.repositoryObject.sha256} bundle=${result.bundlePath}`);
   return 0;
 }
-function boundReport(bundlePath) {
-  try {
-    const bundle = record4(readJson3(bundlePath));
-    const reportPath = record4(bundle?.report)?.path;
-    if (typeof reportPath !== "string") return void 0;
-    const report = record4(readJson3(resolve29(dirname19(resolve29(bundlePath)), reportPath)));
-    const commit = record4(report?.repo)?.commit;
-    return { verdict: report?.verdict, commit: typeof commit === "string" ? commit : null };
-  } catch {
-    return void 0;
-  }
-}
 async function runValidate(args, io, runtimeAttestation, onValidated) {
   const kind = args.shift();
   const path = args.shift();
@@ -32474,6 +32611,7 @@ async function runValidate(args, io, runtimeAttestation, onValidated) {
     return 2;
   }
   if (kind === "bundle") {
+    let bound;
     const result = await nodeCloseoutEngine.validateBundle(path, {
       allowPlaceholders: template,
       verifyLive: !structural,
@@ -32481,20 +32619,22 @@ async function runValidate(args, io, runtimeAttestation, onValidated) {
       ...repo === void 0 ? {} : { repoPath: repo },
       ...acceptedEvaluatorPath === void 0 ? {} : { acceptedEvaluatorPath },
       ...guardAuthorityPath === void 0 ? {} : { guardAuthorityPath },
-      trustPolicyPins: pins
+      trustPolicyPins: pins,
+      onValidated: (binding) => {
+        bound = binding;
+      }
     });
     if (result.failureKind === "load") {
       result.errors.forEach((error) => io.stderr(`ERROR: ${error}`));
       return 2;
     }
-    if (!template) {
-      const bound = boundReport(path);
+    if (!template && bound !== void 0) {
       onValidated?.({
-        root: repo ?? dirname19(resolve29(path)),
-        verdict: validateReceiptVerdict({ ok: result.ok, live: !structural, reportVerdict: bound?.verdict }),
+        root: repo ?? dirname20(resolve29(path)),
+        verdict: validateReceiptVerdict({ ok: result.ok, live: !structural, reportVerdict: bound.report_verdict }),
         validation: {
-          bundle_sha256: sha256Bytes(readFileSync22(path)),
-          subject_commit: bound?.commit ?? null,
+          bundle_sha256: bound.bundle_sha256,
+          subject_commit: bound.subject_commit,
           trust_policy_pins: pins,
           trust_policy_pins_used: [...result.trustPolicyPinsUsed ?? []],
           live: !structural

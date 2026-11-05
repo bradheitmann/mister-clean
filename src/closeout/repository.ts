@@ -322,6 +322,7 @@ export function loadPlanningConfig(repository: string): PlanningConfig | null {
 
 export { PLANNING_LANE_LIFECYCLES, PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
 import { PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
+import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 
 const PLANNING_IGNORED_NAMES = new Set([
   "__fixtures__",
@@ -393,9 +394,9 @@ export function runGit(
   options: RunGitOptions = {},
 ): GitResult {
   const limit = options.max_buffer_bytes ?? GIT_OUTPUT_LIMIT_BYTES;
-  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: limit,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -412,9 +413,9 @@ export function runGit(
 }
 
 function gitNullPaths(repository: string, args: readonly string[]): string[] {
-  const result = spawnSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   });
