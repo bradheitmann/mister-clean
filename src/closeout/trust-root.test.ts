@@ -480,6 +480,41 @@ describe("trust root (master-gate S0)", { timeout: 120_000 }, () => {
       expect(result.errors).toContainEqual(expect.stringContaining("$.live_detector_coverage.public_safety: CLEAN requires zero payable findings"));
     });
 
+    it("refuses CLEAN when a ruling names the judge-supplied owner key_id but is signed with a different key", async () => {
+      const item = await acceptedExceptionBundle();
+      const owner = testKey();
+      const impostor = testKey();
+      const pin = await signRuling(item, [policyKey(owner, "principal", "owner-key", ["owner"])], impostor, "owner-key");
+      await persistRuling(item);
+      const result = await validateBundle(item.value.bundle, item.value.bundlePath, { repoPath: item.value.repo, trustPolicyPins: [pin] });
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContainEqual(expect.stringMatching(/completion_debts\[0\]\.exception: .*stays payable.*does not verify over its canonical bytes/));
+      expect(result.errors).toContainEqual(expect.stringContaining("$.live_detector_coverage.public_safety: CLEAN requires zero payable findings"));
+    });
+
+    it("refuses CLEAN when a validly signed ruling names an actor other than the signing key's actor", async () => {
+      const item = await acceptedExceptionBundle();
+      const owner = testKey();
+      const pin = await signRuling(item, [policyKey(owner, "owner-of-record", "owner-key", ["owner"])], owner, "owner-key");
+      await persistRuling(item);
+      const result = await validateBundle(item.value.bundle, item.value.bundlePath, { repoPath: item.value.repo, trustPolicyPins: [pin] });
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContainEqual(expect.stringMatching(/completion_debts\[0\]\.exception: .*stays payable.*the ruling actor is not the signing key's actor/));
+      expect(result.errors).toContainEqual(expect.stringContaining("$.live_detector_coverage.public_safety: CLEAN requires zero payable findings"));
+    });
+
+    it("refuses CLEAN when a validly signed ruling's time falls outside the signing key's validity window", async () => {
+      const item = await acceptedExceptionBundle();
+      const owner = testKey();
+      const lateWindow = { valid_from: "2026-09-01T00:00:00Z", valid_to: "2027-01-01T00:00:00Z" };
+      const pin = await signRuling(item, [policyKey(owner, "principal", "owner-key", ["owner"], lateWindow)], owner, "owner-key");
+      await persistRuling(item);
+      const result = await validateBundle(item.value.bundle, item.value.bundlePath, { repoPath: item.value.repo, trustPolicyPins: [pin] });
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContainEqual(expect.stringMatching(/completion_debts\[0\]\.exception: .*stays payable.*the signing key is outside its validity window/));
+      expect(result.errors).toContainEqual(expect.stringContaining("$.live_detector_coverage.public_safety: CLEAN requires zero payable findings"));
+    });
+
     it("counts an owner-signed ruling under a judge-supplied policy toward CLEAN", async () => {
       const item = await acceptedExceptionBundle();
       const owner = testKey();
