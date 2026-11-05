@@ -1,5 +1,5 @@
 {
-  "commit": "f0aa24af049c6024c5bf75e67beb3a4146d8e6f0",
+  "commit": "13ca3644220755778820a16240b861ddb5a3b13e",
   "entries": [
     {
       "mode": "100644",
@@ -2208,9 +2208,9 @@
     },
     {
       "mode": "100644",
-      "object": "915a7de5ed7a52bcef2a588fa455e939536e8484",
+      "object": "a85940138334fad58cc4616d54ae95a9d6d6c06b",
       "path": "src/closeout/execution-safety.test.ts",
-      "sha256": "aaf4130fc47097b1afc9b4617c8879fe65c580d033b844a523c6cf3058ba4d4f",
+      "sha256": "66beba2550287aeb21a4a0070e2c3ae9fa97ffa92a5cf3561e2301b30cff117f",
       "type": "blob"
     },
     {
@@ -3552,11 +3552,11 @@
     }
   ],
   "entry_count": 507,
-  "head": "f0aa24af049c6024c5bf75e67beb3a4146d8e6f0",
+  "head": "13ca3644220755778820a16240b861ddb5a3b13e",
   "kind": "git-commit-tree",
-  "manifest_sha256": "0a8a76aa7e69e71d605c9106cf0cefe8f8d4ad82c8c082ea173a70d6b00035c1",
+  "manifest_sha256": "143015729a843d06c03105670c46bde94d11e854a1d42cfc795ba5bdb817962b",
   "schema_version": "charter.freeze/2",
   "selector": "git-ls-tree:HEAD",
   "slice": "mg-s1b-git-env-hardening",
-  "tree": "1c458ce0e5d2a5e9a4e766683609cf4f7973c3fe"
+  "tree": "93a23204eae49817855e5670e12eb793afb02311"
 }
