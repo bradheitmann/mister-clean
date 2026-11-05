@@ -358,7 +358,7 @@ describe("SQLite live snapshot producer", () => {
         snapshot_producer: new SqliteControlPlaneSnapshotProducer({ repository, global }),
       });
       try {
-        const session = await fetch(new URL("session", http.app_url!));
+        const session = await fetch(new URL("session", http.app_url!), { headers: { Authorization: "Bearer snapshot-producer-http-test-token-0001" } });
         const response = await fetch(new URL("control-plane/snapshot.json", http.app_url!), { headers: { Cookie: session.headers.get("set-cookie")! } });
         const wire = await response.json();
         const canonical = parseCanonicalLiveSnapshot(wire);

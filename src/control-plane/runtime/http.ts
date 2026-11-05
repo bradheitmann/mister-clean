@@ -245,6 +245,7 @@ async function handleAppRequest(
   options: {
     readonly app_root: string;
     readonly sessions: BrowserSessions;
+    readonly authenticator: LocalAuthenticator;
     readonly snapshot_producer?: { load(signal?: AbortSignal): Promise<unknown> };
     readonly operation_timeout_ms: number;
   },
@@ -265,6 +266,12 @@ async function handleAppRequest(
     return;
   }
   if (request.method === "GET" && pathname === "/session") {
+    // A session grants snapshot reads, so minting one needs the bearer token that guards /rpc.
+    const authorization = typeof request.headers.authorization === "string" ? request.headers.authorization : null;
+    if (headerOccurrences(request, "authorization") !== 1 || !options.authenticator.authenticateAuthorizationHeader(authorization)) {
+      writeAppJson(response, { error: "Authentication required" }, 401);
+      return;
+    }
     const now = Date.now();
     pruneSessions(options.sessions, now);
     const session = newSessionId();
@@ -416,6 +423,7 @@ async function handleHttpRequest(
   if (options.app_root !== undefined && request.method === "GET" && request.url !== "/rpc") {
     await handleAppRequest(request, response, nullPrototypeRecord({
       app_root: options.app_root,
+      authenticator: options.authenticator,
       sessions: options.sessions,
       ...(options.snapshot_producer === undefined ? {} : { snapshot_producer: options.snapshot_producer }),
       operation_timeout_ms: options.operation_timeout_ms,

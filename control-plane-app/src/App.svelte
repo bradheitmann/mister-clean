@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { demoBanner, sourceForLocation } from "./data-source.js";
+  import { demoBanner, SameOriginSnapshotSource, sessionTokenFromFragment, sourceForLocation } from "./data-source.js";
   import { resolveCapabilityQuery } from "./domain.js";
   import { ALL_CAPABILITY_DEFINITIONS, CAPABILITY_DEFINITIONS } from "../../src/control-plane/contracts/capability-taxonomy.js";
   import { CONTROL_PLANE_SNAPSHOT_SCHEMA_VERSION } from "../../src/control-plane/contracts/snapshot.js";
@@ -217,7 +217,11 @@
     status = "loading";
     errorMessage = "";
     try {
-      snapshot = await sourceForLocation(window.location.search).load();
+      const sessionToken = sessionTokenFromFragment(window.location.hash);
+      snapshot = await sourceForLocation(
+        window.location.search,
+        new SameOriginSnapshotSource(sessionToken === undefined ? {} : { sessionToken }),
+      ).load();
       // A valid zero-issue snapshot is still a complete control-plane state.
       // Every view must render it without turning absence of debt into absence
       // of evidence or silently inferring CLEAN.
