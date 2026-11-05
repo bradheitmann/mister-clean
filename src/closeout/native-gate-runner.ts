@@ -13,6 +13,7 @@ import {
   type HeldExecutionLease,
 } from "./execution-lease.js";
 import { spawnSupervisedCommand } from "./execution-supervisor.js";
+import { hardenedGitEnv } from "./git-hardening.js";
 import {
   COVERAGE_RECORD_TYPE,
   COVERAGE_SCHEMA_VERSION,
@@ -159,9 +160,10 @@ export function toolchainLocators(
   // <CARGO_HOME>/bin, and RUSTUP_HOME is the sibling rustup or .rustup that
   // holds settings.toml. Only directories that exist are used.
   const rustup = environment.PATH === undefined ? undefined : resolveExecutable("rustup", environment.PATH);
-  if (rustup !== undefined) {
+  // Only a rustup in a bin/ directory names a home; anywhere else the layout is not rustup's.
+  if (rustup !== undefined && basename(dirname(rustup.resolved)) === "bin") {
     const cargoHome = dirname(dirname(rustup.resolved));
-    if (locators.CARGO_HOME === undefined && basename(dirname(rustup.resolved)) === "bin") locators.CARGO_HOME = cargoHome;
+    if (locators.CARGO_HOME === undefined) locators.CARGO_HOME = cargoHome;
     if (locators.RUSTUP_HOME === undefined) {
       const rustupHome = ["rustup", ".rustup"].map((name) => join(dirname(cargoHome), name))
         .find((candidate) => existsSync(join(candidate, "settings.toml")));
@@ -269,8 +271,7 @@ export function scrubbedEnvironment(home: string, gateExecutable?: ResolvedExecu
     CI: "1",
     NO_COLOR: "1",
     FORCE_COLOR: "0",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_OPTIONAL_LOCKS: "0",
+    ...hardenedGitEnv({}),
     NPM_CONFIG_OFFLINE: "true",
     YARN_ENABLE_NETWORK: "0",
     BUN_INSTALL_CACHE_DIR: join(home, "bun-cache"),
