@@ -355,7 +355,8 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       { key: "gpg.program", config: (p) => `[gpg]\n\tprogram = ${p}\n`, neutral: "false", trigger: (repo) => ["-C", repo, "-c", "commit.gpgsign=true", "commit", "--allow-empty", "-m", "signed"] },
       { key: "core.pager", config: (p) => `[core]\n\tpager = ${p}\n`, neutral: "cat" },
       { key: "core.editor", config: (p) => `[core]\n\teditor = ${p}\n`, neutral: "false" },
-      { key: "sequence.editor", config: (p) => `[sequence]\n\teditor = ${p}\n`, neutral: "false" },
+      // git runs the sequence editor on the todo file with no terminal, so it gets a marker proof.
+      { key: "sequence.editor", config: (p) => `[sequence]\n\teditor = ${p}\n`, neutral: "false", trigger: (repo) => ["-C", repo, "rebase", "-i", "--root"] },
       { key: "core.alternateRefsCommand", config: (p) => `[core]\n\talternateRefsCommand = ${p}\n`, neutral: "" },
       { key: "gpg.ssh.program", config: (p) => `[gpg "ssh"]\n\tprogram = ${p}\n`, neutral: "" },
       { key: "remote.origin.vcs", config: (p) => `[remote "origin"]\n\turl = https://example.invalid/x.git\n\tvcs = ${p}\n`, neutral: "" },
@@ -375,6 +376,27 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
 
       const hardened = spawnSync("git", hardenedGitArgs(["-C", repo, "config", "--get", key]), { encoding: "utf8", env: hardenedGitEnv() });
       expect(hardened.stdout.trim(), key).toBe(neutral);
+    });
+
+    it("neutralises remote.<name>.vcs, so the remote helper it names never runs", () => {
+      // remote.<name>.vcs=<v> makes git run the helper git-remote-<v> from PATH, with no terminal.
+      const root = scratch("remote-vcs-helper");
+      const repo = join(root, "repo");
+      createFixtureRepository(repo, { identity: { name: "VCS Fixture", email: "vcs.invalid" } });
+      writeFileSync(join(repo, "README.md"), "fixture\n");
+      fixtureCommit(repo, "fixture");
+      const marker = join(root, "vcs-helper-ran");
+      const helpers = join(root, "helpers");
+      mkdirSync(helpers);
+      writeFileSync(join(helpers, "git-remote-mcfixture"), `#!/bin/sh\necho ran >> "${marker}"\nexit 1\n`);
+      chmodSync(join(helpers, "git-remote-mcfixture"), 0o755);
+      appendFileSync(join(repo, ".git", "config"), "[remote \"origin\"]\n\turl = https://example.invalid/x.git\n\tvcs = mcfixture\n");
+      const path = `${helpers}${delimiter}${process.env.PATH ?? ""}`;
+      spawnSync("git", ["-C", repo, "ls-remote", "origin"], { encoding: "utf8", env: { ...process.env, PATH: path, GIT_TERMINAL_PROMPT: "0" }, timeout: 30_000 });
+      expect(existsSync(marker), "remote.origin.vcs: the unhardened fixture never ran its helper, so the case proves nothing").toBe(true);
+      rmSync(marker);
+      spawnSync("git", hardenedGitArgs(["-C", repo, "ls-remote", "origin"]), { encoding: "utf8", env: hardenedGitEnv({ ...process.env, PATH: path }), timeout: 30_000 });
+      expect(existsSync(marker), "remote.origin.vcs").toBe(false);
     });
 
     it("neutralises core.gitProxy, a multi-valued key an empty -c cannot reset, so its program never runs on a git:// fetch", () => {
