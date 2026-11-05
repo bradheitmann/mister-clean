@@ -207,6 +207,28 @@ describe("bundle hardening regressions", () => {
     expect(result.errors.some((error) => error.includes("executed-early/unexecuted-later"))).toBe(true);
   });
 
+  it("does not treat a declared reference document as an executed-early procedure", async () => {
+    const fixture = await prepared("cascade");
+    const bundle = json(fixture.bundlePath);
+    const report = json(join(fixture.proof, "closeout-report.json"));
+    report.verdict = "CLEAN";
+    writeFileSync(join(fixture.repo, "planning", "done", "done.md"), "---\nartifact_type: reference\n---\nPlanned: implementation done when acceptance review is pending.\n");
+    persistBundle(fixture.proof, bundle, report);
+    const result = await validateBundle(bundle, fixture.bundlePath, { repoPath: fixture.repo });
+    expect(result.errors.some((error) => error.includes("executed-early/unexecuted-later"))).toBe(false);
+  });
+
+  it("still rejects a declared slice with executed-early and unexecuted-later steps", async () => {
+    const fixture = await prepared("cascade");
+    const bundle = json(fixture.bundlePath);
+    const report = json(join(fixture.proof, "closeout-report.json"));
+    report.verdict = "CLEAN";
+    writeFileSync(join(fixture.repo, "planning", "done", "done.md"), "---\nartifact_type: slice\n---\nimplementation done; acceptance review not_run\n");
+    persistBundle(fixture.proof, bundle, report);
+    const result = await validateBundle(bundle, fixture.bundlePath, { repoPath: fixture.repo });
+    expect(result.errors.some((error) => error.includes("executed-early/unexecuted-later"))).toBe(true);
+  });
+
   it("requires complete process topology rows", async () => {
     const fixture = await prepared("process-row");
     const bundle = json(fixture.bundlePath);
