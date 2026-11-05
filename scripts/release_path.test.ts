@@ -10,7 +10,6 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
-  rmSync,
   symlinkSync,
   statSync,
   writeFileSync,
@@ -230,7 +229,15 @@ function registryDigests(path: string): { integrity: string; shasum: string } {
 }
 
 afterEach(() => {
-  while (temporaryRoots.length) rmSync(temporaryRoots.pop()!, { recursive: true, force: true });
+  // One `rm -rf` over every temporary root: the capsule's installed dependency
+  // tree and copied checkouts measured minutes under Node's per-entry removal
+  // on a loaded host; the system remover is several times cheaper. The hook
+  // still fails if any root survives.
+  const roots = temporaryRoots.splice(0);
+  if (roots.length === 0) return;
+  execFileSync("rm", ["-rf", "--", ...roots], { stdio: "pipe" });
+  const survivors = roots.filter((path) => existsSync(path));
+  if (survivors.length > 0) throw new Error(`temporary roots survived cleanup: ${survivors.join(", ")}`);
 }, REAL_BUILD_CAPSULE_HOOK_TIMEOUT_MS);
 
 describe("release archive boundary", () => {
