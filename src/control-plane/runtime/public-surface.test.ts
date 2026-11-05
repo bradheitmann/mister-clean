@@ -10,6 +10,8 @@ import {
 } from "../../control-plane.js";
 
 const token = "public-control-plane-test-token-0000000001";
+// The frozen-surface socket round trip measured past the 5 s default inside the clean-CI capsule on a loaded host (owner-approved, 2026-11-05).
+const PUBLIC_SURFACE_SOCKET_TEST_TIMEOUT_MS = 30_000;
 const expectedRuntimeKeys = [
   "close",
   "dispatch_supported",
@@ -345,5 +347,5 @@ describe("public control-plane source surface", () => {
       await runtime.close();
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, PUBLIC_SURFACE_SOCKET_TEST_TIMEOUT_MS);
 });
