@@ -7408,7 +7408,6 @@ var FIXED_OVERRIDES = [
   "core.pager=cat",
   "core.editor=false",
   "core.alternateRefsCommand=",
-  "core.gitProxy=",
   "sequence.editor=false",
   "gpg.program=false",
   "diff.external=",
@@ -7418,6 +7417,7 @@ var FIXED_OVERRIDES = [
 var INJECTED_CONFIG = [
   ["credential.helper", ""],
   ["protocol.ext.allow", "never"],
+  ["protocol.git.allow", "never"],
   ["core.askPass", ""],
   ["core.askpass", ""]
 ];
@@ -7524,8 +7524,20 @@ function remoteTransport(url) {
   if (/^[^/]+@[^/:]+:/u.test(url)) return "ssh";
   return "path";
 }
+var GitRemoteNameError = class extends Error {
+  constructor(remote, reason) {
+    super(`remote ${JSON.stringify(remote)} is refused: ${reason}`);
+    this.remote = remote;
+    this.reason = reason;
+    this.name = "GitRemoteNameError";
+  }
+  code = "git_remote_name_refused";
+};
 async function hardenedRemoteUrl(repository, remote, git2) {
-  const url = (await git2.run(repository, ["ls-remote", "--get-url", remote])).stdout.trim();
+  if (remote.startsWith("-") || remote.length === 0) throw new GitRemoteNameError(remote, "a remote name may not be empty or begin with '-'");
+  const configured = (await git2.run(repository, ["remote"])).stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (!configured.includes(remote)) throw new GitRemoteNameError(remote, "not a configured remote; a target proof may not name a remote the repository does not define");
+  const url = (await git2.run(repository, ["remote", "get-url", "--end-of-options", remote])).stdout.trim();
   const transport = remoteTransport(url);
   if (!ALLOWED_REMOTE_TRANSPORTS.includes(transport)) {
     throw new GitRemoteTransportError(remote, transport);
@@ -21468,13 +21480,19 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
         if (repo && !allowPlaceholders && (await git2.run(repo, ["cat-file", "-e", `${String(evidence.commit ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push(`${epath}: commit does not exist in live repository`);
       } else if (name === "pushed" && evidence.kind === "remote_ref_resolution") {
         if (repo && !allowPlaceholders) {
+          const ref = String(evidence.ref ?? "");
+          if (ref.startsWith("-")) {
+            errors.push(`${epath}: a pushed ref may not begin with '-'`);
+            continue;
+          }
+          let remoteUrl;
           try {
-            await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git2);
+            remoteUrl = await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git2);
           } catch (error) {
             errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
             continue;
           }
-          const result = await git2.run(repo, ["ls-remote", String(evidence.remote ?? ""), String(evidence.ref ?? "")], [0, 2, 128]);
+          const result = await git2.run(repo, ["ls-remote", "--end-of-options", remoteUrl, ref], [0, 2, 128]);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object5(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
         }
@@ -27095,13 +27113,18 @@ async function validateLiveRepositoryAndTarget(bundle, report, repo, files, git2
   if (observation.kind === "remote_ref_resolution") {
     const remote = String(observation.remote ?? "");
     const remoteRef = String(observation.remote_ref ?? "");
+    if (remoteRef.startsWith("-")) {
+      errors.push("$.successor_readiness.target_observation.remote_ref: a remote ref may not begin with '-'");
+      return { head, subject, successor };
+    }
+    let remoteUrl;
     try {
-      await hardenedRemoteUrl(repo, remote, git2);
+      remoteUrl = await hardenedRemoteUrl(repo, remote, git2);
     } catch (error) {
       errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
       return { head, subject, successor };
     }
-    const result = await git2.run(repo, ["ls-remote", "--heads", remote, remoteRef], [0, 2, 128]);
+    const result = await git2.run(repo, ["ls-remote", "--heads", "--end-of-options", remoteUrl, remoteRef], [0, 2, 128]);
     const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
     if (observed !== liveTarget) errors.push("$.successor_readiness.target_observation: remote ref differs from live target");
   }

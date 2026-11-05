@@ -280,15 +280,22 @@ export async function validateBoundExecutionRecords(
         if (repo && !allowPlaceholders && (await git.run(repo, ["cat-file", "-e", `${String(evidence.commit ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push(`${epath}: commit does not exist in live repository`);
       } else if (name === "pushed" && evidence.kind === "remote_ref_resolution") {
         if (repo && !allowPlaceholders) {
-          // Same boundary as the live target proof: the bundle names the remote, so its
-          // transport is resolved under the hardened config and refused unless https or ssh.
+          // Same boundary as the live target proof: resolve the exact remote's URL,
+          // check its transport, then contact that URL directly with --end-of-options
+          // so an option-shaped remote or ref cannot become a git option.
+          const ref = String(evidence.ref ?? "");
+          if (ref.startsWith("-")) {
+            errors.push(`${epath}: a pushed ref may not begin with '-'`);
+            continue;
+          }
+          let remoteUrl: string;
           try {
-            await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git);
+            remoteUrl = await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git);
           } catch (error) {
             errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
             continue;
           }
-          const result = await git.run(repo, ["ls-remote", String(evidence.remote ?? ""), String(evidence.ref ?? "")], [0, 2, 128]);
+          const result = await git.run(repo, ["ls-remote", "--end-of-options", remoteUrl, ref], [0, 2, 128]);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
         }

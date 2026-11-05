@@ -22,7 +22,6 @@ const FIXED_OVERRIDES = [
   "core.pager=cat",
   "core.editor=false",
   "core.alternateRefsCommand=",
-  "core.gitProxy=",
   "sequence.editor=false",
   "gpg.program=false",
   "diff.external=",
@@ -38,6 +37,7 @@ const FIXED_OVERRIDES = [
 const INJECTED_CONFIG = [
   ["credential.helper", ""],
   ["protocol.ext.allow", "never"],
+  ["protocol.git.allow", "never"],
   ["core.askPass", ""],
   ["core.askpass", ""],
 ] as const;
@@ -172,16 +172,36 @@ export function remoteTransport(url: string): string {
   return "path";
 }
 
+export class GitRemoteNameError extends Error {
+  readonly code = "git_remote_name_refused";
+  constructor(readonly remote: string, readonly reason: string) {
+    super(`remote ${JSON.stringify(remote)} is refused: ${reason}`);
+    this.name = "GitRemoteNameError";
+  }
+}
+
+export interface GitRunner {
+  run(repo: string, args: readonly string[], allowed?: readonly number[]): Promise<{ readonly stdout: string; readonly code?: number }>;
+}
+
 /**
- * The URL a remote resolves to under the hardened configuration, after any
- * `insteadOf` rewrite. Refuses any transport other than https or ssh.
+ * The URL the named remote resolves to under the hardened configuration, after
+ * any `insteadOf` rewrite. The name is refused unless it is a configured remote
+ * whose name is not option-shaped, so it cannot fall back to `origin` or be
+ * read as a git option; the URL comes from that exact remote, and its transport
+ * must be https or ssh. Callers contact the returned URL, not the name, so the
+ * value checked here is the value contacted.
  */
 export async function hardenedRemoteUrl(
   repository: string,
   remote: string,
-  git: { run(repo: string, args: readonly string[], allowed?: readonly number[]): Promise<{ readonly stdout: string }> },
+  git: GitRunner,
 ): Promise<string> {
-  const url = (await git.run(repository, ["ls-remote", "--get-url", remote])).stdout.trim();
+  if (remote.startsWith("-") || remote.length === 0) throw new GitRemoteNameError(remote, "a remote name may not be empty or begin with '-'");
+  const configured = (await git.run(repository, ["remote"])).stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (!configured.includes(remote)) throw new GitRemoteNameError(remote, "not a configured remote; a target proof may not name a remote the repository does not define");
+  // get-url errors on an unknown remote rather than falling back to origin.
+  const url = (await git.run(repository, ["remote", "get-url", "--end-of-options", remote])).stdout.trim();
   const transport = remoteTransport(url);
   if (!ALLOWED_REMOTE_TRANSPORTS.includes(transport as (typeof ALLOWED_REMOTE_TRANSPORTS)[number])) {
     throw new GitRemoteTransportError(remote, transport);

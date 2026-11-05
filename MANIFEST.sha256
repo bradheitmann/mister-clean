@@ -28,9 +28,9 @@ b97a3d54909032f9f5dccba9a3b36dfc08fc065a0abd7af7a41ea4dd887180d9  ./assets/codeb
 b32333bbd5e144d2e2c736df9ce0cd977f73ed50d53c57bcee7051e9ad8c7ce6  ./assets/codebase-state-dashboard/product-mark.svg
 2b280962cfe5fdaf4513877c3d65184c8f71ddadb75f000f8b52b7a40bf57ada  ./assets/codebase-state-dashboard/tsconfig.scorecard.json
 ad4137f8e86b7ff051d650ee37a6c33757154a5698c798526ce0fa47b9d91e46  ./assets/regression-delta.json
-4616449033c4c381a1be270a9d24e27eb1bfe8de6977a31fcfcc33e401b34f9c  ./bin/mister-clean.js
+7b2bb04787d419892defe94e6101733bcabf5f09059fae12df535bf489020be9  ./bin/mister-clean.js
 a512a7f3940e1d875ebe4485a8e676e557c6279305b9d55c3529c6ddcd5752cf  ./dist/control-plane.d.ts
-fdde1f0df7e572e2dafeb3904ef020cfd2ede9c4f2d57c94b8479db1229c5b36  ./dist/control-plane.js
+5fc1907dfcc07543b529635ed3fdf24080158a4f9dab2a1931fbb8a134a0d8fe  ./dist/control-plane.js
 20afd4527ea2b6486b48ff858e84a93c847f7fbfb5ea3022e79585657272c2f8  ./dist/control-plane/assets/CormorantGaramond-Medium-B9HO_40Y.ttf
 4a58ed5d5e7dbaf8a033a810efc7afc4ac39ca390237a1188f14f9c73e9dd7dc  ./dist/control-plane/assets/CormorantGaramond-SemiBold-DK5mJ7_1.ttf
 6c222ed2c3660524dd0c14fb745e00fee65c5361ab28f60fba6730bf4e648763  ./dist/control-plane/assets/Inter-Medium-DRfMpRcT.otf
@@ -45,11 +45,11 @@ ef5d67cfe5fb0accb94507b75d92f659502c239bc26b2bf1f5c983660cf211f7  ./dist/control
 4aba9409dac257355c56a81dba4d7249fcb25079f9a48b194eec7956362434ec  ./dist/control-plane/assets/index-DmC-s3mW.css
 e235fe117c57f6868bbdd13d29a1c673144a628de56832071d4c9d17c8650191  ./dist/control-plane/index.html
 20c2f4014c2b14c6076d6b4f63ed0b112df7d08b5abd98e631c0a548db5f5220  ./dist/planning.d.ts
-1f3dfb4f1f8cc7c6935f3cdf58d88819007d1ddeee149ef23f1de1670505d479  ./dist/planning.js
+660a44291da8f37184b8c8839f6202101b9f0e133c742885456dcea834d230e1  ./dist/planning.js
 3ae6b5a0a37ccefb99acb0e1413da1780ba64e1b52792e7ab36328eaf83b77ce  ./dist/public.d.ts
-426eacc033d07d7848878b7a102456d011804dbeac4fab60076dbd9705851e06  ./dist/public.js
+7608121538e5445e529e2e58970fd0d5d9118f21ed683120be176e4f14dc8c13  ./dist/public.js
 a59c47872b71f12589942892464e764c0db350c20b72228645615cc36e0a0725  ./dist/stdio.d.ts
-03030b32016f1d7a79bf66252b2863e5d95780575d62184a2514317027d62877  ./dist/stdio.js
+a425a62908c4b11424a09be122899d43b16946b7848a2bcebdc4d59b0028f567  ./dist/stdio.js
 e8e97602b346a6684009cb9764e366a10efeba6d898523ae4f206237fd6df33d  ./evals/blind-run-contract.md
 2b675b478c452464d4a084711205e7c296b2439a1b27234c107a5f9c47b7e9d6  ./evals/mcp-evaluation.xml
 56bed76717fced81c8ae3da5eabb5bfc95f821905ffc212d113a590938b0b4a1  ./evals/model-hygiene-trial.md

@@ -85,15 +85,21 @@ async function validateLiveRepositoryAndTarget(
     if (observation.kind === "remote_ref_resolution") {
       const remote = String(observation.remote ?? "");
       const remoteRef = String(observation.remote_ref ?? "");
-      // The remote name comes from the bundle, and the target's config says where it
-      // points, so the transport is resolved and checked before anything contacts it.
+      // Both strings come from the bundle. Resolve the exact remote's URL, check its
+      // transport, then contact that URL directly (never the name), with
+      // --end-of-options so an option-shaped remote or ref cannot become a git option.
+      if (remoteRef.startsWith("-")) {
+        errors.push("$.successor_readiness.target_observation.remote_ref: a remote ref may not begin with '-'");
+        return { head, subject, successor };
+      }
+      let remoteUrl: string;
       try {
-        await hardenedRemoteUrl(repo, remote, git);
+        remoteUrl = await hardenedRemoteUrl(repo, remote, git);
       } catch (error) {
         errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
         return { head, subject, successor };
       }
-      const result = await git.run(repo, ["ls-remote", "--heads", remote, remoteRef], [0, 2, 128]);
+      const result = await git.run(repo, ["ls-remote", "--heads", "--end-of-options", remoteUrl, remoteRef], [0, 2, 128]);
       const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
       if (observed !== liveTarget) errors.push("$.successor_readiness.target_observation: remote ref differs from live target");
     }

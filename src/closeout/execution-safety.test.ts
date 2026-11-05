@@ -357,12 +357,16 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       { key: "core.editor", config: (p) => `[core]\n\teditor = ${p}\n`, neutral: "false" },
       { key: "sequence.editor", config: (p) => `[sequence]\n\teditor = ${p}\n`, neutral: "false" },
       { key: "core.alternateRefsCommand", config: (p) => `[core]\n\talternateRefsCommand = ${p}\n`, neutral: "" },
-      { key: "core.gitProxy", config: (p) => `[core]\n\tgitProxy = ${p}\n`, neutral: "" },
       { key: "gpg.ssh.program", config: (p) => `[gpg "ssh"]\n\tprogram = ${p}\n`, neutral: "" },
       { key: "remote.origin.vcs", config: (p) => `[remote "origin"]\n\turl = https://example.invalid/x.git\n\tvcs = ${p}\n`, neutral: "" },
       { key: "remote.origin.proxy", config: (p) => `[remote "origin"]\n\turl = https://example.invalid/x.git\n\tproxy = ${p}\n`, neutral: "" },
     ];
 
+    // Resolution is a valid proof only for a scalar key, where an empty or neutral
+    // `-c` value replaces the config value. core.gitProxy is multi-valued, so an
+    // empty `-c` only appends; it has a marker proof below instead. The scalar keys
+    // here were each checked with `git -c <key>= config --get <key>`: every one
+    // returns the override, none keeps the target's program.
     it.each(cases)("neutralises $key, so git resolves it to the hardening's value and not to the program", ({ key, config, neutral }) => {
       const { repo, program } = configured(key.replaceAll(".", "-"), config);
       // Unhardened, git resolves the key to the target's program.
@@ -371,6 +375,17 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
 
       const hardened = spawnSync("git", hardenedGitArgs(["-C", repo, "config", "--get", key]), { encoding: "utf8", env: hardenedGitEnv() });
       expect(hardened.stdout.trim(), key).toBe(neutral);
+    });
+
+    it("neutralises core.gitProxy, a multi-valued key an empty -c cannot reset, so its program never runs on a git:// fetch", () => {
+      const { repo, marker } = configured("core-gitProxy", (p) => `[core]\n\tgitProxy = ${p}\n`);
+      // Unhardened, the proxy program runs for a git:// remote; that is what must be prevented.
+      spawnSync("git", ["-C", repo, "ls-remote", "git://localhost/x"], { encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 30_000 });
+      expect(existsSync(marker), "core.gitProxy: the unhardened fixture never ran its program, so the case proves nothing").toBe(true);
+      rmSync(marker);
+      // An empty -c core.gitProxy= would only append to the list; protocol.git.allow=never is what bites.
+      spawnSync("git", hardenedGitArgs(["-C", repo, "ls-remote", "git://localhost/x"]), { encoding: "utf8", env: hardenedGitEnv(), timeout: 30_000 });
+      expect(existsSync(marker), "core.gitProxy").toBe(false);
     });
 
     it.each(cases.filter((item) => item.trigger !== undefined))("$key: the program it names never runs", ({ key, config, trigger }) => {
@@ -396,7 +411,44 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       ));
       expect(injected.get("credential.helper")).toBe("");
       expect(injected.get("protocol.ext.allow")).toBe("never");
+      expect(injected.get("protocol.git.allow")).toBe("never");
       expect(injected.get("core.askPass")).toBe("");
+    });
+
+    it("an option-shaped remote name cannot become a git option, and the transport check binds to the contacted remote", async () => {
+      // D1: a bundle-controlled remote name must not reach argv as a leading-dash option,
+      // and the URL checked must be the URL contacted (no silent fallback to origin).
+      const root = scratch("remote-argv");
+      const repo = join(root, "repo");
+      createFixtureRepository(repo, { identity: { name: "Argv Fixture", email: "argv.invalid" } });
+      writeFileSync(join(repo, "README.md"), "fixture\n");
+      fixtureCommit(repo, "fixture");
+      // An ordinary https origin, so a fallback-to-origin would pass the transport check.
+      await expect(hardenedRemoteUrl(repo, "origin", nodeGitPort)).rejects.toThrow(/not a configured remote/i);
+      await git(repo, "remote", "add", "origin", "https://example.invalid/x.git");
+
+      const marker = join(root, "upload-pack-ran");
+      const program = join(root, "upload-pack.sh");
+      writeFileSync(program, `#!/bin/sh\necho ran >> "${marker}"\n`);
+      chmodSync(program, 0o755);
+      // The option-shaped name is refused outright, so it never reaches ls-remote argv.
+      await expect(hardenedRemoteUrl(repo, `--upload-pack=${program}`, nodeGitPort)).rejects.toThrow(/begin with '-'/i);
+      // Even passed straight to ls-remote with the terminator, it cannot become an option.
+      spawnSync("git", hardenedGitArgs(["-C", repo, "ls-remote", "--heads", "--end-of-options", `--upload-pack=${program}`, "."]), { encoding: "utf8", env: hardenedGitEnv(), timeout: 30_000 });
+      expect(existsSync(marker)).toBe(false);
+    });
+
+    it("live validation refuses a target proof whose remote name is option-shaped", async () => {
+      const value = await cleanBundleFixture();
+      Object.assign(successor(value).target_observation as RecordValue, {
+        kind: "remote_ref_resolution",
+        remote: "--upload-pack=touch /tmp/mister-clean-should-not-exist",
+        remote_ref: "refs/heads/main",
+      });
+      await value.persist();
+      const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContainEqual(expect.stringMatching(/target_observation\.remote: .*begin with '-'/i));
     });
 
     it("refuses an ext:: transport, whether the config names it directly or through an insteadOf rewrite", () => {
