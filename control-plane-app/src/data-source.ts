@@ -62,6 +62,22 @@ export function sessionTokenFromFragment(hash: string): string | undefined {
   return new URLSearchParams(hash.replace(/^#/u, "")).get("session_token") ?? undefined;
 }
 
+/**
+ * Read the launch token and drop it from the address in the same step, with
+ * `replaceState` so no history entry keeps it. Otherwise the token that guards
+ * `/rpc` stays in the address bar, in the session history, and in anything the
+ * operator copies out of the address bar.
+ */
+export function takeSessionTokenFromFragment(window: Window): string | undefined {
+  const parameters = new URLSearchParams(window.location.hash.replace(/^#/u, ""));
+  const token = parameters.get("session_token");
+  if (token === null) return undefined;
+  parameters.delete("session_token");
+  const remaining = parameters.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${remaining ? `#${remaining}` : ""}`);
+  return token;
+}
+
 export function sourceForLocation(search: string, source: ControlPlaneSnapshotSource = new SameOriginSnapshotSource()): ControlPlaneSnapshotSource {
   const params = new URLSearchParams(search);
   if (params.get("demo") === "1") return { load: async () => validateSnapshot(demoSnapshot) };
