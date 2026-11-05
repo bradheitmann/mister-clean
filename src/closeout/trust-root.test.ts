@@ -3,7 +3,7 @@
  * reach with records the closer can forge. Every key here is generated inside
  * the test; no real key or policy is used.
  */
-import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
+import { generateKeyPairSync, randomBytes, sign, type KeyObject } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -454,6 +454,30 @@ describe("trust root (master-gate S0)", { timeout: 120_000 }, () => {
       const result = await validateBundle(item.value.bundle, item.value.bundlePath, { repoPath: item.value.repo, trustPolicyPins: [pin] });
       expect(result.ok).toBe(false);
       expect(result.errors).toContainEqual(expect.stringMatching(/completion_debts\[0\]\.exception: .*detector_finding_fingerprints/));
+    });
+
+    it("refuses CLEAN when a ruling naming the judge-supplied owner key was tampered with after signing", async () => {
+      const item = await acceptedExceptionBundle();
+      const owner = testKey();
+      const pin = await signRuling(item, [policyKey(owner, "principal", "owner-key", ["owner"])], owner, "owner-key");
+      item.ruling.scope = `${String(item.ruling.scope)} (widened after signing)`;
+      await persistRuling(item);
+      const result = await validateBundle(item.value.bundle, item.value.bundlePath, { repoPath: item.value.repo, trustPolicyPins: [pin] });
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContainEqual(expect.stringMatching(/completion_debts\[0\]\.exception: .*stays payable.*does not verify over its canonical bytes/));
+      expect(result.errors).toContainEqual(expect.stringContaining("$.live_detector_coverage.public_safety: CLEAN requires zero payable findings"));
+    });
+
+    it("refuses CLEAN when a ruling naming the judge-supplied owner key carries random signature bytes", async () => {
+      const item = await acceptedExceptionBundle();
+      const owner = testKey();
+      const pin = await signRuling(item, [policyKey(owner, "principal", "owner-key", ["owner"])], owner, "owner-key");
+      item.ruling.signature = { algorithm: "Ed25519", key_id: "owner-key", signature_base64url: Buffer.from(randomBytes(64)).toString("base64url") };
+      await persistRuling(item);
+      const result = await validateBundle(item.value.bundle, item.value.bundlePath, { repoPath: item.value.repo, trustPolicyPins: [pin] });
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContainEqual(expect.stringMatching(/completion_debts\[0\]\.exception: .*stays payable.*does not verify over its canonical bytes/));
+      expect(result.errors).toContainEqual(expect.stringContaining("$.live_detector_coverage.public_safety: CLEAN requires zero payable findings"));
     });
 
     it("counts an owner-signed ruling under a judge-supplied policy toward CLEAN", async () => {
