@@ -122,6 +122,7 @@ function runtimeRecords(root: string, policyPath: string, evidenceRoot: string, 
       public_key_pem: publicKey.export({ format: "pem", type: "spki" }).toString(),
       roles: ["independent_qa"],
       valid_from: "2026-01-01T00:00:00Z",
+      valid_to: "2027-01-01T00:00:00Z",
     }],
   };
   writeFileSync(policyPath, `${JSON.stringify(policy, null, 2)}\n`);
