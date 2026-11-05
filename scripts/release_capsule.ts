@@ -11,6 +11,7 @@ import {
   readlinkSync,
   realpathSync,
   readdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -326,9 +327,13 @@ export function createExternalPnpmArchive({
   } catch (error) {
     capsuleFailure = error;
   }
+  // The dependency tree must be out of the pack root before pnpm packs it,
+  // but deleting it file by file here measured minutes on a loaded host and
+  // blocked the event loop. Renaming it out of the pack root is one syscall;
+  // the caller owns `staging` and removes it whole, so nothing is left behind.
   let cleanupFailure: unknown = null;
   try {
-    rmSync(externalDependencies, { recursive: true, force: true });
+    if (existsSync(externalDependencies)) renameSync(externalDependencies, join(external, "node_modules.discarded"));
   } catch (error) {
     cleanupFailure = error;
   }

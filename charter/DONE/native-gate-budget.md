@@ -1,0 +1,18 @@
+# Done list — native-gate-budget (written BEFORE implementation; does not grow during it)
+Base bytes: main e61d0d7 (branch feat/native-gate-budget)
+Finding: DEBT-NATIVE-GATE-8EE43DE5895D0E3B on e61d0d7 (installed 7.4.0 prepare, 2026-11-04 23:09Z): `node:.:ci-check` timed_out at the fixed 10-minute default; the clean-CI matrix needs ~25 minutes and no budget can be declared.
+Proofs (each: name, what it guarantees, reopen step, fail-without mutant):
+1. declared-budget-honoured-and-recorded: a fixture gate that sleeps past the run's default budget but within a budget the repository declares in `.mister-clean/native-gates.json` ends `passed`, and its execution evidence records the declared `timeout_ms`, the source file path and sha256, the reason, and the default it replaced. Reopen: run `src/closeout/native-gate-budget.test.ts`. Mutant: the runner ignores the budget file → the gate ends `timed_out` → RED.
+2. budget-above-maximum-refused-before-any-run: a declared budget above `NATIVE_GATE_TIMEOUT_MAX_MS` (and likewise a non-integer, a non-positive value, an unknown gate id, a missing reason, an unknown key or schema) is a typed refusal (`native_gate_budget_invalid` with path and reason) raised before any gate executes; no coverage record and no gate output exist afterwards. Reopen: same test file. Mutant: clamp the value to the maximum silently → the gate runs → RED.
+3. undeclared-gate-keeps-default: with a budget file that names another gate, an undeclared gate keeps the run's default budget and its evidence records `source: "default"`; with no budget file nothing changes. Reopen: same test file. Mutant: apply the declared budget to every gate → the undeclared sleeping gate passes instead of timing out → RED.
+4. this-repository-prepare: `MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun src/cli.ts prepare <frozen clone of this branch> --evidence-home <scratch> …` runs `node:.:ci-check` to completion under the declared budget (passed, or a real failure other than `timed_out`) and both cargo gates pass; the three gate states and the budget evidence are recorded in the lane report. Reopen: rerun the command on the tip. Mutant: remove this repository's `.mister-clean/native-gates.json` → `node:.:ci-check` ends `timed_out` → RED (observed by the finding on e61d0d7; not re-run for 10 minutes here unless QA asks).
+5. existing-gates-green: `tsc --noEmit`; `src/closeout/native-gates.test.ts`, `src/closeout/native-gate-validation.test.ts` if present, `src/closeout/prepare.test.ts`, `src/skill-contract.test.ts`; `charter check --strict`; double clean `pnpm run build:raw` under bun 1.4.0 with identical hashes; `manifest:package:check`; `SKILL.md` not grown. Reopen: the gate commands below. Mutant: coverage validation accepts an execution whose recorded budget `timeout_ms` is not an integer → the validator test in the proof file goes RED.
+Gates (exact commands):
+- tsc --noEmit
+- MISTER_CLEAN_SOURCE_DEVELOPMENT=1 nice -n 10 node ./node_modules/vitest/vitest.mjs run --allowOnly=false --no-file-parallelism --testTimeout=120000 src/closeout/native-gate-budget.test.ts src/closeout/native-gates.test.ts src/closeout/prepare.test.ts src/skill-contract.test.ts
+- bun run audit:public; bun run manifest:package:check (after the double clean build); charter check --strict
+- no full local suite (owner decision 24954d2: S6 evidence is hosted CI on the exact tip)
+Out of scope (recorded obligations, not fixed here):
+- none; the two cargo gates' 7.4.0 failures are already fixed on main by #56 and are only verified in proof 4
+Owner decision points:
+- the maximum: NATIVE_GATE_TIMEOUT_MAX_MS = 2 hours (brief's default); the owner may lower it

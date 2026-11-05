@@ -10,7 +10,6 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
-  rmSync,
   symlinkSync,
   statSync,
   writeFileSync,
@@ -60,6 +59,10 @@ interface PackageJsonFixture {
 }
 
 const RELEASE_FIXTURE_IDENTITY = { name: "Release Fixture", email: "release-fixture.invalid" };
+// The real-build capsule test measured 129 s against a 120 s budget on a loaded host (owner-approved, 2026-11-05).
+const REAL_BUILD_CAPSULE_TEST_TIMEOUT_MS = 300_000;
+// Removing the capsule's full build output measured over the 10 s default hook budget on a loaded host (owner-approved, 2026-11-05).
+const REAL_BUILD_CAPSULE_HOOK_TIMEOUT_MS = 60_000;
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const verifier = join(root, "scripts", "verify_packed_cli.ts");
@@ -226,8 +229,16 @@ function registryDigests(path: string): { integrity: string; shasum: string } {
 }
 
 afterEach(() => {
-  while (temporaryRoots.length) rmSync(temporaryRoots.pop()!, { recursive: true, force: true });
-});
+  // One `rm -rf` over every temporary root: the capsule's installed dependency
+  // tree and copied checkouts measured minutes under Node's per-entry removal
+  // on a loaded host; the system remover is several times cheaper. The hook
+  // still fails if any root survives.
+  const roots = temporaryRoots.splice(0);
+  if (roots.length === 0) return;
+  execFileSync("rm", ["-rf", "--", ...roots], { stdio: "pipe" });
+  const survivors = roots.filter((path) => existsSync(path));
+  if (survivors.length > 0) throw new Error(`temporary roots survived cleanup: ${survivors.join(", ")}`);
+}, REAL_BUILD_CAPSULE_HOOK_TIMEOUT_MS);
 
 describe("release archive boundary", () => {
   it("rejects a raw AppleDouble member before consulting platform tar listings", () => {
@@ -569,7 +580,7 @@ describe("release archive boundary", () => {
       expect(sha256File(join(packageRoot, path!))).toBe(row.sha256);
     }
     expect(existsSync(join(packageRoot, ".git"))).toBe(false);
-  }, 120_000);
+  }, REAL_BUILD_CAPSULE_TEST_TIMEOUT_MS);
 
   it("strips extended metadata and installs the exact manifest-bound package tree with pnpm", () => {
     const temporary = temporaryRoot();

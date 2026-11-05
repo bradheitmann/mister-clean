@@ -25,11 +25,13 @@ import {
   digestFile,
   errorMessage,
   identity,
+  loadNativeGateBudgets,
   repositoryRelation,
   sha256,
   stableEqual,
   validateDiscoveryIntegrity,
   validatePortablePath,
+  type NativeGateBudgetEvidence,
   type NativeGateCommand,
   type NativeGateCoverage,
   type NativeGateDefinition,
@@ -362,7 +364,31 @@ export async function blockedExecution(
   };
 }
 
+/**
+ * Execute one gate under its budget. `budget.timeout_ms` is the deadline the
+ * gate actually ran under; the evidence carries the whole budget record so a
+ * reader can see whether the repository declared it and what default it
+ * replaced.
+ */
 export async function executeGate(
+  repository: string,
+  gate: NativeGateDefinition & { readonly command: NativeGateCommand },
+  discoveryObject: RepositoryObject,
+  evidenceRoot: string,
+  options: Required<Pick<RunNativeGateOptions, "max_output_bytes" | "termination_grace_ms">>,
+  budget: NativeGateBudgetEvidence,
+  skip: ReadonlySet<string>,
+  now: () => Date,
+  lease: HeldExecutionLease,
+): Promise<NativeGateExecution> {
+  const execution = await executeGateUnderDeadline(
+    repository, gate, discoveryObject, evidenceRoot,
+    { ...options, timeout_ms: budget.timeout_ms }, skip, now, lease,
+  );
+  return { ...execution, budget };
+}
+
+async function executeGateUnderDeadline(
   repository: string,
   gate: NativeGateDefinition & { readonly command: NativeGateCommand },
   discoveryObject: RepositoryObject,
@@ -627,6 +653,22 @@ export async function runNativeGates(
         throw new Error(`cannot skip unknown or non-required gate ${JSON.stringify(id)}`);
       }
     }
+    // Repository-declared budgets are read once, before any gate runs; an
+    // invalid file is a typed refusal of the whole run, never a silent clamp.
+    const budgets = loadNativeGateBudgets(root, new Set(discovery.gates.map((gate) => gate.id)));
+    const budgetFor = (gateId: string): NativeGateBudgetEvidence => {
+      const declared = budgets?.gates.get(gateId);
+      return declared
+        ? {
+          source: "repository",
+          timeout_ms: declared.timeout_ms,
+          path: budgets!.path,
+          sha256: budgets!.sha256,
+          reason: declared.reason,
+          default_timeout_ms: timeoutMs,
+        }
+        : { source: "default", timeout_ms: timeoutMs };
+    };
 
     await mkdir(evidenceDirectory, { recursive: true, mode: 0o700 });
     const evidenceRoot = await realpath(resolve(evidenceDirectory));
@@ -647,7 +689,8 @@ export async function runNativeGates(
         gate as NativeGateDefinition & { readonly command: NativeGateCommand },
         discovery.repository_object,
         evidenceRoot,
-        { timeout_ms: timeoutMs, max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
+        { max_output_bytes: maxOutputBytes, termination_grace_ms: terminationGraceMs },
+        budgetFor(gate.id),
         skip,
         now,
         lease,
