@@ -18,7 +18,7 @@ import { createFixtureRepository, fixtureCommit } from "../test-support/fixture-
 import { fixture as cleanBundleFixture, git, removeTemporaryRoots, successor, validateBundle, type RecordValue } from "./bundle.test-fixture.js";
 import { discoverNativeGates } from "./native-gates.js";
 import { gateShimDirectory, materializeGateShims, resolveExecutable, runNativeGates, scrubbedEnvironment } from "./native-gate-runner.js";
-import { GitConfigSnapshotError, gitConfigSnapshot, hardenedGitArgs, hardenedGitEnv, hardenedRemoteUrl } from "./git-hardening.js";
+import { GitConfigSnapshotError, contactRemote, gitConfigSnapshot, hardenedGitArgs, hardenedGitEnv, hardenedRemoteUrl } from "./git-hardening.js";
 import { nodeGitPort } from "./bundle.js";
 import { prepareCloseout } from "./prepare.js";
 import { captureRepositoryObject } from "./repository-object.js";
@@ -459,6 +459,36 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       spawnSync("git", hardenedGitArgs(["-C", repo, "ls-remote", "--heads", "--end-of-options", `--upload-pack=${program}`, "."]), { encoding: "utf8", env: hardenedGitEnv(), timeout: 30_000 });
       expect(existsSync(marker)).toBe(false);
     });
+
+    it.each([["file:// rewrite", (local: string) => `file://${local}/`], ["plain path rewrite", (local: string) => `${local}/`]] as const)(
+      "a second insteadOf rewrite cannot redirect the contacted remote (%s)",
+      async (_name, target) => {
+        // MC/QA MCQA-D1: get-url applies one insteadOf rewrite and the checked https URL
+        // then met a second rewrite inside ls-remote, which reached a local repository.
+        const root = scratch("double-insteadof");
+        const local = join(root, "local");
+        createFixtureRepository(join(local, "repo"), { identity: { name: "Local Fixture", email: "local.invalid" } });
+        writeFileSync(join(local, "repo", "README.md"), "local\n");
+        fixtureCommit(join(local, "repo"), "local");
+        const repo = join(root, "repo");
+        createFixtureRepository(repo, { identity: { name: "Rewrite Fixture", email: "rewrite.invalid" } });
+        writeFileSync(join(repo, "README.md"), "fixture\n");
+        fixtureCommit(repo, "fixture");
+        appendFileSync(join(repo, ".git", "config"), [
+          "[remote \"origin\"]", "\turl = https://first.invalid/repo",
+          "[url \"https://second.invalid/\"]", "\tinsteadOf = https://first.invalid/",
+          `[url "${target(local)}"]`, "\tinsteadOf = https://second.invalid/",
+          "",
+        ].join("\n"));
+        const checked = await hardenedRemoteUrl(repo, "origin", nodeGitPort);
+        expect(checked).toBe("https://second.invalid/repo");
+        const contacted = contactRemote(repo, checked, ["--heads"], "refs/heads/main");
+        // The checked URL is contacted as written: no repository, global or system
+        // rewrite applies, so the local repository is never reached.
+        expect(contacted.code).not.toBe(0);
+        expect(contacted.stdout).toBe("");
+      },
+    );
 
     it("live validation refuses a target proof whose remote name is option-shaped", async () => {
       const value = await cleanBundleFixture();

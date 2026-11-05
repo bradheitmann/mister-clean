@@ -48,7 +48,7 @@ import {
   RETIREMENT_RATIFICATION_NORMALIZER,
   RETIREMENT_RULING_MINTED_BY,
 } from "./retirement-ratification.js";
-import { hardenedRemoteUrl } from "./git-hardening.js";
+import { contactRemote, hardenedRemoteUrl } from "./git-hardening.js";
 
 export interface NativeGateControlEvidence {
   readonly control: JsonObject;
@@ -295,7 +295,8 @@ export async function validateBoundExecutionRecords(
             errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
             continue;
           }
-          const result = await git.run(repo, ["ls-remote", "--end-of-options", remoteUrl, ref], [0, 2, 128]);
+          // Contacted outside any config, so no second insteadOf can redirect the checked URL.
+          const result = contactRemote(repo, remoteUrl, [], ref);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
         }

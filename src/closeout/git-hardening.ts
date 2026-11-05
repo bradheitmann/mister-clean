@@ -10,6 +10,9 @@
  * keep working.
  */
 import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /** Keys whose value names a program, or a transport that carries a command. */
 const FIXED_OVERRIDES = [
@@ -207,4 +210,36 @@ export async function hardenedRemoteUrl(
     throw new GitRemoteTransportError(remote, transport);
   }
   return url;
+}
+
+/**
+ * Contact a URL `hardenedRemoteUrl` already checked, exactly as written. The
+ * call runs outside any repository, with no system config and an empty global
+ * config, so no `insteadOf` rewrite from the repository, global or system
+ * config can redirect it after the check: the bytes checked are the bytes
+ * contacted. `repository` names the subject in errors only; it is never read.
+ */
+export function contactRemote(
+  repository: string,
+  url: string,
+  flags: readonly string[],
+  ref: string,
+): { readonly stdout: string; readonly code: number } {
+  if (ref.startsWith("-")) throw new GitRemoteNameError(ref, `a ref contacted for ${repository} may not begin with '-'`);
+  const isolation = mkdtempSync(join(tmpdir(), "mister-clean-remote-contact-"));
+  try {
+    const outside = join(isolation, "cwd");
+    const emptyGlobal = join(isolation, "gitconfig");
+    mkdirSync(outside);
+    writeFileSync(emptyGlobal, "");
+    const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", outside, "ls-remote", ...flags, "--end-of-options", url, ref]), {
+      encoding: "utf8",
+      env: { ...hardenedGitEnv(), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: emptyGlobal, GIT_CEILING_DIRECTORIES: isolation },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 60_000,
+    });
+    return { stdout: (result.stdout ?? "").trim(), code: result.status ?? 128 };
+  } finally {
+    rmSync(isolation, { recursive: true, force: true });
+  }
 }

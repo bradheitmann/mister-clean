@@ -28,7 +28,7 @@ import { captureRepositoryObject } from "./repository-object.js";
 import { auditSemanticRepository } from "./semantic.js";
 import { auditSemanticEvidencePackageV2 } from "./semantic-v2.js";
 import { exceptionSignatureErrors, trustPolicyPinError } from "./trust-root.js";
-import { hardenedRemoteUrl } from "./git-hardening.js";
+import { contactRemote, hardenedRemoteUrl } from "./git-hardening.js";
 import {
   HEX64,
   array,
@@ -99,7 +99,8 @@ async function validateLiveRepositoryAndTarget(
         errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
         return { head, subject, successor };
       }
-      const result = await git.run(repo, ["ls-remote", "--heads", "--end-of-options", remoteUrl, remoteRef], [0, 2, 128]);
+      // Contacted outside any config, so no second insteadOf can redirect the checked URL.
+      const result = contactRemote(repo, remoteUrl, ["--heads"], remoteRef);
       const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
       if (observed !== liveTarget) errors.push("$.successor_readiness.target_observation: remote ref differs from live target");
     }
