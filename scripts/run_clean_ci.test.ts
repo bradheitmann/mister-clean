@@ -90,7 +90,6 @@ function fixture(buildsGeneratedOutput: boolean): string {
     version: "1.0.0",
     private: true,
     type: "module",
-    packageManager: "pnpm@11.0.3",
     scripts: {
       "build:raw": "bun scripts/build.ts",
       "test:node": "bun scripts/assert-built.ts",
