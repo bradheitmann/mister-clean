@@ -26,9 +26,10 @@ import {
   detectorById,
   detectorRegistrySha256,
   detectorRuntimeIdentitySha256,
+  type DetectorInputRef,
   type DetectorRuntimeIdentity,
 } from "./detector-coverage.js";
-import { auditSemanticRepository } from "./semantic.js";
+import { auditSemanticRepository, type SemanticAuditResult } from "./semantic.js";
 import { auditGitHubActionsRepository } from "./github-actions.js";
 import { scanTrackedPublicSafetySync } from "./inspection.js";
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
@@ -200,6 +201,8 @@ export interface Fixture {
   bundle: RecordValue;
   regression: RecordValue;
   repositoryObject: RepositoryObject;
+  /** Replaces the default no-input semantic audit, e.g. with a frozen v2 evidence package and trust policy. */
+  semantic?: { readonly audit: () => SemanticAuditResult; readonly inputRefs: readonly DetectorInputRef[] };
   persist(): Promise<void>;
 }
 
@@ -405,7 +408,7 @@ export async function fixture(): Promise<Fixture> {
         repository_object: baselineRepositoryObject,
       };
       const semanticAudit = {
-        ...auditSemanticRepository(repo),
+        ...(value.semantic?.audit() ?? auditSemanticRepository(repo)),
         object: baselineRepositoryObject.sha256,
         repository_object: baselineRepositoryObject,
       };
@@ -491,6 +494,7 @@ export async function fixture(): Promise<Fixture> {
         githubActionsRef: { path: "github-actions-audit.json", sha256: digest(auditText(githubActionsAudit)) },
         semanticAudit,
         semanticRef: { path: "semantic-audit.json", sha256: digest(auditText(semanticAudit)) },
+        ...(value.semantic ? { inputRefs: { semantic_boundary: value.semantic.inputRefs } } : {}),
         registryVersion: "5",
       });
       if (regression.schema_version === "1.3") {

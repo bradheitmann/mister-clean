@@ -1271,7 +1271,7 @@ describe("validateBundle", { timeout: 30_000 }, () => {
     ))).toBe(true);
   });
 
-  it("allows a principal-ratified irreparable finding without hiding its physical observation", async () => {
+  it("refuses CLEAN on an unsigned principal ruling over an irreparable finding, which stays payable", async () => {
     const { value, debt, observationId } = await publicSafetyDebtFixture();
     const rulingPath = "operator-ruling.json";
     const ruling = {
@@ -1309,8 +1309,12 @@ describe("validateBundle", { timeout: 30_000 }, () => {
     });
     await value.persist();
 
-    await expect(validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo }))
-      .resolves.toEqual({ errors: [], ok: true });
+    // Master-gate S0: a closer-written ruling is not the principal's act. Without an
+    // owner or principal signature under a judge-pinned policy it waives nothing.
+    const result = await validateBundle(value.bundle, value.bundlePath, { repoPath: value.repo });
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContainEqual(expect.stringMatching(/^\$\.report\.completion_debts\[0\]\.exception: .*stays payable \(unsigned/));
+    expect(result.errors).toContain("$.live_detector_coverage.public_safety: CLEAN requires zero payable findings after owner-signed exceptions (got 1)");
   });
 
   it("keeps an honest NOT_CLEAN schema 1.5 bundle readable without native gate control", async () => {

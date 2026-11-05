@@ -197,8 +197,8 @@ describe("language_policy root debts (registry 6, regression 1.6)", () => {
     const read = (name: string): Json => json(join(prepared.bundleDirectory, name));
     // Live: the forbidden file is still tracked, so the live row reports it.
     const liveErrors: string[] = [];
-    await validateLive(read("closure-bundle.json"), read("closeout-report.json"), read("action-manifest.json"), prepared.bundlePath, repo, nodeBundlePorts, undefined, liveErrors);
-    expect(liveErrors).toContain("$.live_detector_coverage.language_policy: CLEAN requires zero payable findings after principal-ratified exceptions (got 1)");
+    await validateLive(read("closure-bundle.json"), read("closeout-report.json"), read("action-manifest.json"), prepared.bundlePath, repo, nodeBundlePorts, undefined, { pins: [], used: new Set() }, liveErrors);
+    expect(liveErrors).toContain("$.live_detector_coverage.language_policy: CLEAN requires zero payable findings after owner-signed exceptions (got 1)");
     // Action boundary: port the file through the public lifecycle; the comparator reruns language_policy.
     const debt = languageDebts(prepared.bundleDirectory)[0]!;
     await beginAction({

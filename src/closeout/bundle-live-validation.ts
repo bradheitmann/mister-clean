@@ -27,10 +27,12 @@ import { auditPlanningRepository } from "./planning.js";
 import { captureRepositoryObject } from "./repository-object.js";
 import { auditSemanticRepository } from "./semantic.js";
 import { auditSemanticEvidencePackageV2 } from "./semantic-v2.js";
+import { exceptionSignatureErrors, trustPolicyPinError } from "./trust-root.js";
 import {
   HEX64,
   array,
   contained,
+  loadBytesRef,
   loadRef,
   object,
   owned,
@@ -239,19 +241,53 @@ async function loadLiveRegressionBoundary(
   return { closingRepositoryObject, coverage };
 }
 
+/** Judge-supplied trust-policy pins, and the ones this validation's trust checks matched. */
+export interface LiveTrust {
+  readonly pins: readonly string[];
+  readonly used: Set<string>;
+}
+
+/**
+ * The accepted-exception debts whose findings the live rerun may waive: only
+ * those whose operator ruling carries an owner or principal Ed25519 signature
+ * under a judge-pinned trust policy. Every other one stays payable.
+ */
+async function ownerSignedExceptions(
+  report: JsonObject, bundlePath: string, files: FilePort, trust: LiveTrust, errors: string[],
+): Promise<JsonObject[]> {
+  const base = dirname(resolve(bundlePath));
+  const signed: JsonObject[] = [];
+  for (const [index, rawDebt] of array(report.completion_debts).entries()) {
+    const debt = object(rawDebt);
+    if (debt?.state !== "accepted_exception" || debt.disposition !== "accepted_exception") continue;
+    const path = `$.report.completion_debts[${index}].exception`;
+    const loadErrors: string[] = [];
+    const ruling = (await loadRef(files, base, object(debt.exception)?.ref, `${path}.ref`, loadErrors, false)).data;
+    const policyRef = object(ruling?.trust_policy_ref);
+    const policyBytes = ruling?.signature !== undefined && policyRef
+      ? (await loadBytesRef(files, base, policyRef, `${path}.ruling.trust_policy_ref`, loadErrors, false)).bytes
+      : undefined;
+    const verdict = exceptionSignatureErrors({ ruling, debt, policyBytes, pins: trust.pins });
+    if (verdict.pinUsed !== undefined) trust.used.add(verdict.pinUsed);
+    const reasons = [...loadErrors, ...verdict.errors];
+    if (reasons.length === 0) signed.push(debt);
+    else errors.push(`${path}: an accepted exception counts toward CLEAN only with an owner or principal Ed25519 signature under a judge-pinned trust policy; this one stays payable (${reasons.join("; ")})`);
+  }
+  return signed;
+}
+
 async function validateLiveDetectors(
   report: JsonObject, bundlePath: string, repo: string, coverage: JsonObject | undefined,
-  files: FilePort, git: GitPort, errors: string[],
+  files: FilePort, git: GitPort, trust: LiveTrust, errors: string[],
 ): Promise<Set<string>> {
     const trackedPaths = (await git.run(repo, ["ls-files", "-z"])).stdout.split("\0").filter(Boolean);
     const liveRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths.length });
     if (!stableEqual(coverage?.run_policy, liveRunPolicy)) {
       errors.push("$.live_detector_coverage.run_policy: recorded applicability differs from the live tracked shippable surface");
     }
-    // Rerun the universe of the registry the bundle bound: a 1.5 bundle (registry 5)
-    // never ran language_policy, a 1.6 bundle (registry 6) must rerun it.
-    const liveRegistryVersion = coverage?.registry_version === "5" ? "5" : DETECTOR_COVERAGE_SCHEMA_VERSION;
-    const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy, liveRegistryVersion) ?? [];
+    // The judge reruns its own current registry. A bundle's declared registry
+    // (5 for a 1.5 bundle, which never ran language_policy) cannot narrow it.
+    const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy, DETECTOR_COVERAGE_SCHEMA_VERSION) ?? [];
     const executionFor = (detectorId: string): JsonObject | undefined => array(coverage?.executions)
       .map(object)
       .find((execution) => execution?.detector_id === detectorId);
@@ -265,16 +301,9 @@ async function validateLiveDetectors(
     const semanticManifest = await frozenInput("semantic_boundary", "semantic_probe_manifest");
     const semanticEvidencePackage = await frozenInput("semantic_boundary", "semantic_evidence_package");
     const semanticTrustPolicy = await frozenInput("semantic_boundary", "semantic_trust_policy");
-    const semanticExecution = executionFor("semantic_boundary");
-    const semanticResult = semanticExecution
-      ? await loadRef(files, dirname(resolve(bundlePath)), semanticExecution.result_ref, "$.live_detector_coverage.semantic_boundary.result_ref", errors, false)
-      : {};
-    const executeSemanticProbes = Number(semanticResult.data?.executed_probe_count ?? 0) > 0;
     const acceptedDetectorFindings = new Set<string>();
     const acceptedObservationIds = new Set<string>();
-    for (const rawDebt of array(report.completion_debts)) {
-      const debt = object(rawDebt);
-      if (debt?.state !== "accepted_exception" || debt.disposition !== "accepted_exception") continue;
+    for (const debt of await ownerSignedExceptions(report, bundlePath, files, trust, errors)) {
       for (const observationId of array(debt.observation_ids)) {
         if (typeof observationId === "string" && HEX64.test(observationId)) {
           acceptedObservationIds.add(observationId);
@@ -295,11 +324,19 @@ async function validateLiveDetectors(
       semanticLive = auditSemanticRepository(repo);
     } else if (semanticEvidencePackage !== undefined && semanticTrustPolicy !== undefined) {
       semanticLive = auditSemanticEvidencePackageV2(repo, semanticEvidencePackage, semanticTrustPolicy);
+      if (semanticLive.resolutions.some((resolution) => resolution.disposition === "attested_satisfied")) {
+        const policySha256 = sha256(await files.readBytes(semanticTrustPolicy));
+        const pinError = trustPolicyPinError(policySha256, trust.pins);
+        if (pinError) errors.push(`$.live_detector_coverage.semantic_boundary.semantic_trust_policy: CLEAN rests on semantic v2 attestations, but ${pinError}`);
+        else trust.used.add(policySha256);
+      }
     } else {
-      semanticLive = auditSemanticRepository(repo, {
-        execute: executeSemanticProbes,
-        ...(semanticManifest === undefined ? {} : { manifestPath: semanticManifest }),
-      });
+      // The legacy v1 manifest lets its probe print its own pass verdict, so it
+      // never counts toward CLEAN, and the judge never executes its commands.
+      if (semanticManifest !== undefined) {
+        errors.push("$.live_detector_coverage.semantic_boundary: the legacy v1 semantic probe manifest never counts toward CLEAN; bind a v2 evidence package and trust policy");
+      }
+      semanticLive = auditSemanticRepository(repo);
     }
     const liveDetectorFindings: Array<readonly [string, readonly string[] | undefined]> = [
       ["planning_graph", findingFingerprintsFromAudit("planning_graph", planningLive)],
@@ -337,7 +374,7 @@ async function validateLiveDetectors(
         !acceptedDetectorFindings.has(`${detectorId}\0${fingerprint}`)
       ));
       if (payable.length !== 0) {
-        errors.push(`$.live_detector_coverage.${detectorId}: CLEAN requires zero payable findings after principal-ratified exceptions (got ${payable.length})`);
+        errors.push(`$.live_detector_coverage.${detectorId}: CLEAN requires zero payable findings after owner-signed exceptions (got ${payable.length})`);
       }
     }
   return acceptedObservationIds;
@@ -416,7 +453,7 @@ async function validateLiveNativeGates(
             }
             const payableNative = liveFailureIds.filter((id) => !acceptedObservationIds.has(id));
             if (payableNative.length !== 0) {
-              errors.push(`$.live_native_gates.execution: CLEAN requires zero payable native-gate findings after principal-ratified exceptions (got ${payableNative.length})`);
+              errors.push(`$.live_native_gates.execution: CLEAN requires zero payable native-gate findings after owner-signed exceptions (got ${payableNative.length})`);
             }
           } finally {
             await rm(evidenceDirectory, { recursive: true, force: true });
@@ -441,20 +478,21 @@ function validateLiveClosingRecheck(
 
 export async function validateLive(
   bundle: JsonObject, report: JsonObject, manifest: JsonObject, bundlePath: string,
-  repo: string, ports: BundlePorts, guardAuthorityPath: string | undefined, errors: string[],
+  repo: string, ports: BundlePorts, guardAuthorityPath: string | undefined, trust: LiveTrust, errors: string[],
 ): Promise<void> {
   const { files, git } = ports;
   if (!(await files.exists(repo))) { errors.push(`$.live_repo: repository not found: ${repo}`); return; }
   if (manifest.mode === "GUARD") {
     await validateGuardLiveAuthority(bundle, report, manifest, bundlePath, repo, ports, guardAuthorityPath, errors);
-    return;
+    // A GUARD bundle that claims CLEAN gets the same full live recheck as CLOSE.
+    if (report.verdict !== "CLEAN") return;
   }
   try {
     const { head, subject, successor } = await validateLiveRepositoryAndTarget(bundle, report, repo, files, git, errors);
     await validateLiveTopology(successor, repo, head, subject, ports, errors);
     await validateLiveSuccessorFiles(successor, manifest, repo, subject, files, git, errors);
     const { closingRepositoryObject, coverage } = await loadLiveRegressionBoundary(report, bundlePath, repo, files, errors);
-    const acceptedObservationIds = await validateLiveDetectors(report, bundlePath, repo, coverage, files, git, errors);
+    const acceptedObservationIds = await validateLiveDetectors(report, bundlePath, repo, coverage, files, git, trust, errors);
     await validateLiveNativeGates(successor, closingRepositoryObject, acceptedObservationIds, bundlePath, repo, files, errors);
     validateLiveClosingRecheck(closingRepositoryObject, repo, errors);
     void bundlePath;
