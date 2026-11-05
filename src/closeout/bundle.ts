@@ -84,6 +84,17 @@ export {
   type GitResult,
 } from "./bundle-runtime.js";
 
+/** The planning type a document declares in its leading YAML front matter (artifact_type, kind or type), if any. */
+function declaredPlanningType(content: string): string | undefined {
+  const frontMatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!frontMatter) return undefined;
+  for (const key of ["artifact_type", "kind", "type"]) {
+    const line = frontMatter[1]!.match(new RegExp(`^${key}:[ \\t]*["']?([^"'\\r\\n#]+?)["']?[ \\t]*(?:#.*)?$`, "m"));
+    if (line) return line[1]!.trim();
+  }
+  return undefined;
+}
+
 function requiresAcceptedReleaseBoundary(report: JsonObject, manifest: JsonObject): boolean {
   const barrierState = object(object(manifest.guard ?? report.guard)?.commit_barrier)?.state;
   if (report.mode === "GUARD" && (barrierState === "open" || barrierState === "crossed")) return true;
@@ -359,9 +370,13 @@ async function validatePlanning(
             errors.push(`${spath}.corpus: planning entry ${artifact.path} contains binary NUL bytes`);
             continue;
           }
+          // A document that declares a non-procedure planning class (reference, schema, template, guidance)
+          // describes work; it does not record executed steps, so the procedure check does not apply to it.
+          const declaredType = declaredPlanningType(content);
+          const procedure = declaredType === undefined || !isNonArtifactPlanningClass(declaredType);
           const earlyDone = /\b(implementation|dev|code)\b/i.test(content) && /\b(done|complete|completed|merged)\b/i.test(content);
           const laterUnrun = /\b(review|qa|acceptance|holdout)\b/i.test(content) && /\b(not[_ -]?run|pending|todo|backlog|unexecuted)\b/i.test(content);
-          if (earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
+          if (procedure && earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
           if (planningSourcePaths.has(artifact.path)) continue;
           planningSourcePaths.add(artifact.path);
           planningSources.push({

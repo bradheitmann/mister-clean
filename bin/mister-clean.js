@@ -27079,6 +27079,15 @@ async function validateLive(bundle, report, manifest2, bundlePath, repo, ports, 
 }
 
 // src/closeout/bundle.ts
+function declaredPlanningType(content) {
+  const frontMatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!frontMatter) return void 0;
+  for (const key of ["artifact_type", "kind", "type"]) {
+    const line = frontMatter[1].match(new RegExp(`^${key}:[ \\t]*["']?([^"'\\r\\n#]+?)["']?[ \\t]*(?:#.*)?$`, "m"));
+    if (line) return line[1].trim();
+  }
+  return void 0;
+}
 function requiresAcceptedReleaseBoundary(report, manifest2) {
   const barrierState = object5(object5(manifest2.guard ?? report.guard)?.commit_barrier)?.state;
   if (report.mode === "GUARD" && (barrierState === "open" || barrierState === "crossed")) return true;
@@ -27342,9 +27351,11 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
             errors.push(`${spath}.corpus: planning entry ${artifact.path} contains binary NUL bytes`);
             continue;
           }
+          const declaredType = declaredPlanningType(content);
+          const procedure = declaredType === void 0 || !isNonArtifactPlanningClass(declaredType);
           const earlyDone = /\b(implementation|dev|code)\b/i.test(content) && /\b(done|complete|completed|merged)\b/i.test(content);
           const laterUnrun = /\b(review|qa|acceptance|holdout)\b/i.test(content) && /\b(not[_ -]?run|pending|todo|backlog|unexecuted)\b/i.test(content);
-          if (earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
+          if (procedure && earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
           if (planningSourcePaths.has(artifact.path)) continue;
           planningSourcePaths.add(artifact.path);
           planningSources.push({
