@@ -9,6 +9,7 @@ Proven (with the proof names):
 - Installed 7.5.0 prepare (CLOSE) on the 7.5.1 commit a75da86: zero completion debts; all three native gates passed (node:.:ci-check under its declared 40-minute budget, both cargo gates); SEM-EXECUTABLE attested_satisfied (MC/QA signature, run sem-exec-20261105-4).
 - Field-evals: the 2026-10-31 window; RC-001, RC-002 (see reports).
 - Charter: pinned cf05eb5 (fleet pin) in CI (#80) and in the local hooks; SPEC unchanged.
+- Branch claude/tender-galileo-fuwg10 (unreleased, no version bump): c8b2663 gate-source-ref-byte-order (discovery source refs in UTF-8 byte order) and runner-findings-byte-order (runner-safety findings in UTF-8 byte order; native-gates.ts has no localeCompare left); each RED on its base, GREEN after; focused native-gate vitest, tsc, generated:check and generated:postbuild:check green.
 Not proven / known gaps:
 - Slice Zero: `proven_on` is EMPTY. The owner-authorized final repair was rejected by MC/QA (charter/owner-decisions/2026-11-04-s5-slice-zero.md); redesign with the owner, starting from a written threat model of every field an adversary can flip. Work preserved at tag archive/feat/slice-zero-eval-case.
 - Local full suite on this host: not a gate (charter/owner-decisions/2026-11-04-s6-evidence-is-hosted-ci.md). Three capsule tests fail locally because the host's pnpm 12 downloads pnpm 11.0.3 into each fresh capsule at the network's current speed (O-LOCAL-CAPSULE-1).
@@ -20,11 +21,14 @@ Not proven / known gaps:
   - O-SUITE-LEASE-1 (full suites refuse to overlap), O-LOAD-1 (timing tests report contention), O-LOCAL-CAPSULE-1.
   - O-STD-TITLE-1: COMMON-STANDARD title at its next substantive revision.
   - Carried: O-GATE-SNAPSHOT-1, O-TMP-1, O-PS-PROV-2/3, O-GEN-MERGE-1, O-TOOLCHAIN-2, O-STD-1..5, O-PLAN-1, O-RET-2, O-PERF-2, O-CENSUS-1, O-ABL-1, O-R18-2, O-FE1-SCHEMA, O-DATA-1, O-CI-PIN-1.
+  - O-GATE-SNAPSHOT-PERF-1: each gate snapshot spawns ~3 git processes per tracked file; ~2.7 min per gate on a 10,896-file repo; prepare on that repository (a private multi-workspace monorepo) ≈4.5–5 h.
 Exact last-green command(s):
+- on claude/tender-galileo-fuwg10: `MISTER_CLEAN_SOURCE_DEVELOPMENT=1 node ./node_modules/vitest/vitest.mjs run --allowOnly=false --no-file-parallelism --testTimeout=120000 src/closeout/native-gate-runner-finding-order.test.ts src/closeout/native-gate-source-ref-order.test.ts src/closeout/native-gates.test.ts`: 29 passed
 - hosted CI verify, dependency-audit and charter on the exact tips of #67, #69–#76 and on main 7080cde: success
 - `node ~/.claude/skills/mister-clean/bin/mister-clean.js audit {planning,github-actions,repository-boundaries} . --json` on 7080cde: pass
 - charter check --strict (charter cf05eb5) on this candidate: ok
 Exact last-red command(s) and why:
+- same vitest command on c8b2663 bytes for native-gate-runner-finding-order.test.ts: RED (localeCompare put alpha.test.ts before Zeta.test.ts); fixed on this branch.
 - MC/QA final Slice Zero QA on 8e80c3c0: REJECTED (strict validation accepts a subject-role/outcome flip and an invalid second publisher citation).
 - local `pnpm run test:node` under host load 50–130: timing failures (indeterminate under load; not a gate).
 Next three bounded items (in order):

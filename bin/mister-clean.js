@@ -19054,7 +19054,7 @@ function verificationRunnerSafetyFindings(repository, paths) {
       });
     }
   }
-  return findings.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
+  return findings.sort((left, right) => compareUtf8Bytes(left.path, right.path) || left.line - right.line);
 }
 function packageManager(value) {
   if (typeof value !== "string") return void 0;
