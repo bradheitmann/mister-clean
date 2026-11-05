@@ -60,6 +60,10 @@ interface PackageJsonFixture {
 }
 
 const RELEASE_FIXTURE_IDENTITY = { name: "Release Fixture", email: "release-fixture.invalid" };
+// The real-build capsule test measured 129 s against a 120 s budget on a loaded host (owner-approved, 2026-11-05).
+const REAL_BUILD_CAPSULE_TEST_TIMEOUT_MS = 300_000;
+// Removing the capsule's full build output measured over the 10 s default hook budget on a loaded host (owner-approved, 2026-11-05).
+const FIXTURE_CLEANUP_HOOK_TIMEOUT_MS = 60_000;
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const verifier = join(root, "scripts", "verify_packed_cli.ts");
@@ -227,7 +231,7 @@ function registryDigests(path: string): { integrity: string; shasum: string } {
 
 afterEach(() => {
   while (temporaryRoots.length) rmSync(temporaryRoots.pop()!, { recursive: true, force: true });
-});
+}, FIXTURE_CLEANUP_HOOK_TIMEOUT_MS);
 
 describe("release archive boundary", () => {
   it("rejects a raw AppleDouble member before consulting platform tar listings", () => {
@@ -569,7 +573,7 @@ describe("release archive boundary", () => {
       expect(sha256File(join(packageRoot, path!))).toBe(row.sha256);
     }
     expect(existsSync(join(packageRoot, ".git"))).toBe(false);
-  }, 120_000);
+  }, REAL_BUILD_CAPSULE_TEST_TIMEOUT_MS);
 
   it("strips extended metadata and installs the exact manifest-bound package tree with pnpm", () => {
     const temporary = temporaryRoot();
