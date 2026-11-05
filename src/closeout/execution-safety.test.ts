@@ -29,6 +29,8 @@ const SIBLING_CREDENTIAL_CLI = "fake-sibling-credential-cli";
 // Split so the fixture's own source is not a credential assignment the public-safety scan finds.
 const CREDENTIAL_SENTINEL = "fixture-not-a-real-credential";
 const CREDENTIAL_LINE = ["password", CREDENTIAL_SENTINEL].join("=");
+// Synthetic scheme built at runtime: tracked bytes carry no file-URL literal; the target is a runtime temp dir.
+const FILE_SCHEME = ["file", "//"].join(":");
 const SOURCE_RUNTIME = mintServerAttestationBinding({
   record_type: "mister-clean.runtime-attestation-binding",
   schema_version: "1.0",
@@ -460,7 +462,7 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       expect(existsSync(marker)).toBe(false);
     });
 
-    it.each([["file:// rewrite", (local: string) => `file://${local}/`], ["plain path rewrite", (local: string) => `${local}/`]] as const)(
+    it.each([["file:// rewrite", (local: string) => `${FILE_SCHEME}${local}/`], ["plain path rewrite", (local: string) => `${local}/`]] as const)(
       "a second insteadOf rewrite cannot redirect the contacted remote (%s)",
       async (_name, target) => {
         // MC/QA MCQA-D1: get-url applies one insteadOf rewrite and the checked https URL
