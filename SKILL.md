@@ -69,8 +69,8 @@ Every finding has exactly one disposition:
 
 1. `autonomously_repair` — repair and validate it;
 2. `autonomously_validate` — execute the missing test, review, acceptance, or gate;
-3. `accepted_exception` — irreparable history explicitly ratified with authority,
-   scope, rationale, and machine-readable evidence; or
+3. `accepted_exception` — irreparable history in an owner-signed ruling under
+   a judge-pinned trust policy, with scope, rationale, and evidence; or
 4. `decision_or_coordination_required` — a genuine hard boundary; never CLEAN.
 
 Never fabricate provenance or independence. Unrecorded historical identity

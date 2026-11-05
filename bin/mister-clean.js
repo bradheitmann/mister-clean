@@ -7362,7 +7362,7 @@ var require_dist = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync18, readFileSync as readFileSync22, realpathSync as realpathSync12, statSync as statSync8, writeFileSync as writeFileSync9 } from "fs";
-import { isAbsolute as isAbsolute24, join as join22, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
+import { dirname as dirname19, isAbsolute as isAbsolute24, join as join22, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -8087,10 +8087,10 @@ function canonicalJson(value) {
   }
   if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
   if (typeof value !== "object") throw new Error("Canonical JSON encountered a non-JSON value");
-  const record4 = value;
-  const entries2 = Object.keys(record4).sort(compareCodeUnits).map((key) => {
-    if (record4[key] === void 0) throw new Error("Canonical JSON cannot encode undefined");
-    return `${JSON.stringify(key)}:${canonicalJson(record4[key])}`;
+  const record5 = value;
+  const entries2 = Object.keys(record5).sort(compareCodeUnits).map((key) => {
+    if (record5[key] === void 0) throw new Error("Canonical JSON cannot encode undefined");
+    return `${JSON.stringify(key)}:${canonicalJson(record5[key])}`;
   });
   return `{${entries2.join(",")}}`;
 }
@@ -8282,24 +8282,24 @@ function digestRef(value) {
   return !!ref && nonempty(ref.path) && typeof ref.sha256 === "string" && /^[0-9a-f]{64}$/.test(ref.sha256);
 }
 function requireKeys(value, keys, path, errors) {
-  const record4 = object(value);
-  if (!record4) {
+  const record5 = object(value);
+  if (!record5) {
     errors.push(`${path}: expected object`);
     return;
   }
-  for (const key of [...keys].sort()) if (!(key in record4)) errors.push(`${path}.${key}: missing`);
+  for (const key of [...keys].sort()) if (!(key in record5)) errors.push(`${path}.${key}: missing`);
 }
 function findPlaceholders(value, path = "$") {
   if (typeof value === "string") return PLACEHOLDER.test(value) ? [path] : [];
-  const record4 = object(value);
-  if (record4) return Object.entries(record4).flatMap(([key, item]) => findPlaceholders(item, `${path}.${key}`));
+  const record5 = object(value);
+  if (record5) return Object.entries(record5).flatMap(([key, item]) => findPlaceholders(item, `${path}.${key}`));
   const items = array(value);
   return items ? items.flatMap((item, index) => findPlaceholders(item, `${path}[${index}]`)) : [];
 }
 function meaningful(value) {
   if (typeof value === "string") return value.trim().length > 0;
-  const record4 = object(value);
-  if (record4) return Object.values(record4).some(meaningful);
+  const record5 = object(value);
+  if (record5) return Object.values(record5).some(meaningful);
   const items = array(value);
   if (items) return items.some(meaningful);
   return value !== null && value !== void 0;
@@ -8308,8 +8308,8 @@ function generic(value) {
   if (typeof value === "string") return GENERIC_FILLER.has(foldCase(value.trim())) || value.trim().length < 3;
   const items = array(value);
   if (items) return items.length === 0 || items.every(generic);
-  const record4 = object(value);
-  if (record4) return !Object.values(record4).some(meaningful);
+  const record5 = object(value);
+  if (record5) return !Object.values(record5).some(meaningful);
   return false;
 }
 function normalizeActor(value) {
@@ -10308,8 +10308,8 @@ function planningConfigPath(label, entry, invalid) {
   }
   return trimmed;
 }
-function planningConfigEntries(record4, key, invalid) {
-  const value = record4[key];
+function planningConfigEntries(record5, key, invalid) {
+  const value = record5[key];
   if (value === void 0) return void 0;
   if (!Array.isArray(value)) throw invalid(`${key} must be an array of repository-relative paths`);
   return value.map((entry, index) => {
@@ -10351,14 +10351,14 @@ function loadPlanningConfig(repository) {
     throw invalid(`malformed JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw invalid("expected a JSON object");
-  const record4 = parsed;
-  const unknownKeys = Object.keys(record4).filter((key) => !PLANNING_CONFIG_KEYS.has(key)).sort();
+  const record5 = parsed;
+  const unknownKeys = Object.keys(record5).filter((key) => !PLANNING_CONFIG_KEYS.has(key)).sort();
   if (unknownKeys.length) throw invalid(`unknown key(s) ${JSON.stringify(unknownKeys)}`);
-  if (record4.schema !== PLANNING_CONFIG_SCHEMA) {
-    throw invalid(`unknown schema ${JSON.stringify(record4.schema)}; expected ${JSON.stringify(PLANNING_CONFIG_SCHEMA)}`);
+  if (record5.schema !== PLANNING_CONFIG_SCHEMA) {
+    throw invalid(`unknown schema ${JSON.stringify(record5.schema)}; expected ${JSON.stringify(PLANNING_CONFIG_SCHEMA)}`);
   }
-  const declared = planningConfigEntries(record4, "roots", invalid)?.map((entry) => entry.path);
-  const excludeEntries = planningConfigEntries(record4, "exclude", invalid) ?? [];
+  const declared = planningConfigEntries(record5, "roots", invalid)?.map((entry) => entry.path);
+  const excludeEntries = planningConfigEntries(record5, "exclude", invalid) ?? [];
   const exclude = [...new Set(excludeEntries.map((entry) => entry.path))].sort(compareCodePoints3);
   const gateExclude = [...new Set(excludeEntries.filter((entry) => entry.kind !== void 0 && PLANNING_GATE_EXCLUDE_KINDS.has(entry.kind)).map((entry) => entry.path))].sort(compareCodePoints3);
   const repositoryReal = realpathSync(root);
@@ -10753,12 +10753,12 @@ function validatePortablePath(path, source) {
 function parseTracked(bytes2) {
   const entries2 = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const record4 of nulRecords(bytes2, "git ls-files --stage")) {
-    const separator = record4.indexOf(9);
-    if (separator <= 0 || separator === record4.length - 1) {
+  for (const record5 of nulRecords(bytes2, "git ls-files --stage")) {
+    const separator = record5.indexOf(9);
+    if (separator <= 0 || separator === record5.length - 1) {
       throw new Error("git ls-files --stage returned a malformed index record");
     }
-    const metadataBytes = record4.subarray(0, separator);
+    const metadataBytes = record5.subarray(0, separator);
     if ([...metadataBytes].some((byte) => byte > 127)) {
       throw new Error("git ls-files --stage returned non-ASCII index metadata");
     }
@@ -10772,7 +10772,7 @@ function parseTracked(bytes2) {
     if (stage !== "0") {
       throw new Error("repository object capture refuses an unmerged index");
     }
-    const pathBytes = Buffer.from(record4.subarray(separator + 1));
+    const pathBytes = Buffer.from(record5.subarray(separator + 1));
     const path = decodePath(pathBytes, "git ls-files --stage");
     if (seen.has(path)) throw new Error(`duplicate tracked path: ${JSON.stringify(path)}`);
     seen.add(path);
@@ -10783,8 +10783,8 @@ function parseTracked(bytes2) {
 function parseUntracked(bytes2, tracked) {
   const entries2 = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const record4 of nulRecords(bytes2, "git ls-files --others")) {
-    const pathBytes = Buffer.from(record4);
+  for (const record5 of nulRecords(bytes2, "git ls-files --others")) {
+    const pathBytes = Buffer.from(record5);
     const path = decodePath(pathBytes, "git ls-files --others");
     if (tracked.has(path)) throw new Error(`path is both tracked and untracked: ${JSON.stringify(path)}`);
     if (seen.has(path)) throw new Error(`duplicate untracked path: ${JSON.stringify(path)}`);
@@ -14324,9 +14324,9 @@ function validIdentityReference(root, value) {
   if (relation === ".." || relation.startsWith(`..${sep6}`) || isAbsolute5(relation) || !existsSync3(target) || !lstatSync4(target).isFile() || lstatSync4(target).isSymbolicLink()) return false;
   return createHash8("sha256").update(readFileSync3(target)).digest("hex") === ref.sha256;
 }
-function recordRole(record4) {
+function recordRole(record5) {
   for (const field2 of ["artifact_type", "role", "slice_type", "task_type", "work_type"]) {
-    const value = record4[field2];
+    const value = record5[field2];
     if (typeof value !== "string") continue;
     const normalized = value.trim().toLocaleLowerCase("und");
     if (normalized === "dev" || normalized === "qa") return normalized;
@@ -14347,16 +14347,16 @@ function historicalPlanningLifecycle(path) {
 }
 function missingExecutionIdentityFields(root, path, content) {
   if (!currentPlanningLifecycle(path) || historicalPlanningLifecycle(path)) return void 0;
-  const record4 = planningRecord(path, content);
-  if (!record4 || !recordRole(record4)) return void 0;
-  const validReference = IDENTITY_REFERENCE_FIELDS.some((field2) => validIdentityReference(root, record4[field2]));
+  const record5 = planningRecord(path, content);
+  if (!record5 || !recordRole(record5)) return void 0;
+  const validReference = IDENTITY_REFERENCE_FIELDS.some((field2) => validIdentityReference(root, record5[field2]));
   if (validReference) return [];
   const errors = [];
-  const presentReference = IDENTITY_REFERENCE_FIELDS.find((field2) => Object.hasOwn(record4, field2));
+  const presentReference = IDENTITY_REFERENCE_FIELDS.find((field2) => Object.hasOwn(record5, field2));
   if (presentReference) errors.push(`invalid ${presentReference}`);
   for (const field2 of EXECUTION_IDENTITY_FIELDS) {
-    if (!Object.hasOwn(record4, field2)) errors.push(`missing ${field2}`);
-    else if (!nonemptyIdentityValue(record4[field2])) errors.push(`blank ${field2}`);
+    if (!Object.hasOwn(record5, field2)) errors.push(`missing ${field2}`);
+    else if (!nonemptyIdentityValue(record5[field2])) errors.push(`blank ${field2}`);
   }
   return errors;
 }
@@ -14687,8 +14687,8 @@ function runtimeSourceClosure(root, seeds, paths) {
 function nestedStrings(value) {
   if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap(nestedStrings);
-  const record4 = object3(value);
-  return record4 ? Object.values(record4).flatMap(nestedStrings) : [];
+  const record5 = object3(value);
+  return record5 ? Object.values(record5).flatMap(nestedStrings) : [];
 }
 function executableSurfaceGaps(root, paths) {
   const packages = [];
@@ -14930,10 +14930,10 @@ function authorityStatuses(text3) {
 }
 function nestedEntries(value, prefix = "") {
   if (Array.isArray(value)) return value.flatMap((entry, index) => nestedEntries(entry, `${prefix}[${index}]`));
-  const record4 = object3(value);
-  if (!record4) return [];
+  const record5 = object3(value);
+  if (!record5) return [];
   const result = [];
-  for (const [key, entry] of Object.entries(record4)) {
+  for (const [key, entry] of Object.entries(record5)) {
     const path = prefix ? `${prefix}.${key}` : key;
     result.push({ key: path, value: entry });
     result.push(...nestedEntries(entry, path));
@@ -14947,34 +14947,34 @@ function nestedObjects(value) {
       entry.forEach(visit);
       return;
     }
-    const record4 = object3(entry);
-    if (!record4) return;
-    result.push(record4);
-    Object.values(record4).forEach(visit);
+    const record5 = object3(entry);
+    if (!record5) return;
+    result.push(record5);
+    Object.values(record5).forEach(visit);
   };
   visit(value);
   return result;
 }
-function structuredProductContract(record4) {
-  if (!record4) return false;
-  const type = [record4.artifact_type, record4.contract_type, record4.record_type].find((value) => typeof value === "string");
+function structuredProductContract(record5) {
+  if (!record5) return false;
+  const type = [record5.artifact_type, record5.contract_type, record5.record_type].find((value) => typeof value === "string");
   return typeof type === "string" && /^(?:acceptance_contract|epic|plan|product_contract|requirement|slice|story)$/iu.test(type.trim());
 }
-function operativeProductContract(path, record4) {
+function operativeProductContract(path, record5) {
   if (NON_AUTHORITATIVE_CONTRACT_PATH.test(path)) return false;
-  const status = typeof record4?.status === "string" ? record4.status.trim() : "";
+  const status = typeof record5?.status === "string" ? record5.status.trim() : "";
   if (/^(?:archived|historical|rejected|retired|superseded)$/iu.test(status)) return false;
-  return structuredProductContract(record4) || currentPlanningLifecycle(path);
+  return structuredProductContract(record5) || currentPlanningLifecycle(path);
 }
-function structuredMirrorContract(record4) {
-  return !!record4 && nestedEntries(record4).some(({ key, value }) => /(?:^|\.)mirror_contract_ref$/iu.test(key) && nonemptyIdentityValue(value));
+function structuredMirrorContract(record5) {
+  return !!record5 && nestedEntries(record5).some(({ key, value }) => /(?:^|\.)mirror_contract_ref$/iu.test(key) && nonemptyIdentityValue(value));
 }
-function terminalStructuredRecord(record4) {
-  return nestedEntries(record4).some(({ key, value }) => /(?:^|\.)(?:result|status|verdict)$/iu.test(key) && typeof value === "string" && /^(?:accepted|complete|completed|done|pass|passed)$/iu.test(value.trim()));
+function terminalStructuredRecord(record5) {
+  return nestedEntries(record5).some(({ key, value }) => /(?:^|\.)(?:result|status|verdict)$/iu.test(key) && typeof value === "string" && /^(?:accepted|complete|completed|done|pass|passed)$/iu.test(value.trim()));
 }
-function structuredRecordId(record4) {
+function structuredRecordId(record5) {
   for (const key of ["review_id", "holdout_id", "slice_id", "story_id", "epic_id", "artifact_id", "id"]) {
-    const value = record4[key];
+    const value = record5[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return void 0;
@@ -14987,9 +14987,9 @@ function ignoredByRepository(root, portablePath3) {
   });
   return result.status === 0;
 }
-function commonFailureDomain(record4) {
-  const fallbacks = record4.fallbacks;
-  if (record4.resilience_claim !== true || !Array.isArray(fallbacks) || fallbacks.length < 2) return void 0;
+function commonFailureDomain(record5) {
+  const fallbacks = record5.fallbacks;
+  if (record5.resilience_claim !== true || !Array.isArray(fallbacks) || fallbacks.length < 2) return void 0;
   const domains = fallbacks.map((entry) => object3(entry)).filter((entry) => !!entry).map((entry) => ["provider", "gateway", "account", "credential", "region", "runtime"].map((field2) => typeof entry[field2] === "string" ? `${field2}=${String(entry[field2]).trim()}` : "").filter(Boolean).join("|"));
   if (domains.length < 2) return void 0;
   const sharedFields = ["provider", "gateway", "account", "credential", "region", "runtime"].filter((field2) => {
@@ -15085,9 +15085,9 @@ function discoverSemanticProbeCandidates(repository, boundRepositoryPaths) {
     for (const item of visibleLines(content)) {
       if (!historicalPlanningLifecycle(path)) {
         for (const { identifier, status } of authorityStatuses(item.text)) {
-          const record4 = authorityClaims.get(identifier) ?? { proposed: [], ratified: [] };
-          record4[status].push({ line: item.line, path, text: item.text });
-          authorityClaims.set(identifier, record4);
+          const record5 = authorityClaims.get(identifier) ?? { proposed: [], ratified: [] };
+          record5[status].push({ line: item.line, path, text: item.text });
+          authorityClaims.set(identifier, record5);
         }
         for (const match of item.text.matchAll(NAMESPACE_IDENTIFIER)) {
           const spelling = String(match[0]);
@@ -15929,25 +15929,25 @@ function stringArray(value) {
 function hexSha256(value) {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
-function requireFields(record4, fields, path, errors) {
-  if (!record4) {
+function requireFields(record5, fields, path, errors) {
+  if (!record5) {
     errors.push(`${path}: expected object`);
     return false;
   }
-  for (const field2 of fields) if (!(field2 in record4)) errors.push(`${path}.${field2}: missing`);
+  for (const field2 of fields) if (!(field2 in record5)) errors.push(`${path}.${field2}: missing`);
   return true;
 }
-function exactFields(record4, fields, path, errors) {
-  if (!requireFields(record4, fields, path, errors)) return false;
+function exactFields(record5, fields, path, errors) {
+  if (!requireFields(record5, fields, path, errors)) return false;
   const allowed = new Set(fields);
-  for (const field2 of Object.keys(record4)) {
+  for (const field2 of Object.keys(record5)) {
     if (!allowed.has(field2)) errors.push(`${path}.${field2}: unknown field`);
   }
   return true;
 }
 function detectorRuntimeIdentityErrors(value, path = "$") {
   const errors = [];
-  const record4 = object4(value);
+  const record5 = object4(value);
   const fields = [
     "record_type",
     "schema_version",
@@ -15959,17 +15959,17 @@ function detectorRuntimeIdentityErrors(value, path = "$") {
     "claim_scope",
     "reason"
   ];
-  if (!exactFields(record4, fields, path, errors)) return errors;
-  if (record4.record_type !== "mister-clean.detector-runtime-identity") {
+  if (!exactFields(record5, fields, path, errors)) return errors;
+  if (record5.record_type !== "mister-clean.detector-runtime-identity") {
     errors.push(`${path}.record_type: expected mister-clean.detector-runtime-identity`);
   }
-  if (record4.schema_version !== "1.0") errors.push(`${path}.schema_version: expected 1.0`);
-  const status = String(record4.status ?? "");
+  if (record5.schema_version !== "1.0") errors.push(`${path}.schema_version: expected 1.0`);
+  const status = String(record5.status ?? "");
   if (!(/* @__PURE__ */ new Set(["release_attested", "source_development"])).has(status)) {
     errors.push(`${path}.status: expected release_attested or source_development`);
     return errors;
   }
-  const entrypoint = object4(record4.entrypoint);
+  const entrypoint = object4(record5.entrypoint);
   if (!exactFields(entrypoint, ["path", "sha256"], `${path}.entrypoint`, errors)) return errors;
   if (!nonempty2(entrypoint.path) || !String(entrypoint.path).startsWith("./") || String(entrypoint.path).includes("../")) errors.push(`${path}.entrypoint.path: expected safe package-relative path`);
   if (!hexSha256(entrypoint.sha256)) errors.push(`${path}.entrypoint.sha256: expected lowercase SHA-256`);
@@ -15977,9 +15977,9 @@ function detectorRuntimeIdentityErrors(value, path = "$") {
     if (entrypoint.path !== "./bin/mister-clean.js") {
       errors.push(`${path}.entrypoint.path: release_attested requires ./bin/mister-clean.js`);
     }
-    const packageRecord = object4(record4.package);
-    const claimedSource = object4(record4.claimed_source);
-    const manifest2 = object4(record4.manifest);
+    const packageRecord = object4(record5.package);
+    const claimedSource = object4(record5.claimed_source);
+    const manifest2 = object4(record5.manifest);
     if (exactFields(packageRecord, ["name", "version"], `${path}.package`, errors)) {
       if (!nonempty2(packageRecord.name) || !nonempty2(packageRecord.version)) errors.push(`${path}.package: name and version are required`);
     }
@@ -15995,7 +15995,7 @@ function detectorRuntimeIdentityErrors(value, path = "$") {
       if (!nonnegativeInteger(manifest2.entry_count)) errors.push(`${path}.manifest.entry_count: expected nonnegative integer`);
       if (!hexSha256(manifest2.sha256)) errors.push(`${path}.manifest.sha256: expected lowercase SHA-256`);
     }
-    const scope = object4(record4.claim_scope);
+    const scope = object4(record5.claim_scope);
     if (!exactFields(scope, ["covers", "excludes"], `${path}.claim_scope`, errors) || scope.covers !== "own_package_regular_file_bytes" || JSON.stringify(scope.excludes) !== JSON.stringify([
       "registry_publication_provenance",
       "dependency_resolution_graph",
@@ -16005,12 +16005,12 @@ function detectorRuntimeIdentityErrors(value, path = "$") {
     ])) {
       errors.push(`${path}.claim_scope: release_attested requires the exact own-package claim and exclusions`);
     }
-    if (record4.reason !== null) errors.push(`${path}.reason: release_attested requires null`);
+    if (record5.reason !== null) errors.push(`${path}.reason: release_attested requires null`);
   } else {
-    if (record4.package !== null) errors.push(`${path}.package: ${status} requires null`);
-    if (record4.claimed_source !== null) errors.push(`${path}.claimed_source: ${status} requires null`);
-    if (record4.manifest !== null) errors.push(`${path}.manifest: ${status} requires null`);
-    const scope = object4(record4.claim_scope);
+    if (record5.package !== null) errors.push(`${path}.package: ${status} requires null`);
+    if (record5.claimed_source !== null) errors.push(`${path}.claimed_source: ${status} requires null`);
+    if (record5.manifest !== null) errors.push(`${path}.manifest: ${status} requires null`);
+    const scope = object4(record5.claim_scope);
     if (!exactFields(scope, ["covers", "excludes"], `${path}.claim_scope`, errors) || scope.covers !== "source_entrypoint_regular_file_bytes_only" || JSON.stringify(scope.excludes) !== JSON.stringify([
       "imported_source_module_graph",
       "dependency_resolution_graph",
@@ -16018,14 +16018,14 @@ function detectorRuntimeIdentityErrors(value, path = "$") {
     ])) {
       errors.push(`${path}.claim_scope: source_development requires the exact source-entrypoint claim and exclusions`);
     }
-    if (!nonempty2(record4.reason)) errors.push(`${path}.reason: ${status} requires an explanation`);
+    if (!nonempty2(record5.reason)) errors.push(`${path}.reason: ${status} requires an explanation`);
     if (entrypoint.path !== "./src/cli.ts") {
       errors.push(`${path}.entrypoint.path: source_development requires ./src/cli.ts`);
     }
   }
   return errors;
 }
-function validatePlanningResult(record4, errors) {
+function validatePlanningResult(record5, errors) {
   const numericFields = [
     "artifactCount",
     "candidate_probe_count",
@@ -16035,7 +16035,7 @@ function validatePlanningResult(record4, errors) {
     "structuredArtifactCount",
     "suppressed_by_typed_nonartifact_count"
   ];
-  requireFields(record4, [
+  requireFields(record5, [
     ...numericFields,
     "counts",
     "exitCode",
@@ -16045,22 +16045,22 @@ function validatePlanningResult(record4, errors) {
     "status"
   ], "$", errors);
   for (const field2 of numericFields) {
-    if (!nonnegativeInteger(record4[field2])) errors.push(`$.${field2}: expected nonnegative integer`);
+    if (!nonnegativeInteger(record5[field2])) errors.push(`$.${field2}: expected nonnegative integer`);
   }
-  const findings = Array.isArray(record4.findings) ? record4.findings : [];
-  const rawFindings = Array.isArray(record4.raw_findings) ? record4.raw_findings : [];
-  const rootDebts = Array.isArray(record4.root_debts) ? record4.root_debts : [];
-  if (!Array.isArray(record4.findings)) errors.push("$.findings: expected array");
-  if (!Array.isArray(record4.raw_findings)) errors.push("$.raw_findings: expected array");
-  if (!Array.isArray(record4.root_debts)) errors.push("$.root_debts: expected array");
-  if (record4.raw_finding_count !== rawFindings.length || findings.length !== rawFindings.length) {
+  const findings = Array.isArray(record5.findings) ? record5.findings : [];
+  const rawFindings = Array.isArray(record5.raw_findings) ? record5.raw_findings : [];
+  const rootDebts = Array.isArray(record5.root_debts) ? record5.root_debts : [];
+  if (!Array.isArray(record5.findings)) errors.push("$.findings: expected array");
+  if (!Array.isArray(record5.raw_findings)) errors.push("$.raw_findings: expected array");
+  if (!Array.isArray(record5.root_debts)) errors.push("$.root_debts: expected array");
+  if (record5.raw_finding_count !== rawFindings.length || findings.length !== rawFindings.length) {
     errors.push("$.raw_finding_count: must equal findings and raw_findings lengths");
   }
-  if (record4.root_debt_count !== rootDebts.length) errors.push("$.root_debt_count: must equal root_debts length");
-  if (nonnegativeInteger(record4.structuredArtifactCount) && nonnegativeInteger(record4.artifactCount) && record4.structuredArtifactCount > record4.artifactCount) {
+  if (record5.root_debt_count !== rootDebts.length) errors.push("$.root_debt_count: must equal root_debts length");
+  if (nonnegativeInteger(record5.structuredArtifactCount) && nonnegativeInteger(record5.artifactCount) && record5.structuredArtifactCount > record5.artifactCount) {
     errors.push("$.structuredArtifactCount: cannot exceed artifactCount");
   }
-  const counts = object4(record4.counts);
+  const counts = object4(record5.counts);
   if (!counts || Object.values(counts).some((value) => !nonnegativeInteger(value))) {
     errors.push("$.counts: expected nonnegative integer values");
   } else if (Object.values(counts).map(Number).reduce((sum, value) => sum + value, 0) !== findings.length) {
@@ -16153,11 +16153,11 @@ function validatePlanningResult(record4, errors) {
       }
     }
   }
-  const expectedStatus = Number(record4.planningRootCount) === 0 && findings.length === 0 ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
-  if (record4.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
-  if (record4.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
+  const expectedStatus = Number(record5.planningRootCount) === 0 && findings.length === 0 ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
+  if (record5.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
+  if (record5.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
-function validateSemanticResult(record4, errors) {
+function validateSemanticResult(record5, errors) {
   const semanticKinds = /* @__PURE__ */ new Set([
     "acceptance_effect_liveness",
     "authoritative_projection",
@@ -16183,7 +16183,7 @@ function validateSemanticResult(record4, errors) {
     "pending_probe_count",
     "resolved_probe_count"
   ];
-  requireFields(record4, [
+  requireFields(record5, [
     ...numericFields,
     "candidate_set_sha256",
     "candidates",
@@ -16195,24 +16195,24 @@ function validateSemanticResult(record4, errors) {
     "status",
     "working_tree_sha256"
   ], "$", errors);
-  for (const field2 of numericFields) if (!nonnegativeInteger(record4[field2])) errors.push(`$.${field2}: expected nonnegative integer`);
-  const candidates = Array.isArray(record4.candidates) ? record4.candidates : [];
-  const executions = Array.isArray(record4.executions) ? record4.executions : [];
-  const findings = Array.isArray(record4.findings) ? record4.findings : [];
-  const resolutions = Array.isArray(record4.resolutions) ? record4.resolutions : [];
+  for (const field2 of numericFields) if (!nonnegativeInteger(record5[field2])) errors.push(`$.${field2}: expected nonnegative integer`);
+  const candidates = Array.isArray(record5.candidates) ? record5.candidates : [];
+  const executions = Array.isArray(record5.executions) ? record5.executions : [];
+  const findings = Array.isArray(record5.findings) ? record5.findings : [];
+  const resolutions = Array.isArray(record5.resolutions) ? record5.resolutions : [];
   for (const field2 of ["candidates", "executions", "findings", "resolutions"]) {
-    if (!Array.isArray(record4[field2])) errors.push(`$.${field2}: expected array`);
+    if (!Array.isArray(record5[field2])) errors.push(`$.${field2}: expected array`);
   }
-  if (!hexSha256(record4.candidate_set_sha256)) errors.push("$.candidate_set_sha256: expected lowercase SHA-256");
-  if (!hexSha256(record4.working_tree_sha256)) errors.push("$.working_tree_sha256: expected lowercase SHA-256");
-  if (!nonempty2(record4.snapshot)) errors.push("$.snapshot: required");
-  if (record4.candidate_probe_count !== candidates.length) errors.push("$.candidate_probe_count: must equal candidates length");
-  if (record4.executed_probe_count !== executions.length) errors.push("$.executed_probe_count: must equal executions length");
-  if (record4.resolved_probe_count !== resolutions.length) errors.push("$.resolved_probe_count: must equal resolutions length");
-  if (record4.confirmed_failure_count !== findings.filter((value) => object4(value)?.classification === "confirmed_product_defect").length) {
+  if (!hexSha256(record5.candidate_set_sha256)) errors.push("$.candidate_set_sha256: expected lowercase SHA-256");
+  if (!hexSha256(record5.working_tree_sha256)) errors.push("$.working_tree_sha256: expected lowercase SHA-256");
+  if (!nonempty2(record5.snapshot)) errors.push("$.snapshot: required");
+  if (record5.candidate_probe_count !== candidates.length) errors.push("$.candidate_probe_count: must equal candidates length");
+  if (record5.executed_probe_count !== executions.length) errors.push("$.executed_probe_count: must equal executions length");
+  if (record5.resolved_probe_count !== resolutions.length) errors.push("$.resolved_probe_count: must equal resolutions length");
+  if (record5.confirmed_failure_count !== findings.filter((value) => object4(value)?.classification === "confirmed_product_defect").length) {
     errors.push("$.confirmed_failure_count: must equal confirmed product-defect findings");
   }
-  if (record4.pending_probe_count !== findings.filter((value) => object4(value)?.classification === "operate_time_pending").length) {
+  if (record5.pending_probe_count !== findings.filter((value) => object4(value)?.classification === "operate_time_pending").length) {
     errors.push("$.pending_probe_count: must equal operate-time-pending findings");
   }
   const candidateIds = /* @__PURE__ */ new Set();
@@ -16227,7 +16227,7 @@ function validateSemanticResult(record4, errors) {
   if (candidates.every((value) => {
     const row = object4(value);
     return row && stringArray(row.evidence) && nonempty2(row.id) && semanticKinds.has(String(row.kind)) && nonempty2(row.path) && stringArray(row.refs);
-  }) && record4.candidate_set_sha256 !== semanticCandidateSetSha256(candidates)) {
+  }) && record5.candidate_set_sha256 !== semanticCandidateSetSha256(candidates)) {
     errors.push("$.candidate_set_sha256: must equal the deterministic digest of candidates");
   }
   const executionIds = /* @__PURE__ */ new Set();
@@ -16266,7 +16266,7 @@ function validateSemanticResult(record4, errors) {
       errors.push(`$.findings[${index}].candidate_id: must name one discovered candidate`);
     }
   }
-  if (manifestBoundaryCount > 0 && !hexSha256(record4.manifest_sha256)) {
+  if (manifestBoundaryCount > 0 && !hexSha256(record5.manifest_sha256)) {
     errors.push("$.manifest_sha256: manifest boundary requires the observed manifest digest");
   }
   const resolutionIds = /* @__PURE__ */ new Set();
@@ -16285,12 +16285,12 @@ function validateSemanticResult(record4, errors) {
     }) || (disposition === "attested_satisfied" || disposition === "not_applicable") && refs.length === 0 || !nonempty2(row.rationale)) errors.push(`$.resolutions[${index}]: invalid semantic resolution`);
   }
   const expectedStatus = candidates.length === 0 && findings.length === 0 ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
-  if (record4.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
+  if (record5.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
   const acceptedExitCodes = expectedStatus === "fail" ? /* @__PURE__ */ new Set([1, 2]) : /* @__PURE__ */ new Set([0]);
-  if (!acceptedExitCodes.has(Number(record4.exitCode))) errors.push("$.exitCode: disagrees with status");
+  if (!acceptedExitCodes.has(Number(record5.exitCode))) errors.push("$.exitCode: disagrees with status");
 }
-function validatePublicSafetyResult(record4, errors) {
-  requireFields(record4, [
+function validatePublicSafetyResult(record5, errors) {
+  requireFields(record5, [
     "exitCode",
     "findings",
     "scope",
@@ -16299,14 +16299,14 @@ function validatePublicSafetyResult(record4, errors) {
     "tracked_paths_sha256",
     "unassessed"
   ], "$", errors);
-  const findings = Array.isArray(record4.findings) ? record4.findings : [];
-  const unassessed = Array.isArray(record4.unassessed) ? record4.unassessed : [];
-  if (!Array.isArray(record4.findings)) errors.push("$.findings: expected array");
-  if (!Array.isArray(record4.unassessed)) errors.push("$.unassessed: expected array");
-  if (record4.scope !== "tracked_shippable") errors.push("$.scope: expected tracked_shippable");
-  if (!nonnegativeInteger(record4.tracked_path_count)) errors.push("$.tracked_path_count: expected nonnegative integer");
-  if (!hexSha256(record4.tracked_paths_sha256)) errors.push("$.tracked_paths_sha256: expected lowercase SHA-256");
-  if (record4.input_sha256 !== void 0 && !hexSha256(record4.input_sha256)) errors.push("$.input_sha256: expected lowercase SHA-256");
+  const findings = Array.isArray(record5.findings) ? record5.findings : [];
+  const unassessed = Array.isArray(record5.unassessed) ? record5.unassessed : [];
+  if (!Array.isArray(record5.findings)) errors.push("$.findings: expected array");
+  if (!Array.isArray(record5.unassessed)) errors.push("$.unassessed: expected array");
+  if (record5.scope !== "tracked_shippable") errors.push("$.scope: expected tracked_shippable");
+  if (!nonnegativeInteger(record5.tracked_path_count)) errors.push("$.tracked_path_count: expected nonnegative integer");
+  if (!hexSha256(record5.tracked_paths_sha256)) errors.push("$.tracked_paths_sha256: expected lowercase SHA-256");
+  if (record5.input_sha256 !== void 0 && !hexSha256(record5.input_sha256)) errors.push("$.input_sha256: expected lowercase SHA-256");
   for (const [index, value] of findings.entries()) {
     const row = object4(value);
     requireFields(row, ["fingerprint", "line", "path", "rule"], `$.findings[${index}]`, errors);
@@ -16322,14 +16322,14 @@ function validatePublicSafetyResult(record4, errors) {
     }
   }
   const expectedStatus = findings.length > 0 || unassessed.length > 0 ? "fail" : "pass";
-  if (record4.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
-  if (record4.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
+  if (record5.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
+  if (record5.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
 function languagePolicyFingerprint(path, extension) {
   return digest(`language_policy\0forbidden_language\0${path}\0${extension}`);
 }
-function validateLanguagePolicyResult(record4, errors) {
-  requireFields(record4, [
+function validateLanguagePolicyResult(record5, errors) {
+  requireFields(record5, [
     "allowed_count",
     "exitCode",
     "findings",
@@ -16340,16 +16340,16 @@ function validateLanguagePolicyResult(record4, errors) {
     "status",
     "tracked_path_count"
   ], "$", errors);
-  if (record4.record_type !== "mister-clean.language-policy-audit") errors.push("$.record_type: expected mister-clean.language-policy-audit");
-  if (record4.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
-  if (!nonnegativeInteger(record4.tracked_path_count)) errors.push("$.tracked_path_count: expected nonnegative integer");
-  if (!nonnegativeInteger(record4.allowed_count)) errors.push("$.allowed_count: expected nonnegative integer");
-  const generated = object4(record4.generated_exempt);
+  if (record5.record_type !== "mister-clean.language-policy-audit") errors.push("$.record_type: expected mister-clean.language-policy-audit");
+  if (record5.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
+  if (!nonnegativeInteger(record5.tracked_path_count)) errors.push("$.tracked_path_count: expected nonnegative integer");
+  if (!nonnegativeInteger(record5.allowed_count)) errors.push("$.allowed_count: expected nonnegative integer");
+  const generated = object4(record5.generated_exempt);
   if (!generated || !nonnegativeInteger(generated.count) || !Array.isArray(generated.paths) || generated.paths.length !== generated.count || generated.paths.some((path) => !nonempty2(path))) {
     errors.push("$.generated_exempt: expected { count, paths } with one path per count");
   }
-  const findings = Array.isArray(record4.findings) ? record4.findings : [];
-  if (!Array.isArray(record4.findings)) errors.push("$.findings: expected array");
+  const findings = Array.isArray(record5.findings) ? record5.findings : [];
+  if (!Array.isArray(record5.findings)) errors.push("$.findings: expected array");
   for (const [index, value] of findings.entries()) {
     const row = object4(value);
     requireFields(row, ["extension", "family", "fingerprint", "path", "rule"], `$.findings[${index}]`, errors);
@@ -16357,22 +16357,22 @@ function validateLanguagePolicyResult(record4, errors) {
       errors.push(`$.findings[${index}]: invalid canonical language-policy finding`);
     }
   }
-  const declared = record4.policy !== null;
-  if (declared && !object4(record4.policy)) errors.push("$.policy: expected object or null");
+  const declared = record5.policy !== null;
+  if (declared && !object4(record5.policy)) errors.push("$.policy: expected object or null");
   const expectedStatus = !declared ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
-  if (record4.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
+  if (record5.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
   if (!declared && (findings.length > 0 || generated?.count !== 0)) errors.push("$: an undeclared policy carries no findings and no exemptions");
-  if (record4.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
+  if (record5.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
 function detectorResultShapeErrors(detectorId, value) {
   const errors = [];
-  const record4 = object4(value);
-  if (!record4) return ["$: expected object"];
-  if (detectorId === "planning_graph") validatePlanningResult(record4, errors);
-  else if (detectorId === "semantic_boundary") validateSemanticResult(record4, errors);
-  else if (detectorId === "public_safety") validatePublicSafetyResult(record4, errors);
-  else if (detectorId === "github_actions") validateGitHubActionsResult(record4, errors);
-  else if (detectorId === "language_policy") validateLanguagePolicyResult(record4, errors);
+  const record5 = object4(value);
+  if (!record5) return ["$: expected object"];
+  if (detectorId === "planning_graph") validatePlanningResult(record5, errors);
+  else if (detectorId === "semantic_boundary") validateSemanticResult(record5, errors);
+  else if (detectorId === "public_safety") validatePublicSafetyResult(record5, errors);
+  else if (detectorId === "github_actions") validateGitHubActionsResult(record5, errors);
+  else if (detectorId === "language_policy") validateLanguagePolicyResult(record5, errors);
   else errors.push(`$: unknown detector ${detectorId}`);
   return errors;
 }
@@ -16437,8 +16437,8 @@ function planningFindingFingerprint(id) {
 function semanticFindingFingerprint(candidateId2, code) {
   return digest(`semantic_boundary\0${candidateId2}\0${code}`);
 }
-function validateGitHubActionsResult(record4, errors) {
-  requireFields(record4, [
+function validateGitHubActionsResult(record5, errors) {
+  requireFields(record5, [
     "record_type",
     "schema_version",
     "status",
@@ -16447,14 +16447,14 @@ function validateGitHubActionsResult(record4, errors) {
     "sensitive_workflow_count",
     "findings"
   ], "$", errors);
-  if (record4.record_type !== "mister-clean.github-actions-audit") {
+  if (record5.record_type !== "mister-clean.github-actions-audit") {
     errors.push("$.record_type: expected mister-clean.github-actions-audit");
   }
-  if (record4.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
-  if (!nonnegativeInteger(record4.workflow_count)) errors.push("$.workflow_count: expected nonnegative integer");
-  if (!nonnegativeInteger(record4.sensitive_workflow_count)) errors.push("$.sensitive_workflow_count: expected nonnegative integer");
-  const findings = Array.isArray(record4.findings) ? record4.findings : [];
-  if (!Array.isArray(record4.findings)) errors.push("$.findings: expected array");
+  if (record5.schema_version !== "1.0") errors.push("$.schema_version: expected 1.0");
+  if (!nonnegativeInteger(record5.workflow_count)) errors.push("$.workflow_count: expected nonnegative integer");
+  if (!nonnegativeInteger(record5.sensitive_workflow_count)) errors.push("$.sensitive_workflow_count: expected nonnegative integer");
+  const findings = Array.isArray(record5.findings) ? record5.findings : [];
+  if (!Array.isArray(record5.findings)) errors.push("$.findings: expected array");
   const rules = /* @__PURE__ */ new Set([
     "health_gate_identity_unbound",
     "health_gate_nonblocking",
@@ -16480,14 +16480,14 @@ function validateGitHubActionsResult(record4, errors) {
     const expected = digest(`github_actions\0${row.rule}\0${row.path}\0${refs.join("\0")}`);
     if (row.fingerprint !== expected) errors.push(`$.findings[${index}].fingerprint: does not match canonical identity`);
   }
-  const expectedStatus = Number(record4.workflow_count) === 0 ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
-  if (record4.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
-  if (record4.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
+  const expectedStatus = Number(record5.workflow_count) === 0 ? "not_applicable" : findings.length > 0 ? "fail" : "pass";
+  if (record5.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
+  if (record5.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
 function findingFingerprintsFromAudit(detectorId, value) {
   if (detectorResultShapeErrors(detectorId, value).length > 0) return void 0;
-  const record4 = value;
-  const rows = detectorId === "planning_graph" ? record4.raw_findings : detectorId === "public_safety" ? [...record4.findings, ...record4.unassessed] : record4.findings;
+  const record5 = value;
+  const rows = detectorId === "planning_graph" ? record5.raw_findings : detectorId === "public_safety" ? [...record5.findings, ...record5.unassessed] : record5.findings;
   if (!Array.isArray(rows)) return void 0;
   const fingerprints = [];
   for (const finding4 of rows) {
@@ -16598,52 +16598,52 @@ var inside = (root, candidate) => {
 };
 var overlaps = (left, right) => inside(left, right) || inside(right, left);
 function exact(value, names, path, errors) {
-  const record4 = obj(value);
-  if (!record4) {
+  const record5 = obj(value);
+  if (!record5) {
     errors.push(`${path}: expected object`);
     return void 0;
   }
   const allowed = new Set(names);
-  for (const key of Object.keys(record4)) if (!allowed.has(key)) errors.push(`${path}.${key}: unexpected field`);
-  for (const key of names) if (!(key in record4)) errors.push(`${path}.${key}: missing field`);
-  return record4;
+  for (const key of Object.keys(record5)) if (!allowed.has(key)) errors.push(`${path}.${key}: unexpected field`);
+  for (const key of names) if (!(key in record5)) errors.push(`${path}.${key}: missing field`);
+  return record5;
 }
 function canonical(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  const record4 = value;
-  return `{${Object.keys(record4).sort().map((key) => `${JSON.stringify(key)}:${canonical(record4[key])}`).join(",")}}`;
+  const record5 = value;
+  return `{${Object.keys(record5).sort().map((key) => `${JSON.stringify(key)}:${canonical(record5[key])}`).join(",")}}`;
 }
 function parseRecord(value, errors) {
-  const record4 = exact(value, ["record_type", "schema_version", "package_name", "version", "registry_integrity", "archive", "installed_package_root", "entrypoint", "files", "accepted_at", "evidence_ref"], "$.accepted_release", errors);
-  if (!record4) return void 0;
-  if (record4.record_type !== "mister-clean.accepted-release") errors.push("$.accepted_release.record_type: expected mister-clean.accepted-release");
-  if (record4.schema_version !== "1.0") errors.push("$.accepted_release.schema_version: expected 1.0");
-  if (typeof record4.package_name !== "string" || record4.package_name.length === 0) errors.push("$.accepted_release.package_name: required");
-  if (typeof record4.version !== "string" || !SEMVER.test(record4.version)) errors.push("$.accepted_release.version: required exact SemVer");
-  if (typeof record4.registry_integrity !== "string" || !SRI512.test(record4.registry_integrity)) errors.push("$.accepted_release.registry_integrity: required npm SHA-512 SRI");
-  if (typeof record4.installed_package_root !== "string" || !isAbsolute6(record4.installed_package_root)) errors.push("$.accepted_release.installed_package_root: required absolute path");
-  if (!safePath(record4.entrypoint)) errors.push("$.accepted_release.entrypoint: required safe package-relative path");
-  if (!iso(record4.accepted_at)) errors.push("$.accepted_release.accepted_at: required timezone-aware ISO timestamp");
-  const archive = exact(record4.archive, ["path", "byte_length", "sha512"], "$.accepted_release.archive", errors);
+  const record5 = exact(value, ["record_type", "schema_version", "package_name", "version", "registry_integrity", "archive", "installed_package_root", "entrypoint", "files", "accepted_at", "evidence_ref"], "$.accepted_release", errors);
+  if (!record5) return void 0;
+  if (record5.record_type !== "mister-clean.accepted-release") errors.push("$.accepted_release.record_type: expected mister-clean.accepted-release");
+  if (record5.schema_version !== "1.0") errors.push("$.accepted_release.schema_version: expected 1.0");
+  if (typeof record5.package_name !== "string" || record5.package_name.length === 0) errors.push("$.accepted_release.package_name: required");
+  if (typeof record5.version !== "string" || !SEMVER.test(record5.version)) errors.push("$.accepted_release.version: required exact SemVer");
+  if (typeof record5.registry_integrity !== "string" || !SRI512.test(record5.registry_integrity)) errors.push("$.accepted_release.registry_integrity: required npm SHA-512 SRI");
+  if (typeof record5.installed_package_root !== "string" || !isAbsolute6(record5.installed_package_root)) errors.push("$.accepted_release.installed_package_root: required absolute path");
+  if (!safePath(record5.entrypoint)) errors.push("$.accepted_release.entrypoint: required safe package-relative path");
+  if (!iso(record5.accepted_at)) errors.push("$.accepted_release.accepted_at: required timezone-aware ISO timestamp");
+  const archive = exact(record5.archive, ["path", "byte_length", "sha512"], "$.accepted_release.archive", errors);
   if (archive) {
     if (typeof archive.path !== "string" || !isAbsolute6(archive.path)) errors.push("$.accepted_release.archive.path: required absolute path");
     if (!Number.isSafeInteger(archive.byte_length) || Number(archive.byte_length) < 0) errors.push("$.accepted_release.archive.byte_length: required nonnegative safe integer");
     if (typeof archive.sha512 !== "string" || !HEX128.test(archive.sha512)) errors.push("$.accepted_release.archive.sha512: required lowercase SHA-512");
   }
-  const files = exact(record4.files, ["package_json", "skill", "executable", "manifest"], "$.accepted_release.files", errors);
+  const files = exact(record5.files, ["package_json", "skill", "executable", "manifest"], "$.accepted_release.files", errors);
   if (files) for (const name of ["package_json", "skill", "executable", "manifest"]) {
     const ref = exact(files[name], ["path", "sha256"], `$.accepted_release.files.${name}`, errors);
     if (!ref) continue;
     if (!safePath(ref.path)) errors.push(`$.accepted_release.files.${name}.path: required safe package-relative path`);
     if (typeof ref.sha256 !== "string" || !HEX64.test(ref.sha256)) errors.push(`$.accepted_release.files.${name}.sha256: required lowercase SHA-256`);
   }
-  const evidence = exact(record4.evidence_ref, ["path", "sha256"], "$.accepted_release.evidence_ref", errors);
+  const evidence = exact(record5.evidence_ref, ["path", "sha256"], "$.accepted_release.evidence_ref", errors);
   if (evidence) {
     if (typeof evidence.path !== "string" || !isAbsolute6(evidence.path)) errors.push("$.accepted_release.evidence_ref.path: required absolute path");
     if (typeof evidence.sha256 !== "string" || !HEX64.test(evidence.sha256)) errors.push("$.accepted_release.evidence_ref.sha256: required lowercase SHA-256");
   }
-  return record4;
+  return record5;
 }
 function parseEvidence(value, errors) {
   const evidence = exact(value, ["record_type", "schema_version", "authority", "verdict", "package_name", "version", "tarball_url", "dist_integrity", "archive", "retrieved_at", "response", "response_sha256"], "$.accepted_release.evidence", errors);
@@ -16885,14 +16885,14 @@ function compare(left, right) {
   }
   return 0;
 }
-function evaluatorValue(record4, field2) {
+function evaluatorValue(record5, field2) {
   if (field2 === "release_state") return "accepted_release";
-  if (field2 === "skill_sha256") return record4.files.skill.sha256;
-  if (field2 === "executable_sha256") return record4.files.executable.sha256;
-  if (field2 === "manifest_sha256") return record4.files.manifest.sha256;
-  if (field2 === "resolved_package_root") return record4.installed_package_root;
-  if (field2 === "resolved_at") return record4.accepted_at;
-  return record4[field2];
+  if (field2 === "skill_sha256") return record5.files.skill.sha256;
+  if (field2 === "executable_sha256") return record5.files.executable.sha256;
+  if (field2 === "manifest_sha256") return record5.files.manifest.sha256;
+  if (field2 === "resolved_package_root") return record5.installed_package_root;
+  if (field2 === "resolved_at") return record5.accepted_at;
+  return record5[field2];
 }
 async function verifyAcceptedReleaseBoundary(input) {
   const errors = [], evaluator = obj(input.evaluator);
@@ -16920,44 +16920,44 @@ async function verifyAcceptedReleaseBoundary(input) {
   } catch {
     return { errors: [...errors, "$.accepted_release_ref.path: required JSON accepted-release record"], ok: false };
   }
-  const parseErrors = [], record4 = parseRecord(raw, parseErrors);
+  const parseErrors = [], record5 = parseRecord(raw, parseErrors);
   errors.push(...parseErrors);
-  if (!record4 || parseErrors.length > 0) return { errors, ok: false };
-  for (const field2 of ["package_name", "version", "release_state", "registry_integrity", "skill_sha256", "executable_sha256", "manifest_sha256", "entrypoint", "resolved_package_root", "resolved_at"]) if (evaluator[field2] !== evaluatorValue(record4, field2)) errors.push(`$.mister_clean_evaluator.${field2}: does not match accepted-release record`);
+  if (!record5 || parseErrors.length > 0) return { errors, ok: false };
+  for (const field2 of ["package_name", "version", "release_state", "registry_integrity", "skill_sha256", "executable_sha256", "manifest_sha256", "entrypoint", "resolved_package_root", "resolved_at"]) if (evaluator[field2] !== evaluatorValue(record5, field2)) errors.push(`$.mister_clean_evaluator.${field2}: does not match accepted-release record`);
   const evaluatorEvidence = obj(evaluator.evidence_ref);
-  if (!evaluatorEvidence || evaluatorEvidence.path !== record4.evidence_ref.path || evaluatorEvidence.sha256 !== record4.evidence_ref.sha256) errors.push("$.mister_clean_evaluator.evidence_ref: does not match accepted-release record");
-  const packageRoot2 = isAbsolute6(record4.installed_package_root) ? await real(input.files, record4.installed_package_root, "$.accepted_release.installed_package_root", errors) : void 0;
-  const archivePath2 = isAbsolute6(record4.archive.path) ? await real(input.files, record4.archive.path, "$.accepted_release.archive.path", errors) : void 0;
-  const evidencePath = isAbsolute6(record4.evidence_ref.path) ? await real(input.files, record4.evidence_ref.path, "$.accepted_release.evidence_ref.path", errors) : void 0;
-  if (candidateRoot && (overlaps(candidateRoot, resolve8(record4.installed_package_root)) || packageRoot2 && overlaps(candidateRoot, packageRoot2))) errors.push("$.accepted_release.installed_package_root: accepted package and candidate repository must not overlap");
-  if (candidateRoot && (overlaps(candidateRoot, resolve8(record4.archive.path)) || archivePath2 && overlaps(candidateRoot, archivePath2))) errors.push("$.accepted_release.archive.path: retained archive and candidate repository must not overlap");
-  if (candidateRoot && (overlaps(candidateRoot, resolve8(record4.evidence_ref.path)) || evidencePath && overlaps(candidateRoot, evidencePath))) errors.push("$.accepted_release.evidence_ref.path: acceptance evidence and candidate repository must not overlap");
+  if (!evaluatorEvidence || evaluatorEvidence.path !== record5.evidence_ref.path || evaluatorEvidence.sha256 !== record5.evidence_ref.sha256) errors.push("$.mister_clean_evaluator.evidence_ref: does not match accepted-release record");
+  const packageRoot2 = isAbsolute6(record5.installed_package_root) ? await real(input.files, record5.installed_package_root, "$.accepted_release.installed_package_root", errors) : void 0;
+  const archivePath2 = isAbsolute6(record5.archive.path) ? await real(input.files, record5.archive.path, "$.accepted_release.archive.path", errors) : void 0;
+  const evidencePath = isAbsolute6(record5.evidence_ref.path) ? await real(input.files, record5.evidence_ref.path, "$.accepted_release.evidence_ref.path", errors) : void 0;
+  if (candidateRoot && (overlaps(candidateRoot, resolve8(record5.installed_package_root)) || packageRoot2 && overlaps(candidateRoot, packageRoot2))) errors.push("$.accepted_release.installed_package_root: accepted package and candidate repository must not overlap");
+  if (candidateRoot && (overlaps(candidateRoot, resolve8(record5.archive.path)) || archivePath2 && overlaps(candidateRoot, archivePath2))) errors.push("$.accepted_release.archive.path: retained archive and candidate repository must not overlap");
+  if (candidateRoot && (overlaps(candidateRoot, resolve8(record5.evidence_ref.path)) || evidencePath && overlaps(candidateRoot, evidencePath))) errors.push("$.accepted_release.evidence_ref.path: acceptance evidence and candidate repository must not overlap");
   if (candidateRoot) {
     const candidatePath = await installed(input.files, candidateRoot, "package.json", "$.candidate_repo.package_json", errors), candidateBytes = candidatePath ? await bytes(input.files, candidatePath, "$.candidate_repo.package_json", errors) : void 0;
     if (candidateBytes) try {
       const candidate = obj(JSON.parse(utf8.decode(candidateBytes)));
       if (!candidate || typeof candidate.version !== "string" || !SEMVER.test(candidate.version)) errors.push("$.candidate_repo.package_json.version: required exact SemVer");
-      else if (compare(semver(record4.version), semver(candidate.version)) >= 0) errors.push("$.accepted_release.version: must be strictly lower than candidate package.json version");
+      else if (compare(semver(record5.version), semver(candidate.version)) >= 0) errors.push("$.accepted_release.version: must be strictly lower than candidate package.json version");
     } catch {
       errors.push("$.candidate_repo.package_json: required JSON object");
     }
   }
   const now = Date.now();
-  if (Date.parse(record4.accepted_at) > now) errors.push("$.accepted_release.accepted_at: must not be in the future at validation time");
+  if (Date.parse(record5.accepted_at) > now) errors.push("$.accepted_release.accepted_at: must not be in the future at validation time");
   let archive;
   if (archivePath2) {
     const value = await bytes(input.files, archivePath2, "$.accepted_release.archive.path", errors);
     if (value) {
-      if (value.byteLength !== record4.archive.byte_length) errors.push("$.accepted_release.archive.byte_length: retained archive byte length mismatch");
-      if (sha512(value) !== record4.archive.sha512) errors.push("$.accepted_release.archive.sha512: retained archive digest mismatch");
-      if (sri512(value) !== record4.registry_integrity) errors.push("$.accepted_release.registry_integrity: npm SHA-512 SRI does not match retained archive bytes");
+      if (value.byteLength !== record5.archive.byte_length) errors.push("$.accepted_release.archive.byte_length: retained archive byte length mismatch");
+      if (sha512(value) !== record5.archive.sha512) errors.push("$.accepted_release.archive.sha512: retained archive digest mismatch");
+      if (sri512(value) !== record5.registry_integrity) errors.push("$.accepted_release.registry_integrity: npm SHA-512 SRI does not match retained archive bytes");
       archive = archiveFiles(value, errors);
     }
   }
   if (evidencePath) {
     const value = await bytes(input.files, evidencePath, "$.accepted_release.evidence_ref.path", errors);
     if (value) {
-      if (sha2565(value) !== record4.evidence_ref.sha256) errors.push("$.accepted_release.evidence_ref.sha256: evidence digest mismatch");
+      if (sha2565(value) !== record5.evidence_ref.sha256) errors.push("$.accepted_release.evidence_ref.sha256: evidence digest mismatch");
       else {
         let rawEvidence;
         try {
@@ -16968,11 +16968,11 @@ async function verifyAcceptedReleaseBoundary(input) {
         const evidenceErrors = [], evidence = parseEvidence(rawEvidence, evidenceErrors);
         errors.push(...evidenceErrors);
         if (evidence) {
-          if (evidence.package_name !== record4.package_name || evidence.version !== record4.version) errors.push("$.accepted_release.evidence: package/version do not match accepted release");
-          if (evidence.dist_integrity !== record4.registry_integrity) errors.push("$.accepted_release.evidence: SRI does not match accepted release");
-          if (evidence.archive.sha512 !== record4.archive.sha512 || evidence.archive.byte_length !== record4.archive.byte_length) errors.push("$.accepted_release.evidence: archive does not match accepted release");
+          if (evidence.package_name !== record5.package_name || evidence.version !== record5.version) errors.push("$.accepted_release.evidence: package/version do not match accepted release");
+          if (evidence.dist_integrity !== record5.registry_integrity) errors.push("$.accepted_release.evidence: SRI does not match accepted release");
+          if (evidence.archive.sha512 !== record5.archive.sha512 || evidence.archive.byte_length !== record5.archive.byte_length) errors.push("$.accepted_release.evidence: archive does not match accepted release");
           if (Date.parse(evidence.retrieved_at) > now) errors.push("$.accepted_release.evidence.retrieved_at: must not be in the future at validation time");
-          if (Date.parse(evidence.retrieved_at) > Date.parse(record4.accepted_at)) errors.push("$.accepted_release.accepted_at: must not precede registry retrieval evidence");
+          if (Date.parse(evidence.retrieved_at) > Date.parse(record5.accepted_at)) errors.push("$.accepted_release.accepted_at: must not precede registry retrieval evidence");
         }
       }
     }
@@ -16984,8 +16984,8 @@ async function verifyAcceptedReleaseBoundary(input) {
   }
   const tree = await walkedFiles(input.files, packageRoot2, errors), allArchive = new Map([...archive].map(([path, file]) => [path, file.sha256]));
   equals(tree, allArchive, "$.accepted_release.installed_package_root", errors);
-  for (const name of ["package_json", "skill", "executable", "manifest"]) if (archive.get(record4.files[name].path)?.sha256 !== record4.files[name].sha256) errors.push(`$.accepted_release.files.${name}: archive does not match declared file`);
-  const manifestFile = archive.get(record4.files.manifest.path);
+  for (const name of ["package_json", "skill", "executable", "manifest"]) if (archive.get(record5.files[name].path)?.sha256 !== record5.files[name].sha256) errors.push(`$.accepted_release.files.${name}: archive does not match declared file`);
+  const manifestFile = archive.get(record5.files.manifest.path);
   if (!manifestFile) errors.push("$.accepted_release.files.manifest: archive does not contain MANIFEST");
   else {
     let entries2;
@@ -16995,9 +16995,9 @@ async function verifyAcceptedReleaseBoundary(input) {
       errors.push("$.accepted_release.files.manifest: MANIFEST must be UTF-8");
     }
     if (entries2) {
-      if (entries2.has(record4.files.manifest.path)) errors.push("$.accepted_release.files.manifest: MANIFEST must not self-enumerate");
+      if (entries2.has(record5.files.manifest.path)) errors.push("$.accepted_release.files.manifest: MANIFEST must not self-enumerate");
       const payload = new Map(allArchive);
-      payload.delete(record4.files.manifest.path);
+      payload.delete(record5.files.manifest.path);
       const attestationFile = archive.get(RELEASE_ATTESTATION_FILE);
       if (attestationFile) {
         let value;
@@ -17010,8 +17010,8 @@ async function verifyAcceptedReleaseBoundary(input) {
         errors.push(...validated.errors.map((error) => `$.accepted_release.attestation: ${error}`));
         const attestation = validated.value;
         if (attestation) {
-          if (attestation.package.name !== record4.package_name || attestation.package.version !== record4.version) errors.push("$.accepted_release.attestation: package/version mismatch");
-          if (attestation.manifest.sha256 !== record4.files.manifest.sha256 || attestation.manifest.entry_count !== entries2.size) errors.push("$.accepted_release.attestation: manifest identity mismatch");
+          if (attestation.package.name !== record5.package_name || attestation.package.version !== record5.version) errors.push("$.accepted_release.attestation: package/version mismatch");
+          if (attestation.manifest.sha256 !== record5.files.manifest.sha256 || attestation.manifest.entry_count !== entries2.size) errors.push("$.accepted_release.attestation: manifest identity mismatch");
           for (const entry of attestation.required_entrypoints) {
             if (allArchive.get(entry.path.slice(2)) !== entry.sha256 || entries2.get(entry.path.slice(2)) !== entry.sha256) errors.push(`$.accepted_release.attestation: entrypoint digest mismatch ${entry.path}`);
           }
@@ -17021,21 +17021,21 @@ async function verifyAcceptedReleaseBoundary(input) {
       }
       const listed = new Map([...entries2].map(([path, digest4]) => [path, { path, bytes: new Uint8Array(), sha256: digest4 }]));
       equals(listed, payload, "$.accepted_release.files.manifest", errors);
-      for (const name of ["package_json", "skill", "executable"]) if (entries2.get(record4.files[name].path) !== record4.files[name].sha256) errors.push(`$.accepted_release.files.manifest: missing or mismatched declared ${name} entry`);
+      for (const name of ["package_json", "skill", "executable"]) if (entries2.get(record5.files[name].path) !== record5.files[name].sha256) errors.push(`$.accepted_release.files.manifest: missing or mismatched declared ${name} entry`);
     }
   }
-  if (record4.entrypoint !== record4.files.executable.path) errors.push("$.accepted_release.entrypoint: must equal declared executable path");
-  await installed(input.files, packageRoot2, record4.entrypoint, "$.accepted_release.entrypoint", errors);
-  const packageBytes = tree.get(record4.files.package_json.path)?.bytes;
+  if (record5.entrypoint !== record5.files.executable.path) errors.push("$.accepted_release.entrypoint: must equal declared executable path");
+  await installed(input.files, packageRoot2, record5.entrypoint, "$.accepted_release.entrypoint", errors);
+  const packageBytes = tree.get(record5.files.package_json.path)?.bytes;
   if (packageBytes) try {
     const pkg = obj(JSON.parse(utf8.decode(packageBytes)));
     if (!pkg) errors.push("$.accepted_release.files.package_json: package.json must contain an object");
     else {
-      if (pkg.name !== record4.package_name) errors.push("$.accepted_release.files.package_json: package.json name does not match accepted release");
-      if (pkg.version !== record4.version) errors.push("$.accepted_release.files.package_json: package.json version does not match accepted release");
+      if (pkg.name !== record5.package_name) errors.push("$.accepted_release.files.package_json: package.json name does not match accepted release");
+      if (pkg.version !== record5.version) errors.push("$.accepted_release.files.package_json: package.json version does not match accepted release");
       const binObject = obj(pkg.bin);
       const bin = typeof pkg.bin === "string" ? [pkg.bin] : binObject ? Object.values(binObject).filter((value) => typeof value === "string") : [];
-      if (!bin.map((value) => value.startsWith("./") ? value.slice(2) : value).includes(record4.entrypoint)) errors.push("$.accepted_release.entrypoint: installed package.json bin does not expose accepted entrypoint");
+      if (!bin.map((value) => value.startsWith("./") ? value.slice(2) : value).includes(record5.entrypoint)) errors.push("$.accepted_release.entrypoint: installed package.json bin does not expose accepted entrypoint");
     }
   } catch {
     errors.push("$.accepted_release.files.package_json: required JSON object");
@@ -17564,12 +17564,12 @@ function captureRelevantProcessCensus(worktreePaths, options = {}) {
     rows.sort((left, right) => compare2(processKey(left), processKey(right)));
     const status = errors.length === 0 && rows.some((row) => row.identity.pid === currentPid) ? "complete" : "unstable";
     if (!rows.some((row) => row.identity.pid === currentPid)) errors.push(`current invocation PID ${currentPid} was not stably observed`);
-    const record4 = { ...base, status, rows, errors };
-    return { ...record4, state_sha256: identity(record4) };
+    const record5 = { ...base, status, rows, errors };
+    return { ...record5, state_sha256: identity(record5) };
   } catch (error) {
     const errors = [error instanceof Error ? error.message : String(error)];
-    const record4 = { ...base, status: "unsupported", rows: [], errors };
-    return { ...record4, state_sha256: identity(record4) };
+    const record5 = { ...base, status: "unsupported", rows: [], errors };
+    return { ...record5, state_sha256: identity(record5) };
   }
 }
 function successorProcessRows(census) {
@@ -17631,7 +17631,7 @@ function captureGitState(repository) {
     status: captureStatus(row.path),
     ignored: captureIgnored(row.path)
   }));
-  const record4 = {
+  const record5 = {
     head: {
       kind: symbolic ? "symbolic" : "detached",
       target: symbolic || null,
@@ -17643,7 +17643,7 @@ function captureGitState(repository) {
     worktrees,
     controls: captureControls(topology)
   };
-  return { ...record4, state_sha256: identity(record4) };
+  return { ...record5, state_sha256: identity(record5) };
 }
 function captureActionHygiene(root, options = {}) {
   const repository = realpathSync3(resolve9(root));
@@ -17654,7 +17654,7 @@ function captureActionHygiene(root, options = {}) {
     throw new Error("repository hygiene state changed while its exact boundary was being captured");
   }
   const physical = { git_state_sha256: second.state_sha256, process_state_sha256: processes.state_sha256 };
-  const record4 = {
+  const record5 = {
     record_type: "mister-clean.action-hygiene-snapshot",
     schema_version: "1.0",
     repo_id: repositoryIdentity(repository),
@@ -17664,7 +17664,7 @@ function captureActionHygiene(root, options = {}) {
     processes,
     physical_state_sha256: identity(physical)
   };
-  return { ...record4, snapshot_sha256: identity(record4) };
+  return { ...record5, snapshot_sha256: identity(record5) };
 }
 function rowMap(rows, key) {
   const result = /* @__PURE__ */ new Map();
@@ -17814,7 +17814,7 @@ function deriveActionHygieneDelta(before, after, primaryBranch) {
     }
   }
   violations.sort((left, right) => compare2(`${left.code}\0${left.key}`, `${right.code}\0${right.key}`));
-  const record4 = {
+  const record5 = {
     record_type: "mister-clean.action-hygiene-delta",
     schema_version: "1.0",
     before_snapshot_sha256: before.snapshot_sha256,
@@ -17829,7 +17829,7 @@ function deriveActionHygieneDelta(before, after, primaryBranch) {
     processes: processChanges,
     violations
   };
-  return { ...record4, delta_sha256: identity(record4) };
+  return { ...record5, delta_sha256: identity(record5) };
 }
 function assertActionHygieneDelta(delta, before, after, label = "action hygiene delta") {
   if (delta.record_type !== "mister-clean.action-hygiene-delta" || delta.schema_version !== "1.0") {
@@ -18115,11 +18115,11 @@ function parseProcessIdentity(value, label) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} is structurally invalid`);
   }
-  const record4 = value;
-  if (!Number.isSafeInteger(record4.pid) || Number(record4.pid) <= 0 || typeof record4.process_identity !== "string" || record4.process_identity.length === 0) {
+  const record5 = value;
+  if (!Number.isSafeInteger(record5.pid) || Number(record5.pid) <= 0 || typeof record5.process_identity !== "string" || record5.process_identity.length === 0) {
     throw new Error(`${label} is structurally invalid`);
   }
-  return record4;
+  return record5;
 }
 function parseLeaseState(path) {
   const value = JSON.parse(readFileSync5(path, "utf8"));
@@ -18543,8 +18543,8 @@ function canonicalJson2(value) {
   }
   if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson2(entry)).join(",")}]`;
   if (typeof value === "object") {
-    const record4 = value;
-    const fields = Object.keys(record4).filter((key) => record4[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson2(record4[key])}`);
+    const record5 = value;
+    const fields = Object.keys(record5).filter((key) => record5[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson2(record5[key])}`);
     return `{${fields.join(",")}}`;
   }
   throw new Error(`canonical JSON refuses ${typeof value}`);
@@ -18559,9 +18559,9 @@ function stableEqual(left, right) {
   return canonicalJson2(left) === canonicalJson2(right);
 }
 function withoutField(value, field2) {
-  const record4 = { ...value };
-  delete record4[String(field2)];
-  return record4;
+  const record5 = { ...value };
+  delete record5[String(field2)];
+  return record5;
 }
 function assertPositiveInteger(name, value, maximum = Number.MAX_SAFE_INTEGER) {
   if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
@@ -18697,12 +18697,12 @@ function trackedIndexEntries(repository, timeoutMs) {
   let start = 0;
   for (let index = 0; index < bytes2.length; index += 1) {
     if (bytes2[index] !== 0) continue;
-    const record4 = bytes2.subarray(start, index);
-    const separator = record4.indexOf(9);
-    if (separator <= 0 || separator === record4.length - 1) {
+    const record5 = bytes2.subarray(start, index);
+    const separator = record5.indexOf(9);
+    if (separator <= 0 || separator === record5.length - 1) {
       throw new Error("git ls-files --stage returned a malformed index record");
     }
-    const metadata = UTF82.decode(record4.subarray(0, separator)).split(" ");
+    const metadata = UTF82.decode(record5.subarray(0, separator)).split(" ");
     if (metadata.length !== 3 || metadata[2] !== "0") {
       throw new Error("native gate snapshot refuses an unmerged index");
     }
@@ -18710,7 +18710,7 @@ function trackedIndexEntries(repository, timeoutMs) {
     if (!rawMode || !(/* @__PURE__ */ new Set(["100644", "100755", "120000", "160000"])).has(rawMode) || !oid || !GIT_OID.test(oid)) {
       throw new Error("git ls-files --stage returned unsupported index metadata");
     }
-    const pathBytes = record4.subarray(separator + 1);
+    const pathBytes = record5.subarray(separator + 1);
     const path = UTF82.decode(pathBytes);
     if (!Buffer.from(path, "utf8").equals(pathBytes)) {
       throw new Error("native gate snapshot refuses non-canonical UTF-8");
@@ -18765,7 +18765,7 @@ function captureSubjectStateOnce(repository) {
     "--format=%H%x00%gd%x00%gs"
   ]));
   const worktreeTopologySha256 = sha2567(gitBytes3(repository, ["worktree", "list", "--porcelain", "-z"]));
-  const record4 = {
+  const record5 = {
     record_type: "mister-clean.native-gate-subject-state",
     schema_version: "1.0",
     repository_object: repositoryObject,
@@ -18773,7 +18773,7 @@ function captureSubjectStateOnce(repository) {
     stash_sha256: stashSha256,
     worktree_topology_sha256: worktreeTopologySha256
   };
-  return { ...record4, state_sha256: identity2(record4) };
+  return { ...record5, state_sha256: identity2(record5) };
 }
 function captureSubjectState(repository) {
   const first = captureSubjectStateOnce(repository);
@@ -19594,7 +19594,7 @@ function discoverNativeGates(repository, repositoryObject) {
       script_sha256: sha2567(canonicalJson2(runnerFindings))
     }));
   }
-  const record4 = {
+  const record5 = {
     record_type: DISCOVERY_RECORD_TYPE,
     schema_version: SCHEMA_VERSION2,
     repository_object: repositoryObject,
@@ -19604,7 +19604,7 @@ function discoverNativeGates(repository, repositoryObject) {
     required_gate_ids: gates.filter((gate) => gate.disposition === "required").map((gate) => gate.id),
     excluded_candidates: excludedCandidates
   };
-  return { ...record4, catalog_sha256: identity2(record4) };
+  return { ...record5, catalog_sha256: identity2(record5) };
 }
 
 // src/closeout/native-gate-validation.ts
@@ -20794,7 +20794,7 @@ function iso2(value) {
   return isoTimestamp(value);
 }
 function validateRepositoryObject(value, path, errors, expectedSha256) {
-  const record4 = requireObject(value, [
+  const record5 = requireObject(value, [
     "record_type",
     "schema_version",
     "head_commit",
@@ -20802,27 +20802,27 @@ function validateRepositoryObject(value, path, errors, expectedSha256) {
     "entry_count",
     "sha256"
   ], path, errors);
-  if (!record4) return void 0;
-  if (record4.record_type !== "mister-clean.repository-object") {
+  if (!record5) return void 0;
+  if (record5.record_type !== "mister-clean.repository-object") {
     errors.push(`${path}.record_type: expected mister-clean.repository-object`);
   }
-  if (record4.schema_version !== "1.0") errors.push(`${path}.schema_version: expected 1.0`);
-  if (typeof record4.head_commit !== "string" || !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(record4.head_commit)) {
+  if (record5.schema_version !== "1.0") errors.push(`${path}.schema_version: expected 1.0`);
+  if (typeof record5.head_commit !== "string" || !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(record5.head_commit)) {
     errors.push(`${path}.head_commit: required full lowercase Git commit object id`);
   }
-  if (record4.surface !== "tracked_and_nonignored") {
+  if (record5.surface !== "tracked_and_nonignored") {
     errors.push(`${path}.surface: expected tracked_and_nonignored`);
   }
-  if (!Number.isSafeInteger(record4.entry_count) || Number(record4.entry_count) < 0) {
+  if (!Number.isSafeInteger(record5.entry_count) || Number(record5.entry_count) < 0) {
     errors.push(`${path}.entry_count: required nonnegative safe integer`);
   }
-  if (typeof record4.sha256 !== "string" || !HEX643.test(record4.sha256)) {
+  if (typeof record5.sha256 !== "string" || !HEX643.test(record5.sha256)) {
     errors.push(`${path}.sha256: required lowercase SHA-256`);
   }
-  if (expectedSha256 !== void 0 && record4.sha256 !== expectedSha256) {
+  if (expectedSha256 !== void 0 && record5.sha256 !== expectedSha256) {
     errors.push(`${path}.sha256: must equal the bound repository object`);
   }
-  return record4;
+  return record5;
 }
 function validateEvidenceClock(value, path, clock, errors) {
   if (Array.isArray(value)) {
@@ -21252,8 +21252,8 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
       const evidence = object5(rawEvidence);
       if (!evidence) continue;
       const epath = `$.manifest.actions[${JSON.stringify(action.id)}].outcome.evidence[${evidenceIndex}]`;
-      const record4 = await evidenceRef(files, base, evidence.evidence_ref, `${epath}.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.action-result");
-      if (record4 && !allowPlaceholders) {
+      const record5 = await evidenceRef(files, base, evidence.evidence_ref, `${epath}.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.action-result");
+      if (record5 && !allowPlaceholders) {
         const expected = {
           action_id: action.id,
           kind: action.kind,
@@ -21263,11 +21263,11 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
           result: evidence.result,
           observed_at: evidence.observed_at
         };
-        for (const [key, value] of Object.entries(expected)) if (record4[key] !== value) errors.push(`${epath}: bound result disagrees on ${key}`);
+        for (const [key, value] of Object.entries(expected)) if (record5[key] !== value) errors.push(`${epath}: bound result disagrees on ${key}`);
         await validateActionHygieneEvidence(
           action,
           evidence,
-          record4,
+          record5,
           epath,
           base,
           files,
@@ -21287,8 +21287,8 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
         const evidence = object5(rawEvidence);
         if (!evidence) continue;
         const epath = `$.report.completion_debts[${index}].evidence[${evidenceIndex}]`;
-        const record4 = await evidenceRef(files, base, evidence.evidence_ref, `${epath}.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.debt-result");
-        if (record4 && !allowPlaceholders) {
+        const record5 = await evidenceRef(files, base, evidence.evidence_ref, `${epath}.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.debt-result");
+        if (record5 && !allowPlaceholders) {
           const expected = {
             debt_id: debt.id,
             kind: evidence.kind,
@@ -21297,22 +21297,22 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
             result: evidence.result,
             observed_at: evidence.observed_at
           };
-          for (const [key, value] of Object.entries(expected)) if (record4[key] !== value) errors.push(`${epath}: bound debt result disagrees on ${key}`);
+          for (const [key, value] of Object.entries(expected)) if (record5[key] !== value) errors.push(`${epath}: bound debt result disagrees on ${key}`);
         }
       }
     }
     if (debt.state === "accepted_exception") {
       const exception = object5(debt.exception) ?? {};
       const epath = `$.report.completion_debts[${index}].exception.ref`;
-      const record4 = await evidenceRef(files, base, exception.ref, epath, errors, allowPlaceholders, clock, "mister-clean.operator-ruling");
-      if (record4 && !allowPlaceholders) {
-        for (const field2 of ["actor", "at", "scope", "rationale"]) if (record4[field2] !== exception[field2]) errors.push(`${epath}: ruling disagrees on ${field2}`);
-        if (record4.debt_id !== debt.id) errors.push(`${epath}: ruling debt_id mismatch`);
-        if (record4.request_sha256 !== object5(bundle.criteria_discovery)?.request_sha256) errors.push(`${epath}: ruling must bind the exact operative request`);
+      const record5 = await evidenceRef(files, base, exception.ref, epath, errors, allowPlaceholders, clock, "mister-clean.operator-ruling");
+      if (record5 && !allowPlaceholders) {
+        for (const field2 of ["actor", "at", "scope", "rationale"]) if (record5[field2] !== exception[field2]) errors.push(`${epath}: ruling disagrees on ${field2}`);
+        if (record5.debt_id !== debt.id) errors.push(`${epath}: ruling debt_id mismatch`);
+        if (record5.request_sha256 !== object5(bundle.criteria_discovery)?.request_sha256) errors.push(`${epath}: ruling must bind the exact operative request`);
         const retired = typeof exception.scope === "string" && exception.scope.startsWith("retired root ");
-        if (record4.minted_by !== void 0 || retired) {
-          if (record4.minted_by !== RETIREMENT_RULING_MINTED_BY) errors.push(`${epath}: a retired-root ruling must be the tool-minted record (minted_by ${JSON.stringify(RETIREMENT_RULING_MINTED_BY)}); it is never an operator's own act`);
-          const source = object5(record4.source);
+        if (record5.minted_by !== void 0 || retired) {
+          if (record5.minted_by !== RETIREMENT_RULING_MINTED_BY) errors.push(`${epath}: a retired-root ruling must be the tool-minted record (minted_by ${JSON.stringify(RETIREMENT_RULING_MINTED_BY)}); it is never an operator's own act`);
+          const source = object5(record5.source);
           if (!source || typeof source.path !== "string" || typeof source.sha256 !== "string" || !HEX643.test(source.sha256)) errors.push(`${epath}: tool-minted ruling requires source {path, sha256} binding the retirement record`);
           mintedSources.set(String(debt.id), { path: source?.path, sha256: source?.sha256, epath });
         }
@@ -21607,32 +21607,32 @@ async function validateSuccessorTopology(bundle, successor, path, base, files, c
           if (!Number.isInteger(row.dirty_count) || Number(row.dirty_count) < 0) errors.push(`${rpath}.dirty_count: required nonnegative integer`);
           if (clean && Number(row.dirty_count) > 0) {
             errors.push(`${rpath}: unresolved topology row prevents CLEAN`);
-            const record4 = await evidenceRef(files, base, row.policy_ref, `${rpath}.policy_ref`, errors, allowPlaceholders, clock, "mister-clean.topology-policy");
-            if (record4 && !allowPlaceholders) {
+            const record5 = await evidenceRef(files, base, row.policy_ref, `${rpath}.policy_ref`, errors, allowPlaceholders, clock, "mister-clean.topology-policy");
+            if (record5 && !allowPlaceholders) {
               const expected = {
                 surface: field2,
                 identity: row.path,
                 commit: row.head,
                 request_sha256: object5(bundle.criteria_discovery)?.request_sha256
               };
-              for (const [key, value] of Object.entries(expected)) if (record4[key] !== value) errors.push(`${rpath}.policy_ref: bound topology ruling disagrees on ${key}`);
-              for (const key of ["actor", "scope", "rationale", "next_action"]) if (!text(record4[key])) errors.push(`${rpath}.policy_ref: topology ruling requires ${key}`);
+              for (const [key, value] of Object.entries(expected)) if (record5[key] !== value) errors.push(`${rpath}.policy_ref: bound topology ruling disagrees on ${key}`);
+              for (const key of ["actor", "scope", "rationale", "next_action"]) if (!text(record5[key])) errors.push(`${rpath}.policy_ref: topology ruling requires ${key}`);
             }
           }
         } else {
           if (typeof row.merged !== "boolean") errors.push(`${rpath}.merged: required boolean`);
           if (clean && row.merged === false) {
             errors.push(`${rpath}: unresolved topology row prevents CLEAN`);
-            const record4 = await evidenceRef(files, base, row.policy_ref, `${rpath}.policy_ref`, errors, allowPlaceholders, clock, "mister-clean.topology-policy");
-            if (record4 && !allowPlaceholders) {
+            const record5 = await evidenceRef(files, base, row.policy_ref, `${rpath}.policy_ref`, errors, allowPlaceholders, clock, "mister-clean.topology-policy");
+            if (record5 && !allowPlaceholders) {
               const expected = {
                 surface: field2,
                 identity: row.name,
                 commit: row.commit,
                 request_sha256: object5(bundle.criteria_discovery)?.request_sha256
               };
-              for (const [key, value] of Object.entries(expected)) if (record4[key] !== value) errors.push(`${rpath}.policy_ref: bound topology ruling disagrees on ${key}`);
-              for (const key of ["actor", "scope", "rationale", "next_action"]) if (!text(record4[key])) errors.push(`${rpath}.policy_ref: topology ruling requires ${key}`);
+              for (const [key, value] of Object.entries(expected)) if (record5[key] !== value) errors.push(`${rpath}.policy_ref: bound topology ruling disagrees on ${key}`);
+              for (const key of ["actor", "scope", "rationale", "next_action"]) if (!text(record5[key])) errors.push(`${rpath}.policy_ref: topology ruling requires ${key}`);
             }
           }
         }
@@ -21674,9 +21674,9 @@ async function validateSuccessorCurrentState(successor, path, base, files, clean
       if (!allowPlaceholders && (typeof current.sha256 !== "string" || !HEX643.test(current.sha256))) errors.push(`${currentPath}.sha256: required lowercase SHA-256`);
       if (current.state === "candidate_unverified" && current.designation !== null) errors.push(`${currentPath}.designation: candidate_unverified requires null`);
       if (current.state === "designated") {
-        const record4 = await evidenceRef(files, base, current.designation, `${currentPath}.designation`, errors, allowPlaceholders, clock, "mister-clean.current-state-designation");
-        if (record4 && !allowPlaceholders) {
-          for (const field2 of ["path", "sha256", "commit"]) if (record4[field2] !== current[field2]) errors.push(`${currentPath}.designation: bound designation disagrees on ${field2}`);
+        const record5 = await evidenceRef(files, base, current.designation, `${currentPath}.designation`, errors, allowPlaceholders, clock, "mister-clean.current-state-designation");
+        if (record5 && !allowPlaceholders) {
+          for (const field2 of ["path", "sha256", "commit"]) if (record5[field2] !== current[field2]) errors.push(`${currentPath}.designation: bound designation disagrees on ${field2}`);
         }
       }
     }
@@ -21700,8 +21700,8 @@ async function validateSuccessorGates(report, successor, path, base, files, clea
     if (clean && gate.total === 0) errors.push(`${gpath}.total: zero-scope gate cannot establish CLEAN`);
     if (clean && gate.verified !== gate.total) errors.push(`${gpath}: verified must equal total`);
     for (const field2 of ["warnings", "debt", "skipped"]) if (clean && gate[field2] !== 0) errors.push(`${gpath}.${field2}: CLEAN requires zero`);
-    const record4 = await evidenceRef(files, base, gate.evidence_ref, `${gpath}.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.gate-result");
-    if (record4 && !allowPlaceholders) {
+    const record5 = await evidenceRef(files, base, gate.evidence_ref, `${gpath}.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.gate-result");
+    if (record5 && !allowPlaceholders) {
       const expected = {
         gate_id: gate.id,
         object: gate.object,
@@ -21714,8 +21714,8 @@ async function validateSuccessorGates(report, successor, path, base, files, clea
         debt: gate.debt,
         skipped: gate.skipped
       };
-      for (const [key, value] of Object.entries(expected)) if (record4[key] !== value) errors.push(`${gpath}.evidence_ref: bound gate record disagrees on ${key}`);
-      if (!iso2(record4.observed_at)) errors.push(`${gpath}.evidence_ref: gate record requires timezone-aware observed_at`);
+      for (const [key, value] of Object.entries(expected)) if (record5[key] !== value) errors.push(`${gpath}.evidence_ref: bound gate record disagrees on ${key}`);
+      if (!iso2(record5.observed_at)) errors.push(`${gpath}.evidence_ref: gate record requires timezone-aware observed_at`);
     }
   }
   if (clean && !gates.some((raw) => {
@@ -21733,9 +21733,9 @@ async function validateSuccessorDebris(successor, path, base, files, clean, allo
     if (!Array.isArray(debris.evidence) || array2(debris.evidence).length === 0) errors.push(`${path}.debris.evidence: required`);
     else {
       for (const [index, ref] of array2(debris.evidence).entries()) {
-        const record4 = await evidenceRef(files, base, ref, `${path}.debris.evidence[${index}]`, errors, allowPlaceholders, clock, "mister-clean.debris-census");
-        if (record4 && !allowPlaceholders) for (const field2 of ["removed", "retained", "unclassified"]) {
-          if (record4[field2] !== debris[field2]) errors.push(`${path}.debris.evidence[${index}]: bound debris record disagrees on ${field2}`);
+        const record5 = await evidenceRef(files, base, ref, `${path}.debris.evidence[${index}]`, errors, allowPlaceholders, clock, "mister-clean.debris-census");
+        if (record5 && !allowPlaceholders) for (const field2 of ["removed", "retained", "unclassified"]) {
+          if (record5[field2] !== debris[field2]) errors.push(`${path}.debris.evidence[${index}]: bound debris record disagrees on ${field2}`);
         }
       }
     }
@@ -21770,8 +21770,8 @@ async function validateSuccessorFinalReview(bundle, report, successor, path, bas
     for (const field2 of ["findings_total", "findings_paid", "unresolved"]) if (!Number.isInteger(review[field2]) || Number(review[field2]) < 0) errors.push(`${path}.final_review.${field2}: required nonnegative integer`);
     if (clean && review.unresolved !== 0) errors.push(`${path}.final_review.unresolved: CLEAN requires zero`);
     if (clean && review.findings_total !== review.findings_paid) errors.push(`${path}.final_review: findings_total must equal findings_paid`);
-    const record4 = await evidenceRef(files, base, review.evidence_ref, `${path}.final_review.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.independent-review");
-    if (record4 && !allowPlaceholders) {
+    const record5 = await evidenceRef(files, base, review.evidence_ref, `${path}.final_review.evidence_ref`, errors, allowPlaceholders, clock, "mister-clean.independent-review");
+    if (record5 && !allowPlaceholders) {
       const criteria = object5(bundle.criteria_discovery);
       const planning = object5(bundle.planning_discovery);
       const expected = {
@@ -21788,8 +21788,8 @@ async function validateSuccessorFinalReview(bundle, report, successor, path, bas
         findings_paid: review.findings_paid,
         unresolved: review.unresolved
       };
-      for (const [key, value] of Object.entries(expected)) if (!stableEqual2(record4[key], value)) errors.push(`${path}.final_review.evidence_ref: bound review record disagrees on ${key}`);
-      if (!iso2(record4.observed_at)) errors.push(`${path}.final_review.evidence_ref: review record requires timezone-aware observed_at`);
+      for (const [key, value] of Object.entries(expected)) if (!stableEqual2(record5[key], value)) errors.push(`${path}.final_review.evidence_ref: bound review record disagrees on ${key}`);
+      if (!iso2(record5.observed_at)) errors.push(`${path}.final_review.evidence_ref: review record requires timezone-aware observed_at`);
     }
   }
 }
@@ -22110,9 +22110,9 @@ async function validateExternalChangeOrigin(ref, debt, debtPath, earliestActionI
   }
   if (!iso2(transition.observed_at)) errors.push(`${path}.observed_at: required ISO-8601 timestamp`);
 }
-async function validateDetectorCoverage(record4, report, base, files, clean, allowPlaceholders, clock, comparatorFingerprints, liveRuntimeIdentity, errors) {
+async function validateDetectorCoverage(record5, report, base, files, clean, allowPlaceholders, clock, comparatorFingerprints, liveRuntimeIdentity, errors) {
   const path = "$.report.regression_control.evidence_ref.detector_coverage";
-  const schemaVersion = String(record4.schema_version ?? "");
+  const schemaVersion = String(record5.schema_version ?? "");
   if (!(/* @__PURE__ */ new Set(["1.3", "1.4", "1.5", REGRESSION_DELTA_SCHEMA_VERSION])).has(schemaVersion)) {
     if (clean) errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 or later runtime and repository-object coverage");
     return;
@@ -22122,7 +22122,7 @@ async function validateDetectorCoverage(record4, report, base, files, clean, all
     errors.push("$.report.regression_control.evidence_ref.schema_version: CLEAN requires regression-delta schema 1.5 or later runtime and repository-object coverage");
   }
   const requiresRepositoryObjects = schemaVersion === "1.4" || requiresRuntimeIdentity;
-  const coverage = requireObject(record4.detector_coverage, [
+  const coverage = requireObject(record5.detector_coverage, [
     "registry_version",
     "registry_sha256",
     "run_policy",
@@ -22172,7 +22172,7 @@ async function validateDetectorCoverage(record4, report, base, files, clean, all
       errors.push(`${path}.applicability: must explicitly classify every canonical detector from the bound run policy`);
     }
   }
-  if (coverage.baseline_object !== record4.baseline_object) {
+  if (coverage.baseline_object !== record5.baseline_object) {
     errors.push(`${path}.baseline_object: must equal regression baseline_object`);
   }
   if (requiresRepositoryObjects) {
@@ -22182,7 +22182,7 @@ async function validateDetectorCoverage(record4, report, base, files, clean, all
       errors,
       coverage.baseline_object
     );
-    if (repositoryObject && !stableEqual2(repositoryObject, record4.baseline_repository_object)) {
+    if (repositoryObject && !stableEqual2(repositoryObject, record5.baseline_repository_object)) {
       errors.push(`${path}.baseline_repository_object: must equal regression baseline_repository_object`);
     }
   }
@@ -22224,7 +22224,7 @@ async function validateDetectorCoverage(record4, report, base, files, clean, all
       continue;
     }
     if (execution.phase !== "baseline") errors.push(`${executionPath}.phase: expected baseline`);
-    if (execution.object !== record4.baseline_object) errors.push(`${executionPath}.object: must equal regression baseline_object`);
+    if (execution.object !== record5.baseline_object) errors.push(`${executionPath}.object: must equal regression baseline_object`);
     if (requiresRepositoryObjects) {
       const repositoryObject = validateRepositoryObject(
         execution.repository_object,
@@ -22664,7 +22664,7 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     "evidence_ref"
   ] : ["policy", "baseline_object", "closing_object", ...REGRESSION_COUNT_FIELDS, "evidence_ref"], path, errors);
   if (!control) return;
-  const record4 = await evidenceRef(
+  const record5 = await evidenceRef(
     files,
     base,
     control.evidence_ref,
@@ -22674,11 +22674,11 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     clock,
     "mister-clean.regression-delta"
   );
-  if (!record4) return;
+  if (!record5) return;
   const recordPath = `${path}.evidence_ref`;
-  const schemaVersion = String(record4.schema_version ?? "");
+  const schemaVersion = String(record5.schema_version ?? "");
   const modern = isRuntimeBoundRegressionSchema(schemaVersion);
-  requireObject(record4, modern ? [
+  requireObject(record5, modern ? [
     "record_type",
     "schema_version",
     "policy",
@@ -22698,7 +22698,7 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     ...REGRESSION_COUNT_FIELDS.filter((field2) => field2 !== "action_checks"),
     "action_checks"
   ], recordPath, errors);
-  if (!(/* @__PURE__ */ new Set(["1.2", "1.3", "1.4", "1.5", REGRESSION_DELTA_SCHEMA_VERSION])).has(String(record4.schema_version ?? ""))) {
+  if (!(/* @__PURE__ */ new Set(["1.2", "1.3", "1.4", "1.5", REGRESSION_DELTA_SCHEMA_VERSION])).has(String(record5.schema_version ?? ""))) {
     errors.push(`${recordPath}.schema_version: expected 1.2, 1.3, 1.4, 1.5, or ${REGRESSION_DELTA_SCHEMA_VERSION}`);
   }
   const requiresRuntimeIdentity = modern;
@@ -22707,19 +22707,19 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
   if (clean && !requiresRuntimeIdentity) {
     errors.push(`${recordPath}.schema_version: CLEAN requires 1.5 or later runtime and repository-object binding`);
   }
-  if (record4.policy !== REGRESSION_POLICY) {
+  if (record5.policy !== REGRESSION_POLICY) {
     errors.push(`${recordPath}.policy: expected ${REGRESSION_POLICY}`);
   }
   for (const field2 of ["policy", "baseline_object", "closing_object"]) {
-    if (control[field2] !== record4[field2]) errors.push(`${recordPath}: bound regression record disagrees on ${field2}`);
+    if (control[field2] !== record5[field2]) errors.push(`${recordPath}: bound regression record disagrees on ${field2}`);
   }
   if (modern) {
     if (control.accounting_schema !== "1.5") errors.push(`${path}.accounting_schema: must equal 1.5 for regression schema ${schemaVersion}`);
-    errors.push(...schema15LegacyNumericFieldErrors({ ...record4, schema_version: "1.5" }, recordPath));
+    errors.push(...schema15LegacyNumericFieldErrors({ ...record5, schema_version: "1.5" }, recordPath));
     errors.push(...schema15LegacyNumericFieldErrors({ ...control, schema_version: "1.5" }, path));
   } else {
     for (const field2 of REGRESSION_COUNT_FIELDS) {
-      const recordValue = field2 === "action_checks" ? array2(record4.action_checks).length : record4[field2];
+      const recordValue = field2 === "action_checks" ? array2(record5.action_checks).length : record5[field2];
       if (control[field2] !== recordValue) errors.push(`${recordPath}: bound regression record disagrees on ${field2}`);
     }
   }
@@ -22727,21 +22727,21 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
   let closingRepositoryObject;
   if (requiresRepositoryObjects) {
     baselineRepositoryObject = validateRepositoryObject(
-      record4.baseline_repository_object,
+      record5.baseline_repository_object,
       `${recordPath}.baseline_repository_object`,
       errors,
-      record4.baseline_object
+      record5.baseline_object
     );
     closingRepositoryObject = validateRepositoryObject(
-      record4.closing_repository_object,
+      record5.closing_repository_object,
       `${recordPath}.closing_repository_object`,
       errors,
-      record4.closing_object
+      record5.closing_object
     );
-    if (!stableEqual2(control.baseline_repository_object, record4.baseline_repository_object)) {
+    if (!stableEqual2(control.baseline_repository_object, record5.baseline_repository_object)) {
       errors.push(`${recordPath}: bound regression record disagrees on baseline_repository_object`);
     }
-    if (!stableEqual2(control.closing_repository_object, record4.closing_repository_object)) {
+    if (!stableEqual2(control.closing_repository_object, record5.closing_repository_object)) {
       errors.push(`${recordPath}: bound regression record disagrees on closing_repository_object`);
     }
   }
@@ -22751,8 +22751,8 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
   const startObject = startSnapshot?.object;
   const endObject = endSnapshot?.object;
   const closingCommit = object5(report.repo)?.commit;
-  if (record4.baseline_object !== startObject) errors.push(`${recordPath}.baseline_object: must equal successor start snapshot`);
-  if (record4.closing_object !== endObject) {
+  if (record5.baseline_object !== startObject) errors.push(`${recordPath}.baseline_object: must equal successor start snapshot`);
+  if (record5.closing_object !== endObject) {
     errors.push(`${recordPath}.closing_object: must equal successor end snapshot`);
   }
   if (requiresRepositoryObjects) {
@@ -22769,23 +22769,23 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     if (baselineRepositoryObject?.head_commit !== startCommit) {
       errors.push(`${recordPath}.baseline_repository_object.head_commit: must equal change_inventory.start_commit`);
     }
-  } else if (record4.closing_object !== closingCommit) {
+  } else if (record5.closing_object !== closingCommit) {
     errors.push(`${recordPath}.closing_object: legacy record must equal report repo.commit`);
   }
   if (!modern) {
     for (const field2 of REGRESSION_COUNT_FIELDS.filter((name) => name !== "action_checks")) {
-      if (!Number.isInteger(record4[field2]) || Number(record4[field2]) < 0) {
+      if (!Number.isInteger(record5[field2]) || Number(record5[field2]) < 0) {
         errors.push(`${recordPath}.${field2}: required nonnegative integer`);
       }
     }
-    const countsValid = REGRESSION_COUNT_FIELDS.filter((field2) => field2 !== "action_checks").every((field2) => Number.isInteger(record4[field2]) && Number(record4[field2]) >= 0);
+    const countsValid = REGRESSION_COUNT_FIELDS.filter((field2) => field2 !== "action_checks").every((field2) => Number.isInteger(record5[field2]) && Number(record5[field2]) >= 0);
     if (countsValid) {
-      const baselineExpected = Number(record4.baseline_paid) + Number(record4.baseline_open);
-      if (record4.baseline_findings !== baselineExpected) {
+      const baselineExpected = Number(record5.baseline_paid) + Number(record5.baseline_open);
+      if (record5.baseline_findings !== baselineExpected) {
         errors.push(`${recordPath}.baseline_findings: must equal baseline_paid + baseline_open (${baselineExpected})`);
       }
-      const closingExpected = Number(record4.baseline_open) + Number(record4.newly_discovered_preexisting_open) + Number(record4.concurrent_external_open) + Number(record4.introduced_by_run_open);
-      if (record4.closing_findings !== closingExpected) {
+      const closingExpected = Number(record5.baseline_open) + Number(record5.newly_discovered_preexisting_open) + Number(record5.concurrent_external_open) + Number(record5.introduced_by_run_open);
+      if (record5.closing_findings !== closingExpected) {
         errors.push(`${recordPath}.closing_findings: must equal all open origin buckets (${closingExpected})`);
       }
     }
@@ -22803,7 +22803,7 @@ async function loadRegressionValidationContext(bundle, report, manifest2, base, 
     errors,
     path,
     control,
-    record: record4,
+    record: record5,
     recordPath,
     modern,
     requiresRepositoryObjects,
@@ -22988,7 +22988,7 @@ async function validateRegressionActionChain(context) {
     clock,
     errors,
     path,
-    record: record4,
+    record: record5,
     recordPath,
     modern,
     requiresRepositoryObjects,
@@ -22997,8 +22997,8 @@ async function validateRegressionActionChain(context) {
     baselineRepositoryObject,
     closingRepositoryObject
   } = context;
-  if (!Array.isArray(record4.action_checks)) errors.push(`${recordPath}.action_checks: required array`);
-  const checks = array2(record4.action_checks);
+  if (!Array.isArray(record5.action_checks)) errors.push(`${recordPath}.action_checks: required array`);
+  const checks = array2(record5.action_checks);
   const manifestActions = array2(manifest2.actions).map(object5).filter((item) => !!item);
   const expectedActionIds = manifestActions.filter((action) => manifest2.execution_state === "executed" || action.status === "executed" || action.status === "failed").map((action) => action.id);
   const checkedActionIds = [];
@@ -23057,7 +23057,7 @@ async function validateRegressionActionChain(context) {
   let priorNativeEvidence;
   if (modern && hasChangedRepositoryBoundary) {
     priorNativeEvidence = await validateNativeGateControlRecord(
-      record4.baseline_native_gate_control,
+      record5.baseline_native_gate_control,
       `${recordPath}.baseline_native_gate_control`,
       baselineRepositoryObject,
       base,
@@ -23078,13 +23078,13 @@ async function validateRegressionActionChain(context) {
       for (const root of projection.roots) addExpectedRoot(root);
     }
   }
-  const requiresDetectorCoverage = record4.schema_version === "1.3" || record4.schema_version === "1.4" || modern;
-  const coverageRuntimeIdentitySha256 = requiresRuntimeIdentity ? object5(record4.detector_coverage)?.runtime_identity_sha256 : void 0;
+  const requiresDetectorCoverage = record5.schema_version === "1.3" || record5.schema_version === "1.4" || modern;
+  const coverageRuntimeIdentitySha256 = requiresRuntimeIdentity ? object5(record5.detector_coverage)?.runtime_identity_sha256 : void 0;
   const actionRequiredDetectorIds = requiresDetectorCoverage ? requiredDetectorIdsForPolicy(
-    object5(record4.detector_coverage)?.run_policy,
+    object5(record5.detector_coverage)?.run_policy,
     registryVersion
   ) ?? [] : [];
-  let expectedBeforeObject = record4.baseline_object;
+  let expectedBeforeObject = record5.baseline_object;
   let expectedBeforeRepositoryObject = baselineRepositoryObject;
   for (const [index, raw] of checks.entries()) {
     const checkPath = `${recordPath}.action_checks[${index}]`;
@@ -23242,7 +23242,7 @@ async function validateRegressionActionChain(context) {
       errors
     });
   }
-  if (requiresRepositoryObjects && expectedBeforeObject !== record4.closing_object) {
+  if (requiresRepositoryObjects && expectedBeforeObject !== record5.closing_object) {
     errors.push(`${recordPath}.action_checks: repository-object chain must terminate at regression closing_object`);
   }
   if (requiresRepositoryObjects && expectedBeforeRepositoryObject && closingRepositoryObject && !stableEqual2(expectedBeforeRepositoryObject, closingRepositoryObject)) {
@@ -23255,13 +23255,13 @@ async function validateRegressionActionChain(context) {
     errors.push(`${recordPath}.action_checks: exactly one interrupted boundary may appear, and only as the final observed action`);
   }
   if (!modern) {
-    if (introducedPaid !== record4.introduced_by_run_paid) {
+    if (introducedPaid !== record5.introduced_by_run_paid) {
       errors.push(`${recordPath}.introduced_by_run_paid: must equal action-check total (${introducedPaid})`);
     }
-    if (introducedOpen !== record4.introduced_by_run_open) {
+    if (introducedOpen !== record5.introduced_by_run_open) {
       errors.push(`${recordPath}.introduced_by_run_open: must equal action-check total (${introducedOpen})`);
     }
-    if (clean && record4.introduced_by_run_open !== 0) {
+    if (clean && record5.introduced_by_run_open !== 0) {
       errors.push(`${recordPath}.introduced_by_run_open: CLEAN requires zero`);
     }
   }
@@ -23299,7 +23299,7 @@ async function validateModernRegressionClosure(context, state) {
     allowPlaceholders,
     clock,
     errors,
-    record: record4,
+    record: record5,
     recordPath,
     modern,
     requiresRepositoryObjects,
@@ -23368,7 +23368,7 @@ async function validateModernRegressionClosure(context, state) {
       errors.push(`${debtPath}.origin.class: cleanup-introduced debt must be repaired or rolled back, never accepted as an exception`);
     }
   }
-  const coverage = object5(record4.detector_coverage);
+  const coverage = object5(record5.detector_coverage);
   for (const rawExecution of array2(coverage?.executions)) {
     const execution = object5(rawExecution);
     const sourceId = detectorById(String(execution?.detector_id ?? ""), registryVersion)?.detector;
@@ -23531,7 +23531,7 @@ async function validateModernRegressionClosure(context, state) {
           origin.baseline_replay_ref,
           debt,
           debtPath,
-          record4.baseline_object,
+          record5.baseline_object,
           baselineRepositoryObject,
           coverageRuntimeIdentitySha256,
           registryVersion,
@@ -23573,11 +23573,11 @@ async function validateModernRegressionClosure(context, state) {
     }
     for (const id of action.closing_observation_ids) closingObservationIds.add(id);
   }
-  if (checks.length === 0 && record4.baseline_object !== record4.closing_object) {
+  if (checks.length === 0 && record5.baseline_object !== record5.closing_object) {
     errors.push(`${recordPath}.action_checks: a changed closing object requires an exact ordered action-observation chain`);
   }
   const repoId = String(object5(report.repo)?.id ?? "");
-  const accountingErrors = validateRegressionAccounting(record4.accounting, {
+  const accountingErrors = validateRegressionAccounting(record5.accounting, {
     repo_id: repoId,
     baseline_observation_ids: [...baselineObservationIds].sort(compareCodePoints4),
     closing_observation_ids: [...closingObservationIds].sort(compareCodePoints4),
@@ -23683,13 +23683,13 @@ function parseLanguagePolicy(text3) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "expected a JSON object");
   }
-  const record4 = parsed;
-  const unknownKeys = Object.keys(record4).filter((key) => !POLICY_KEYS.has(key)).sort();
+  const record5 = parsed;
+  const unknownKeys = Object.keys(record5).filter((key) => !POLICY_KEYS.has(key)).sort();
   if (unknownKeys.length > 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `unknown key(s): ${unknownKeys.join(", ")}`);
-  if (record4.schema !== LANGUAGE_POLICY_SCHEMA) {
+  if (record5.schema !== LANGUAGE_POLICY_SCHEMA) {
     throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, `schema must be ${LANGUAGE_POLICY_SCHEMA}`);
   }
-  const forbid = stringList(record4.forbid_extensions, "forbid_extensions", true);
+  const forbid = stringList(record5.forbid_extensions, "forbid_extensions", true);
   if (forbid.length === 0) throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "forbid_extensions must not be empty");
   const malformed = forbid.filter((extension) => !EXTENSION.test(extension));
   if (malformed.length > 0) {
@@ -23697,8 +23697,8 @@ function parseLanguagePolicy(text3) {
   }
   return {
     forbid_extensions: [...new Set(forbid.map((extension) => extension.toLowerCase()))].sort(),
-    allow: stringList(record4.allow, "allow", false),
-    generated: stringList(record4.generated, "generated", false)
+    allow: stringList(record5.allow, "allow", false),
+    generated: stringList(record5.generated, "generated", false)
   };
 }
 function parseLangGuardAllow(text3) {
@@ -23825,14 +23825,14 @@ function map(value) {
   return value instanceof Map ? value : void 0;
 }
 function get(value, key) {
-  const record4 = map(value);
-  if (!record4) return void 0;
-  for (const [candidate, item] of record4) if (String(candidate) === key) return item;
+  const record5 = map(value);
+  if (!record5) return void 0;
+  for (const [candidate, item] of record5) if (String(candidate) === key) return item;
   return void 0;
 }
 function entries(value) {
-  const record4 = map(value);
-  return record4 ? [...record4.entries()].map(([key, item]) => [String(key), item]) : [];
+  const record5 = map(value);
+  return record5 ? [...record5.entries()].map(([key, item]) => [String(key), item]) : [];
 }
 function array3(value) {
   return Array.isArray(value) ? value : [];
@@ -25612,16 +25612,137 @@ async function runNativeGates(repository, discovery, evidenceDirectory, runOptio
   }
   if (failure !== void 0) throw failure;
   if (!partial) throw new Error("native gate execution ended without coverage");
-  const record4 = { ...partial, execution_lease: executionLease };
-  return { ...record4, coverage_sha256: identity2(record4) };
+  const record5 = { ...partial, execution_lease: executionLease };
+  return { ...record5, coverage_sha256: identity2(record5) };
 }
 
 // src/closeout/semantic-v2.ts
-import { verify } from "crypto";
+import { verify as verify2 } from "crypto";
 import { existsSync as existsSync8, lstatSync as lstatSync11, readFileSync as readFileSync10, readdirSync as readdirSync7, realpathSync as realpathSync7 } from "fs";
 import { isAbsolute as isAbsolute15, relative as relative14, resolve as resolve17, sep as sep13 } from "path";
-var HEX_64 = /^[0-9a-f]{64}$/u;
+
+// src/closeout/trust-root.ts
+import { createHash as createHash19, createPublicKey, verify } from "crypto";
+var TRUST_POLICY_PIN_ENV = "MISTER_CLEAN_TRUST_POLICY_SHA256";
+var TRUST_POLICY_PIN_FLAG = "--trust-policy-sha256";
+var TRUST_POLICY_RECORD_TYPE = "mister-clean.semantic-trust-policy";
+var HEX644 = /^[0-9a-f]{64}$/u;
 var ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
+var EXCEPTION_SIGNER_ROLES = /* @__PURE__ */ new Set(["owner", "principal"]);
+function record3(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function validIsoTimestamp(value) {
+  return typeof value === "string" && ISO_TIMESTAMP.test(value) && !Number.isNaN(Date.parse(value));
+}
+function trustPolicyPins(flags, environment) {
+  const pins = /* @__PURE__ */ new Set();
+  for (const value of flags) {
+    if (!HEX644.test(value)) throw new Error(`${TRUST_POLICY_PIN_FLAG} requires a lowercase SHA-256 hex digest`);
+    pins.add(value);
+  }
+  for (const value of (environment[TRUST_POLICY_PIN_ENV] ?? "").split(/[\s,]+/u).filter(Boolean)) {
+    if (!HEX644.test(value)) throw new Error(`${TRUST_POLICY_PIN_ENV} must hold lowercase SHA-256 hex digests separated by commas or whitespace`);
+    pins.add(value);
+  }
+  return [...pins].sort();
+}
+function trustPolicyPinError(boundSha256, pins) {
+  if (pins.includes(boundSha256)) return void 0;
+  return `trust policy sha256 ${boundSha256} matches no judge-supplied pin (pins: ${pins.length === 0 ? "none" : pins.join(", ")}); the judge pins the trust root with ${TRUST_POLICY_PIN_FLAG} <hex> or ${TRUST_POLICY_PIN_ENV}, never from the bundle`;
+}
+function parseTrustPolicy(bytes2) {
+  try {
+    const parsed = record3(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes2)));
+    if (parsed?.record_type !== TRUST_POLICY_RECORD_TYPE || parsed.schema_version !== "1.0" || !Array.isArray(parsed.keys)) return void 0;
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function trustKeyIdentity(key) {
+  try {
+    const parsed = createPublicKey(key.public_key_pem);
+    if (parsed.asymmetricKeyType !== "ed25519") return void 0;
+    return createHash19("sha256").update(parsed.export({ format: "der", type: "spki" })).digest("hex");
+  } catch {
+    return void 0;
+  }
+}
+function trustKeyWindowError(key, at) {
+  if (key.valid_to === void 0) return "has no valid_to; an open-ended trust-policy key is refused";
+  if (!validIsoTimestamp(key.valid_from) || !validIsoTimestamp(key.valid_to) || !validIsoTimestamp(at) || Date.parse(at) < Date.parse(key.valid_from) || Date.parse(at) > Date.parse(key.valid_to)) {
+    return "is outside its validity window";
+  }
+  return void 0;
+}
+function trustKeyIndependenceError(keys, verifyingKey, excludedActorIds) {
+  const identity4 = trustKeyIdentity(verifyingKey);
+  const excluded2 = new Set(excludedActorIds.filter((id) => typeof id === "string" && id.length > 0).map((id) => id.toLocaleLowerCase("und")));
+  const sameSigner = keys.filter((key) => key === verifyingKey || identity4 !== void 0 && trustKeyIdentity(key) === identity4);
+  const bound = sameSigner.some((key) => excluded2.has(String(key.actor_id).toLocaleLowerCase("und")) || Array.isArray(key.roles) && key.roles.includes("runner"));
+  return bound ? "the verifying key is bound to a runner or supervisor identity in the trust policy" : void 0;
+}
+var RULING_DEBT_BINDINGS = ["debt_key", "detector_finding_fingerprints", "observation_ids"];
+function sortedStrings(value) {
+  return Array.isArray(value) ? [...value].map(String).sort() : value;
+}
+function exceptionSignatureErrors(input) {
+  const { ruling, debt } = input;
+  if (!ruling) return { errors: ["the operator ruling could not be loaded"] };
+  const signature = record3(ruling.signature);
+  if (!signature) return { errors: ["unsigned: the operator ruling carries no owner or principal signature"] };
+  const errors = [];
+  if (signature.algorithm !== "Ed25519" || typeof signature.key_id !== "string" || typeof signature.signature_base64url !== "string") {
+    errors.push("the ruling signature must be {algorithm: Ed25519, key_id, signature_base64url}");
+  }
+  for (const field2 of RULING_DEBT_BINDINGS) {
+    if (canonicalJson(sortedStrings(ruling[field2]) ?? null) !== canonicalJson(sortedStrings(debt[field2] ?? (field2 === "debt_key" ? null : [])) ?? null)) {
+      errors.push(`the signed ruling's ${field2} differs from its debt's`);
+    }
+  }
+  if (!input.policyBytes) {
+    errors.push("the ruling names no loadable trust_policy_ref {path, sha256}");
+    return { errors };
+  }
+  const policySha256 = sha256Bytes(input.policyBytes);
+  const pinError = trustPolicyPinError(policySha256, input.pins);
+  if (pinError) {
+    errors.push(pinError);
+    return { errors };
+  }
+  const policy = parseTrustPolicy(input.policyBytes);
+  const key = policy?.keys.find((item) => item?.key_id === signature.key_id);
+  if (!key) {
+    errors.push("the signing key is not in the judge-pinned trust policy");
+    return { errors, pinUsed: policySha256 };
+  }
+  if (!Array.isArray(key.roles) || !key.roles.some((role) => EXCEPTION_SIGNER_ROLES.has(role))) {
+    errors.push("the signing key holds no owner or principal role in the trust policy");
+  }
+  if (key.actor_id !== ruling.actor) errors.push("the ruling actor is not the signing key's actor");
+  const windowError = trustKeyWindowError(key, String(ruling.at ?? ""));
+  if (windowError) errors.push(`the signing key ${windowError}`);
+  if (trustKeyIdentity(key) === void 0) errors.push("the signing key is not an Ed25519 public key");
+  else if (typeof signature.signature_base64url === "string") {
+    const { signature: _signature, ...unsigned } = ruling;
+    let valid = false;
+    try {
+      valid = verify(null, Buffer.from(canonicalJson(unsigned)), key.public_key_pem, Buffer.from(signature.signature_base64url, "base64url"));
+    } catch {
+      valid = false;
+    }
+    if (!valid) errors.push("the ruling signature does not verify over its canonical bytes");
+  }
+  return { errors, pinUsed: policySha256 };
+}
+function validateReceiptVerdict(input) {
+  return input.ok && input.live && input.reportVerdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
+}
+
+// src/closeout/semantic-v2.ts
+var HEX_64 = /^[0-9a-f]{64}$/u;
+var ISO_TIMESTAMP2 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
 var VERDICT_KEYS = /* @__PURE__ */ new Set(["disposition", "failed_cases", "passed_cases", "result", "verdict"]);
 var DIRECT_CHECKERS = {
   authoritative_projection: { id: "mister-clean/authoritative-projection", version: "2.0.0" },
@@ -25640,8 +25761,8 @@ function isInside2(root, path) {
   const relation = relative14(root, path);
   return relation === "" || relation !== ".." && !relation.startsWith(`..${sep13}`) && !isAbsolute15(relation);
 }
-function validIsoTimestamp(value) {
-  return ISO_TIMESTAMP.test(value) && !Number.isNaN(Date.parse(value));
+function validIsoTimestamp2(value) {
+  return ISO_TIMESTAMP2.test(value) && !Number.isNaN(Date.parse(value));
 }
 function sourceRef2(repository, rawRef) {
   const [rawPath, fragment = ""] = rawRef.split("#", 2);
@@ -25727,7 +25848,7 @@ function verifyEvidenceRefs(evidenceRoot, refs) {
   const errors = [];
   const root = realpathSync7(resolve17(evidenceRoot));
   for (const ref of refs) {
-    if (ref.store !== "evidence_bundle" || !validIsoTimestamp(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || isAbsolute15(ref.path) || ref.path === ".." || ref.path.startsWith("../") || !HEX_64.test(ref.sha256)) {
+    if (ref.store !== "evidence_bundle" || !validIsoTimestamp2(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || isAbsolute15(ref.path) || ref.path === ".." || ref.path.startsWith("../") || !HEX_64.test(ref.sha256)) {
       errors.push(`semantic evidence reference is malformed: ${ref.path || "<blank>"}`);
       continue;
     }
@@ -25773,7 +25894,7 @@ function verifyPackagedEvidenceRefs(files, refs) {
   const parsed = evidenceFilesMap(files);
   const errors = [...parsed.errors];
   for (const ref of refs) {
-    if (ref.store !== "evidence_bundle" || !validIsoTimestamp(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || !HEX_64.test(ref.sha256)) {
+    if (ref.store !== "evidence_bundle" || !validIsoTimestamp2(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || !HEX_64.test(ref.sha256)) {
       errors.push(`semantic evidence reference is malformed: ${ref.path || "<blank>"}`);
       continue;
     }
@@ -25787,7 +25908,7 @@ function createSemanticPlanV2(input) {
   if (!HEX_64.test(input.candidateSetSha256) || !HEX_64.test(input.repositoryObjectSha256)) {
     throw new Error("semantic v2 plan requires SHA-256 candidate-set and RepositoryObject bindings");
   }
-  if (!input.runId.trim() || !input.challengeNonce.trim() || !validIsoTimestamp(input.observedAt)) {
+  if (!input.runId.trim() || !input.challengeNonce.trim() || !validIsoTimestamp2(input.observedAt)) {
     throw new Error("semantic v2 plan requires run id, unique challenge nonce, and timezone-aware observed_at");
   }
   const repository = resolve17(input.repository);
@@ -25986,7 +26107,7 @@ function verifyRuntimeSemanticCandidateV2(input) {
       }
     }
   }
-  if (attestation.record_type !== "mister-clean.semantic-attestation" || attestation.schema_version !== "2.0" || !validIsoTimestamp(attestation.attested_at)) {
+  if (attestation.record_type !== "mister-clean.semantic-attestation" || attestation.schema_version !== "2.0" || !validIsoTimestamp2(attestation.attested_at)) {
     errors.push("semantic attestation record_type, schema_version, or attested_at is invalid");
   }
   const expectedBinding = {
@@ -26005,9 +26126,6 @@ function verifyRuntimeSemanticCandidateV2(input) {
     errors.push("semantic attestation evidence-root digest does not match the supplied evidence bundle");
   }
   errors.push(...verifyBoundEvidence(evidenceRefsIn(attestation)));
-  if (attestation.attester.actor_id === runnerActorId || attestation.attester.actor_id === observations.supervisor?.actor_id) {
-    errors.push("semantic attester must be independent of the runner and supervisor");
-  }
   const policySha256 = sha256Bytes(policyBytes);
   if (attestation.attester.independence_policy_sha256 !== policySha256) {
     errors.push("semantic attestation does not bind the external trust policy bytes");
@@ -26016,9 +26134,10 @@ function verifyRuntimeSemanticCandidateV2(input) {
   if (!key || key.actor_id !== attestation.attester.actor_id || !key.roles.includes(attestation.attester.role)) {
     errors.push("semantic attester is not authorized by the external trust policy");
   }
-  if (key && (!validIsoTimestamp(key.valid_from) || Date.parse(attestation.attested_at) < Date.parse(key.valid_from) || key.valid_to !== void 0 && (!validIsoTimestamp(key.valid_to) || Date.parse(attestation.attested_at) > Date.parse(key.valid_to)))) {
-    errors.push("semantic attester key is outside its validity window");
-  }
+  const independenceError = key && policy ? trustKeyIndependenceError(policy.keys, key, [runnerActorId, observations.supervisor?.actor_id]) : void 0;
+  if (independenceError) errors.push(`semantic attester must be independent of the runner and supervisor: ${independenceError}`);
+  const windowError = key ? trustKeyWindowError(key, attestation.attested_at) : void 0;
+  if (windowError) errors.push(`semantic attester key ${windowError}`);
   if (attestation.signature.algorithm !== "Ed25519" || attestation.signature.key_id !== attestation.attester.key_id) {
     errors.push("semantic attestation signature algorithm or key id is invalid");
   }
@@ -26029,7 +26148,7 @@ function verifyRuntimeSemanticCandidateV2(input) {
   if (key) {
     try {
       const signature = Buffer.from(attestation.signature.signature_base64url, "base64url");
-      if (!verify(null, Buffer.from(payload), key.public_key_pem, signature)) errors.push("semantic attestation signature is invalid");
+      if (!verify2(null, Buffer.from(payload), key.public_key_pem, signature)) errors.push("semantic attestation signature is invalid");
     } catch {
       errors.push("semantic attestation signature or public key is invalid");
     }
@@ -26130,12 +26249,12 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
   } else {
     const plan = evidencePackage.plan;
     const runtimeByCandidate = /* @__PURE__ */ new Map();
-    for (const record4 of evidencePackage.runtime_records) {
-      if (!record4 || typeof record4.candidate_id !== "string" || runtimeByCandidate.has(record4.candidate_id)) {
-        packageErrors.push(`semantic evidence package has a missing or duplicate runtime candidate: ${String(record4?.candidate_id ?? "<blank>")}`);
+    for (const record5 of evidencePackage.runtime_records) {
+      if (!record5 || typeof record5.candidate_id !== "string" || runtimeByCandidate.has(record5.candidate_id)) {
+        packageErrors.push(`semantic evidence package has a missing or duplicate runtime candidate: ${String(record5?.candidate_id ?? "<blank>")}`);
         continue;
       }
-      runtimeByCandidate.set(record4.candidate_id, record4);
+      runtimeByCandidate.set(record5.candidate_id, record5);
     }
     const plannedLegacyIds = new Set(plan.candidates.flatMap((candidate) => candidate.legacy_candidate_ids));
     for (const candidate of base.candidates) {
@@ -26159,17 +26278,17 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
         }
         continue;
       }
-      const record4 = runtimeByCandidate.get(planned.candidate_id);
-      if (!record4) {
+      const record5 = runtimeByCandidate.get(planned.candidate_id);
+      if (!record5) {
         findings.push(packageFinding(candidate, "semantic_probe_unexecuted", "verification_debt", "semantic v2 package omits supervised observations and independent attestation"));
         continue;
       }
       let result;
       try {
         result = verifyRuntimeSemanticCandidateV2({
-          attestation: record4.attestation,
-          evidenceFiles: record4.evidence_files,
-          observations: record4.observations,
+          attestation: record5.attestation,
+          evidenceFiles: record5.evidence_files,
+          observations: record5.observations,
           plan,
           repository: root,
           trustPolicyPath: externalTrustPolicyPath
@@ -26177,19 +26296,19 @@ function auditSemanticEvidencePackageV2(repository, packagePath, trustPolicyPath
       } catch (error) {
         result = { errors: [error instanceof Error ? error.message : String(error)], verdict: "verification_debt" };
       }
-      const statuses = record4.observations?.cases?.map((item) => item.exit_status) ?? [];
+      const statuses = record5.observations?.cases?.map((item) => item.exit_status) ?? [];
       const oneStatus = new Set(statuses).size === 1 ? statuses[0] ?? null : null;
       executions.push({
         candidate_id: candidate.id,
-        command_sha256: record4.observations?.runner?.argv_sha256 ?? "0".repeat(64),
-        evidence_sha256: record4.observations?.observations_sha256 ?? "0".repeat(64),
+        command_sha256: record5.observations?.runner?.argv_sha256 ?? "0".repeat(64),
+        evidence_sha256: record5.observations?.observations_sha256 ?? "0".repeat(64),
         executable: "v2-supervised-runtime",
         observed_status: oneStatus,
-        receipt_sha256: record4.attestation?.signature?.signed_payload_sha256 ?? "0".repeat(64),
+        receipt_sha256: record5.attestation?.signature?.signed_payload_sha256 ?? "0".repeat(64),
         result: result.verdict === "attested_satisfied" ? "pass" : result.verdict === "confirmed_failure" ? "fail" : "error"
       });
       if (result.verdict === "attested_satisfied") {
-        const evidenceRefs2 = record4.attestation.judgments.flatMap((judgment) => judgment.evidence_refs).map((ref) => ({ path: ref.path, sha256: ref.sha256 }));
+        const evidenceRefs2 = record5.attestation.judgments.flatMap((judgment) => judgment.evidence_refs).map((ref) => ({ path: ref.path, sha256: ref.sha256 }));
         resolutions.push({
           candidate_id: candidate.id,
           disposition: result.verdict,
@@ -26879,14 +26998,32 @@ async function loadLiveRegressionBoundary(report, bundlePath, repo, files, error
   const coverage = object5(regressionRecord?.detector_coverage);
   return { closingRepositoryObject, coverage };
 }
-async function validateLiveDetectors(report, bundlePath, repo, coverage, files, git2, errors) {
+async function ownerSignedExceptions(report, bundlePath, files, trust, errors) {
+  const base = dirname10(resolve19(bundlePath));
+  const signed = [];
+  for (const [index, rawDebt] of array2(report.completion_debts).entries()) {
+    const debt = object5(rawDebt);
+    if (debt?.state !== "accepted_exception" || debt.disposition !== "accepted_exception") continue;
+    const path = `$.report.completion_debts[${index}].exception`;
+    const loadErrors = [];
+    const ruling = (await loadRef(files, base, object5(debt.exception)?.ref, `${path}.ref`, loadErrors, false)).data;
+    const policyRef = object5(ruling?.trust_policy_ref);
+    const policyBytes = ruling?.signature !== void 0 && policyRef ? (await loadBytesRef(files, base, policyRef, `${path}.ruling.trust_policy_ref`, loadErrors, false)).bytes : void 0;
+    const verdict = exceptionSignatureErrors({ ruling, debt, policyBytes, pins: trust.pins });
+    if (verdict.pinUsed !== void 0) trust.used.add(verdict.pinUsed);
+    const reasons = [...loadErrors, ...verdict.errors];
+    if (reasons.length === 0) signed.push(debt);
+    else errors.push(`${path}: an accepted exception counts toward CLEAN only with an owner or principal Ed25519 signature under a judge-pinned trust policy; this one stays payable (${reasons.join("; ")})`);
+  }
+  return signed;
+}
+async function validateLiveDetectors(report, bundlePath, repo, coverage, files, git2, trust, errors) {
   const trackedPaths3 = (await git2.run(repo, ["ls-files", "-z"])).stdout.split("\0").filter(Boolean);
   const liveRunPolicy = createDetectorRunPolicy({ trackedShippablePathCount: trackedPaths3.length });
   if (!stableEqual2(coverage?.run_policy, liveRunPolicy)) {
     errors.push("$.live_detector_coverage.run_policy: recorded applicability differs from the live tracked shippable surface");
   }
-  const liveRegistryVersion = coverage?.registry_version === "5" ? "5" : DETECTOR_COVERAGE_SCHEMA_VERSION;
-  const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy, liveRegistryVersion) ?? [];
+  const liveRequiredDetectorIds = requiredDetectorIdsForPolicy(liveRunPolicy, DETECTOR_COVERAGE_SCHEMA_VERSION) ?? [];
   const executionFor = (detectorId) => array2(coverage?.executions).map(object5).find((execution) => execution?.detector_id === detectorId);
   const frozenInput = async (detectorId, kind) => {
     const execution = executionFor(detectorId);
@@ -26898,14 +27035,9 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
   const semanticManifest = await frozenInput("semantic_boundary", "semantic_probe_manifest");
   const semanticEvidencePackage = await frozenInput("semantic_boundary", "semantic_evidence_package");
   const semanticTrustPolicy = await frozenInput("semantic_boundary", "semantic_trust_policy");
-  const semanticExecution = executionFor("semantic_boundary");
-  const semanticResult = semanticExecution ? await loadRef(files, dirname10(resolve19(bundlePath)), semanticExecution.result_ref, "$.live_detector_coverage.semantic_boundary.result_ref", errors, false) : {};
-  const executeSemanticProbes = Number(semanticResult.data?.executed_probe_count ?? 0) > 0;
   const acceptedDetectorFindings = /* @__PURE__ */ new Set();
   const acceptedObservationIds = /* @__PURE__ */ new Set();
-  for (const rawDebt of array2(report.completion_debts)) {
-    const debt = object5(rawDebt);
-    if (debt?.state !== "accepted_exception" || debt.disposition !== "accepted_exception") continue;
+  for (const debt of await ownerSignedExceptions(report, bundlePath, files, trust, errors)) {
     for (const observationId2 of array2(debt.observation_ids)) {
       if (typeof observationId2 === "string" && HEX643.test(observationId2)) {
         acceptedObservationIds.add(observationId2);
@@ -26926,11 +27058,17 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
     semanticLive = auditSemanticRepository(repo);
   } else if (semanticEvidencePackage !== void 0 && semanticTrustPolicy !== void 0) {
     semanticLive = auditSemanticEvidencePackageV2(repo, semanticEvidencePackage, semanticTrustPolicy);
+    if (semanticLive.resolutions.some((resolution) => resolution.disposition === "attested_satisfied")) {
+      const policySha256 = sha2569(await files.readBytes(semanticTrustPolicy));
+      const pinError = trustPolicyPinError(policySha256, trust.pins);
+      if (pinError) errors.push(`$.live_detector_coverage.semantic_boundary.semantic_trust_policy: CLEAN rests on semantic v2 attestations, but ${pinError}`);
+      else trust.used.add(policySha256);
+    }
   } else {
-    semanticLive = auditSemanticRepository(repo, {
-      execute: executeSemanticProbes,
-      ...semanticManifest === void 0 ? {} : { manifestPath: semanticManifest }
-    });
+    if (semanticManifest !== void 0) {
+      errors.push("$.live_detector_coverage.semantic_boundary: the legacy v1 semantic probe manifest never counts toward CLEAN; bind a v2 evidence package and trust policy");
+    }
+    semanticLive = auditSemanticRepository(repo);
   }
   const liveDetectorFindings = [
     ["planning_graph", findingFingerprintsFromAudit("planning_graph", planningLive)],
@@ -26966,7 +27104,7 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
     }
     const payable = fingerprints.filter((fingerprint2) => !acceptedDetectorFindings.has(`${detectorId}\0${fingerprint2}`));
     if (payable.length !== 0) {
-      errors.push(`$.live_detector_coverage.${detectorId}: CLEAN requires zero payable findings after principal-ratified exceptions (got ${payable.length})`);
+      errors.push(`$.live_detector_coverage.${detectorId}: CLEAN requires zero payable findings after owner-signed exceptions (got ${payable.length})`);
     }
   }
   return acceptedObservationIds;
@@ -27036,7 +27174,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
           }
           const payableNative = liveFailureIds.filter((id) => !acceptedObservationIds.has(id));
           if (payableNative.length !== 0) {
-            errors.push(`$.live_native_gates.execution: CLEAN requires zero payable native-gate findings after principal-ratified exceptions (got ${payableNative.length})`);
+            errors.push(`$.live_native_gates.execution: CLEAN requires zero payable native-gate findings after owner-signed exceptions (got ${payableNative.length})`);
           }
         } finally {
           await rm4(evidenceDirectory, { recursive: true, force: true });
@@ -27054,7 +27192,7 @@ function validateLiveClosingRecheck(closingRepositoryObject, repo, errors) {
     if (!stableEqual2(verifiedLiveRepositoryObject, closingRepositoryObject) && !errors.includes(driftError)) errors.push(driftError);
   }
 }
-async function validateLive(bundle, report, manifest2, bundlePath, repo, ports, guardAuthorityPath, errors) {
+async function validateLive(bundle, report, manifest2, bundlePath, repo, ports, guardAuthorityPath, trust, errors) {
   const { files, git: git2 } = ports;
   if (!await files.exists(repo)) {
     errors.push(`$.live_repo: repository not found: ${repo}`);
@@ -27062,14 +27200,14 @@ async function validateLive(bundle, report, manifest2, bundlePath, repo, ports, 
   }
   if (manifest2.mode === "GUARD") {
     await validateGuardLiveAuthority(bundle, report, manifest2, bundlePath, repo, ports, guardAuthorityPath, errors);
-    return;
+    if (report.verdict !== "CLEAN") return;
   }
   try {
     const { head, subject, successor } = await validateLiveRepositoryAndTarget(bundle, report, repo, files, git2, errors);
     await validateLiveTopology(successor, repo, head, subject, ports, errors);
     await validateLiveSuccessorFiles(successor, manifest2, repo, subject, files, git2, errors);
     const { closingRepositoryObject, coverage } = await loadLiveRegressionBoundary(report, bundlePath, repo, files, errors);
-    const acceptedObservationIds = await validateLiveDetectors(report, bundlePath, repo, coverage, files, git2, errors);
+    const acceptedObservationIds = await validateLiveDetectors(report, bundlePath, repo, coverage, files, git2, trust, errors);
     await validateLiveNativeGates(successor, closingRepositoryObject, acceptedObservationIds, bundlePath, repo, files, errors);
     validateLiveClosingRecheck(closingRepositoryObject, repo, errors);
     void bundlePath;
@@ -27183,10 +27321,10 @@ async function validateCriteria(bundle, report, base, files, clean, allowPlaceho
   const reportIds = array2(report.acceptance_criteria).map((item) => object5(item)?.id).filter(text).sort();
   if (!stableEqual2([...ids].sort(), reportIds)) errors.push(`${path}.criteria_ids: must equal report acceptance_criteria ids`);
   const records = await Promise.all(refs.map((ref, index) => evidenceRef(files, base, ref, `${path}.source_refs[${index}]`, errors, allowPlaceholders, clock, "mister-clean.criteria-source")));
-  for (const [index, record4] of records.entries()) if (record4 && (!Array.isArray(record4.criteria_ids) || !array2(record4.criteria_ids).every(text))) {
+  for (const [index, record5] of records.entries()) if (record5 && (!Array.isArray(record5.criteria_ids) || !array2(record5.criteria_ids).every(text))) {
     errors.push(`${path}.source_refs[${index}]: criteria-source record requires criteria_ids string array`);
   }
-  if (!allowPlaceholders && !records.some((record4) => record4 !== void 0 && record4.request_ref === bundle.request_ref && record4.request_sha256 === proof.request_sha256 && stableEqual2([...array2(record4.criteria_ids)].sort(), [...ids].sort()))) {
+  if (!allowPlaceholders && !records.some((record5) => record5 !== void 0 && record5.request_ref === bundle.request_ref && record5.request_sha256 === proof.request_sha256 && stableEqual2([...array2(record5.criteria_ids)].sort(), [...ids].sort()))) {
     errors.push(`${path}.source_refs: no bound source record matches request_ref, request_sha256, and criteria_ids`);
   }
 }
@@ -27413,8 +27551,8 @@ async function validateChangeInventory(bundle, report, manifest2, repo, git2, ba
     }
     if (clean && ids.length === 0) errors.push(`${cpath}: CLEAN requires an executed action mapping`);
     if (change.exclusion !== null) {
-      const record4 = await evidenceRef(files, base, change.exclusion, `${cpath}.exclusion`, errors, allowPlaceholders, clock, "mister-clean.change-exclusion");
-      if (record4 && !allowPlaceholders) {
+      const record5 = await evidenceRef(files, base, change.exclusion, `${cpath}.exclusion`, errors, allowPlaceholders, clock, "mister-clean.change-exclusion");
+      if (record5 && !allowPlaceholders) {
         const expected = {
           path: change.path,
           status: change.status,
@@ -27422,8 +27560,8 @@ async function validateChangeInventory(bundle, report, manifest2, repo, git2, ba
           subject_commit: subject,
           request_sha256: object5(bundle.criteria_discovery)?.request_sha256
         };
-        for (const [key, value] of Object.entries(expected)) if (record4[key] !== value) errors.push(`${cpath}.exclusion: bound exclusion disagrees on ${key}`);
-        for (const key of ["actor", "scope", "rationale"]) if (!text(record4[key])) errors.push(`${cpath}.exclusion: requires ${key}`);
+        for (const [key, value] of Object.entries(expected)) if (record5[key] !== value) errors.push(`${cpath}.exclusion: bound exclusion disagrees on ${key}`);
+        for (const key of ["actor", "scope", "rationale"]) if (!text(record5[key])) errors.push(`${cpath}.exclusion: requires ${key}`);
       }
     }
   }
@@ -27548,11 +27686,16 @@ async function validateBundleUnsafe(data, bundlePath, options = {}) {
   await validateSuccessor(bundle, report, base, ports.files, clean, allowPlaceholders, clock, errors);
   if (!allowPlaceholders) for (const path of findPlaceholders(bundle)) errors.push(`${path}: unresolved template placeholder`);
   const liveGuard = manifest2.mode === "GUARD" && !allowPlaceholders;
+  const trust = { pins: options.trustPolicyPins ?? [], used: /* @__PURE__ */ new Set() };
   if (clean || liveGuard) {
     if (clean && !verifyLive) errors.push("$.verdict: CLEAN requires live verification");
-    else if (verifyLive && repo && repoExists) await validateLive(bundle, report, manifest2, bundlePath, repo, ports, options.guardAuthorityPath, errors);
+    else if (verifyLive && repo && repoExists) await validateLive(bundle, report, manifest2, bundlePath, repo, ports, options.guardAuthorityPath, trust, errors);
   }
-  return { errors, ok: errors.length === 0 };
+  return {
+    errors,
+    ok: errors.length === 0,
+    ...trust.used.size === 0 ? {} : { trustPolicyPinsUsed: [...trust.used].sort() }
+  };
 }
 async function validateBundle(data, bundlePath, options = {}) {
   try {
@@ -27575,12 +27718,12 @@ async function validateBundleFile(bundlePath, options = {}) {
 }
 
 // src/closeout/prepare.ts
-import { createHash as createHash20 } from "crypto";
+import { createHash as createHash21 } from "crypto";
 import { existsSync as existsSync10, mkdirSync as mkdirSync2, readFileSync as readFileSync12, writeFileSync as writeFileSync4 } from "fs";
 import { dirname as dirname12, join as join13, resolve as resolve22 } from "path";
 
 // src/closeout/retirements.ts
-import { createHash as createHash19 } from "crypto";
+import { createHash as createHash20 } from "crypto";
 import { existsSync as existsSync9, readdirSync as readdirSync8, readFileSync as readFileSync11, statSync as statSync2 } from "fs";
 import { isAbsolute as isAbsolute19, join as join12, normalize as normalize2, resolve as resolve21, sep as sep15 } from "path";
 var RETIREMENT_RECORD_TYPE = "mister-clean.retirement";
@@ -27617,33 +27760,33 @@ function readJsonRecord(repository, relativePath, refusals) {
   const absolute = join12(repository, relativePath);
   try {
     const parsed = JSON.parse(readFileSync11(absolute, "utf8"));
-    const record4 = object5(parsed);
-    if (!record4) refusals.push(`${relativePath}: expected a JSON object`);
-    return record4;
+    const record5 = object5(parsed);
+    if (!record5) refusals.push(`${relativePath}: expected a JSON object`);
+    return record5;
   } catch (error) {
     refusals.push(`${relativePath}: cannot be read as JSON (${error instanceof Error ? error.message : String(error)})`);
     return void 0;
   }
 }
 function sha256FileBytes(absolute) {
-  return createHash19("sha256").update(readFileSync11(absolute)).digest("hex");
+  return createHash20("sha256").update(readFileSync11(absolute)).digest("hex");
 }
 function readRetirements(repository) {
   const refusals = [];
   const records = [];
   for (const relativePath of censusInputPaths(repository, RETIREMENT_DIRECTORY)) {
-    const record4 = readJsonRecord(repository, relativePath, refusals);
-    if (!record4) continue;
-    if (record4.record_type !== RETIREMENT_RECORD_TYPE) {
+    const record5 = readJsonRecord(repository, relativePath, refusals);
+    if (!record5) continue;
+    if (record5.record_type !== RETIREMENT_RECORD_TYPE) {
       refusals.push(`${relativePath}: record_type must be ${RETIREMENT_RECORD_TYPE}`);
       continue;
     }
-    if (record4.schema_version !== RETIREMENT_SCHEMA_VERSION) {
+    if (record5.schema_version !== RETIREMENT_SCHEMA_VERSION) {
       refusals.push(`${relativePath}: schema_version must be ${RETIREMENT_SCHEMA_VERSION}`);
       continue;
     }
-    if (!nonempty(record4.slug)) refusals.push(`${relativePath}: slug is required`);
-    const roots = array2(record4.roots);
+    if (!nonempty(record5.slug)) refusals.push(`${relativePath}: slug is required`);
+    const roots = array2(record5.roots);
     if (!roots || roots.length === 0) {
       refusals.push(`${relativePath}: roots must list at least one repository-relative path`);
       continue;
@@ -27658,7 +27801,7 @@ function readRetirements(repository) {
       normalizedRoots.push(normalized);
     }
     if (normalizedRoots.length !== roots.length) continue;
-    const ruling = object5(record4.ruling);
+    const ruling = object5(record5.ruling);
     if (!ruling) {
       refusals.push(`${relativePath}: ruling is required (this record cites a ruling, it is not one)`);
       continue;
@@ -27697,7 +27840,7 @@ function readRetirements(repository) {
     records.push({
       record_path: relativePath,
       record_sha256: sha256FileBytes(join12(repository, relativePath)),
-      slug: String(record4.slug),
+      slug: String(record5.slug),
       roots: [...new Set(normalizedRoots)].sort(),
       ruling: {
         author: String(ruling.author),
@@ -27721,15 +27864,15 @@ function applyRetirements(debts, records) {
     if (records.length === 0) return debt;
     const paths = (array2(debt.affected_paths) ?? []).filter((value) => typeof value === "string").map((value) => value.replaceAll("\\", "/"));
     if (paths.length === 0) return debt;
-    for (const record4 of records) {
-      const root = record4.roots.find((candidate) => paths.some((path) => isUnder(path, candidate)));
+    for (const record5 of records) {
+      const root = record5.roots.find((candidate) => paths.some((path) => isUnder(path, candidate)));
       if (!root) continue;
       if (PAYABLE_CLASSES.has(String(debt.class))) {
-        refusals.push(`${record4.record_path}: ${String(debt.id)} is ${String(debt.class)}, which stays payable and cannot be retired`);
+        refusals.push(`${record5.record_path}: ${String(debt.id)} is ${String(debt.class)}, which stays payable and cannot be retired`);
         continue;
       }
-      const key = `${record4.record_path}\0${root}`;
-      const application = applied.get(key) ?? { record_path: record4.record_path, slug: record4.slug, root, debt_ids: [] };
+      const key = `${record5.record_path}\0${root}`;
+      const application = applied.get(key) ?? { record_path: record5.record_path, slug: record5.slug, root, debt_ids: [] };
       application.debt_ids.push(String(debt.id));
       applied.set(key, application);
       return {
@@ -27737,11 +27880,11 @@ function applyRetirements(debts, records) {
         state: "accepted_exception",
         disposition: "accepted_exception",
         exception: {
-          actor: record4.ruling.author,
-          at: record4.ruling.at,
-          ref: record4.ruling.evidence,
+          actor: record5.ruling.author,
+          at: record5.ruling.at,
+          ref: record5.ruling.evidence,
           scope: `retired root ${root}`,
-          rationale: record4.ruling.scope
+          rationale: record5.ruling.scope
         }
       };
     }
@@ -27754,17 +27897,17 @@ function readPublicSafetyExemptions(repository) {
   const refusals = [];
   const entries2 = [];
   for (const relativePath of censusInputPaths(repository, PUBLIC_SAFETY_EXEMPTION_DIRECTORY)) {
-    const record4 = readJsonRecord(repository, relativePath, refusals);
-    if (!record4) continue;
-    if (record4.record_type !== PUBLIC_SAFETY_EXEMPTION_RECORD_TYPE) {
+    const record5 = readJsonRecord(repository, relativePath, refusals);
+    if (!record5) continue;
+    if (record5.record_type !== PUBLIC_SAFETY_EXEMPTION_RECORD_TYPE) {
       refusals.push(`${relativePath}: record_type must be ${PUBLIC_SAFETY_EXEMPTION_RECORD_TYPE}`);
       continue;
     }
-    if (record4.schema_version !== PUBLIC_SAFETY_EXEMPTION_SCHEMA_VERSION) {
+    if (record5.schema_version !== PUBLIC_SAFETY_EXEMPTION_SCHEMA_VERSION) {
       refusals.push(`${relativePath}: schema_version must be ${PUBLIC_SAFETY_EXEMPTION_SCHEMA_VERSION}`);
       continue;
     }
-    const rows = array2(record4.entries);
+    const rows = array2(record5.entries);
     if (!rows || rows.length === 0) {
       refusals.push(`${relativePath}: entries must list at least one exemption`);
       continue;
@@ -27822,7 +27965,7 @@ function asObject(value, path) {
   return value;
 }
 function sha25611(value) {
-  return createHash20("sha256").update(value).digest("hex");
+  return createHash21("sha256").update(value).digest("hex");
 }
 function isoTimestamp3(date) {
   return date.toISOString();
@@ -28123,7 +28266,7 @@ async function collectPrepareEvidence(options, mode) {
         execution.command.cwd
       );
       const passed = execution.state === "passed";
-      const record4 = {
+      const record5 = {
         record_type: "mister-clean.gate-result",
         gate_id: execution.gate_id,
         object: nativeGateCoverage.closing_repository_object.sha256,
@@ -28141,7 +28284,7 @@ async function collectPrepareEvidence(options, mode) {
         stdout_ref: { ...execution.stdout_ref, path: `native-gate-output/${execution.stdout_ref.path}` },
         stderr_ref: { ...execution.stderr_ref, path: `native-gate-output/${execution.stderr_ref.path}` }
       };
-      writeJson(join13(bundleDirectory, path), record4);
+      writeJson(join13(bundleDirectory, path), record5);
       return {
         id: execution.gate_id,
         kind: execution.kind,
@@ -28377,11 +28520,11 @@ async function collectPrepareTopology(context) {
 }
 function stageRetirementRulings(repository, bundleDirectory, retirements) {
   const staged = /* @__PURE__ */ new Set();
-  for (const record4 of retirements) {
-    const { path, sha256: sha25614 } = record4.ruling.evidence;
+  for (const record5 of retirements) {
+    const { path, sha256: sha25614 } = record5.ruling.evidence;
     if (staged.has(path)) continue;
     const bytes2 = readFileSync12(resolve22(repository, path));
-    const observed = createHash20("sha256").update(bytes2).digest("hex");
+    const observed = createHash21("sha256").update(bytes2).digest("hex");
     if (observed !== sha25614) {
       throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25614}`);
     }
@@ -28394,9 +28537,9 @@ function stageRetirementRulings(repository, bundleDirectory, retirements) {
 function bindRetirementRulings(debts, bundleDirectory, requestSha256, applications, retirements) {
   const sourceByDebt = /* @__PURE__ */ new Map();
   for (const application of applications) {
-    const record4 = retirements.find((candidate) => candidate.record_path === application.record_path);
-    if (!record4) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
-    for (const id of application.debt_ids) sourceByDebt.set(id, { path: record4.record_path, sha256: record4.record_sha256 });
+    const record5 = retirements.find((candidate) => candidate.record_path === application.record_path);
+    if (!record5) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
+    for (const id of application.debt_ids) sourceByDebt.set(id, { path: record5.record_path, sha256: record5.record_sha256 });
   }
   return debts.map((debt) => {
     const exception = debt.exception;
@@ -28721,21 +28864,21 @@ function assemblePrepareReport(context) {
   ];
   const retirementOutcome = applyRetirements(completionDebts, retirements);
   const retirementApplications = retirementOutcome.applications.map((application) => {
-    const record4 = retirements.find((candidate) => candidate.record_path === application.record_path);
-    if (!record4) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
-    return { ...application, record_sha256: record4.record_sha256 };
+    const record5 = retirements.find((candidate) => candidate.record_path === application.record_path);
+    if (!record5) throw new Error(`retirement application cites an unread record: ${application.record_path}`);
+    return { ...application, record_sha256: record5.record_sha256 };
   });
   const ratificationDebts = retirementRatifications(retirementApplications).map((ratification) => {
-    const record4 = retirements.find((candidate) => candidate.record_path === ratification.record_path);
-    if (!record4) throw new Error(`retirement application cites an unread record: ${ratification.record_path}`);
+    const record5 = retirements.find((candidate) => candidate.record_path === ratification.record_path);
+    if (!record5) throw new Error(`retirement application cites an unread record: ${ratification.record_path}`);
     return baselineDebt(repoId, {
-      id: `DEBT-RETIREMENT-RATIFICATION-${sha25611(Buffer.from(record4.record_path, "utf8")).slice(0, 16).toUpperCase()}`,
+      id: `DEBT-RETIREMENT-RATIFICATION-${sha25611(Buffer.from(record5.record_path, "utf8")).slice(0, 16).toUpperCase()}`,
       class: "retirement_ratification",
       observation_count: 1,
       affected_paths: [...ratification.roots],
-      affected_refs: [record4.record_path, record4.ruling.evidence.path],
-      repair_boundary: `decision:${record4.record_path}`,
-      procedure: `${RETIREMENT_RATIFICATION_NOTE}. ${ratification.debt_ids.length} debt(s) under ${ratification.roots.join(", ")} are held as accepted_exception on the strength of ${record4.record_path}, which names ${JSON.stringify(record4.ruling.author)} but which any committer can write. An owner must ratify the retirement, or it must be withdrawn, before the run can be CLEAN.`,
+      affected_refs: [record5.record_path, record5.ruling.evidence.path],
+      repair_boundary: `decision:${record5.record_path}`,
+      procedure: `${RETIREMENT_RATIFICATION_NOTE}. ${ratification.debt_ids.length} debt(s) under ${ratification.roots.join(", ")} are held as accepted_exception on the strength of ${record5.record_path}, which names ${JSON.stringify(record5.ruling.author)} but which any committer can write. An owner must ratify the retirement, or it must be withdrawn, before the run can be CLEAN.`,
       state: "open",
       disposition: "decision_or_coordination_required",
       evidence: []
@@ -29171,7 +29314,7 @@ function assemblePrepareBundle(context) {
 }
 
 // src/closeout/repository-boundaries.ts
-import { createHash as createHash21 } from "crypto";
+import { createHash as createHash22 } from "crypto";
 import { execFileSync as execFileSync6 } from "child_process";
 import { lstatSync as lstatSync12, readFileSync as readFileSync13 } from "fs";
 import { extname as extname5, join as join14, normalize as normalize3, posix as posix3, resolve as resolve23 } from "path";
@@ -29179,7 +29322,7 @@ var SOURCE_EXTENSIONS2 = /* @__PURE__ */ new Set([".bash", ".cjs", ".go", ".js",
 var FORBIDDEN_MAP_KEYS = Object.freeze(["__proto__", "constructor", "prototype"]);
 var INVENTORY_PATH = ".mister-clean/repository-boundaries.json";
 function digest3(value) {
-  return createHash21("sha256").update(value, "utf8").digest("hex");
+  return createHash22("sha256").update(value, "utf8").digest("hex");
 }
 function finding3(rule, path, detail, relatedPaths = []) {
   const related_paths = [...new Set(relatedPaths)].sort();
@@ -29356,11 +29499,11 @@ function wireContractErrors(contract, value) {
   const errors = [];
   if (contract.observed_version !== contract.expected_version) errors.push("producer version does not match expected_version");
   if (value === null || Array.isArray(value) || typeof value !== "object") return [...errors, "fixture root is not an object map"];
-  const record4 = value;
-  for (const key of FORBIDDEN_MAP_KEYS) if (Object.prototype.hasOwnProperty.call(record4, key)) errors.push(`fixture contains forbidden map key ${key}`);
-  for (const key of contract.required_keys ?? []) if (!Object.prototype.hasOwnProperty.call(record4, key)) errors.push(`fixture is missing required key ${key}`);
+  const record5 = value;
+  for (const key of FORBIDDEN_MAP_KEYS) if (Object.prototype.hasOwnProperty.call(record5, key)) errors.push(`fixture contains forbidden map key ${key}`);
+  for (const key of contract.required_keys ?? []) if (!Object.prototype.hasOwnProperty.call(record5, key)) errors.push(`fixture is missing required key ${key}`);
   const exactRowKeys = contract.row_keys === void 0 ? void 0 : [...contract.row_keys].sort();
-  for (const [mapKey, rows] of Object.entries(record4)) {
+  for (const [mapKey, rows] of Object.entries(record5)) {
     if (!Array.isArray(rows)) {
       errors.push(`map entry ${mapKey} is not an array`);
       continue;
@@ -29386,8 +29529,8 @@ function externalContracts(root, paths) {
   } catch (error) {
     return { count: 0, findings: [finding3("topology_inventory_invalid", INVENTORY_PATH, error instanceof Error ? error.message : String(error))] };
   }
-  const record4 = data !== null && typeof data === "object" && !Array.isArray(data) ? data : void 0;
-  const contracts = record4?.schema_version === "1.0" && Array.isArray(record4.external_producers) ? record4.external_producers : void 0;
+  const record5 = data !== null && typeof data === "object" && !Array.isArray(data) ? data : void 0;
+  const contracts = record5?.schema_version === "1.0" && Array.isArray(record5.external_producers) ? record5.external_producers : void 0;
   if (!contracts) return { count: 0, findings: [finding3("topology_inventory_invalid", INVENTORY_PATH, "inventory requires schema_version 1.0 and external_producers array")] };
   const findings = [];
   for (const [index, raw] of contracts.entries()) {
@@ -29479,7 +29622,7 @@ import { hostname } from "os";
 import { dirname as dirname14, join as join16, posix as pathPosix2 } from "path";
 
 // src/closeout/action-lifecycle-runtime.ts
-import { createHash as createHash22, randomUUID as randomUUID5 } from "crypto";
+import { createHash as createHash23, randomUUID as randomUUID5 } from "crypto";
 import {
   closeSync as closeSync4,
   copyFileSync,
@@ -29493,7 +29636,7 @@ import {
   writeFileSync as writeFileSync5
 } from "fs";
 import { dirname as dirname13, isAbsolute as isAbsolute20, join as join15, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
-var HEX644 = /^[0-9a-f]{64}$/;
+var HEX645 = /^[0-9a-f]{64}$/;
 function object6(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
   return value;
@@ -29512,8 +29655,8 @@ function clone(value) {
 function canonical3(value) {
   if (Array.isArray(value)) return `[${value.map(canonical3).join(",")}]`;
   if (value && typeof value === "object") {
-    const record4 = value;
-    return `{${Object.keys(record4).sort().map((key) => `${JSON.stringify(key)}:${canonical3(record4[key])}`).join(",")}}`;
+    const record5 = value;
+    return `{${Object.keys(record5).sort().map((key) => `${JSON.stringify(key)}:${canonical3(record5[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -29534,7 +29677,7 @@ function jsonBytes(value) {
 `;
 }
 function digestBytes(value) {
-  return createHash22("sha256").update(value).digest("hex");
+  return createHash23("sha256").update(value).digest("hex");
 }
 function readJson2(path) {
   return object6(JSON.parse(readFileSync14(path, "utf8")), path);
@@ -29556,17 +29699,17 @@ function digestRef2(base, path) {
   const absolute = resolveContained(base, path, "evidence path");
   return { path, sha256: sha256File2(absolute) };
 }
-function writeEvidenceRecord(context, path, record4) {
+function writeEvidenceRecord(context, path, record5) {
   const absolute = resolveContained(context.base, path, "action evidence path");
   mkdirSync3(dirname13(absolute), { recursive: true, mode: 448 });
-  writeFileSync5(absolute, jsonBytes(record4), { encoding: "utf8", mode: 384, flag: "wx" });
+  writeFileSync5(absolute, jsonBytes(record5), { encoding: "utf8", mode: 384, flag: "wx" });
   return digestRef2(context.base, path);
 }
 function readBoundEvidenceRecord(context, rawRef, label) {
   const ref = object6(rawRef, label);
   const path = text2(ref.path, `${label}.path`);
   const expected = text2(ref.sha256, `${label}.sha256`);
-  if (!HEX644.test(expected)) throw new Error(`${label}.sha256: required lowercase SHA-256`);
+  if (!HEX645.test(expected)) throw new Error(`${label}.sha256: required lowercase SHA-256`);
   const absolute = resolveContained(context.base, path, `${label}.path`);
   const actual = sha256File2(absolute);
   if (actual !== expected) throw new Error(`${label}.sha256: digest mismatch`);
@@ -29961,10 +30104,10 @@ function rebaseDigestRefs(value, prefix) {
   const visit = (input) => {
     if (Array.isArray(input)) return input.map(visit);
     if (!input || typeof input !== "object") return input;
-    const record4 = input;
+    const record5 = input;
     const output = {};
-    const digestReference = typeof record4.path === "string" && typeof record4.sha256 === "string" && HEX644.test(record4.sha256) && !("commit" in record4);
-    for (const [key, child] of Object.entries(record4)) {
+    const digestReference = typeof record5.path === "string" && typeof record5.sha256 === "string" && HEX645.test(record5.sha256) && !("commit" in record5);
+    for (const [key, child] of Object.entries(record5)) {
       output[key] = digestReference && key === "path" ? `${prefix}/${String(child)}` : visit(child);
     }
     return output;
@@ -30195,7 +30338,7 @@ function writeActionResult(context, lifecycle2, after, status, observedAt, hygie
   const absolute = resolveContained(context.base, path, "action result path");
   const command = `mister-clean action finish ${JSON.stringify(context.base)} --id ${JSON.stringify(action.id)} --status ${status}`;
   const result = status === "closed" ? "closed without open action-introduced observations" : "interrupted with action-introduced observations preserved";
-  const record4 = {
+  const record5 = {
     record_type: "mister-clean.action-result",
     action_id: action.id,
     kind: action.kind,
@@ -30206,7 +30349,7 @@ function writeActionResult(context, lifecycle2, after, status, observedAt, hygie
     observed_at: observedAt,
     hygiene
   };
-  writeFileSync6(absolute, jsonBytes(record4), { encoding: "utf8", mode: 384 });
+  writeFileSync6(absolute, jsonBytes(record5), { encoding: "utf8", mode: 384 });
   return {
     kind: actionEvidenceKind(action.kind),
     object: after.sha256,
@@ -30337,7 +30480,7 @@ function lifecycleSnapshot(context, lifecycle2) {
 }
 async function beginAction(options) {
   if (!ACTION_ID.test(options.id)) throw new Error("--id must match [A-Za-z0-9][A-Za-z0-9._-]{0,127}");
-  if (!HEX644.test(options.debtKey)) throw new Error("--debt-key must be a lowercase SHA-256 root-debt key");
+  if (!HEX645.test(options.debtKey)) throw new Error("--debt-key must be a lowercase SHA-256 root-debt key");
   const kind = text2(options.kind, "--kind");
   if (SPECIALIZED_ACTION_PROTOCOLS[kind]) {
     throw new Error(
@@ -30858,12 +31001,12 @@ var nodeCloseoutEngine = {
 
 // src/mister-clean-invocation-journal.ts
 import { appendFileSync, existsSync as existsSync13, mkdirSync as mkdirSync5, readFileSync as readFileSync17 } from "fs";
-import { createHash as createHash25, randomUUID as randomUUID7 } from "crypto";
+import { createHash as createHash26, randomUUID as randomUUID7 } from "crypto";
 import { basename as basename14, dirname as dirname16, isAbsolute as isAbsolute22 } from "path";
 
 // src/sealed-segments.ts
 import { chmodSync as chmodSync2, existsSync as existsSync12, readFileSync as readFileSync16, renameSync as renameSync4, statSync as statSync5, writeFileSync as writeFileSync7 } from "fs";
-import { createHash as createHash24 } from "crypto";
+import { createHash as createHash25 } from "crypto";
 import { basename as basename13, dirname as dirname15, join as join17 } from "path";
 var SEGMENT_MANIFEST_RECORD_TYPE = "mister-clean.segment-manifest";
 var SEGMENT_MANIFEST_SCHEMA_VERSION = "1";
@@ -30904,7 +31047,7 @@ function readSegmentFile(path) {
   return readFileSync16(path);
 }
 function sha25612(bytes2) {
-  return createHash24("sha256").update(bytes2).digest("hex");
+  return createHash25("sha256").update(bytes2).digest("hex");
 }
 function segmentLines(text3, label) {
   if (text3.length === 0) return [];
@@ -30927,16 +31070,16 @@ function parseManifest2(layout) {
   } catch {
     throw new SegmentStoreInvalidError(`segment manifest ${basename13(layout.manifestPath)} is not valid JSON`);
   }
-  const record4 = parsed;
-  if (!record4 || record4.record_type !== SEGMENT_MANIFEST_RECORD_TYPE || record4.schema_version !== SEGMENT_MANIFEST_SCHEMA_VERSION || !Array.isArray(record4.segments)) {
+  const record5 = parsed;
+  if (!record5 || record5.record_type !== SEGMENT_MANIFEST_RECORD_TYPE || record5.schema_version !== SEGMENT_MANIFEST_SCHEMA_VERSION || !Array.isArray(record5.segments)) {
     throw new SegmentStoreInvalidError(`segment manifest ${basename13(layout.manifestPath)} is not a ${SEGMENT_MANIFEST_RECORD_TYPE}/${SEGMENT_MANIFEST_SCHEMA_VERSION}`);
   }
-  for (const [index, segment] of record4.segments.entries()) {
+  for (const [index, segment] of record5.segments.entries()) {
     if (segment.file !== layout.sealedFile(index + 1) || !/^[0-9a-f]{64}$/u.test(String(segment.sha256))) {
       throw new SegmentStoreInvalidError(`segment manifest entry ${index + 1} must name ${layout.sealedFile(index + 1)} with its sha256`);
     }
   }
-  return record4;
+  return record5;
 }
 function recordSealedSegment(layout, manifest2, ordinal, summarize, sealedAt) {
   const file = layout.sealedFile(ordinal);
@@ -31025,23 +31168,23 @@ function parseJournalLine(line, at) {
     throw new Error(`Mister Clean invocation journal is not valid JSONL at ${at}`);
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error(`Mister Clean invocation journal has an invalid receipt at ${at}`);
-  const record4 = parsed;
-  if (record4.record_type !== "mister-clean.invocation-receipt" || record4.schema_version !== "1.0") throw new Error(`Mister Clean invocation journal has an invalid receipt at ${at}`);
-  if (record4.event === "started") {
-    const current = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_status", "evaluation_run_event_id"]);
-    const legacy = sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_run_event_id"]);
-    if (!current && !legacy || typeof record4.invocation_id !== "string" || typeof record4.command !== "string" || typeof record4.argv_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(record4.argv_sha256) || typeof record4.observed_at !== "string" || record4.identity_provenance !== "UNOBSERVED" || record4.evaluation_run_event_id !== null || current && record4.evaluation_status !== "PENDING_IDENTITY_EVALUATION") throw new Error(`Mister Clean invocation journal has an invalid start receipt at ${at}`);
-    const canonical4 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
+  const record5 = parsed;
+  if (record5.record_type !== "mister-clean.invocation-receipt" || record5.schema_version !== "1.0") throw new Error(`Mister Clean invocation journal has an invalid receipt at ${at}`);
+  if (record5.event === "started") {
+    const current = sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_status", "evaluation_run_event_id"]);
+    const legacy = sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_run_event_id"]);
+    if (!current && !legacy || typeof record5.invocation_id !== "string" || typeof record5.command !== "string" || typeof record5.argv_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(record5.argv_sha256) || typeof record5.observed_at !== "string" || record5.identity_provenance !== "UNOBSERVED" || record5.evaluation_run_event_id !== null || current && record5.evaluation_status !== "PENDING_IDENTITY_EVALUATION") throw new Error(`Mister Clean invocation journal has an invalid start receipt at ${at}`);
+    const canonical4 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
     if (line !== canonicalJson(canonical4)) throw new Error(`Mister Clean invocation journal has a non-canonical receipt at ${at}`);
-    return { event: "started", value: { invocation_id: record4.invocation_id, command: record4.command, argv_sha256: record4.argv_sha256, observed_at: record4.observed_at, receipt_sha256: sha25613(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null } };
+    return { event: "started", value: { invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, receipt_sha256: sha25613(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null } };
   }
-  if (record4.event === "finished") {
-    if (!sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "status", "exit_code", "observed_at"]) || typeof record4.invocation_id !== "string" || record4.run_event_id !== null && typeof record4.run_event_id !== "string" || record4.status !== "SUCCEEDED" && record4.status !== "FAILED" || typeof record4.exit_code !== "number" || !Number.isInteger(record4.exit_code) || record4.exit_code < 0 || record4.exit_code > 255 || record4.status === "SUCCEEDED" && record4.exit_code !== 0 || record4.status === "FAILED" && record4.exit_code === 0 || typeof record4.observed_at !== "string" || !canonicalTimestamp2(record4.observed_at) || line !== canonicalJson(record4)) {
+  if (record5.event === "finished") {
+    if (!sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "status", "exit_code", "observed_at"]) || typeof record5.invocation_id !== "string" || record5.run_event_id !== null && typeof record5.run_event_id !== "string" || record5.status !== "SUCCEEDED" && record5.status !== "FAILED" || typeof record5.exit_code !== "number" || !Number.isInteger(record5.exit_code) || record5.exit_code < 0 || record5.exit_code > 255 || record5.status === "SUCCEEDED" && record5.exit_code !== 0 || record5.status === "FAILED" && record5.exit_code === 0 || typeof record5.observed_at !== "string" || !canonicalTimestamp2(record5.observed_at) || line !== canonicalJson(record5)) {
       throw new Error(`Mister Clean invocation journal has an invalid terminal receipt at ${at}`);
     }
-    return { event: "finished", invocation_id: record4.invocation_id, terminal: { status: record4.status, exit_code: record4.exit_code, observed_at: record4.observed_at, run_event_id: record4.run_event_id } };
+    return { event: "finished", invocation_id: record5.invocation_id, terminal: { status: record5.status, exit_code: record5.exit_code, observed_at: record5.observed_at, run_event_id: record5.run_event_id } };
   }
-  if (record4.event !== "evaluation_run_linked" || !sameKeys(record4, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "observed_at"]) || typeof record4.invocation_id !== "string" || typeof record4.run_event_id !== "string" || typeof record4.observed_at !== "string" || line !== canonicalJson(record4)) {
+  if (record5.event !== "evaluation_run_linked" || !sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "observed_at"]) || typeof record5.invocation_id !== "string" || typeof record5.run_event_id !== "string" || typeof record5.observed_at !== "string" || line !== canonicalJson(record5)) {
     throw new Error(`Mister Clean invocation journal has an invalid receipt at ${at}`);
   }
   return { event: "evaluation_run_linked" };
@@ -31066,12 +31209,12 @@ function canonicalTimestamp2(value) {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
-function sameKeys(record4, expected) {
-  const keys = Object.keys(record4).sort((left, right) => left.localeCompare(right));
+function sameKeys(record5, expected) {
+  const keys = Object.keys(record5).sort((left, right) => left.localeCompare(right));
   return keys.length === expected.length && keys.every((key) => expected.includes(key));
 }
 function sha25613(value) {
-  return createHash25("sha256").update(value, "utf8").digest("hex");
+  return createHash26("sha256").update(value, "utf8").digest("hex");
 }
 var AppendOnlyLocalMisterCleanInvocationJournal = class {
   /** The live segment: the journal's historical path. */
@@ -31120,15 +31263,15 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
     if (!canonicalTimestamp2(input.occurred_at)) throw new Error("Mister Clean terminal receipt requires a canonical timestamp");
     this.#append({ record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "finished", invocation_id: input.invocation_id, run_event_id: input.run_event_id, status: input.status, exit_code: input.exit_code, observed_at: input.occurred_at });
   }
-  #append(record4) {
+  #append(record5) {
     sealLiveSegmentIfFull(this.#segments, {
-      incomingBytes: new TextEncoder().encode(`${canonicalJson(record4)}
+      incomingBytes: new TextEncoder().encode(`${canonicalJson(record5)}
 `).byteLength,
       maxSize: this.#segmentMaxBytes,
       summarize: summarizeJournalSegment,
       betweenSealSteps: this.#betweenSealSteps
     });
-    appendFileSync(this.#path, `${canonicalJson(record4)}
+    appendFileSync(this.#path, `${canonicalJson(record5)}
 `, { encoding: "utf8", flag: "a", mode: 384 });
   }
   /** Construction reads the manifest (completing an interrupted seal) and the
@@ -31152,7 +31295,7 @@ function journalFromEnvironment(environment) {
 }
 
 // src/closeout/finding-anchors.ts
-import { createHash as createHash26 } from "crypto";
+import { createHash as createHash27 } from "crypto";
 import { spawnSync as spawnSync6 } from "child_process";
 import { existsSync as existsSync14, readFileSync as readFileSync18, statSync as statSync6 } from "fs";
 import { join as join18 } from "path";
@@ -31166,7 +31309,7 @@ var RECEIPT_FAMILIES = [
 ];
 var ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy", "file"];
 function sha256Text(value) {
-  return createHash26("sha256").update(value, "utf8").digest("hex");
+  return createHash27("sha256").update(value, "utf8").digest("hex");
 }
 function receiptFingerprint(input) {
   return sha256Text([input.family, input.rule, input.path, input.anchor_kind, input.content_sha256].join("\0"));
@@ -31232,18 +31375,18 @@ function githubActionsRefText(repository, ref) {
   return { text: row === void 0 ? "" : row.trim(), line };
 }
 function receiptFindingsFromAudit(family, audit, context) {
-  const record4 = object7(audit);
-  if (!record4) throw new Error(`${family}: audit result must be an object`);
+  const record5 = object7(audit);
+  if (!record5) throw new Error(`${family}: audit result must be an object`);
   if (family === "repository_boundaries") {
-    if (record4.record_type !== "mister-clean.repository-boundary-audit" || !Array.isArray(record4.findings)) {
+    if (record5.record_type !== "mister-clean.repository-boundary-audit" || !Array.isArray(record5.findings)) {
       throw new Error("repository_boundaries: audit result is not canonical");
     }
   } else if (family === "public_safety") {
-    if (!Array.isArray(record4.findings) || !Array.isArray(record4.unassessed)) {
+    if (!Array.isArray(record5.findings) || !Array.isArray(record5.unassessed)) {
       throw new Error("public_safety: audit result is not canonical");
     }
   } else if (family === "language_policy") {
-    if (record4.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record4.findings)) {
+    if (record5.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record5.findings)) {
       throw new Error("language_policy: audit result is not canonical");
     }
   } else {
@@ -31255,12 +31398,12 @@ function receiptFindingsFromAudit(family, audit, context) {
   const pathsToHash = /* @__PURE__ */ new Set();
   const semanticCandidatePaths = /* @__PURE__ */ new Map();
   if (family === "semantic_boundary") {
-    for (const candidate of record4.candidates) {
+    for (const candidate of record5.candidates) {
       const row = object7(candidate);
       if (row && typeof row.id === "string" && typeof row.path === "string") semanticCandidatePaths.set(row.id, row.path);
     }
   }
-  const sourceRows = family === "planning_graph" ? record4.raw_findings : family === "public_safety" ? [...record4.findings, ...record4.unassessed] : record4.findings;
+  const sourceRows = family === "planning_graph" ? record5.raw_findings : family === "public_safety" ? [...record5.findings, ...record5.unassessed] : record5.findings;
   for (const value of sourceRows) {
     const row = object7(value);
     if (!row) throw new Error(`${family}: finding must be an object`);
@@ -31330,7 +31473,7 @@ function receiptFindingsFromAudit(family, audit, context) {
       rule = asString(row.code, "semantic_boundary.code");
       legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
       kind = "whole_repo";
-      content = asString(record4.candidate_set_sha256, "semantic_boundary.candidate_set_sha256");
+      content = asString(record5.candidate_set_sha256, "semantic_boundary.candidate_set_sha256");
       probe = { kind, content_sha256: content };
     }
     const fingerprint2 = receiptFingerprint({ family, rule, path, anchor_kind: kind, content_sha256: content });
@@ -31358,7 +31501,7 @@ import { dirname as dirname18, join as join20, relative as relative19, resolve a
 
 // src/run-receipt.ts
 import { appendFileSync as appendFileSync2, existsSync as existsSync15, mkdirSync as mkdirSync6, readFileSync as readFileSync19, realpathSync as realpathSync10, writeFileSync as writeFileSync8 } from "fs";
-import { createHash as createHash27, randomUUID as randomUUID8 } from "crypto";
+import { createHash as createHash28, randomUUID as randomUUID8 } from "crypto";
 import { dirname as dirname17, isAbsolute as isAbsolute23, join as join19, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
 var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
 var RUN_RECEIPT_SCHEMA_VERSION = "1";
@@ -31388,13 +31531,13 @@ var RunReceiptInvalidError = class extends Error {
   }
   code = "run_receipt_invalid";
 };
-var HEX645 = /^[0-9a-f]{64}$/u;
+var HEX646 = /^[0-9a-f]{64}$/u;
 var HEX40 = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
 function object8(value) {
   return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
-function exactKeys(record4, expected, path, errors) {
-  const keys = Object.keys(record4).sort();
+function exactKeys(record5, expected, path, errors) {
+  const keys = Object.keys(record5).sort();
   const wanted = [...expected].sort();
   if (keys.length === wanted.length && keys.every((key, index) => key === wanted[index])) return true;
   errors.push(`${path}: expected exactly the keys ${wanted.join(",")}; got ${keys.join(",")}`);
@@ -31411,16 +31554,17 @@ function isRepositoryRelativePath(path) {
   return path === "." || path.split("/").every((part) => part.length > 0 && part !== "..");
 }
 function sha256Hex(value) {
-  return createHash27("sha256").update(value, "utf8").digest("hex");
+  return createHash28("sha256").update(value, "utf8").digest("hex");
 }
 function repositoryIdSha256(repositoryId) {
   return sha256Hex(repositoryId);
 }
 function runReceiptErrors(value) {
   const errors = [];
-  const record4 = object8(value);
-  if (!record4) return ["$: expected object"];
-  if (!exactKeys(record4, [
+  const record5 = object8(value);
+  if (!record5) return ["$: expected object"];
+  const validating = record5.mode === "VALIDATE";
+  if (!exactKeys(record5, [
     "record_type",
     "schema_version",
     "receipt_id",
@@ -31437,15 +31581,30 @@ function runReceiptErrors(value) {
     "verdict",
     "exit_code",
     "observed_at",
-    "finished_at"
+    "finished_at",
+    ...validating ? ["validation"] : []
   ], "$", errors)) return errors;
-  if (record4.record_type !== RUN_RECEIPT_RECORD_TYPE) errors.push(`$.record_type: expected ${RUN_RECEIPT_RECORD_TYPE}`);
-  if (record4.schema_version !== RUN_RECEIPT_SCHEMA_VERSION) errors.push(`$.schema_version: expected ${RUN_RECEIPT_SCHEMA_VERSION}`);
-  if (typeof record4.receipt_id !== "string" || !/^mc-receipt:[0-9a-f-]{36}$/u.test(record4.receipt_id)) errors.push("$.receipt_id: expected mc-receipt:<uuid>");
-  if (record4.invocation_id !== null && (typeof record4.invocation_id !== "string" || !record4.invocation_id.startsWith("mc-invocation:"))) errors.push("$.invocation_id: expected null or mc-invocation:<uuid>");
-  if (!["CLOSE", "AUDIT", "SECOND_PASS"].includes(String(record4.mode))) errors.push("$.mode: expected CLOSE, AUDIT or SECOND_PASS");
-  if (typeof record4.repository_id !== "string" || !/^(?:remote:[^\s/]+\/.+|local-path-sha256:[0-9a-f]{64})$/u.test(record4.repository_id)) errors.push("$.repository_id: expected remote:<host>/<path> or local-path-sha256:<hex>");
-  const subject = object8(record4.subject);
+  if (record5.record_type !== RUN_RECEIPT_RECORD_TYPE) errors.push(`$.record_type: expected ${RUN_RECEIPT_RECORD_TYPE}`);
+  if (record5.schema_version !== RUN_RECEIPT_SCHEMA_VERSION) errors.push(`$.schema_version: expected ${RUN_RECEIPT_SCHEMA_VERSION}`);
+  if (typeof record5.receipt_id !== "string" || !/^mc-receipt:[0-9a-f-]{36}$/u.test(record5.receipt_id)) errors.push("$.receipt_id: expected mc-receipt:<uuid>");
+  if (record5.invocation_id !== null && (typeof record5.invocation_id !== "string" || !record5.invocation_id.startsWith("mc-invocation:"))) errors.push("$.invocation_id: expected null or mc-invocation:<uuid>");
+  if (!["CLOSE", "AUDIT", "SECOND_PASS", "VALIDATE"].includes(String(record5.mode))) errors.push("$.mode: expected CLOSE, AUDIT, SECOND_PASS or VALIDATE");
+  if (record5.verdict === "CLEAN" && !validating) errors.push("$.verdict: CLEAN is recorded only by a VALIDATE receipt");
+  if (validating && record5.verdict !== "CLEAN" && record5.verdict !== "NOT_CLEAN") errors.push("$.verdict: a VALIDATE receipt records CLEAN or NOT_CLEAN");
+  const validation = object8(record5.validation);
+  if (validating && (!validation || !exactKeys(validation, ["bundle_sha256", "subject_commit", "trust_policy_pins", "trust_policy_pins_used", "live"], "$.validation", errors))) {
+    if (!validation) errors.push("$.validation: expected object");
+  } else if (validation) {
+    if (typeof validation.bundle_sha256 !== "string" || !HEX646.test(validation.bundle_sha256)) errors.push("$.validation.bundle_sha256: expected lowercase SHA-256");
+    if (validation.subject_commit !== null && (typeof validation.subject_commit !== "string" || !HEX40.test(validation.subject_commit))) errors.push("$.validation.subject_commit: expected null or Git object id");
+    for (const field2 of ["trust_policy_pins", "trust_policy_pins_used"]) {
+      const pins = validation[field2];
+      if (!Array.isArray(pins) || pins.some((pin) => typeof pin !== "string" || !HEX646.test(pin))) errors.push(`$.validation.${field2}: expected lowercase SHA-256 array`);
+    }
+    if (typeof validation.live !== "boolean") errors.push("$.validation.live: expected boolean");
+  }
+  if (typeof record5.repository_id !== "string" || !/^(?:remote:[^\s/]+\/.+|local-path-sha256:[0-9a-f]{64})$/u.test(record5.repository_id)) errors.push("$.repository_id: expected remote:<host>/<path> or local-path-sha256:<hex>");
+  const subject = object8(record5.subject);
   if (subject && exactKeys(subject, ["repository_object", "head_commit", "head_tree"], "$.subject", errors)) {
     if (typeof subject.head_commit !== "string" || !HEX40.test(subject.head_commit)) errors.push("$.subject.head_commit: expected Git object id");
     if (typeof subject.head_tree !== "string" || !HEX40.test(subject.head_tree)) errors.push("$.subject.head_tree: expected Git object id");
@@ -31453,15 +31612,15 @@ function runReceiptErrors(value) {
     if (subject.repository_object !== null) {
       if (!repositoryObject || !exactKeys(repositoryObject, ["record_type", "schema_version", "head_commit", "surface", "entry_count", "sha256"], "$.subject.repository_object", errors)) {
         if (!repositoryObject) errors.push("$.subject.repository_object: expected null or RepositoryObject 1.0");
-      } else if (repositoryObject.record_type !== "mister-clean.repository-object" || repositoryObject.schema_version !== "1.0" || repositoryObject.surface !== "tracked_and_nonignored" || !Number.isInteger(repositoryObject.entry_count) || typeof repositoryObject.sha256 !== "string" || !HEX645.test(repositoryObject.sha256) || repositoryObject.head_commit !== subject.head_commit) {
+      } else if (repositoryObject.record_type !== "mister-clean.repository-object" || repositoryObject.schema_version !== "1.0" || repositoryObject.surface !== "tracked_and_nonignored" || !Number.isInteger(repositoryObject.entry_count) || typeof repositoryObject.sha256 !== "string" || !HEX646.test(repositoryObject.sha256) || repositoryObject.head_commit !== subject.head_commit) {
         errors.push("$.subject.repository_object: expected RepositoryObject 1.0 bound to subject.head_commit");
       }
     }
   } else if (!subject) errors.push("$.subject: expected object");
-  if (typeof record4.dirty !== "boolean") errors.push("$.dirty: expected boolean");
-  if (typeof record4.detector_registry_sha256 !== "string" || !HEX645.test(record4.detector_registry_sha256)) errors.push("$.detector_registry_sha256: expected lowercase SHA-256");
-  if (typeof record4.runtime_identity_sha256 !== "string" || !HEX645.test(record4.runtime_identity_sha256)) errors.push("$.runtime_identity_sha256: expected lowercase SHA-256");
-  const agent = object8(record4.agent);
+  if (typeof record5.dirty !== "boolean") errors.push("$.dirty: expected boolean");
+  if (typeof record5.detector_registry_sha256 !== "string" || !HEX646.test(record5.detector_registry_sha256)) errors.push("$.detector_registry_sha256: expected lowercase SHA-256");
+  if (typeof record5.runtime_identity_sha256 !== "string" || !HEX646.test(record5.runtime_identity_sha256)) errors.push("$.runtime_identity_sha256: expected lowercase SHA-256");
+  const agent = object8(record5.agent);
   if (agent && exactKeys(agent, ["identity_status", "card_ref", "source"], "$.agent", errors)) {
     if (!["receipt", "title_only", "contract_only", "unobserved"].includes(String(agent.identity_status))) errors.push("$.agent.identity_status: expected receipt, title_only, contract_only or unobserved");
     if (agent.card_ref !== null && (typeof agent.card_ref !== "string" || agent.card_ref.length === 0 || isAbsolute23(agent.card_ref) || agent.card_ref.includes("/"))) errors.push("$.agent.card_ref: expected null or an opaque reference without path separators");
@@ -31469,9 +31628,9 @@ function runReceiptErrors(value) {
     if (agent.identity_status === "unobserved" && (agent.card_ref !== null || agent.source !== null)) errors.push("$.agent: unobserved identity carries no card_ref or source");
     if (agent.identity_status !== "unobserved" && (agent.card_ref === null || agent.source === null)) errors.push("$.agent: an observed identity requires card_ref and source");
   } else if (!agent) errors.push("$.agent: expected object");
-  const families = Array.isArray(record4.families) ? record4.families : void 0;
+  const families = Array.isArray(record5.families) ? record5.families : void 0;
   if (!families || families.some((family) => !RECEIPT_FAMILIES.includes(family)) || new Set(families).size !== families.length) errors.push("$.families: expected unique receipt families");
-  const findings = Array.isArray(record4.findings) ? record4.findings : void 0;
+  const findings = Array.isArray(record5.findings) ? record5.findings : void 0;
   if (!findings) errors.push("$.findings: expected array");
   const seen = /* @__PURE__ */ new Set();
   for (const [index, value2] of (findings ?? []).entries()) {
@@ -31481,7 +31640,7 @@ function runReceiptErrors(value) {
       if (!finding4) errors.push(`${path}: expected object`);
       continue;
     }
-    if (typeof finding4.fingerprint !== "string" || !HEX645.test(finding4.fingerprint)) errors.push(`${path}.fingerprint: expected lowercase SHA-256`);
+    if (typeof finding4.fingerprint !== "string" || !HEX646.test(finding4.fingerprint)) errors.push(`${path}.fingerprint: expected lowercase SHA-256`);
     else if (seen.has(finding4.fingerprint)) errors.push(`${path}.fingerprint: duplicate`);
     else seen.add(finding4.fingerprint);
     if (!RECEIPT_FAMILIES.includes(finding4.family)) errors.push(`${path}.family: unknown family`);
@@ -31489,19 +31648,19 @@ function runReceiptErrors(value) {
     if (typeof finding4.rule !== "string" || finding4.rule.length === 0) errors.push(`${path}.rule: required`);
     if (typeof finding4.path !== "string" || !isRepositoryRelativePath(finding4.path)) errors.push(`${path}.path: expected a repository-relative path`);
     if (finding4.severity !== null && typeof finding4.severity !== "string") errors.push(`${path}.severity: expected string or null`);
-    if (typeof finding4.legacy_fingerprint !== "string" || !HEX645.test(finding4.legacy_fingerprint)) errors.push(`${path}.legacy_fingerprint: expected lowercase SHA-256`);
+    if (typeof finding4.legacy_fingerprint !== "string" || !HEX646.test(finding4.legacy_fingerprint)) errors.push(`${path}.legacy_fingerprint: expected lowercase SHA-256`);
     const anchor = object8(finding4.anchor);
     if (anchor && exactKeys(anchor, ["kind", "blob_oid", "content_sha256", "line_hint"], `${path}.anchor`, errors)) {
       if (!ANCHOR_KINDS.includes(anchor.kind)) errors.push(`${path}.anchor.kind: unknown anchor kind`);
       if (anchor.blob_oid !== null && (typeof anchor.blob_oid !== "string" || !HEX40.test(anchor.blob_oid))) errors.push(`${path}.anchor.blob_oid: expected null or Git object id`);
-      if (typeof anchor.content_sha256 !== "string" || !HEX645.test(anchor.content_sha256)) errors.push(`${path}.anchor.content_sha256: expected lowercase SHA-256`);
+      if (typeof anchor.content_sha256 !== "string" || !HEX646.test(anchor.content_sha256)) errors.push(`${path}.anchor.content_sha256: expected lowercase SHA-256`);
       if (anchor.line_hint !== null && (!Number.isInteger(anchor.line_hint) || Number(anchor.line_hint) < 1)) errors.push(`${path}.anchor.line_hint: expected null or positive integer`);
     } else if (!anchor) errors.push(`${path}.anchor: expected object`);
   }
-  if (!["CLEAN", "NOT_CLEAN", "AUDIT_ONLY"].includes(String(record4.verdict))) errors.push("$.verdict: expected CLEAN, NOT_CLEAN or AUDIT_ONLY");
-  if (!Number.isInteger(record4.exit_code) || Number(record4.exit_code) < 0 || Number(record4.exit_code) > 255) errors.push("$.exit_code: expected 0..255");
-  if (!canonicalTimestamp3(record4.observed_at)) errors.push("$.observed_at: expected canonical ISO timestamp");
-  if (!canonicalTimestamp3(record4.finished_at)) errors.push("$.finished_at: expected canonical ISO timestamp");
+  if (!["CLEAN", "NOT_CLEAN", "AUDIT_ONLY"].includes(String(record5.verdict))) errors.push("$.verdict: expected CLEAN, NOT_CLEAN or AUDIT_ONLY");
+  if (!Number.isInteger(record5.exit_code) || Number(record5.exit_code) < 0 || Number(record5.exit_code) > 255) errors.push("$.exit_code: expected 0..255");
+  if (!canonicalTimestamp3(record5.observed_at)) errors.push("$.observed_at: expected canonical ISO timestamp");
+  if (!canonicalTimestamp3(record5.finished_at)) errors.push("$.finished_at: expected canonical ISO timestamp");
   return errors;
 }
 function receiptPrivacyViolations(receipt) {
@@ -31557,11 +31716,11 @@ function indexEntries(text3, label, live) {
     } catch {
       throw new RunReceiptInvalidError([`receipt index is not valid JSONL at ${at}`]);
     }
-    const record4 = object8(parsed);
-    if (!record4 || typeof record4.receipt_id !== "string" || typeof record4.repository_id_sha256 !== "string" || typeof record4.path !== "string") {
+    const record5 = object8(parsed);
+    if (!record5 || typeof record5.receipt_id !== "string" || typeof record5.repository_id_sha256 !== "string" || typeof record5.path !== "string") {
       throw new RunReceiptInvalidError([`receipt index has an invalid entry at ${at}`]);
     }
-    return record4;
+    return record5;
   });
 }
 function summarizeReceiptIndexSegment(lines2) {
@@ -31860,7 +32019,8 @@ function assembleRunReceipt(input) {
     verdict: input.verdict,
     exit_code: input.exit_code,
     observed_at: input.observed_at,
-    finished_at: input.finished_at
+    finished_at: input.finished_at,
+    ...input.validation === void 0 ? {} : { validation: input.validation }
   };
 }
 function runReadOnlyFamilies(capture, root, families, options = {}) {
@@ -31942,7 +32102,7 @@ function baselineFromReceipt(receipt) {
 }
 function resolveEarlierBaseline(store, repositoryId, against) {
   if (against === void 0) {
-    const entries2 = store.forRepository(repositoryId).filter((entry) => entry.mode !== "SECOND_PASS");
+    const entries2 = store.forRepository(repositoryId).filter((entry) => entry.mode !== "SECOND_PASS" && entry.mode !== "VALIDATE");
     const latest = entries2.at(-1) ?? store.forRepository(repositoryId).at(-1);
     if (latest === void 0) throw new Error("no earlier receipt for this repository; pass --against <receipt_id|bundle>");
     return baselineFromReceipt(store.read(latest.receipt_id));
@@ -31979,12 +32139,12 @@ function runSecondPass(input) {
   });
   const receiptPath = input.store.write(receipt, capture.repository);
   const history = input.store.forRepository(capture.repository_id).map((entry) => {
-    const record4 = input.store.read(entry.receipt_id);
+    const record5 = input.store.read(entry.receipt_id);
     return {
-      receipt_id: record4.receipt_id,
-      subject_sha256: record4.subject.repository_object?.sha256 ?? null,
-      families: record4.families,
-      findings: record4.findings.map((finding4) => ({ fingerprint: finding4.fingerprint, family: finding4.family }))
+      receipt_id: record5.receipt_id,
+      subject_sha256: record5.subject.repository_object?.sha256 ?? null,
+      families: record5.families,
+      findings: record5.findings.map((finding4) => ({ fingerprint: finding4.fingerprint, family: finding4.family }))
     };
   });
   const rows = classifySecondPass({ earlier, current: anchored, git: input.git ?? gitPortFor(capture.repository), flaky: flakyFingerprints(history) });
@@ -32073,7 +32233,7 @@ function inside2(root, candidate) {
 function readJson3(path) {
   return JSON.parse(readFileSync22(path, "utf8"));
 }
-function record3(value) {
+function record4(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 async function runSemantic(args, io) {
@@ -32091,8 +32251,8 @@ async function runSemantic(args, io) {
     assertNoArgs(args);
     if (inside2(repository, outputPath)) throw new UsageError("semantic v2 plan output must be outside the audited repository");
     if (existsSync18(outputPath)) throw new UsageError("semantic v2 plan output already exists");
-    const proposal = record3(readJson3(proposalsPath));
-    const rawCases = record3(proposal?.cases);
+    const proposal = record4(readJson3(proposalsPath));
+    const rawCases = record4(proposal?.cases);
     if (proposal?.record_type !== "mister-clean.semantic-case-proposals" || proposal.schema_version !== "1.0" || !rawCases) {
       throw new UsageError("--case-proposals must be a mister-clean.semantic-case-proposals schema 1.0 record");
     }
@@ -32256,7 +32416,19 @@ async function runAction(args, io, runtimeAttestation) {
   io.stdout(`${status.toLocaleUpperCase("und")} action=${result.actionId} object=${result.repositoryObject.sha256} bundle=${result.bundlePath}`);
   return 0;
 }
-async function runValidate(args, io, runtimeAttestation) {
+function boundReport(bundlePath) {
+  try {
+    const bundle = record4(readJson3(bundlePath));
+    const reportPath = record4(bundle?.report)?.path;
+    if (typeof reportPath !== "string") return void 0;
+    const report = record4(readJson3(resolve29(dirname19(resolve29(bundlePath)), reportPath)));
+    const commit = record4(report?.repo)?.commit;
+    return { verdict: report?.verdict, commit: typeof commit === "string" ? commit : null };
+  } catch {
+    return void 0;
+  }
+}
+async function runValidate(args, io, runtimeAttestation, onValidated) {
   const kind = args.shift();
   const path = args.shift();
   if (!kind || !(/* @__PURE__ */ new Set(["report", "manifest", "bundle"])).has(kind)) {
@@ -32268,12 +32440,22 @@ async function runValidate(args, io, runtimeAttestation) {
   const repo = removeOption(args, "--repo");
   const acceptedEvaluatorPath = removeOption(args, "--accepted-evaluator");
   const guardAuthorityPath = removeOption(args, "--guard-authority");
+  const pinFlags = removeRepeatedOption(args, TRUST_POLICY_PIN_FLAG);
   assertNoArgs(args);
   if (kind !== "bundle" && (structural || repo !== void 0 || acceptedEvaluatorPath !== void 0)) {
     throw new UsageError("--structural, --repo, and --accepted-evaluator are only valid for bundle validation");
   }
   if (kind !== "bundle" && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for bundle validation");
+  }
+  if (kind !== "bundle" && pinFlags.length > 0) {
+    throw new UsageError(`${TRUST_POLICY_PIN_FLAG} is only valid for bundle validation`);
+  }
+  let pins = [];
+  try {
+    if (kind === "bundle") pins = trustPolicyPins(pinFlags, process.env);
+  } catch (error) {
+    throw new UsageError(error instanceof Error ? error.message : String(error));
   }
   if (acceptedEvaluatorPath !== void 0 && !isAbsolute24(acceptedEvaluatorPath)) {
     throw new UsageError("--accepted-evaluator requires an absolute path");
@@ -32298,11 +32480,29 @@ async function runValidate(args, io, runtimeAttestation) {
       runtimeAttestation,
       ...repo === void 0 ? {} : { repoPath: repo },
       ...acceptedEvaluatorPath === void 0 ? {} : { acceptedEvaluatorPath },
-      ...guardAuthorityPath === void 0 ? {} : { guardAuthorityPath }
+      ...guardAuthorityPath === void 0 ? {} : { guardAuthorityPath },
+      trustPolicyPins: pins
     });
+    if (result.failureKind === "load") {
+      result.errors.forEach((error) => io.stderr(`ERROR: ${error}`));
+      return 2;
+    }
+    if (!template) {
+      const bound = boundReport(path);
+      onValidated?.({
+        root: repo ?? dirname19(resolve29(path)),
+        verdict: validateReceiptVerdict({ ok: result.ok, live: !structural, reportVerdict: bound?.verdict }),
+        validation: {
+          bundle_sha256: sha256Bytes(readFileSync22(path)),
+          subject_commit: bound?.commit ?? null,
+          trust_policy_pins: pins,
+          trust_policy_pins_used: [...result.trustPolicyPinsUsed ?? []],
+          live: !structural
+        }
+      });
+    }
     if (!result.ok) {
       result.errors.forEach((error) => io.stderr(`ERROR: ${error}`));
-      if (result.failureKind === "load") return 2;
       io.stderr(`FAIL errors=${result.errors.length}`);
       return 1;
     }
@@ -32651,7 +32851,8 @@ function writeRunReceipt(io, receipts, input) {
     verdict: input.verdict,
     exit_code: input.exitCode,
     observed_at: input.observedAt,
-    finished_at: (/* @__PURE__ */ new Date()).toISOString()
+    finished_at: (/* @__PURE__ */ new Date()).toISOString(),
+    ...input.validation === void 0 ? {} : { validation: input.validation }
   });
   receipts.write(receipt, capture.repository);
   io.stderr(`receipt: WROTE id=${receipt.receipt_id} mode=${receipt.mode} families=${receipt.families.join(",")} findings=${receipt.findings.length}`);
@@ -32751,10 +32952,9 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "language_policy", file: "language-policy-audit.json" }
             ];
             const results = families.filter((entry) => existsSync18(join22(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join22(bundle, entry.file)) }));
-            const report = record3(readJson3(join22(bundle, "closeout-report.json")));
-            const delta = record3(readJson3(join22(bundle, "regression-delta.json")));
-            const baselineObject = record3(delta?.baseline_repository_object);
-            const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
+            const delta = record4(readJson3(join22(bundle, "regression-delta.json")));
+            const baselineObject = record4(delta?.baseline_repository_object);
+            const verdict = "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
               root: prepared.repo,
               mode: "CLOSE",
@@ -32771,8 +32971,28 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
           }
         }
       } else if (command === "action") exitCode = await runAction(args, io, runtimeAttestation);
-      else if (command === "validate") exitCode = await runValidate(args, io, runtimeAttestation);
-      else if (command === "detect") exitCode = await runDetect(args, io);
+      else if (command === "validate") {
+        const receiptOptions = takeReceiptRunOptions(args);
+        const observedAt = (/* @__PURE__ */ new Date()).toISOString();
+        let validated;
+        exitCode = await runValidate(args, io, runtimeAttestation, (entry) => {
+          validated = entry;
+        });
+        if (receipts !== void 0 && validated !== void 0) {
+          writeRunReceipt(io, receipts, {
+            root: validated.root,
+            mode: "VALIDATE",
+            results: [],
+            verdict: validated.verdict,
+            exitCode,
+            observedAt,
+            runtimeAttestation,
+            options: receiptOptions,
+            invocationId: invocationId ?? null,
+            validation: validated.validation
+          });
+        }
+      } else if (command === "detect") exitCode = await runDetect(args, io);
       else if (command === "inspect") exitCode = await runInspect(args, io);
       else if (command === "census") exitCode = await runCensus(args, io);
       else if (command === "manifest") exitCode = await runManifest(args, io);

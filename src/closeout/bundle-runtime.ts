@@ -63,6 +63,8 @@ export interface BundleValidationOptions {
   readonly repoPath?: string;
   /** Live-verifier-minted identity of the CLI performing validation. */
   readonly runtimeAttestation?: FileRuntimeAttestationBinding;
+  /** Judge-supplied SHA-256 pins of the trust policies a CLEAN verdict may rest on; never read from the bundle. */
+  readonly trustPolicyPins?: readonly string[];
   readonly validationTime?: Date;
   readonly verifyLive?: boolean;
 }
@@ -71,6 +73,8 @@ export interface BundleValidationResult {
   readonly errors: readonly string[];
   readonly failureKind?: "load";
   readonly ok: boolean;
+  /** The judge pins this validation's trust checks matched; present only when one matched. */
+  readonly trustPolicyPinsUsed?: readonly string[];
 }
 
 export interface EvidenceClock {

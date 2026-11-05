@@ -17,6 +17,11 @@ import {
   type SemanticProbeKind,
   type SemanticExecutableSurfaceProof,
 } from "./semantic.js";
+import {
+  trustKeyIndependenceError,
+  trustKeyWindowError,
+  type TrustPolicy,
+} from "./trust-root.js";
 
 export type SemanticCandidateVerdictV2 =
   | "attested_satisfied"
@@ -196,19 +201,7 @@ export interface SemanticAttestationV2 {
   };
 }
 
-export interface SemanticTrustPolicyV2 {
-  keys: Array<{
-    actor_id: string;
-    key_id: string;
-    public_key_pem: string;
-    roles: Array<"domain_evaluator" | "independent_qa">;
-    valid_from: string;
-    valid_to?: string;
-  }>;
-  policy_id: string;
-  record_type: "mister-clean.semantic-trust-policy";
-  schema_version: "1.0";
-}
+export type SemanticTrustPolicyV2 = TrustPolicy;
 
 export interface SemanticEvidencePackageV2 {
   plan: SemanticPlanV2;
@@ -701,10 +694,6 @@ export function verifyRuntimeSemanticCandidateV2(input: {
     errors.push("semantic attestation evidence-root digest does not match the supplied evidence bundle");
   }
   errors.push(...verifyBoundEvidence(evidenceRefsIn(attestation)));
-  if (attestation.attester.actor_id === runnerActorId
-    || attestation.attester.actor_id === observations.supervisor?.actor_id) {
-    errors.push("semantic attester must be independent of the runner and supervisor");
-  }
   const policySha256 = sha256Bytes(policyBytes);
   if (attestation.attester.independence_policy_sha256 !== policySha256) {
     errors.push("semantic attestation does not bind the external trust policy bytes");
@@ -714,10 +703,14 @@ export function verifyRuntimeSemanticCandidateV2(input: {
     || !key.roles.includes(attestation.attester.role)) {
     errors.push("semantic attester is not authorized by the external trust policy");
   }
-  if (key && (!validIsoTimestamp(key.valid_from) || Date.parse(attestation.attested_at) < Date.parse(key.valid_from)
-    || (key.valid_to !== undefined && (!validIsoTimestamp(key.valid_to) || Date.parse(attestation.attested_at) > Date.parse(key.valid_to))))) {
-    errors.push("semantic attester key is outside its validity window");
-  }
+  // Independence is decided by the key that verifies the signature, never by
+  // the actor_id string the attestation declares.
+  const independenceError = key && policy
+    ? trustKeyIndependenceError(policy.keys, key, [runnerActorId, observations.supervisor?.actor_id])
+    : undefined;
+  if (independenceError) errors.push(`semantic attester must be independent of the runner and supervisor: ${independenceError}`);
+  const windowError = key ? trustKeyWindowError(key, attestation.attested_at) : undefined;
+  if (windowError) errors.push(`semantic attester key ${windowError}`);
   if (attestation.signature.algorithm !== "Ed25519" || attestation.signature.key_id !== attestation.attester.key_id) {
     errors.push("semantic attestation signature algorithm or key id is invalid");
   }

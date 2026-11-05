@@ -1,7 +1,7 @@
 /**
  * Run receipts: `mister-clean.run-receipt/1`.
  *
- * Every CLOSE, AUDIT and SECOND_PASS run writes one receipt to the machine-local
+ * Every CLOSE, AUDIT, SECOND_PASS and VALIDATE run writes one receipt to the machine-local
  * state root (the same custody as the invocation journal): repository identity,
  * the exact subject, and every finding keyed by a content anchor. A receipt
  * holds repository-relative paths and digests only: never matched text,
@@ -45,7 +45,7 @@ export const RECEIPT_INDEX_FILE = "receipts.index.jsonl";
  */
 export const RECEIPT_INDEX_SEGMENT_MAX_BYTES = 8 * 1024 * 1024;
 
-export type ReceiptMode = "CLOSE" | "AUDIT" | "SECOND_PASS";
+export type ReceiptMode = "CLOSE" | "AUDIT" | "SECOND_PASS" | "VALIDATE";
 export type ReceiptVerdict = "CLEAN" | "NOT_CLEAN" | "AUDIT_ONLY";
 export type AgentIdentityStatus = "receipt" | "title_only" | "contract_only" | "unobserved";
 export type AgentIdentitySource = "flag" | "env" | "lifecycle" | null;
@@ -83,6 +83,24 @@ export interface RunReceipt {
   readonly exit_code: number;
   readonly observed_at: string;
   readonly finished_at: string;
+  /** Present exactly on VALIDATE receipts: what `validate bundle` judged. */
+  readonly validation?: ReceiptValidation;
+}
+
+/**
+ * The VALIDATE receipt body. A VALIDATE receipt is the only machine record of
+ * CLEAN: prepare never decides it, and a closer-written report field is never
+ * copied into a receipt verdict.
+ */
+export interface ReceiptValidation {
+  readonly bundle_sha256: string;
+  /** The subject commit the validated bundle binds, or null when unreadable. */
+  readonly subject_commit: string | null;
+  /** Judge-supplied trust-policy pins, sorted. */
+  readonly trust_policy_pins: readonly string[];
+  /** The pins the trust checks matched, sorted; empty when none was relied on. */
+  readonly trust_policy_pins_used: readonly string[];
+  readonly live: boolean;
 }
 
 export interface ReceiptIndexEntry {
@@ -164,16 +182,31 @@ export function runReceiptErrors(value: unknown): string[] {
   const errors: string[] = [];
   const record = object(value);
   if (!record) return ["$: expected object"];
+  const validating = record.mode === "VALIDATE";
   if (!exactKeys(record, [
     "record_type", "schema_version", "receipt_id", "invocation_id", "mode", "repository_id", "subject", "dirty",
     "detector_registry_sha256", "runtime_identity_sha256", "agent", "families", "findings", "verdict", "exit_code",
-    "observed_at", "finished_at",
+    "observed_at", "finished_at", ...(validating ? ["validation"] : []),
   ], "$", errors)) return errors;
   if (record.record_type !== RUN_RECEIPT_RECORD_TYPE) errors.push(`$.record_type: expected ${RUN_RECEIPT_RECORD_TYPE}`);
   if (record.schema_version !== RUN_RECEIPT_SCHEMA_VERSION) errors.push(`$.schema_version: expected ${RUN_RECEIPT_SCHEMA_VERSION}`);
   if (typeof record.receipt_id !== "string" || !/^mc-receipt:[0-9a-f-]{36}$/u.test(record.receipt_id)) errors.push("$.receipt_id: expected mc-receipt:<uuid>");
   if (record.invocation_id !== null && (typeof record.invocation_id !== "string" || !record.invocation_id.startsWith("mc-invocation:"))) errors.push("$.invocation_id: expected null or mc-invocation:<uuid>");
-  if (!["CLOSE", "AUDIT", "SECOND_PASS"].includes(String(record.mode))) errors.push("$.mode: expected CLOSE, AUDIT or SECOND_PASS");
+  if (!["CLOSE", "AUDIT", "SECOND_PASS", "VALIDATE"].includes(String(record.mode))) errors.push("$.mode: expected CLOSE, AUDIT, SECOND_PASS or VALIDATE");
+  if (record.verdict === "CLEAN" && !validating) errors.push("$.verdict: CLEAN is recorded only by a VALIDATE receipt");
+  if (validating && record.verdict !== "CLEAN" && record.verdict !== "NOT_CLEAN") errors.push("$.verdict: a VALIDATE receipt records CLEAN or NOT_CLEAN");
+  const validation = object(record.validation);
+  if (validating && (!validation || !exactKeys(validation, ["bundle_sha256", "subject_commit", "trust_policy_pins", "trust_policy_pins_used", "live"], "$.validation", errors))) {
+    if (!validation) errors.push("$.validation: expected object");
+  } else if (validation) {
+    if (typeof validation.bundle_sha256 !== "string" || !HEX64.test(validation.bundle_sha256)) errors.push("$.validation.bundle_sha256: expected lowercase SHA-256");
+    if (validation.subject_commit !== null && (typeof validation.subject_commit !== "string" || !HEX40.test(validation.subject_commit))) errors.push("$.validation.subject_commit: expected null or Git object id");
+    for (const field of ["trust_policy_pins", "trust_policy_pins_used"] as const) {
+      const pins = validation[field];
+      if (!Array.isArray(pins) || pins.some((pin) => typeof pin !== "string" || !HEX64.test(pin))) errors.push(`$.validation.${field}: expected lowercase SHA-256 array`);
+    }
+    if (typeof validation.live !== "boolean") errors.push("$.validation.live: expected boolean");
+  }
   if (typeof record.repository_id !== "string" || !/^(?:remote:[^\s/]+\/.+|local-path-sha256:[0-9a-f]{64})$/u.test(record.repository_id)) errors.push("$.repository_id: expected remote:<host>/<path> or local-path-sha256:<hex>");
   const subject = object(record.subject);
   if (subject && exactKeys(subject, ["repository_object", "head_commit", "head_tree"], "$.subject", errors)) {

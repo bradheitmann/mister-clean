@@ -571,11 +571,16 @@ async function validateBundleUnsafe(
   await validateSuccessor(bundle, report, base, ports.files, clean, allowPlaceholders, clock, errors);
   if (!allowPlaceholders) for (const path of findPlaceholders(bundle)) errors.push(`${path}: unresolved template placeholder`);
   const liveGuard = manifest.mode === "GUARD" && !allowPlaceholders;
+  const trust = { pins: options.trustPolicyPins ?? [], used: new Set<string>() };
   if (clean || liveGuard) {
     if (clean && !verifyLive) errors.push("$.verdict: CLEAN requires live verification");
-    else if (verifyLive && repo && repoExists) await validateLive(bundle, report, manifest, bundlePath, repo, ports, options.guardAuthorityPath, errors);
+    else if (verifyLive && repo && repoExists) await validateLive(bundle, report, manifest, bundlePath, repo, ports, options.guardAuthorityPath, trust, errors);
   }
-  return { errors, ok: errors.length === 0 };
+  return {
+    errors,
+    ok: errors.length === 0,
+    ...(trust.used.size === 0 ? {} : { trustPolicyPinsUsed: [...trust.used].sort() }),
+  };
 }
 
 /**
