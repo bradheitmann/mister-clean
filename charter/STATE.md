@@ -1,5 +1,5 @@
-# State — mister-clean — 2026-11-04T22:30Z (from `date -u`), written by the project PM (Claude Code) at the 7.5.0 release
-HEAD: 7080cdedf03122a2ca59a6b1caa2ed3d4669d6ef (main before this bump) — the object every claim below was verified on; successors compare before trusting a line
+# State — mister-clean — 2026-11-04T22:30Z (from `date -u`), written by the project PM (Claude Code) at the 7.5.0 release; HEAD line refreshed at the 7.5.1 bump
+HEAD: 2a7d0ec4407d9513abb9cc9d1c9cc244f19dbb3c (main before the 7.5.1 bump) — the object every claim below was verified on; successors compare before trusting a line
 Proven (with the proof names):
 - Judge census of main with the installed 7.4.0 (frozen clone, 2026-11-04): planning, github-actions, repository-boundaries and public-safety PASS; semantic debt went 3 → 1 today: SEM-STATE-8CF757A62803 and SEM-STATE-C6FB0796C5F5 retired by #73 (sealed segments); SEM-EXECUTABLE-CBB67799E249 is paid by an independent signed attestation on the release commit.
 - SEM-EXECUTABLE attestation pipeline (frozen 24954d2): plan by the 7.4.0 judge, raw observations, independent judgment and Ed25519 signature by MC/QA with the Doppler-held key, `semantic verify` → attested_satisfied; one-character binding mutant → verification_debt. Evidence private; runbook kept with it.
