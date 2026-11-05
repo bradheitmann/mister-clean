@@ -164,6 +164,16 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
         // manage its own version and rewrite the lockfile, which the gate's mutation
         // guard rightly refuses.
         writeFileSync(join(repo, manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml"), manager === "npm" ? "{}\n" : "lockfileVersion: '9.0'\n");
+        if (manager === "pnpm") {
+          // In the clean-CI capsule pnpm rewrites a placeholder lockfile before it runs a
+          // script (seen: " M pnpm-lock.yaml"). Settle it once, in the exact gate
+          // environment, so the gate run has nothing to write.
+          const settleHome = scratch("pnpm-settle-home");
+          const pnpm = resolveExecutable("pnpm", process.env.PATH ?? "")!;
+          materializeGateShims(settleHome, pnpm);
+          const settled = spawnSync(pnpm.invoked, ["install", "--lockfile-only", "--offline"], { cwd: repo, env: scrubbedEnvironment(settleHome, pnpm), encoding: "utf8" });
+          expect(settled.status, settled.stderr).toBe(0);
+        }
         fixtureCommit(repo, "fixture");
         const { execution, stdout } = await runProbe(repo, join(root, "evidence"));
         const stderr = readFileSync(join(root, "evidence", execution.stderr_ref.path), "utf8");
