@@ -24726,7 +24726,7 @@ import { spawnSync as spawnSync6 } from "child_process";
 import { accessSync as accessSync2, constants as constants4, existsSync as existsSync7, lstatSync as lstatSync10, mkdirSync as mkdirSync2, realpathSync as realpathSync6, symlinkSync } from "fs";
 import { lstat as lstat6, mkdir as mkdir3, realpath as realpath6, rm as rm3, writeFile as writeFile2 } from "fs/promises";
 import { homedir, tmpdir as tmpdir4 } from "os";
-import { delimiter as delimiter2, dirname as dirname9, isAbsolute as isAbsolute14, join as join10, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
+import { basename as basename11, delimiter as delimiter2, dirname as dirname9, isAbsolute as isAbsolute14, join as join10, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
 
 // src/closeout/execution-supervisor.ts
 import {
@@ -24785,6 +24785,8 @@ function processAlive(pid, group = false) {
   catch (error) { return Boolean(error && error.code === "EPERM"); }
 }
 
+// ps by absolute path: the supervisor runs in the gate environment, whose
+// PATH is only the gate's toolchain shims (master-gate S1).
 function processIdentity(pid) {
   if (!processAlive(pid)) return undefined;
   try {
@@ -24795,7 +24797,7 @@ function processIdentity(pid) {
       const fields = stat.slice(close + 2).trim().split(/\s+/);
       return fields[19] ? "linux-proc-start:" + fields[19] : undefined;
     }
-    const started = execFileSync("ps", ["-o", "lstart=", "-o", "comm=", "-p", String(pid)], {
+    const started = execFileSync("/bin/ps", ["-o", "lstart=", "-o", "comm=", "-p", String(pid)], {
       encoding: "utf8", env: { ...process.env, LC_ALL: "C", TZ: "UTC" }, stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return started ? "ps-lstart:" + started : undefined;
@@ -24907,7 +24909,7 @@ function custodyProcessIds() {
     return ids.filter((pid) => pid !== process.pid && processAlive(pid));
   }
   try {
-    const output = execFileSync("ps", ["eww", "-axo", "pid=,command="], {
+    const output = execFileSync("/bin/ps", ["eww", "-axo", "pid=,command="], {
       encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 16 * 1024 * 1024,
     });
@@ -25163,6 +25165,48 @@ function toolchainLocators(environment = process.env, operatorHome = environment
   return locators;
 }
 var GATE_TOOLCHAIN = ["node", "bun", "pnpm", "npm", "cargo", "rustc", "rustup", "go", "git", "sh", "cc"];
+var GATE_POSIX_UTILITIES = [
+  "ar",
+  "as",
+  "awk",
+  "basename",
+  "cat",
+  "chmod",
+  "cmp",
+  "cp",
+  "cut",
+  "date",
+  "diff",
+  "dirname",
+  "env",
+  "expr",
+  "false",
+  "find",
+  "grep",
+  "head",
+  "ld",
+  "ln",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "mv",
+  "printf",
+  "pwd",
+  "rm",
+  "rmdir",
+  "sed",
+  "sleep",
+  "sort",
+  "tail",
+  "tee",
+  "touch",
+  "tr",
+  "true",
+  "uname",
+  "uniq",
+  "wc",
+  "xargs"
+];
 var resolvedGateToolchain;
 function minimalGatePath(pathValue, toolchain, gateExecutable) {
   const wanted = new Set([...toolchain, ...gateExecutable ? [gateExecutable] : []].map((executable) => dirname9(executable.invoked)));
@@ -25170,11 +25214,24 @@ function minimalGatePath(pathValue, toolchain, gateExecutable) {
   return [.../* @__PURE__ */ new Set([...ordered, ...wanted])].join(delimiter2);
 }
 function gateToolchain() {
-  resolvedGateToolchain ??= GATE_TOOLCHAIN.flatMap((name) => {
+  resolvedGateToolchain ??= [...GATE_TOOLCHAIN, ...GATE_POSIX_UTILITIES].flatMap((name) => {
     const executable = resolveExecutable(name, process.env.PATH ?? "");
     return executable ? [executable] : [];
   });
   return resolvedGateToolchain;
+}
+function gateShimDirectory(home) {
+  return join10(home, "toolchain-bin");
+}
+function materializeGateShims(home, gateExecutable) {
+  const directory = gateShimDirectory(home);
+  mkdirSync2(directory, { recursive: true, mode: 448 });
+  const entries2 = /* @__PURE__ */ new Map();
+  for (const executable of gateToolchain()) entries2.set(basename11(executable.invoked), executable.resolved);
+  if (gateExecutable) entries2.set(basename11(gateExecutable.invoked), gateExecutable.resolved);
+  for (const [name, target] of entries2) {
+    if (!existsSync7(join10(directory, name))) symlinkSync(target, join10(directory, name));
+  }
 }
 function scrubbedCargoHome(home) {
   return join10(home, "cargo-home");
@@ -25191,7 +25248,7 @@ function materializeScrubbedCargoHome(home, operatorCargoHome = toolchainLocator
 function scrubbedEnvironment(home, gateExecutable) {
   const locators = toolchainLocators();
   const env = {
-    PATH: minimalGatePath(process.env.PATH ?? "", gateToolchain(), gateExecutable),
+    PATH: process.platform === "win32" ? minimalGatePath(process.env.PATH ?? "", gateToolchain(), gateExecutable) : gateShimDirectory(home),
     HOME: home,
     USERPROFILE: home,
     TMPDIR: home,
@@ -25216,6 +25273,7 @@ function scrubbedEnvironment(home, gateExecutable) {
   return env;
 }
 function gateEnvironment(home, executable) {
+  if (process.platform !== "win32") materializeGateShims(home, executable);
   materializeScrubbedCargoHome(home);
   return scrubbedEnvironment(home, executable);
 }

@@ -4,7 +4,7 @@
  * call against a target runs a program its own .git/config names.
  */
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,12 +18,13 @@ import { createFixtureRepository, fixtureCommit } from "../test-support/fixture-
 import { fixture as cleanBundleFixture, removeTemporaryRoots, validateBundle } from "./bundle.test-fixture.js";
 import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 import { discoverNativeGates } from "./native-gates.js";
-import { resolveExecutable, runNativeGates, scrubbedEnvironment } from "./native-gate-runner.js";
+import { gateShimDirectory, materializeGateShims, resolveExecutable, runNativeGates, scrubbedEnvironment } from "./native-gate-runner.js";
 import { prepareCloseout } from "./prepare.js";
 import { captureRepositoryObject } from "./repository-object.js";
 
 const SOURCE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CREDENTIAL_CLI = "fake-credential-cli";
+const SIBLING_CREDENTIAL_CLI = "fake-sibling-credential-cli";
 const SOURCE_RUNTIME = mintServerAttestationBinding({
   record_type: "mister-clean.runtime-attestation-binding",
   schema_version: "1.0",
@@ -39,11 +40,18 @@ const SOURCE_RUNTIME = mintServerAttestationBinding({
 const credentialBin = mkdtempSync(join(tmpdir(), "mister-clean-credential-bin-"));
 writeFileSync(join(credentialBin, FAKE_CREDENTIAL_CLI), "#!/bin/sh\necho secret\n");
 chmodSync(join(credentialBin, FAKE_CREDENTIAL_CLI), 0o755);
-process.env.PATH = `${credentialBin}${delimiter}${process.env.PATH ?? ""}`;
+// A credential CLI in the SAME directory as a toolchain binary (here a fake `go`),
+// the Homebrew layout where op, gh and gcloud sit beside node and git.
+const toolchainBin = mkdtempSync(join(tmpdir(), "mister-clean-toolchain-bin-"));
+for (const name of [SIBLING_CREDENTIAL_CLI, "go"]) {
+  writeFileSync(join(toolchainBin, name), "#!/bin/sh\necho sibling\n");
+  chmodSync(join(toolchainBin, name), 0o755);
+}
+process.env.PATH = `${toolchainBin}${delimiter}${credentialBin}${delimiter}${process.env.PATH ?? ""}`;
 
-const roots: string[] = [credentialBin];
+const roots: string[] = [credentialBin, toolchainBin];
 afterEach(async () => {
-  for (const root of roots.splice(1)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(2)) rmSync(root, { recursive: true, force: true });
   await removeTemporaryRoots();
 });
 
@@ -97,12 +105,31 @@ function plantFsmonitor(repo: string, root: string): string {
 
 describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
   describe("minimal path", () => {
-    it("builds the gate PATH only from the resolved toolchain directories", () => {
-      const path = (scrubbedEnvironment(scratch("path-home")).PATH ?? "").split(delimiter);
-      expect(path).not.toContain(credentialBin);
+    it("the gate PATH is one per-gate shim directory holding only the resolved toolchain executables", () => {
+      const home = scratch("path-home");
+      materializeGateShims(home);
+      const path = scrubbedEnvironment(home).PATH ?? "";
+      expect(path.split(delimiter)).toEqual([gateShimDirectory(home)]);
+      const shims = readdirSync(gateShimDirectory(home)).sort();
+      expect(shims).toContain("node");
+      expect(shims).toContain("go");
+      expect(shims).not.toContain(FAKE_CREDENTIAL_CLI);
+      expect(shims).not.toContain(SIBLING_CREDENTIAL_CLI);
       const node = resolveExecutable("node", process.env.PATH ?? "");
-      expect(node).toBeDefined();
-      expect(path).toContain(dirname(node!.invoked));
+      expect(realpathSync(join(gateShimDirectory(home), "node"))).toBe(node!.resolved);
+    });
+
+    it("a credential CLI in the same directory as a toolchain binary is not reachable by name", async () => {
+      const { repo, evidence } = probeRepository("sibling-credential-cli", [
+        "#!/bin/sh",
+        `if command -v ${SIBLING_CREDENTIAL_CLI} >/dev/null 2>&1; then echo "reachable"; exit 7; fi`,
+        "command -v go >/dev/null 2>&1 || { echo \"no go\"; exit 8; }",
+        "echo isolated",
+        "",
+      ].join("\n"));
+      const { execution, stdout } = await runProbe(repo, evidence);
+      expect(stdout).toBe("isolated\n");
+      expect(execution.state).toBe("passed");
     });
 
     it("a gate cannot reach a credential CLI on the operator's PATH by name, but still finds its toolchain", async () => {
@@ -116,6 +143,43 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       const { execution, stdout } = await runProbe(repo, evidence);
       expect(stdout).toBe("isolated\n");
       expect(execution.state).toBe("passed");
+    });
+  });
+
+  describe("minimal path toolchains", () => {
+    const has = (name: string): boolean => resolveExecutable(name, process.env.PATH ?? "") !== undefined;
+
+    it.skipIf(!has("npm") || !has("pnpm"))("npm and pnpm gates still run node from the shim PATH", async () => {
+      for (const manager of ["npm", "pnpm"] as const) {
+        const root = scratch(`${manager}-node`);
+        const repo = join(root, "repo");
+        createFixtureRepository(repo, { identity: { name: "Toolchain Fixture", email: "toolchain.invalid" } });
+        writeFileSync(join(repo, "package.json"), `${JSON.stringify({
+          name: `${manager}-node-fixture`,
+          private: true,
+          packageManager: `${manager}@1.0.0`,
+          scripts: { test: "node -e \"process.stdout.write('node ran\\\\n')\"" },
+        }, null, 2)}\n`);
+        writeFileSync(join(repo, manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml"), manager === "npm" ? "{}\n" : "lockfileVersion: '9.0'\n");
+        fixtureCommit(repo, "fixture");
+        const { execution, stdout } = await runProbe(repo, join(root, "evidence"));
+        expect(stdout).toContain("node ran");
+        expect(execution.state).toBe("passed");
+      }
+    });
+
+    it.skipIf(!has("cargo") || !has("cc"))("a cargo gate still runs rustc (through the rustup proxy) and links with cc", async () => {
+      const root = scratch("cargo-rustc");
+      const repo = join(root, "repo");
+      createFixtureRepository(repo, { identity: { name: "Toolchain Fixture", email: "toolchain.invalid" } });
+      writeFileSync(join(repo, ".gitignore"), "target/\nCargo.lock\n");
+      writeFileSync(join(repo, "Cargo.toml"), "[package]\nname = \"shim-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n");
+      mkdirSync(join(repo, "src"));
+      writeFileSync(join(repo, "src", "lib.rs"), "#[test]\nfn links() { assert_eq!(1 + 1, 2); }\n");
+      fixtureCommit(repo, "fixture");
+      const { execution } = await runProbe(repo, join(root, "evidence"));
+      const stderr = readFileSync(join(root, "evidence", execution.stderr_ref.path), "utf8");
+      expect(`${execution.state}:${String(execution.failure_reason)}`, stderr.slice(-2000)).toBe("passed:null");
     });
   });
 
