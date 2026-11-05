@@ -1104,7 +1104,7 @@ function verificationRunnerSafetyFindings(
       });
     }
   }
-  return findings.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
+  return findings.sort((left, right) => compareUtf8Bytes(left.path, right.path) || left.line - right.line);
 }
 
 export function auditVerificationRunnerSafety(repository: string): readonly VerificationRunnerSafetyFinding[] {
