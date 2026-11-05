@@ -25162,6 +25162,15 @@ function toolchainLocators(environment = process.env, operatorHome = environment
     const candidate = join10(operatorHome, conventional);
     if (existsSync7(candidate)) locators[name] = candidate;
   }
+  const rustup = environment.PATH === void 0 ? void 0 : resolveExecutable("rustup", environment.PATH);
+  if (rustup !== void 0) {
+    const cargoHome = dirname9(dirname9(rustup.resolved));
+    if (locators.CARGO_HOME === void 0 && basename11(dirname9(rustup.resolved)) === "bin") locators.CARGO_HOME = cargoHome;
+    if (locators.RUSTUP_HOME === void 0) {
+      const rustupHome = ["rustup", ".rustup"].map((name) => join10(dirname9(cargoHome), name)).find((candidate) => existsSync7(join10(candidate, "settings.toml")));
+      if (rustupHome !== void 0) locators.RUSTUP_HOME = rustupHome;
+    }
+  }
   return locators;
 }
 var GATE_TOOLCHAIN = ["node", "bun", "pnpm", "npm", "cargo", "rustc", "rustup", "go", "git", "sh", "cc"];

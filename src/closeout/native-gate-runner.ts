@@ -154,6 +154,20 @@ export function toolchainLocators(
     const candidate = join(operatorHome, conventional);
     if (existsSync(candidate)) locators[name] = candidate;
   }
+  // A rustup install on PATH names its own homes when the environment does not
+  // (a capsule that replaces HOME and drops RUSTUP_HOME): rustup lives in
+  // <CARGO_HOME>/bin, and RUSTUP_HOME is the sibling rustup or .rustup that
+  // holds settings.toml. Only directories that exist are used.
+  const rustup = environment.PATH === undefined ? undefined : resolveExecutable("rustup", environment.PATH);
+  if (rustup !== undefined) {
+    const cargoHome = dirname(dirname(rustup.resolved));
+    if (locators.CARGO_HOME === undefined && basename(dirname(rustup.resolved)) === "bin") locators.CARGO_HOME = cargoHome;
+    if (locators.RUSTUP_HOME === undefined) {
+      const rustupHome = ["rustup", ".rustup"].map((name) => join(dirname(cargoHome), name))
+        .find((candidate) => existsSync(join(candidate, "settings.toml")));
+      if (rustupHome !== undefined) locators.RUSTUP_HOME = rustupHome;
+    }
+  }
   return locators;
 }
 
