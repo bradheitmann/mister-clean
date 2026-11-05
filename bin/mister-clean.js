@@ -7403,39 +7403,134 @@ var FIXED_OVERRIDES = [
   "core.untrackedCache=false",
   "core.hooksPath=/dev/null",
   "core.sshCommand=ssh",
+  "core.askPass=",
+  "core.askpass=",
+  "core.pager=cat",
+  "core.editor=false",
+  "core.alternateRefsCommand=",
+  "core.gitProxy=",
+  "sequence.editor=false",
+  "gpg.program=false",
   "diff.external=",
-  "credential.helper="
+  "credential.helper=",
+  "protocol.ext.allow=never"
 ];
-var DRIVER_KEYS = "^(filter\\..+\\.(clean|smudge|process)|remote\\..+\\.uploadpack)$";
+var INJECTED_CONFIG = [
+  ["credential.helper", ""],
+  ["protocol.ext.allow", "never"],
+  ["core.askPass", ""],
+  ["core.askpass", ""]
+];
+var INHERITED_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "USERPROFILE",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "LANG",
+  "LC_ALL",
+  "SYSTEMROOT",
+  "WINDIR",
+  "COMSPEC",
+  "PATHEXT",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY"
+];
+var ALLOWED_REMOTE_TRANSPORTS = ["https", "ssh"];
+var DRIVER_KEY = /^(?:filter\.(?<filter>.+)\.(?:clean|smudge|process)|remote\..+\.(?:uploadpack|proxy|vcs)|gpg\..+\.program|diff\..+\.(?:textconv|command)|merge\..+\.driver|trailer\..+\.command)$/u;
+var GitConfigSnapshotError = class extends Error {
+  constructor(repository, detail) {
+    super(
+      `refusing the protected git call: the configuration of ${repository} could not be enumerated (${detail}), so its per-name driver overrides cannot be derived`
+    );
+    this.repository = repository;
+    this.detail = detail;
+    this.name = "GitConfigSnapshotError";
+  }
+  code = "git_config_snapshot_unreadable";
+};
+var GitRemoteTransportError = class extends Error {
+  constructor(remote, transport) {
+    super(
+      `remote ${JSON.stringify(remote)} resolves to a ${transport} transport; only ${ALLOWED_REMOTE_TRANSPORTS.join(" and ")} may be contacted, because every other transport can carry a command`
+    );
+    this.remote = remote;
+    this.transport = transport;
+    this.name = "GitRemoteTransportError";
+  }
+  code = "git_remote_transport_refused";
+};
 function hardenedGitEnv(environment = process.env) {
-  return { ...environment, GIT_CONFIG_NOSYSTEM: "1" };
+  const result = {};
+  for (const name of INHERITED_ALLOWLIST) {
+    const value = environment[name];
+    if (value !== void 0) result[name] = value;
+  }
+  result.GIT_OPTIONAL_LOCKS = "0";
+  result.GIT_CONFIG_NOSYSTEM = "1";
+  result.GIT_TERMINAL_PROMPT = "0";
+  result.GIT_CONFIG_COUNT = String(INJECTED_CONFIG.length);
+  for (const [index, [key, value]] of INJECTED_CONFIG.entries()) {
+    result[`GIT_CONFIG_KEY_${index}`] = key;
+    result[`GIT_CONFIG_VALUE_${index}`] = value;
+  }
+  return result;
 }
-function driverOverrides(repository) {
+function gitConfigSnapshot(repository) {
   const result = spawnSync("git", [
     ...FIXED_OVERRIDES.flatMap((override) => ["-c", override]),
     "-C",
     repository,
     "config",
+    "--list",
     "--name-only",
-    "--get-regexp",
-    DRIVER_KEYS
-  ], { encoding: "utf8", env: hardenedGitEnv(), stdio: ["ignore", "pipe", "ignore"], timeout: 1e4 });
-  if (result.status !== 0 || typeof result.stdout !== "string") return [];
+    "--null"
+  ], { encoding: "utf8", env: hardenedGitEnv(), stdio: ["ignore", "pipe", "pipe"], timeout: 1e4 });
+  if (result.error !== void 0) throw new GitConfigSnapshotError(repository, result.error.message);
+  if (result.signal !== null) throw new GitConfigSnapshotError(repository, `git config was terminated by ${result.signal}`);
+  if (result.status !== 0 || typeof result.stdout !== "string") {
+    throw new GitConfigSnapshotError(repository, `git config exited ${String(result.status)}: ${String(result.stderr ?? "").trim()}`);
+  }
+  return { keys: result.stdout.split("\0").filter(Boolean), reads: 1 };
+}
+function driverOverrides(snapshot) {
   const overrides = [];
-  for (const key of result.stdout.split("\n").filter(Boolean)) {
-    if (key.startsWith("remote.")) {
-      overrides.push(`${key}=git-upload-pack`);
-    } else {
-      overrides.push(`${key}=`, `${key.slice(0, key.lastIndexOf("."))}.required=false`);
-    }
+  for (const key of snapshot.keys) {
+    const match = DRIVER_KEY.exec(key.toLocaleLowerCase("und"));
+    if (!match) continue;
+    if (key.toLocaleLowerCase("und").endsWith(".uploadpack")) overrides.push(`${key}=git-upload-pack`);
+    else if (match.groups?.filter !== void 0) overrides.push(`${key}=`, `filter.${match.groups.filter}.required=false`);
+    else overrides.push(`${key}=`);
   }
   return overrides;
 }
 function hardenedGitArgs(args, cwd) {
   const at = args.indexOf("-C");
   const repository = at >= 0 ? args[at + 1] : cwd;
-  const overrides = [...FIXED_OVERRIDES, ...repository === void 0 ? [] : driverOverrides(repository)];
+  const overrides = [
+    ...FIXED_OVERRIDES,
+    ...repository === void 0 ? [] : driverOverrides(gitConfigSnapshot(repository))
+  ];
   return [...overrides.flatMap((override) => ["-c", override]), ...args];
+}
+function remoteTransport(url) {
+  const scheme = /^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*)::/u.exec(url)?.groups?.scheme ?? /^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*):\/\//u.exec(url)?.groups?.scheme;
+  if (scheme !== void 0) return scheme.toLocaleLowerCase("und");
+  if (/^[^/]+@[^/:]+:/u.test(url)) return "ssh";
+  return "path";
+}
+async function hardenedRemoteUrl(repository, remote, git2) {
+  const url = (await git2.run(repository, ["ls-remote", "--get-url", remote])).stdout.trim();
+  const transport = remoteTransport(url);
+  if (!ALLOWED_REMOTE_TRANSPORTS.includes(transport)) {
+    throw new GitRemoteTransportError(remote, transport);
+  }
+  return url;
 }
 
 // src/attestation.ts
@@ -21373,6 +21468,12 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
         if (repo && !allowPlaceholders && (await git2.run(repo, ["cat-file", "-e", `${String(evidence.commit ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push(`${epath}: commit does not exist in live repository`);
       } else if (name === "pushed" && evidence.kind === "remote_ref_resolution") {
         if (repo && !allowPlaceholders) {
+          try {
+            await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git2);
+          } catch (error) {
+            errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
+            continue;
+          }
           const result = await git2.run(repo, ["ls-remote", String(evidence.remote ?? ""), String(evidence.ref ?? "")], [0, 2, 128]);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object5(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
@@ -25163,9 +25264,9 @@ function toolchainLocators(environment = process.env, operatorHome = environment
     if (existsSync7(candidate)) locators[name] = candidate;
   }
   const rustup = environment.PATH === void 0 ? void 0 : resolveExecutable("rustup", environment.PATH);
-  if (rustup !== void 0) {
+  if (rustup !== void 0 && basename11(dirname9(rustup.resolved)) === "bin") {
     const cargoHome = dirname9(dirname9(rustup.resolved));
-    if (locators.CARGO_HOME === void 0 && basename11(dirname9(rustup.resolved)) === "bin") locators.CARGO_HOME = cargoHome;
+    if (locators.CARGO_HOME === void 0) locators.CARGO_HOME = cargoHome;
     if (locators.RUSTUP_HOME === void 0) {
       const rustupHome = ["rustup", ".rustup"].map((name) => join10(dirname9(cargoHome), name)).find((candidate) => existsSync7(join10(candidate, "settings.toml")));
       if (rustupHome !== void 0) locators.RUSTUP_HOME = rustupHome;
@@ -25266,8 +25367,7 @@ function scrubbedEnvironment(home, gateExecutable) {
     CI: "1",
     NO_COLOR: "1",
     FORCE_COLOR: "0",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_OPTIONAL_LOCKS: "0",
+    ...hardenedGitEnv({}),
     NPM_CONFIG_OFFLINE: "true",
     YARN_ENABLE_NETWORK: "0",
     BUN_INSTALL_CACHE_DIR: join10(home, "bun-cache"),
@@ -26995,6 +27095,12 @@ async function validateLiveRepositoryAndTarget(bundle, report, repo, files, git2
   if (observation.kind === "remote_ref_resolution") {
     const remote = String(observation.remote ?? "");
     const remoteRef = String(observation.remote_ref ?? "");
+    try {
+      await hardenedRemoteUrl(repo, remote, git2);
+    } catch (error) {
+      errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
+      return { head, subject, successor };
+    }
     const result = await git2.run(repo, ["ls-remote", "--heads", remote, remoteRef], [0, 2, 128]);
     const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
     if (observed !== liveTarget) errors.push("$.successor_readiness.target_observation: remote ref differs from live target");
