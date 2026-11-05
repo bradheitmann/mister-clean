@@ -63,7 +63,7 @@ const RELEASE_FIXTURE_IDENTITY = { name: "Release Fixture", email: "release-fixt
 // The real-build capsule test measured 129 s against a 120 s budget on a loaded host (owner-approved, 2026-11-05).
 const REAL_BUILD_CAPSULE_TEST_TIMEOUT_MS = 300_000;
 // Removing the capsule's full build output measured over the 10 s default hook budget on a loaded host (owner-approved, 2026-11-05).
-const FIXTURE_CLEANUP_HOOK_TIMEOUT_MS = 60_000;
+const REAL_BUILD_CAPSULE_HOOK_TIMEOUT_MS = 60_000;
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const verifier = join(root, "scripts", "verify_packed_cli.ts");
@@ -231,7 +231,7 @@ function registryDigests(path: string): { integrity: string; shasum: string } {
 
 afterEach(() => {
   while (temporaryRoots.length) rmSync(temporaryRoots.pop()!, { recursive: true, force: true });
-}, FIXTURE_CLEANUP_HOOK_TIMEOUT_MS);
+}, REAL_BUILD_CAPSULE_HOOK_TIMEOUT_MS);
 
 describe("release archive boundary", () => {
   it("rejects a raw AppleDouble member before consulting platform tar listings", () => {
