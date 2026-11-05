@@ -148,10 +148,17 @@ judges overall case-plan adequacy and records limitations. The unsigned record
 is canonicalized and signed with Ed25519.
 
 The trust policy is external to the subject and names authorized key IDs,
-actors, roles, public keys, and validity windows. The attester cannot be the
-runner or Mister Clean supervisor. Replayed nonces, invalid signatures, stale
-keys, policy-byte drift, missing cases, tree drift, or evidence mismatch produce
-`verification_debt`.
+actors, roles, public keys, and validity windows; every key needs `valid_to`.
+The attester cannot be the runner or Mister Clean supervisor, judged by the key
+that verified the signature: a key the policy also grants to the runner, or
+binds to the runner or supervisor identity, is not independent. Replayed
+nonces, invalid signatures, stale keys, policy-byte drift, missing cases, tree
+drift, or evidence mismatch produce `verification_debt`.
+
+`validate bundle` refuses CLEAN on a v2 attestation unless the frozen trust
+policy matches a SHA-256 pin the judge supplies from outside the bundle:
+`--trust-policy-sha256 <hex>` (repeatable) or `MISTER_CLEAN_TRUST_POLICY_SHA256`
+(comma- or space-separated). A legacy v1 manifest never counts toward CLEAN.
 
 ### 4. Mister Clean verdict reduction
 
