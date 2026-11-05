@@ -32,8 +32,9 @@ import {
   type SemanticObservationsV2,
   type SemanticPlanV2,
 } from "./closeout/semantic-v2.js";
+import { TRUST_POLICY_PIN_FLAG, trustPolicyPins, validateReceiptVerdict } from "./closeout/trust-root.js";
 import type { FileRuntimeAttestationBinding } from "./runtime-binding.js";
-import { canonicalJson } from "./canonical-json.js";
+import { canonicalJson, sha256Bytes } from "./canonical-json.js";
 import type { MisterCleanRunLifecycle } from "./mister-clean-lifecycle.js";
 import { journalFromEnvironment, type MisterCleanInvocationJournal } from "./mister-clean-invocation-journal.js";
 import {
@@ -56,6 +57,7 @@ import {
   receiptRootFromEnvironment,
   type ReceiptAgent,
   type ReceiptMode,
+  type ReceiptValidation,
   type ReceiptVerdict,
 } from "./run-receipt.js";
 import { checkToolchainPin, runningBunVersion } from "./toolchain-pin.js";
@@ -328,10 +330,32 @@ async function runAction(
   return 0;
 }
 
+/** What a receipt-writing caller learns from one `validate bundle` run. */
+interface ValidatedBundle {
+  readonly root: string;
+  readonly verdict: "CLEAN" | "NOT_CLEAN";
+  readonly validation: ReceiptValidation;
+}
+
+/** The verdict and subject commit the bundle's digest-bound report declares; undefined when unreadable. */
+function boundReport(bundlePath: string): { readonly verdict: unknown; readonly commit: string | null } | undefined {
+  try {
+    const bundle = record(readJson(bundlePath));
+    const reportPath = record(bundle?.report)?.path;
+    if (typeof reportPath !== "string") return undefined;
+    const report = record(readJson(resolve(dirname(resolve(bundlePath)), reportPath)));
+    const commit = record(report?.repo)?.commit;
+    return { verdict: report?.verdict, commit: typeof commit === "string" ? commit : null };
+  } catch {
+    return undefined;
+  }
+}
+
 async function runValidate(
   args: string[],
   io: CliIO,
   runtimeAttestation: FileRuntimeAttestationBinding,
+  onValidated?: (entry: ValidatedBundle) => void,
 ): Promise<number> {
   const kind = args.shift();
   const path = args.shift();
@@ -344,12 +368,22 @@ async function runValidate(
   const repo = removeOption(args, "--repo");
   const acceptedEvaluatorPath = removeOption(args, "--accepted-evaluator");
   const guardAuthorityPath = removeOption(args, "--guard-authority");
+  const pinFlags = removeRepeatedOption(args, TRUST_POLICY_PIN_FLAG);
   assertNoArgs(args);
   if (kind !== "bundle" && (structural || repo !== undefined || acceptedEvaluatorPath !== undefined)) {
     throw new UsageError("--structural, --repo, and --accepted-evaluator are only valid for bundle validation");
   }
   if (kind !== "bundle" && guardAuthorityPath !== undefined) {
     throw new UsageError("--guard-authority is only valid for bundle validation");
+  }
+  if (kind !== "bundle" && pinFlags.length > 0) {
+    throw new UsageError(`${TRUST_POLICY_PIN_FLAG} is only valid for bundle validation`);
+  }
+  let pins: string[] = [];
+  try {
+    if (kind === "bundle") pins = trustPolicyPins(pinFlags, process.env);
+  } catch (error) {
+    throw new UsageError(error instanceof Error ? error.message : String(error));
   }
   if (acceptedEvaluatorPath !== undefined && !isAbsolute(acceptedEvaluatorPath)) {
     throw new UsageError("--accepted-evaluator requires an absolute path");
@@ -376,10 +410,29 @@ async function runValidate(
       ...(repo === undefined ? {} : { repoPath: repo }),
       ...(acceptedEvaluatorPath === undefined ? {} : { acceptedEvaluatorPath }),
       ...(guardAuthorityPath === undefined ? {} : { guardAuthorityPath }),
+      trustPolicyPins: pins,
     });
+    if (result.failureKind === "load") {
+      result.errors.forEach((error) => io.stderr(`ERROR: ${error}`));
+      return 2;
+    }
+    // The VALIDATE receipt is the only machine record of CLEAN.
+    if (!template) {
+      const bound = boundReport(path);
+      onValidated?.({
+        root: repo ?? dirname(resolve(path)),
+        verdict: validateReceiptVerdict({ ok: result.ok, live: !structural, reportVerdict: bound?.verdict }),
+        validation: {
+          bundle_sha256: sha256Bytes(readFileSync(path)),
+          subject_commit: bound?.commit ?? null,
+          trust_policy_pins: pins,
+          trust_policy_pins_used: [...(result.trustPolicyPinsUsed ?? [])],
+          live: !structural,
+        },
+      });
+    }
     if (!result.ok) {
       result.errors.forEach((error) => io.stderr(`ERROR: ${error}`));
-      if (result.failureKind === "load") return 2;
       io.stderr(`FAIL errors=${result.errors.length}`);
       return 1;
     }
@@ -744,10 +797,11 @@ interface WriteReceiptInput {
   /** A prepare run already bound its subject; reuse it instead of a second capture. */
   readonly subjectFromBundle?: RepositoryObject;
   readonly pathsRelativeToToplevel?: boolean;
+  readonly validation?: ReceiptValidation;
 }
 
 /**
- * Write one run receipt for a finished audit or prepare. A root that is not a
+ * Write one run receipt for a finished audit, prepare or bundle validation. A root that is not a
  * Git worktree cannot carry a repository identity and is reported as skipped;
  * a refused receipt (root inside the repository, private content) fails the run.
  */
@@ -779,6 +833,7 @@ function writeRunReceipt(io: CliIO, receipts: LocalRunReceiptStore, input: Write
     exit_code: input.exitCode,
     observed_at: input.observedAt,
     finished_at: new Date().toISOString(),
+    ...(input.validation === undefined ? {} : { validation: input.validation }),
   });
   receipts.write(receipt, capture.repository);
   io.stderr(`receipt: WROTE id=${receipt.receipt_id} mode=${receipt.mode} families=${receipt.families.join(",")} findings=${receipt.findings.length}`);
@@ -899,10 +954,10 @@ export async function runCli(
             const results = families
               .filter((entry) => existsSync(join(bundle, entry.file)))
               .map((entry) => ({ family: entry.family, result: readJson(join(bundle, entry.file)) }));
-            const report = record(readJson(join(bundle, "closeout-report.json")));
             const delta = record(readJson(join(bundle, "regression-delta.json")));
             const baselineObject = record(delta?.baseline_repository_object);
-            const verdict = report?.verdict === "CLEAN" ? "CLEAN" : "NOT_CLEAN";
+            // prepare never decides CLEAN; only a VALIDATE receipt records it.
+            const verdict = "NOT_CLEAN";
             writeRunReceipt(io, receipts, {
               root: prepared.repo,
               mode: "CLOSE",
@@ -920,7 +975,26 @@ export async function runCli(
         }
       }
       else if (command === "action") exitCode = await runAction(args, io, runtimeAttestation);
-      else if (command === "validate") exitCode = await runValidate(args, io, runtimeAttestation);
+      else if (command === "validate") {
+        const receiptOptions = takeReceiptRunOptions(args);
+        const observedAt = new Date().toISOString();
+        let validated: ValidatedBundle | undefined;
+        exitCode = await runValidate(args, io, runtimeAttestation, (entry) => { validated = entry; });
+        if (receipts !== undefined && validated !== undefined) {
+          writeRunReceipt(io, receipts, {
+            root: validated.root,
+            mode: "VALIDATE",
+            results: [],
+            verdict: validated.verdict,
+            exitCode,
+            observedAt,
+            runtimeAttestation,
+            options: receiptOptions,
+            invocationId: invocationId ?? null,
+            validation: validated.validation,
+          });
+        }
+      }
       else if (command === "detect") exitCode = await runDetect(args, io);
       else if (command === "inspect") exitCode = await runInspect(args, io);
       else if (command === "census") exitCode = await runCensus(args, io);

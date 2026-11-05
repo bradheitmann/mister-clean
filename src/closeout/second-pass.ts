@@ -48,6 +48,7 @@ import {
   type ReceiptAgent,
   type ReceiptMode,
   type ReceiptSubject,
+  type ReceiptValidation,
   type ReceiptVerdict,
   type RunReceipt,
 } from "../run-receipt.js";
@@ -302,6 +303,7 @@ export interface AssembleReceiptInput {
   readonly exit_code: number;
   readonly observed_at: string;
   readonly finished_at: string;
+  readonly validation?: ReceiptValidation;
 }
 
 export function assembleRunReceipt(input: AssembleReceiptInput): RunReceipt {
@@ -323,6 +325,7 @@ export function assembleRunReceipt(input: AssembleReceiptInput): RunReceipt {
     exit_code: input.exit_code,
     observed_at: input.observed_at,
     finished_at: input.finished_at,
+    ...(input.validation === undefined ? {} : { validation: input.validation }),
   };
 }
 
@@ -426,7 +429,7 @@ export function baselineFromReceipt(receipt: RunReceipt): EarlierBaseline {
 /** Resolve `--against`: a receipt id, a receipt path, a legacy bundle, or the latest receipt for this repository. */
 export function resolveEarlierBaseline(store: LocalRunReceiptStore, repositoryId: string, against: string | undefined): EarlierBaseline {
   if (against === undefined) {
-    const entries = store.forRepository(repositoryId).filter((entry) => entry.mode !== "SECOND_PASS");
+    const entries = store.forRepository(repositoryId).filter((entry) => entry.mode !== "SECOND_PASS" && entry.mode !== "VALIDATE");
     const latest = entries.at(-1) ?? store.forRepository(repositoryId).at(-1);
     if (latest === undefined) throw new Error("no earlier receipt for this repository; pass --against <receipt_id|bundle>");
     return baselineFromReceipt(store.read(latest.receipt_id));
