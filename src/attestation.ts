@@ -15,6 +15,7 @@ import {
   mintServerAttestationBinding,
   type FileRuntimeAttestationBinding,
 } from "./runtime-binding.js";
+import { hardenedGitArgs, hardenedGitEnv } from "./closeout/git-hardening.js";
 
 export const RELEASE_ATTESTATION_FILE = "RELEASE_ATTESTATION.json";
 export const RELEASE_ATTESTATION_RECORD_TYPE = "mister-clean.release-attestation";
@@ -529,9 +530,9 @@ export async function verifyReleaseAttestation(
 }
 
 function runGit(root: string, args: readonly string[]): string {
-  return execFileSync("git", ["--no-optional-locks", "-C", root, ...args], {
+  return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", root, ...args]), {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 }
@@ -596,10 +597,10 @@ async function releaseInputErrors(
     try {
       committed = execFileSync(
         "git",
-        ["--no-optional-locks", "-C", root, "show", `${commit}:${path}`],
+        hardenedGitArgs(["--no-optional-locks", "-C", root, "show", `${commit}:${path}`]),
         {
           encoding: "buffer",
-          env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+          env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
           maxBuffer: 256 * 1024 * 1024,
           stdio: ["ignore", "pipe", "ignore"],
         },

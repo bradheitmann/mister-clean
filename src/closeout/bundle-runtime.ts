@@ -16,6 +16,7 @@ import { isNestedCheckout } from "./repository.js";
 import { isoTimestamp } from "./records.js";
 import { nodeProcessPort, type ActionHygieneProcessPort } from "./action-hygiene.js";
 import type { FileRuntimeAttestationBinding } from "../runtime-binding.js";
+import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -65,8 +66,17 @@ export interface BundleValidationOptions {
   readonly runtimeAttestation?: FileRuntimeAttestationBinding;
   /** Judge-supplied SHA-256 pins of the trust policies a CLEAN verdict may rest on; never read from the bundle. */
   readonly trustPolicyPins?: readonly string[];
+  /** Receives what was validated, taken from the exact bytes read (never re-read afterwards). */
+  readonly onValidated?: (binding: ValidatedBundleBinding) => void;
   readonly validationTime?: Date;
   readonly verifyLive?: boolean;
+}
+
+/** The validated bundle bytes' digest and the verdict and subject its digest-bound report declared. */
+export interface ValidatedBundleBinding {
+  readonly bundle_sha256: string;
+  readonly report_verdict: unknown;
+  readonly subject_commit: string | null;
 }
 
 export interface BundleValidationResult {
@@ -293,18 +303,18 @@ export const nodeFilePort: FilePort = {
 export const nodeGitPort: GitPort = {
   async run(repo, args, allowed = [0]) {
     try {
-      const environment = { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
+      const environment = hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
       let result: { readonly stdout: string; readonly stderr: string };
       if (args.length === 1 && args[0] === "write-tree") {
         const temporary = await mkdtemp(join(tmpdir(), "mc-readonly-index-"));
         try {
-          const sourceIndex = (await execFileAsync("git", ["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "index"], { encoding: "utf8", env: environment })).stdout.trim();
-          const sourceObjects = (await execFileAsync("git", ["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects"], { encoding: "utf8", env: environment })).stdout.trim();
+          const sourceIndex = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "index"]), { encoding: "utf8", env: environment })).stdout.trim();
+          const sourceObjects = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects"]), { encoding: "utf8", env: environment })).stdout.trim();
           const externalIndex = join(temporary, "index");
           const externalObjects = join(temporary, "objects");
           await mkdir(externalObjects, { recursive: true });
           await copyFile(sourceIndex, externalIndex);
-          result = await execFileAsync("git", ["--no-optional-locks", "-C", repo, "write-tree"], {
+          result = await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "write-tree"]), {
             encoding: "utf8",
             env: {
               ...environment,
@@ -317,7 +327,7 @@ export const nodeGitPort: GitPort = {
           await rm(temporary, { recursive: true, force: true });
         }
       } else {
-        result = await execFileAsync("git", ["--no-optional-locks", "-C", repo, ...args], { encoding: "utf8", env: environment });
+        result = await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, ...args]), { encoding: "utf8", env: environment });
       }
       return { code: 0, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
     } catch (error) {

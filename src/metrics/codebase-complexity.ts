@@ -18,6 +18,7 @@ import {
   type RepositoryObject,
   type RepositoryObjectSurfaceEntry,
 } from "../closeout/repository-object.js";
+import { hardenedGitArgs, hardenedGitEnv } from "../closeout/git-hardening.js";
 
 /**
  * Schema 1.0 reports remain valid historical observations.  Version 1.1 adds
@@ -616,9 +617,9 @@ export function classifyIgnoredPath(pathValue: string): IgnoredClass {
 
 function execGit(repository: string, args: readonly string[], input?: string): Buffer {
   try {
-    return execFileSync("git", ["--no-optional-locks", "-C", repository, ...args], {
+    return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
       encoding: null,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
       input,
       maxBuffer: 1024 * 1024 * 1024,
       stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],

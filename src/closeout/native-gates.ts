@@ -32,6 +32,7 @@ import {
   type HeldExecutionLease,
 } from "./execution-lease.js";
 import { isPlanningPathExcluded, loadPlanningConfig } from "./repository.js";
+import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 
 export type NativeGateKind = "established_ci" | "repository_tests" | "lint" | "typecheck" | "build";
 export type NativeGateDisposition = "required" | "not_applicable" | "absent";
@@ -563,7 +564,7 @@ export class NativeGateGitTimeoutError extends Error {
 }
 
 function gitEnvironment(): NodeJS.ProcessEnv {
-  return { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
+  return hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
 }
 
 function gitFailure(args: readonly string[], status: number | null, signal: string | null, stderr: Buffer): Error {
@@ -578,7 +579,7 @@ function gitFailure(args: readonly string[], status: number | null, signal: stri
 function gitBytes(repository: string, args: readonly string[], timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS): Buffer {
   const result = spawnSync(
     "git",
-    ["--no-optional-locks", "-C", repository, ...args],
+    hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]),
     {
       encoding: null,
       env: gitEnvironment(),
@@ -626,7 +627,7 @@ async function gitBytesWithInput(
 ): Promise<Buffer> {
   assertPositiveInteger("git timeout", timeoutMs);
   return await new Promise<Buffer>((resolveBytes, rejectBytes) => {
-    const child = spawn("git", ["--no-optional-locks", "-C", repository, ...args], {
+    const child = spawn("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
       env: gitEnvironment(),
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
@@ -899,10 +900,10 @@ export async function createExecutionSnapshot(
 function trackedPaths(repository: string): readonly string[] {
   const result = spawnSync(
     "git",
-    ["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"],
+    hardenedGitArgs(["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"]),
     {
       encoding: null,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
       maxBuffer: MAX_GIT_OUTPUT_BYTES,
       stdio: ["ignore", "pipe", "pipe"],
     },

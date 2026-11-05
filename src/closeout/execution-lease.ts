@@ -14,6 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 
 type SqliteModule = typeof import("node:sqlite");
 type DatabaseSync = import("node:sqlite").DatabaseSync;
@@ -201,10 +202,10 @@ export function gitCommonDirectory(repository: string): string {
   const root = realpathSync(resolve(repository));
   const output = execFileSync(
     "git",
-    ["--no-optional-locks", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    hardenedGitArgs(["--no-optional-locks", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"]),
     {
       encoding: "utf8",
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
       stdio: ["ignore", "pipe", "pipe"],
     },
   ).trim();
