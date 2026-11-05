@@ -1,5 +1,5 @@
 {
-  "commit": "47f1ea2a83791fc35b3d91c7bda45b4c00a87283",
+  "commit": "f0aa24af049c6024c5bf75e67beb3a4146d8e6f0",
   "entries": [
     {
       "mode": "100644",
@@ -94,9 +94,9 @@
     },
     {
       "mode": "100644",
-      "object": "cf64f06c9735aba2f822ec38f719959b2ea9b280",
+      "object": "a7782bfe0d08db33a5bd2edc16eedfdd533b472d",
       "path": "MANIFEST.sha256",
-      "sha256": "9f3822a6dfb3dd2de52b974303acec58940182848a23610003b7f7de625cda4e",
+      "sha256": "bb0b5bac21017215ec44fde29d828139c660a1927423551389a9da17fd159416",
       "type": "blob"
     },
     {
@@ -325,9 +325,9 @@
     },
     {
       "mode": "100644",
-      "object": "a5769c7b62176750e20c25bb9233340faca71050",
+      "object": "bb360ea67f4ed81d82a7751d817c292db494a4f2",
       "path": "bin/mister-clean.js",
-      "sha256": "7b2bb04787d419892defe94e6101733bcabf5f09059fae12df535bf489020be9",
+      "sha256": "1282547273c3e74f027928184ec966bd10376c11dd568430df029f9687dade74",
       "type": "blob"
     },
     {
@@ -2103,9 +2103,9 @@
     },
     {
       "mode": "100644",
-      "object": "a9c6f7514f610dff7bc2a46844f3b24456c43ad2",
+      "object": "a8d19136e8ca6d580c2034cd426c6ffc21601320",
       "path": "src/closeout/bundle-action-evidence.ts",
-      "sha256": "aaba0916b9da1be0daee98c70a6afcc0e26ce81d7198de83f567e01a48226b8d",
+      "sha256": "d9506521b4724f2ecfe40d5f2e09c579b0c01f856bcaeda8ad22b9aab59b7acb",
       "type": "blob"
     },
     {
@@ -2131,9 +2131,9 @@
     },
     {
       "mode": "100644",
-      "object": "77ffa44bd8072c12403573abdabf0bdaf5eef35f",
+      "object": "e99a272806d534cf94473e78c57bc29d3a657319",
       "path": "src/closeout/bundle-live-validation.ts",
-      "sha256": "18d64b003e9da1c8558bba5f1492c87f3e721cce852d911c59574742fa04c112",
+      "sha256": "8cc5bf6b00d729bf2aafa97ca2d102de9f32dcd76d3c799d9974abfc0b341a2b",
       "type": "blob"
     },
     {
@@ -2208,9 +2208,9 @@
     },
     {
       "mode": "100644",
-      "object": "433708b98282bdd8af1cda1789fbc4a0ac27cb86",
+      "object": "915a7de5ed7a52bcef2a588fa455e939536e8484",
       "path": "src/closeout/execution-safety.test.ts",
-      "sha256": "defab13d8db289401aea7deb5c49b4f177a9ab8b83bec0888cd74dfd7904488a",
+      "sha256": "aaf4130fc47097b1afc9b4617c8879fe65c580d033b844a523c6cf3058ba4d4f",
       "type": "blob"
     },
     {
@@ -2257,9 +2257,9 @@
     },
     {
       "mode": "100644",
-      "object": "e244a31047d8a2d9a130615fab04ca1d29352514",
+      "object": "b77e41b1df767da828d2ba60fa6289c449ba999c",
       "path": "src/closeout/git-hardening.ts",
-      "sha256": "d4f19aac405921b9aba307381bfac67fc621d76a248556fa656a37b0ef536fb2",
+      "sha256": "72fa8ccaf626c2cd004467f05894db974f26e5457e47103269a1a7dc373feddc",
       "type": "blob"
     },
     {
@@ -3552,11 +3552,11 @@
     }
   ],
   "entry_count": 507,
-  "head": "47f1ea2a83791fc35b3d91c7bda45b4c00a87283",
+  "head": "f0aa24af049c6024c5bf75e67beb3a4146d8e6f0",
   "kind": "git-commit-tree",
-  "manifest_sha256": "80d143e73f1bacd43cc6b5a2d4c17e90019132933f36b1d5f2c6c4803d8b2c4a",
+  "manifest_sha256": "0a8a76aa7e69e71d605c9106cf0cefe8f8d4ad82c8c082ea173a70d6b00035c1",
   "schema_version": "charter.freeze/2",
   "selector": "git-ls-tree:HEAD",
   "slice": "mg-s1b-git-env-hardening",
-  "tree": "5e4df9b81a33a90f046111a6d75763d5b1edf70c"
+  "tree": "1c458ce0e5d2a5e9a4e766683609cf4f7973c3fe"
 }
