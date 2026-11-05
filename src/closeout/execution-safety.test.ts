@@ -148,7 +148,6 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
 
   describe("minimal path toolchains", () => {
     const has = (name: string): boolean => resolveExecutable(name, process.env.PATH ?? "") !== undefined;
-    const installedVersion = (name: string): string => spawnSync(resolveExecutable(name, process.env.PATH ?? "")!.invoked, ["--version"], { encoding: "utf8" }).stdout.trim();
 
     it.skipIf(!has("npm") || !has("pnpm"))("npm and pnpm gates still run node from the shim PATH", async () => {
       for (const manager of ["npm", "pnpm"] as const) {
@@ -159,13 +158,12 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
         writeFileSync(join(repo, "package.json"), `${JSON.stringify({
           name: `${manager}-node-fixture`,
           private: true,
-          // The installed version: pnpm downloads any other declared version, which an offline gate cannot.
-          packageManager: `${manager}@${installedVersion(manager)}`,
           scripts: { test: "node -e \"process.stdout.write('node ran\\\\n')\"" },
         }, null, 2)}\n`);
+        // The lockfile alone selects the manager. A declared packageManager makes pnpm
+        // manage its own version and rewrite the lockfile, which the gate's mutation
+        // guard rightly refuses.
         writeFileSync(join(repo, manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml"), manager === "npm" ? "{}\n" : "lockfileVersion: '9.0'\n");
-        // Let the manager settle its own lockfile once, so the gate run leaves the subject unchanged.
-        spawnSync(resolveExecutable(manager, process.env.PATH ?? "")!.invoked, ["run", "test"], { cwd: repo, env: { ...process.env, CI: "1", NPM_CONFIG_OFFLINE: "true" }, stdio: "ignore" });
         fixtureCommit(repo, "fixture");
         const { execution, stdout } = await runProbe(repo, join(root, "evidence"));
         const stderr = readFileSync(join(root, "evidence", execution.stderr_ref.path), "utf8");
