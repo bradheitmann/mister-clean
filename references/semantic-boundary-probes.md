@@ -158,7 +158,9 @@ drift, or evidence mismatch produce `verification_debt`.
 `validate bundle` refuses CLEAN on a v2 attestation unless the frozen trust
 policy matches a SHA-256 pin the judge supplies from outside the bundle:
 `--trust-policy-sha256 <hex>` (repeatable) or `MISTER_CLEAN_TRUST_POLICY_SHA256`
-(comma- or space-separated). A legacy v1 manifest never counts toward CLEAN.
+(comma- or space-separated). Explicit flags replace the environment pin; the
+environment applies only when no flag is given. A legacy v1 manifest never
+counts toward CLEAN.
 
 ### 4. Mister Clean verdict reduction
 

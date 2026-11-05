@@ -7,12 +7,14 @@ import { generateKeyPairSync, randomBytes, sign, type KeyObject } from "node:cry
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { canonicalJson, sha256Bytes } from "../canonical-json.js";
 import { runCli, type CliIO } from "../cli.js";
+import { nodeCloseoutEngine } from "./engine.js";
+import { nodeBundlePorts, nodeFilePort } from "./bundle.js";
 import { LocalRunReceiptStore, runReceiptErrors } from "../run-receipt.js";
 import { captureFileCensus } from "../census.js";
 import {
@@ -269,7 +271,8 @@ describe("trust root (master-gate S0)", { timeout: 120_000 }, () => {
     it("reads judge pins from repeatable flags and the environment, refusing a malformed one", () => {
       const first = "c".repeat(64);
       const second = "d".repeat(64);
-      expect(trustPolicyPins([first], { [TRUST_POLICY_PIN_ENV]: `${second}, ${first}` })).toEqual([first, second]);
+      expect(trustPolicyPins([second, first], {})).toEqual([first, second]);
+      expect(trustPolicyPins([], { [TRUST_POLICY_PIN_ENV]: `${second}, ${first}` })).toEqual([first, second]);
       expect(trustPolicyPins([], {})).toEqual([]);
       expect(() => trustPolicyPins(["not-a-digest"], {})).toThrow(/--trust-policy-sha256/);
       expect(() => trustPolicyPins([], { [TRUST_POLICY_PIN_ENV]: "ABC" })).toThrow(new RegExp(TRUST_POLICY_PIN_ENV));
@@ -282,6 +285,35 @@ describe("trust root (master-gate S0)", { timeout: 120_000 }, () => {
     });
   });
 
+
+  describe("pin precedence", () => {
+    it("explicit --trust-policy-sha256 pins replace the environment pin; they never add to it", () => {
+      const cli = "1".repeat(64);
+      const inherited = "2".repeat(64);
+      expect(trustPolicyPins([cli], { [TRUST_POLICY_PIN_ENV]: inherited })).toEqual([cli]);
+    });
+
+    it("the environment pin applies only when no CLI pin is given", () => {
+      const inherited = "2".repeat(64);
+      expect(trustPolicyPins([], { [TRUST_POLICY_PIN_ENV]: inherited })).toEqual([inherited]);
+    });
+
+    it("validate bundle records only the CLI pins when an environment pin is also set", async () => {
+      const value = await fixture();
+      const store = new LocalRunReceiptStore(join(tmpdir(), `mister-clean-trust-root-receipts-${crypto.randomUUID()}`));
+      temporaryRoots.push(store.root);
+      const cli = "1".repeat(64);
+      const saved = process.env[TRUST_POLICY_PIN_ENV];
+      process.env[TRUST_POLICY_PIN_ENV] = "2".repeat(64);
+      try {
+        await runCli(["validate", "bundle", value.bundlePath, "--repo", value.repo, "--trust-policy-sha256", cli], capture().io, undefined, undefined, store);
+      } finally {
+        if (saved === undefined) delete process.env[TRUST_POLICY_PIN_ENV]; else process.env[TRUST_POLICY_PIN_ENV] = saved;
+      }
+      const receipt = store.read(store.index()[0]!.receipt_id);
+      expect(receipt.validation?.trust_policy_pins).toEqual([cli]);
+    });
+  });
   describe("attester identity", () => {
     function subject(): string {
       const root = mkdtempSync(join(tmpdir(), "mister-clean-trust-root-policy-"));
@@ -609,6 +641,44 @@ describe("trust root (master-gate S0)", { timeout: 120_000 }, () => {
         },
       });
       expect(receipt.subject.head_commit).toBe(value.head);
+    });
+
+    it("receipt binds validated bytes: a bundle and report swapped on disk after validation do not reach the receipt", async () => {
+      const value = await fixture();
+      const store = new LocalRunReceiptStore(join(tmpdir(), `mister-clean-trust-root-receipts-${crypto.randomUUID()}`));
+      temporaryRoots.push(store.root);
+      const validatedBytes = await readFile(value.bundlePath);
+      const reportPath = join(value.proof, String((value.bundle.report as RecordValue).path));
+      const validate = nodeCloseoutEngine.validateBundle.bind(nodeCloseoutEngine);
+      const spy = vi.spyOn(nodeCloseoutEngine, "validateBundle").mockImplementation(async (path, options) => {
+        // A concurrent writer swaps the bundle right after validation first reads it,
+        // and the report once validation returns; any later re-read sees the swap.
+        let swapped = false;
+        const files = {
+          ...nodeFilePort,
+          async readBytes(target: string) {
+            const bytes = await nodeFilePort.readBytes(target);
+            if (!swapped && resolve(target) === resolve(path)) {
+              swapped = true;
+              writeFileSync(path, `${JSON.stringify({ ...value.bundle, run_id: "swapped-after-read" })}\n`);
+            }
+            return bytes;
+          },
+        };
+        const result = await validate(path, { ...options, ports: { ...nodeBundlePorts, files } });
+        const report = JSON.parse(readFileSync(reportPath, "utf8")) as RecordValue;
+        (report.repo as RecordValue).commit = "e".repeat(40);
+        writeFileSync(reportPath, `${JSON.stringify(report)}\n`);
+        return result;
+      });
+      try {
+        await runCli(["validate", "bundle", value.bundlePath, "--repo", value.repo], capture().io, undefined, undefined, store);
+      } finally {
+        spy.mockRestore();
+      }
+      const receipt = store.read(store.index()[0]!.receipt_id);
+      expect(receipt.validation?.bundle_sha256).toBe(digest(validatedBytes));
+      expect(receipt.validation?.subject_commit).toBe(value.head);
     });
 
     it("only a passing live validation of a CLEAN report yields a CLEAN receipt verdict", () => {

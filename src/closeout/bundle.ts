@@ -457,10 +457,17 @@ async function validateChangeInventory(
 }
 
 /** Validate an already-parsed closure bundle and all digest-bound sidecars. */
+/** What the validated report declared, captured from the bytes validation loaded. */
+interface BoundReport {
+  verdict?: unknown;
+  commit?: string | null;
+}
+
 async function validateBundleUnsafe(
   data: unknown,
   bundlePath: string,
   options: BundleValidationOptions = {},
+  bound: BoundReport = {},
 ): Promise<BundleValidationResult> {
   const errors: string[] = [];
   const clock = evidenceClock(options, errors);
@@ -479,6 +486,9 @@ async function validateBundleUnsafe(
   const report = reportLoad.data;
   const manifest = manifestLoad.data;
   if (!report || !manifest) return { errors, ok: errors.length === 0 };
+  bound.verdict = report.verdict;
+  const subjectCommit = object(report.repo)?.commit;
+  bound.commit = typeof subjectCommit === "string" ? subjectCommit : null;
   if (clock) {
     validateEvidenceClock(report, "$.report", clock, errors);
     validateEvidenceClock(manifest, "$.manifest", clock, errors);
@@ -592,8 +602,17 @@ export async function validateBundle(
   bundlePath: string,
   options: BundleValidationOptions = {},
 ): Promise<BundleValidationResult> {
+  return validateBundleCapturing(data, bundlePath, options, {});
+}
+
+async function validateBundleCapturing(
+  data: unknown,
+  bundlePath: string,
+  options: BundleValidationOptions,
+  bound: BoundReport,
+): Promise<BundleValidationResult> {
   try {
-    return await validateBundleUnsafe(data, bundlePath, options);
+    return await validateBundleUnsafe(data, bundlePath, options, bound);
   } catch (error) {
     return {
       errors: [`$: validation input could not be safely inspected: ${error instanceof Error ? error.message : String(error)}`],
@@ -609,8 +628,13 @@ export async function validateBundleFile(
 ): Promise<BundleValidationResult> {
   const ports = options.ports ?? nodeBundlePorts;
   try {
-    const data = JSON.parse(await ports.files.readText(bundlePath));
-    return validateBundle(data, bundlePath, { ...options, ports });
+    // Read once: the receipt binds these bytes, never a later re-read of the path.
+    const bytes = await ports.files.readBytes(bundlePath);
+    const data = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    const bound: BoundReport = {};
+    const result = await validateBundleCapturing(data, bundlePath, { ...options, ports }, bound);
+    options.onValidated?.({ bundle_sha256: sha256(bytes), report_verdict: bound.verdict, subject_commit: bound.commit ?? null });
+    return result;
   } catch (error) {
     return { errors: [error instanceof Error ? error.message : String(error)], failureKind: "load", ok: false };
   }
