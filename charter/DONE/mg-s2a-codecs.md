@@ -24,9 +24,9 @@ Proofs (each re-openable before acceptance):
    - mutant: make the shared encoder sort with `localeCompare` → RED (the keys "B" and "a"). Remove omit mode from the native-gates wrapper → RED (the undefined-field rows).
 2. Declared canonical-JSON deltas, one test each:
    - (a) snapshot.ts comparisons are key-order-insensitive inside arrays: key-reordered capability objects at :307 now compare equal (A2-45).
-   - (b) action-lifecycle-runtime `canonical` and `equal` refuse an undefined field and NaN, instead of emitting the text `undefined` or `null`.
+   - (b) action-lifecycle-runtime `canonical` and `equal`, accepted-release `canonical` and snapshot `canonicalJsonForSnapshot` refuse an undefined field and NaN, instead of emitting the text `undefined` or `null`.
    - (c) root-debt and observation keys sort by UTF-16 code units: a row keyed "\uFFFF" against "\u{10000}" orders as RFC 8785 does.
-   - (d) the shared encoder refuses a cycle, an array hole, a non-plain prototype, a symbol key, a lone surrogate and an accessor property, where the base root encoder overflowed the stack or accepted them.
+   - (d) the shared encoder refuses a cycle, an array hole, a non-plain prototype (including a Date or Map, which the lax encoders in native-gates, accepted-release, action-lifecycle-runtime, action-hygiene and snapshot wrote as `{}`), a symbol key, a lone surrogate and an accessor property, where the base encoders overflowed the stack or accepted them. Proof 1's differential covers only plain JSON values; these out-of-domain inputs are covered here.
    - reopen: `R src/canonical-json.golden.test.ts -t "canonical json declared deltas"`
    - mutant, one per part: route the site back to its oracle → that part goes RED.
 3. Timestamps are byte-identical to every base validator (differential).
@@ -73,7 +73,7 @@ Proofs (each re-openable before acceptance):
    - mutant: change -0 handling, or the omit mode, in the shared encoder → a vector goes RED.
 6. No second implementation remains. src/backbone-single-implementation.test.ts, `describe("codecs")`, reads every tracked non-test `.ts` file under src/, scripts/ and tools/ (excluding `*.test.ts`, `*.test-fixture.ts`, src/test-support/ and bin/) and asserts:
    - (a) the encoder template `${JSON.stringify(key)}:` occurs only in src/canonical-json.ts (7 files on base);
-   - (b) a date-shaped regex literal (`\d{4}` or `(\d{4})` followed by `-`) occurs only in src/timestamp.ts (8 sites on base);
+   - (b) a date-shaped regex literal (`d{4}` or `(d{4})` followed by `-`) occurs only in src/timestamp.ts, plus exactly these 5 base sites, whose grammar is defined through Date.parse and cannot move byte-identically into a Date.parse-free grammar: src/closeout/accepted-release.ts `iso`, src/closeout/planning-analysis/policy.ts `validTimestampWithZone`, src/control-plane/contracts/agent-profile.ts, src/control-plane/contracts/snapshot.ts and src/control-plane/runtime/snapshot-producer.ts. The test allowlists them by file and function or const name, each labelled as an obligation for mg-s2-ts-dateparse. Any other site fails, including a new one in an allowlisted file (13 sites on base: 8 migrate, 5 allowlisted);
    - (c) `toISOString() ===` occurs only in src/timestamp.ts (3 on base);
    - (d) no function or const named `isoTimestamp`, `validIsoTimestamp`, `canonicalTimestamp`, `ISO_TIMESTAMP` or `canonicalJsonForSnapshot` is defined outside src/timestamp.ts and src/canonical-json.ts.
 
@@ -100,6 +100,7 @@ Proofs (each re-openable before acceptance):
 Gates (exact commands): the commands in proofs 1-9. Paired QA comes from two model families (charter.toml review_families_required = 2). Repair cycles are capped at 1 and QA attempts at 3.
 
 Out of scope (recorded obligations, not fixed here):
+- The 5 Date.parse-defined timestamp grammars allowlisted in proof 6(b), plus a measurement of whether node and bun agree on Date.parse over the proof 3 corpus → mg-s2-ts-dateparse.
 - bundle-runtime.ts:233 structural `stableEqual` (113 call sites; it differs from canonical equality on -0, NaN and undefined) → mg-s2f-validate-parity.
 - Git runners and D5 → mg-s2b-git-runner.
 - Front-matter → mg-s2c-front-matter.
