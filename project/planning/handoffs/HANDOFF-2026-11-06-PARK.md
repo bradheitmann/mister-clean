@@ -228,3 +228,25 @@ This repository runs no shared service. Parking stops no service. The control-pl
 - **Pin disposition:** the fleet pin stays v7.5.1 (recent and usable). v7.5.2 is an owner-requested patch for one consumer and does not repin the fleet. main is a checkpoint (S0, S1, S1b), not a release.
 - **Odin field-run support:** odin-close-4 and the retired-corpus run were disarmed before they started; their inputs are preserved privately and deferred into odin's handoff.
 - **PARKED: no new work.**
+
+## 10. Addendum: incidents during this session (requested by A/PO-ASTRA, 2026-11-06; records only)
+
+These are sanitized accounts. The exact commit and ref identities and the custody details are in a private record outside this repository: `~/.local/share/agent-private/mister-clean/master-gate/INCIDENTS-20261106.md`. Each statement below was verified with a command named in that record; nothing is inferred.
+
+**Incident 1: a reviewer receipt carrying owner personal data reached a public branch.**
+- *What happened.* A cross-family QA receipt for slice mg-s1b-git-env-hardening contained absolute local paths that included the owner's username. It was committed on that slice's lane branch and pushed to the public remote branch. It never reached main.
+- *How it was found.* The owner-PII check on the merge candidate caught it before main was pushed. The local merge holding it was never pushed and was undone locally.
+- *Outcome.* The acceptance records were rebuilt on a fresh branch with the paths written as `~/`, the receipt was re-verified and the slice re-accepted, and main received only the clean records. The pull request was closed and the remote lane branch deleted, with no archive tag.
+- *Remaining exposure, verified 2026-11-06.* The affected commit is **still reachable on GitHub by its SHA and through that pull request's head ref**. Deleting the branch did not remove it. Purging it needs GitHub Support, which is an owner action. A local copy of the lane branch is kept for custody.
+- *History rewritten:* no. *Force-push:* no.
+- *Corrective instruction.* The Claude Code charter guard (`~/.claude/hooks/guard-charter.sh`) now blocks, in every repository, any `git push` whose added lines match the owner-PII patterns (tested on a scratch clone). The recorded lesson is to PII-check every verifier-written record before committing it.
+- *Residual risk.* The guard covers Claude Code sessions only; other harnesses have no such hook. And the published commit stays reachable until the owner requests a purge.
+
+**Incident 2: a prohibited forced worktree removal.**
+- *What happened.* A temporary worktree, used only to record one slice's dispatch, was removed with `git worktree remove --force`. AGENTS.md prohibits forced worktree removal.
+- *Outcome.* `git status` showed its only content was the untracked dispatch record. That record had been copied out beforehand and checked, and the copy was later committed and is on main. No loss was observed. Ignored files were not listed separately before the removal, so their absence is not proven.
+- *History rewritten:* no.
+- *Corrective instruction.* "Never --force" is recorded in the program's lifecycle log. The correct route is to give the owner a `!` command deleting the single untracked directory, then run a plain `git worktree remove`.
+- *Residual risk.* None known beyond the rule breach. The rule is enforced by instruction, not by a hook.
+
+**Related, outside this repository.** This PM's odin field-run brief inlined the owner-PII search pattern, and it was copied into a public odin revision. Odin contained it under the owner's ruling (b); see odin's handoff. The corrective instruction is that patterns live only in the private pattern file and briefs reference the file.
