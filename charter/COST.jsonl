@@ -1,0 +1,2 @@
+{"at_unix_ms":1793946563268,"measured":false,"model":null,"reason":"token usage across the PM session, the Claude sub-agents and the pi cross-family seats was not captured per slice","schema_version":"charter.cost/1","seat":"PM-MISTER-CLEAN","slice":"mg-s1b-git-env-hardening"}
+{"at_unix_ms":1793946563278,"measured":false,"model":null,"reason":"token usage across the PM session, the Claude sub-agents and the pi cross-family seats was not captured per slice","schema_version":"charter.cost/1","seat":"PM-MISTER-CLEAN","slice":"mg-pii-name-1"}
