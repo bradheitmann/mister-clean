@@ -1,6 +1,6 @@
 # State — mister-clean — 2026-11-06T06:45Z (from `date -u`), written by the project PM (Claude Code) at the PARK point (owner save-and-handoff directive, 2026-11-06)
 HEAD: d547fc5483cd08875efaac2d98cca86f26235a8c (main before this merge; this merge lands mg-pii-name-1 at the park point). Every claim below was verified at the park point; successors compare before trusting a line.
-PARKED. No new slices start. The full park handoff is project/planning/handoffs/HANDOFF-2026-11-06-PARK.md on branch handoff/park-20261106 (pushed; final handoff commit 08fa859, which includes the §10 incident addendum). It holds purpose, strategy, exact refs, the work done, ordered future work S1c–S9, the recorded lifecycle deviations, protocols, cloud-resume instructions, and pairwise seams with every workspace repository.
+ACTIVE again (owner, 2026-11-06, direct instruction in the PM session: "Why don't you go ahead and bring the 7.5.2 fix into main, then do S1C and S2, and then commit and push again"). Active scope, in order: trust-policy owner role (done: v3 fc0b0677, charter/owner-decisions/2026-11-06-owner-key-principal-role.md), then the 7.5.2 forward merge, then S1c, then S2. The park handoff remains the resume baseline. The full park handoff is project/planning/handoffs/HANDOFF-2026-11-06-PARK.md on branch handoff/park-20261106 (pushed; final handoff commit 08fa859, which includes the §10 incident addendum). It holds purpose, strategy, exact refs, the work done, ordered future work S1c–S9, the recorded lifecycle deviations, protocols, cloud-resume instructions, and pairwise seams with every workspace repository.
 Proven (with the proof names):
 - Fleet pin: v7.5.1 (a47c00d), installed and attested in every agent skill directory; npm latest.
 - v7.5.2 (tag on 1d06f2a; release line release/7.5.x at c966510): the prepare source_refs and runner-finding byte-order fixes. mg-release-7.5.2 was accepted through the full charter lifecycle, with a cross-family receipt by CH/QA xiaomi/mimo-v2.6-flash. The GitHub release is published from the CI tag run. Not installed by this PM; dsgncrsh installs it.
@@ -24,6 +24,5 @@ Next three bounded items (in order), for the resume, NOT started:
 2. S1c, OS sandbox for native gates (plus the S1/S1b QA obligations).
 3. S2, backbone: phase registry, finding model, reducer, shared primitives.
 Open owner decisions:
-- A principal role for the owner key, so exceptions can be signed.
 - A package split of the control plane and Worker out of the CLI package.
 - Slice Zero redesign scope.
