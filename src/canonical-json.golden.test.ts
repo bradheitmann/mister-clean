@@ -672,14 +672,21 @@ describe("canonical json declared deltas", () => {
     expect(canonicalJson(reorderedCapabilities)).toBe(canonicalJson(CAPABILITY_DEFINITIONS));
   });
 
-  it("(b) action-lifecycle-runtime canonical and equal refuse an undefined field and NaN", () => {
+  it("(b) action-lifecycle-runtime, accepted-release and snapshot refuse an undefined field and NaN", () => {
     expect(oracle_action_lifecycle_runtime.canonical({ a: undefined })).toBe("{\"a\":undefined}");
     expect(oracle_action_lifecycle_runtime.canonical({ a: Number.NaN })).toBe("{\"a\":null}");
     expect(oracle_action_lifecycle_runtime.equal({ a: Number.NaN }, { a: null })).toBe(true);
+    expect(oracle_accepted_release.canonical({ a: undefined })).toBe("{\"a\":undefined}");
+    expect(oracle_accepted_release.canonical({ a: Number.NaN })).toBe("{\"a\":null}");
+    expect(oracle_snapshot.canonicalJsonForSnapshot({ a: undefined })).toBe("{\"a\":undefined}");
+    expect(oracle_snapshot.canonicalJsonForSnapshot({ a: Number.NaN })).toBe("{\"a\":null}");
+    // The live action-lifecycle-runtime wrappers, then the shared refuse mode the other two sites use.
     expect(() => canonical({ a: undefined })).toThrow(/undefined/u);
     expect(() => canonical({ a: Number.NaN })).toThrow(/finite/u);
     expect(() => equal({ a: Number.NaN }, { a: null })).toThrow(/finite/u);
     expect(() => equal({ a: undefined }, {})).toThrow(/undefined/u);
+    expect(() => canonicalJson({ a: undefined })).toThrow(/undefined/u);
+    expect(() => canonicalJson({ a: Number.NaN })).toThrow(/finite/u);
   });
 
   it("(c) root-debt keys sort object keys by UTF-16 code units, as RFC 8785 does", () => {
@@ -691,12 +698,13 @@ describe("canonical json declared deltas", () => {
     expect(canonicalRootDebtKey(input)).not.toBe(sha256Bytes(oracle_regression_accounting.canonicalJson(preimage)));
   });
 
-  it("(d) the shared encoder refuses what the base root encoder overflowed on or accepted", () => {
+  it("(d) the shared encoder refuses what the base encoders overflowed on or accepted", () => {
     const rows: readonly [string, unknown][] = [
       ["cycle", cycle()],
       ["array hole", [1, , 2]],
       ["non-plain prototype", new Point(1)],
       ["Date", new Date(0)],
+      ["Map", new Map([["a", 1]])],
       ["symbol key", { [Symbol("k")]: 1, a: 1 }],
       ["lone surrogate value", "\ud800"],
       ["lone surrogate key", { "\udc00": 1 }],
@@ -704,24 +712,27 @@ describe("canonical json declared deltas", () => {
     ];
     for (const [label, value] of rows) {
       expect(() => canonicalJson(value), label).toThrow();
+      expect(() => canonicalJson(value, { undefinedFields: "omit" }), `${label} (omit)`).toThrow();
     }
+    // What the base root encoder did with them.
     expect(() => oracle_canonical_json.canonicalJson(cycle())).toThrow(RangeError);
     expect(oracle_canonical_json.canonicalJson([1, , 2])).toBe("[1,,2]");
     expect(oracle_canonical_json.canonicalJson(new Point(1))).toBe("{\"x\":1}");
-    expect(oracle_canonical_json.canonicalJson(new Date(0))).toBe("{}");
     expect(oracle_canonical_json.canonicalJson({ [Symbol("k")]: 1, a: 1 })).toBe("{\"a\":1}");
     expect(oracle_canonical_json.canonicalJson("\ud800")).toBe("\"\\ud800\"");
     expect(oracle_canonical_json.canonicalJson(accessor())).toBe("{\"a\":1}");
-  });
-
-  it("(d, extension) the lax site encoders' undefined-field, NaN and non-plain encodings are refused too", () => {
-    expect(oracle_accepted_release.canonical({ a: undefined })).toBe("{\"a\":undefined}");
-    expect(oracle_snapshot.canonicalJsonForSnapshot({ a: Number.NaN })).toBe("{\"a\":null}");
-    expect(oracle_native_gates.canonicalJson(new Date(0))).toBe("{}");
-    expect(oracle_action_hygiene.canonical(new Point(1))).toBe("{\"x\":1}");
-    expect(() => canonicalJson({ a: undefined })).toThrow();
-    expect(() => canonicalJson({ a: Number.NaN })).toThrow();
-    expect(() => canonicalJson(new Date(0), { undefinedFields: "omit" })).toThrow();
-    expect(() => canonicalJson(new Point(1))).toThrow();
+    // The lax encoders wrote a Date or a Map as {}.
+    for (const value of [new Date(0), new Map([["a", 1]])]) {
+      expect(oracle_canonical_json.canonicalJson(value)).toBe("{}");
+      expect(oracle_native_gates.canonicalJson(value)).toBe("{}");
+      expect(oracle_accepted_release.canonical(value)).toBe("{}");
+      expect(oracle_action_lifecycle_runtime.canonical(value)).toBe("{}");
+      expect(oracle_action_hygiene.canonical(value)).toBe("{}");
+      expect(oracle_snapshot.canonicalJsonForSnapshot(value)).toBe("{}");
+    }
+    // The live native-gates and action-lifecycle-runtime wrappers refuse them as well.
+    expect(() => identity(new Date(0))).toThrow();
+    expect(() => stableEqual(new Map(), {})).toThrow();
+    expect(() => canonical(new Date(0))).toThrow();
   });
 });

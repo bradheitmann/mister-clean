@@ -47,18 +47,41 @@ describe("codecs", () => {
     expect(occurrences(/\$\{JSON\.stringify\(key\)\}:/u, new Set(["src/canonical-json.ts"]))).toEqual([]);
   });
 
-  it("(b) a date-shaped regex literal occurs only in src/timestamp.ts, apart from the recorded Date.parse-grammar obligations", () => {
-    // Out of mg-s2a scope: these sites define their grammar through Date.parse, so no
-    // engine-independent profile reproduces them byte for byte. Each is an obligation for
-    // a follow-up slice; the list is exact, so a new site, or a moved one, fails here.
-    const DATE_PARSE_GRAMMAR_OBLIGATIONS = [
-      "src/closeout/accepted-release.ts:58",
-      "src/closeout/planning-analysis/policy.ts:543",
-      "src/control-plane/contracts/agent-profile.ts:4",
-      "src/control-plane/contracts/snapshot.ts:22",
-      "src/control-plane/runtime/snapshot-producer.ts:15",
-    ];
-    expect(occurrences(/\\d\{4\}-|\(\\d\{4\}\)-/u, new Set(["src/timestamp.ts"]))).toEqual(DATE_PARSE_GRAMMAR_OBLIGATIONS);
+  it("(b) a date-shaped regex literal occurs only in src/timestamp.ts, apart from the 5 allowlisted Date.parse grammars", () => {
+    // Obligations for mg-s2-ts-dateparse: these sites define their grammar through Date.parse,
+    // so no Date.parse-free profile reproduces them byte for byte. Each is allowed once, by file
+    // and enclosing function or const name; any other site fails, including a new one in these files.
+    const OBLIGATION = "obligation: mg-s2-ts-dateparse";
+    const DATE_PARSE_GRAMMARS: Readonly<Record<string, string>> = {
+      "src/closeout/accepted-release.ts iso": OBLIGATION,
+      "src/closeout/planning-analysis/policy.ts validTimestampWithZone": OBLIGATION,
+      "src/control-plane/contracts/agent-profile.ts timestamp": OBLIGATION,
+      "src/control-plane/contracts/snapshot.ts timestamp": OBLIGATION,
+      "src/control-plane/runtime/snapshot-producer.ts timestamp": OBLIGATION,
+    };
+    const declaration = /^\s*(?:export\s+)?(?:async\s+)?(?:function\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Za-z_$][\w$]*))/u;
+    const enclosingName = (lines: readonly string[], index: number): string => {
+      for (let line = index; line >= 0; line -= 1) {
+        const match = declaration.exec(lines[line]!);
+        if (match) return match[1] ?? match[2]!;
+      }
+      return "<module>";
+    };
+    const seen = new Map<string, string[]>();
+    const unexpected: string[] = [];
+    for (const { path, lines } of productionSources()) {
+      if (path === "src/timestamp.ts") continue;
+      lines.forEach((line, index) => {
+        if (!/\\d\{4\}-|\(\\d\{4\}\)-/u.test(line)) return;
+        const key = `${path} ${enclosingName(lines, index)}`;
+        if (DATE_PARSE_GRAMMARS[key] === undefined) unexpected.push(`${path}:${index + 1}`);
+        else seen.set(key, [...(seen.get(key) ?? []), `${path}:${index + 1}`]);
+      });
+    }
+    expect(unexpected).toEqual([]);
+    const repeated = [...seen.values()].filter((sites) => sites.length > 1).flat();
+    expect(repeated).toEqual([]);
+    expect([...seen.keys()].sort()).toEqual(Object.keys(DATE_PARSE_GRAMMARS).sort());
   });
 
   it("(c) a toISOString round-trip check occurs only in src/timestamp.ts", () => {
