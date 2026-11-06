@@ -63,6 +63,40 @@ describe("toolchain locators in the scrubbed gate environment", () => {
     });
   });
 
+
+  describe("derivation guards", () => {
+    function rustupLayout(binName = "bin", withSettings = true): string {
+      const root = scratch();
+      mkdirSync(join(root, "cargo", binName), { recursive: true });
+      writeFileSync(join(root, "cargo", binName, "rustup"), "#!/bin/sh\n");
+      chmodSync(join(root, "cargo", binName, "rustup"), 0o755);
+      mkdirSync(join(root, "rustup"));
+      if (withSettings) writeFileSync(join(root, "rustup", "settings.toml"), "default_toolchain = \"fixture\"\n");
+      return root;
+    }
+
+    it("does not derive a home the environment already set", () => {
+      const root = rustupLayout();
+      expect(toolchainLocators({
+        HOME: "/nonexistent-home",
+        PATH: join(root, "cargo", "bin"),
+        CARGO_HOME: "/opt/explicit-cargo",
+        RUSTUP_HOME: "/opt/explicit-rustup",
+      }, "/nonexistent-home")).toEqual({ CARGO_HOME: "/opt/explicit-cargo", RUSTUP_HOME: "/opt/explicit-rustup" });
+    });
+
+    it("does not use a sibling directory without settings.toml", () => {
+      const root = rustupLayout("bin", false);
+      expect(toolchainLocators({ HOME: "/nonexistent-home", PATH: join(root, "cargo", "bin") }, "/nonexistent-home"))
+        .toEqual({ CARGO_HOME: join(realpathSync(root), "cargo") });
+    });
+
+    it("does not derive when rustup's parent directory is not named bin", () => {
+      const root = rustupLayout("sbin");
+      expect(toolchainLocators({ HOME: "/nonexistent-home", PATH: join(root, "cargo", "sbin") }, "/nonexistent-home"))
+        .toEqual({});
+    });
+  });
   const cargo = resolveExecutable("cargo", process.env.PATH ?? "");
   const rustupProxy = cargo !== undefined && realpathSync(cargo.resolved).endsWith("/rustup");
   const rustupHome = process.env.RUSTUP_HOME ?? join(process.env.HOME ?? homedir(), ".rustup");

@@ -7361,8 +7361,8 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync18, readFileSync as readFileSync22, realpathSync as realpathSync12, statSync as statSync8, writeFileSync as writeFileSync9 } from "fs";
-import { dirname as dirname20, isAbsolute as isAbsolute24, join as join22, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
+import { existsSync as existsSync18, readFileSync as readFileSync22, realpathSync as realpathSync12, statSync as statSync8, writeFileSync as writeFileSync10 } from "fs";
+import { dirname as dirname20, isAbsolute as isAbsolute24, join as join23, relative as relative20, resolve as resolve29, sep as sep20 } from "path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
@@ -7376,7 +7376,7 @@ import {
   stat
 } from "fs/promises";
 import { existsSync } from "fs";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "path";
+import { basename, dirname, extname, isAbsolute, join as join2, relative, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 
 // src/runtime-binding.ts
@@ -7398,44 +7398,173 @@ function isVerifiedServerAttestationBinding(value) {
 
 // src/closeout/git-hardening.ts
 import { spawnSync } from "child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 var FIXED_OVERRIDES = [
   "core.fsmonitor=false",
   "core.untrackedCache=false",
   "core.hooksPath=/dev/null",
   "core.sshCommand=ssh",
+  "core.askPass=",
+  "core.askpass=",
+  "core.pager=cat",
+  "core.editor=false",
+  "core.alternateRefsCommand=",
+  "sequence.editor=false",
+  "gpg.program=false",
   "diff.external=",
-  "credential.helper="
+  "credential.helper=",
+  "protocol.ext.allow=never"
 ];
-var DRIVER_KEYS = "^(filter\\..+\\.(clean|smudge|process)|remote\\..+\\.uploadpack)$";
+var INJECTED_CONFIG = [
+  ["credential.helper", ""],
+  ["protocol.ext.allow", "never"],
+  ["protocol.git.allow", "never"],
+  ["core.askPass", ""],
+  ["core.askpass", ""]
+];
+var INHERITED_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "USERPROFILE",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "LANG",
+  "LC_ALL",
+  "SYSTEMROOT",
+  "WINDIR",
+  "COMSPEC",
+  "PATHEXT",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY"
+];
+var ALLOWED_REMOTE_TRANSPORTS = ["https", "ssh"];
+var DRIVER_KEY = /^(?:filter\.(?<filter>.+)\.(?:clean|smudge|process)|remote\..+\.(?:uploadpack|proxy|vcs)|gpg\..+\.program|diff\..+\.(?:textconv|command)|merge\..+\.driver|trailer\..+\.command)$/u;
+var GitConfigSnapshotError = class extends Error {
+  constructor(repository, detail) {
+    super(
+      `refusing the protected git call: the configuration of ${repository} could not be enumerated (${detail}), so its per-name driver overrides cannot be derived`
+    );
+    this.repository = repository;
+    this.detail = detail;
+    this.name = "GitConfigSnapshotError";
+  }
+  code = "git_config_snapshot_unreadable";
+};
+var GitRemoteTransportError = class extends Error {
+  constructor(remote, transport) {
+    super(
+      `remote ${JSON.stringify(remote)} resolves to a ${transport} transport; only ${ALLOWED_REMOTE_TRANSPORTS.join(" and ")} may be contacted, because every other transport can carry a command`
+    );
+    this.remote = remote;
+    this.transport = transport;
+    this.name = "GitRemoteTransportError";
+  }
+  code = "git_remote_transport_refused";
+};
 function hardenedGitEnv(environment = process.env) {
-  return { ...environment, GIT_CONFIG_NOSYSTEM: "1" };
+  const result = {};
+  for (const name of INHERITED_ALLOWLIST) {
+    const value = environment[name];
+    if (value !== void 0) result[name] = value;
+  }
+  result.GIT_OPTIONAL_LOCKS = "0";
+  result.GIT_CONFIG_NOSYSTEM = "1";
+  result.GIT_TERMINAL_PROMPT = "0";
+  result.GIT_CONFIG_COUNT = String(INJECTED_CONFIG.length);
+  for (const [index, [key, value]] of INJECTED_CONFIG.entries()) {
+    result[`GIT_CONFIG_KEY_${index}`] = key;
+    result[`GIT_CONFIG_VALUE_${index}`] = value;
+  }
+  return result;
 }
-function driverOverrides(repository) {
+function gitConfigSnapshot(repository) {
   const result = spawnSync("git", [
     ...FIXED_OVERRIDES.flatMap((override) => ["-c", override]),
     "-C",
     repository,
     "config",
+    "--list",
     "--name-only",
-    "--get-regexp",
-    DRIVER_KEYS
-  ], { encoding: "utf8", env: hardenedGitEnv(), stdio: ["ignore", "pipe", "ignore"], timeout: 1e4 });
-  if (result.status !== 0 || typeof result.stdout !== "string") return [];
+    "--null"
+  ], { encoding: "utf8", env: hardenedGitEnv(), stdio: ["ignore", "pipe", "pipe"], timeout: 1e4 });
+  if (result.error !== void 0) throw new GitConfigSnapshotError(repository, result.error.message);
+  if (result.signal !== null) throw new GitConfigSnapshotError(repository, `git config was terminated by ${result.signal}`);
+  if (result.status !== 0 || typeof result.stdout !== "string") {
+    throw new GitConfigSnapshotError(repository, `git config exited ${String(result.status)}: ${String(result.stderr ?? "").trim()}`);
+  }
+  return { keys: result.stdout.split("\0").filter(Boolean), reads: 1 };
+}
+function driverOverrides(snapshot) {
   const overrides = [];
-  for (const key of result.stdout.split("\n").filter(Boolean)) {
-    if (key.startsWith("remote.")) {
-      overrides.push(`${key}=git-upload-pack`);
-    } else {
-      overrides.push(`${key}=`, `${key.slice(0, key.lastIndexOf("."))}.required=false`);
-    }
+  for (const key of snapshot.keys) {
+    const match = DRIVER_KEY.exec(key.toLocaleLowerCase("und"));
+    if (!match) continue;
+    if (key.toLocaleLowerCase("und").endsWith(".uploadpack")) overrides.push(`${key}=git-upload-pack`);
+    else if (match.groups?.filter !== void 0) overrides.push(`${key}=`, `filter.${match.groups.filter}.required=false`);
+    else overrides.push(`${key}=`);
   }
   return overrides;
 }
 function hardenedGitArgs(args, cwd) {
   const at = args.indexOf("-C");
   const repository = at >= 0 ? args[at + 1] : cwd;
-  const overrides = [...FIXED_OVERRIDES, ...repository === void 0 ? [] : driverOverrides(repository)];
+  const overrides = [
+    ...FIXED_OVERRIDES,
+    ...repository === void 0 ? [] : driverOverrides(gitConfigSnapshot(repository))
+  ];
   return [...overrides.flatMap((override) => ["-c", override]), ...args];
+}
+function remoteTransport(url) {
+  const scheme = /^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*)::/u.exec(url)?.groups?.scheme ?? /^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*):\/\//u.exec(url)?.groups?.scheme;
+  if (scheme !== void 0) return scheme.toLocaleLowerCase("und");
+  if (/^[^/]+@[^/:]+:/u.test(url)) return "ssh";
+  return "path";
+}
+var GitRemoteNameError = class extends Error {
+  constructor(remote, reason) {
+    super(`remote ${JSON.stringify(remote)} is refused: ${reason}`);
+    this.remote = remote;
+    this.reason = reason;
+    this.name = "GitRemoteNameError";
+  }
+  code = "git_remote_name_refused";
+};
+async function hardenedRemoteUrl(repository, remote, git2) {
+  if (remote.startsWith("-") || remote.length === 0) throw new GitRemoteNameError(remote, "a remote name may not be empty or begin with '-'");
+  const configured = (await git2.run(repository, ["remote"])).stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (!configured.includes(remote)) throw new GitRemoteNameError(remote, "not a configured remote; a target proof may not name a remote the repository does not define");
+  const url = (await git2.run(repository, ["remote", "get-url", "--end-of-options", remote])).stdout.trim();
+  const transport = remoteTransport(url);
+  if (!ALLOWED_REMOTE_TRANSPORTS.includes(transport)) {
+    throw new GitRemoteTransportError(remote, transport);
+  }
+  return url;
+}
+function contactRemote(repository, url, flags, ref) {
+  if (ref.startsWith("-")) throw new GitRemoteNameError(ref, `a ref contacted for ${repository} may not begin with '-'`);
+  const isolation = mkdtempSync(join(tmpdir(), "mister-clean-remote-contact-"));
+  try {
+    const outside = join(isolation, "cwd");
+    const emptyGlobal = join(isolation, "gitconfig");
+    mkdirSync(outside);
+    writeFileSync(emptyGlobal, "");
+    const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", outside, "ls-remote", ...flags, "--end-of-options", url, ref]), {
+      encoding: "utf8",
+      env: { ...hardenedGitEnv(), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: emptyGlobal, GIT_CEILING_DIRECTORIES: isolation },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 6e4
+    });
+    return { stdout: (result.stdout ?? "").trim(), code: result.status ?? 128 };
+  } finally {
+    rmSync(isolation, { recursive: true, force: true });
+  }
 }
 
 // src/attestation.ts
@@ -7676,7 +7805,7 @@ async function verifyReleaseAttestation(root, options = {}) {
   let manifestText = "";
   let observedManifest;
   try {
-    const parsed = JSON.parse(await readFile(join(packageRootRealpath, RELEASE_ATTESTATION_FILE), "utf8"));
+    const parsed = JSON.parse(await readFile(join2(packageRootRealpath, RELEASE_ATTESTATION_FILE), "utf8"));
     const validated = validateAttestationShape(parsed);
     errors.push(...validated.errors);
     attestation = validated.value;
@@ -7689,7 +7818,7 @@ async function verifyReleaseAttestation(root, options = {}) {
     errors.push(`package.json: ${error instanceof Error ? error.message : String(error)}`);
   }
   try {
-    manifestText = await readFile(join(packageRootRealpath, "MANIFEST.sha256"), "utf8");
+    manifestText = await readFile(join2(packageRootRealpath, "MANIFEST.sha256"), "utf8");
   } catch (error) {
     errors.push(`MANIFEST.sha256: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -7719,7 +7848,7 @@ async function verifyReleaseAttestation(root, options = {}) {
       }
     }
   }
-  const requireExactSurface = options.exactSurface ?? !existsSync(join(packageRootRealpath, ".git"));
+  const requireExactSurface = options.exactSurface ?? !existsSync(join2(packageRootRealpath, ".git"));
   if (requireExactSurface && observedManifest) {
     const allowed = /* @__PURE__ */ new Set([
       ...observedManifest.entries.map((entry) => entry.path.slice(2)),
@@ -7736,7 +7865,7 @@ async function verifyReleaseAttestation(root, options = {}) {
       errors.push(`package surface: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  if (options.strict && attestation && existsSync(join(packageRootRealpath, ".git"))) {
+  if (options.strict && attestation && existsSync(join2(packageRootRealpath, ".git"))) {
     const commit = runGit(packageRootRealpath, ["rev-parse", "HEAD"]);
     const tag = runGit(packageRootRealpath, ["tag", "--points-at", "HEAD", "--list", attestation.claimed_source.git_tag]);
     if (commit !== attestation.claimed_source.git_commit) errors.push("$.claimed_source.git_commit: does not match source HEAD");
@@ -7744,7 +7873,7 @@ async function verifyReleaseAttestation(root, options = {}) {
     const dirty = releaseRelevantStatus(packageRootRealpath);
     if (dirty.length) errors.push(`source tree: dirty paths other than ${RELEASE_ATTESTATION_FILE}: ${dirty.join(", ")}`);
   }
-  const sourceCheckout = existsSync(join(packageRootRealpath, ".git"));
+  const sourceCheckout = existsSync(join2(packageRootRealpath, ".git"));
   const reportedErrors = sourceCheckout && !attestation ? [
     `unreleased source checkout at ${packageRootRealpath}: run the installed release, or build and attest a release`,
     ...errors.filter((error) => !error.startsWith(`${RELEASE_ATTESTATION_FILE}:`) && !error.startsWith("MANIFEST.sha256: stale"))
@@ -7807,7 +7936,7 @@ async function bindRuntimeAttestation(root, options) {
     if (!moduleRelation.startsWith("src/")) {
       throw new Error("source-development binding requires an entrypoint under src/");
     }
-    if (!existsSync(join(packageRootRealpath, ".git"))) {
+    if (!existsSync(join2(packageRootRealpath, ".git"))) {
       throw new Error("source-development binding requires a verified Git repository root");
     }
     const gitRoot = await realpath(runGit(packageRootRealpath, ["rev-parse", "--show-toplevel"]));
@@ -10219,9 +10348,9 @@ import {
   realpathSync,
   readdirSync,
   statSync,
-  writeFileSync
+  writeFileSync as writeFileSync2
 } from "fs";
-import { basename as basename3, dirname as dirname3, extname as extname2, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep3 } from "path";
+import { basename as basename3, dirname as dirname3, extname as extname2, isAbsolute as isAbsolute3, join as join3, relative as relative3, resolve as resolve3, sep as sep3 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 
 // src/closeout/planning-analysis/lifecycle.ts
@@ -10315,7 +10444,7 @@ function isHarnessDefinitionPath(relativePath) {
 }
 function isNestedCheckout(repository, directory) {
   if (resolve3(directory) === resolve3(repository)) return false;
-  return existsSync2(join2(directory, ".git"));
+  return existsSync2(join3(directory, ".git"));
 }
 var PLANNING_CONFIG_PATH = ".mister-clean/planning.json";
 var PLANNING_CONFIG_SCHEMA = "mister-clean.planning-config/1";
@@ -10376,7 +10505,7 @@ function insideRepository(repositoryReal, path) {
 }
 function loadPlanningConfig(repository) {
   const root = resolve3(repository);
-  const configPath = join2(root, PLANNING_CONFIG_PATH);
+  const configPath = join3(root, PLANNING_CONFIG_PATH);
   let stat3;
   try {
     stat3 = lstatSync(configPath);
@@ -10407,12 +10536,12 @@ function loadPlanningConfig(repository) {
   let roots;
   if (declared !== void 0) {
     for (const rootText of declared) {
-      const absolute = join2(root, ...rootText.split("/"));
+      const absolute = join3(root, ...rootText.split("/"));
       if (isPlanningPathExcluded(rootText, exclude)) throw invalid(`root ${JSON.stringify(rootText)} is inside an exclude`);
       if (isHarnessDefinitionPath(rootText)) throw invalid(`root ${JSON.stringify(rootText)} is a harness-definition path`);
       const segments = rootText.split("/");
       for (let depth = 1; depth <= segments.length; depth += 1) {
-        const ancestor = join2(root, ...segments.slice(0, depth));
+        const ancestor = join3(root, ...segments.slice(0, depth));
         if (existsSync2(ancestor) && lstatSync(ancestor).isDirectory() && isNestedCheckout(root, ancestor)) {
           throw invalid(`root ${JSON.stringify(rootText)} is inside a nested checkout`);
         }
@@ -10538,14 +10667,14 @@ function readJson(path) {
   return value;
 }
 function writeJson(path, value) {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}
+  writeFileSync2(path, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function packageRoot(fromUrl = import.meta.url) {
   const sourcePath = fileURLToPath2(fromUrl);
   const here = dirname3(existsSync2(sourcePath) ? realpathSync(sourcePath) : sourcePath);
   const candidates = [resolve3(here, "..", ".."), resolve3(here, "..")];
-  const found = candidates.find((candidate) => existsSync2(join2(candidate, "assets", "closure-bundle.json")));
+  const found = candidates.find((candidate) => existsSync2(join3(candidate, "assets", "closure-bundle.json")));
   if (!found) throw new Error("Cannot locate Mister Clean package assets");
   return found;
 }
@@ -10605,8 +10734,8 @@ function discoverPlanningRoots(repository, config = loadPlanningConfig(repositor
     }
     const entries2 = childEntries(directory).filter((entry) => !PLANNING_IGNORED_NAMES.has(entry.name));
     for (const entry of entries2) {
-      if (entry.isFile() && isCanonicalPlanningFileName(entry.name) && !isPlanningPathExcluded(join2(relativePath, entry.name), [...exclude, PLANNING_CONFIG_PATH])) {
-        candidates.add(join2(directory, entry.name));
+      if (entry.isFile() && isCanonicalPlanningFileName(entry.name) && !isPlanningPathExcluded(join3(relativePath, entry.name), [...exclude, PLANNING_CONFIG_PATH])) {
+        candidates.add(join3(directory, entry.name));
       }
     }
     const names = entries2.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name);
@@ -10615,7 +10744,7 @@ function discoverPlanningRoots(repository, config = loadPlanningConfig(repositor
       candidates.add(directory);
       return;
     }
-    for (const child of names) visit(join2(directory, child));
+    for (const child of names) visit(join3(directory, child));
   }
   visit(repository);
   const ordered = [...candidates].sort((left, right) => {
@@ -10656,7 +10785,7 @@ function listEntriesRecursively(root) {
   const entries2 = [];
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const path = join2(directory, entry.name);
+      const path = join3(directory, entry.name);
       if (entry.isDirectory() && !entry.isSymbolicLink() && !isNestedCheckout(root, path)) visit(path);
       else if (entry.isSymbolicLink()) entries2.push({ kind: "symlink", path });
       else if (entry.isFile()) entries2.push({ kind: "file", path });
@@ -10692,7 +10821,7 @@ import {
   readSync,
   realpathSync as realpathSync2
 } from "fs";
-import { isAbsolute as isAbsolute4, join as join3, relative as relative4, resolve as resolve4, sep as sep4 } from "path";
+import { isAbsolute as isAbsolute4, join as join4, relative as relative4, resolve as resolve4, sep as sep4 } from "path";
 var RECORD_TYPE = "mister-clean.repository-object";
 var SCHEMA_VERSION = "1.0";
 var SURFACE = "tracked_and_nonignored";
@@ -10886,7 +11015,7 @@ function assertFilesystemCoverage(repository, entries2) {
       const pathBytes = parentPathBytes.length === 0 ? nameBytes : Buffer.concat([parentPathBytes, Buffer.from("/", "ascii"), nameBytes]);
       const path = decodePath(pathBytes, "filesystem traversal");
       if (parentPathBytes.length === 0 && path === ".git") continue;
-      const absolute = join3(repository, ...path.split("/"));
+      const absolute = join4(repository, ...path.split("/"));
       const stat3 = tryLstat(absolute);
       if (!stat3) throw new Error(`repository changed during filesystem traversal: ${JSON.stringify(path)}`);
       if (stat3.isDirectory()) {
@@ -10931,14 +11060,14 @@ function stableStat(left, right) {
 }
 function assertNoSymlinkAncestor(repository, path) {
   const segments = path.split("/");
-  const absolute = join3(repository, ...segments);
+  const absolute = join4(repository, ...segments);
   const relation = relative4(repository, absolute);
   if (!relation || relation === ".." || relation.startsWith(`..${sep4}`) || isAbsolute4(relation)) {
     throw new Error(`repository path escapes its root: ${JSON.stringify(path)}`);
   }
   let parent = repository;
   for (const segment of segments.slice(0, -1)) {
-    parent = join3(parent, segment);
+    parent = join4(parent, segment);
     const stat3 = tryLstat(parent);
     if (!stat3) break;
     if (stat3.isSymbolicLink()) {
@@ -11028,7 +11157,7 @@ function hashEntry(hash, repository, entry, visited, projection) {
     if (!before.isDirectory()) {
       throw new Error(`unsupported gitlink worktree entry at ${JSON.stringify(entry.path)}`);
     }
-    if (!tryLstat(join3(absolute, ".git"))) {
+    if (!tryLstat(join4(absolute, ".git"))) {
       const children = readdirSync2(absolute, { encoding: "buffer" });
       const after2 = tryLstat(absolute);
       if (!after2 || !after2.isDirectory() || !stableStat(before, after2)) {
@@ -17092,17 +17221,17 @@ import {
   closeSync as closeSync2,
   existsSync as existsSync4,
   lstatSync as lstatSync5,
-  mkdtempSync,
+  mkdtempSync as mkdtempSync2,
   openSync as openSync2,
   readFileSync as readFileSync4,
   readlinkSync as readlinkSync3,
   readdirSync as readdirSync4,
   realpathSync as realpathSync3,
-  rmSync,
-  writeFileSync as writeFileSync2
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync3
 } from "fs";
-import { platform, tmpdir } from "os";
-import { isAbsolute as isAbsolute7, join as join4, relative as relative8, resolve as resolve9, sep as sep8 } from "path";
+import { platform, tmpdir as tmpdir2 } from "os";
+import { isAbsolute as isAbsolute7, join as join5, relative as relative8, resolve as resolve9, sep as sep8 } from "path";
 import { TextDecoder as TextDecoder2 } from "util";
 var HEX_OBJECT = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
 var OPERATION_PATHS = [
@@ -17145,12 +17274,12 @@ function decode(bytes2, source) {
 }
 var GIT_TIMEOUT_MS = 5 * 60 * 1e3;
 function gitBytes2(repository, args, input, allowed = [0]) {
-  const inputDirectory = input === void 0 ? void 0 : mkdtempSync(join4(tmpdir(), "mister-clean-git-input-"));
+  const inputDirectory = input === void 0 ? void 0 : mkdtempSync2(join5(tmpdir2(), "mister-clean-git-input-"));
   let inputDescriptor;
   try {
     if (inputDirectory !== void 0 && input !== void 0) {
-      const inputPath = join4(inputDirectory, "stdin");
-      writeFileSync2(inputPath, input, { mode: 384, flag: "wx" });
+      const inputPath = join5(inputDirectory, "stdin");
+      writeFileSync3(inputPath, input, { mode: 384, flag: "wx" });
       inputDescriptor = openSync2(inputPath, "r");
     }
     return execFileSync3("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
@@ -17170,7 +17299,7 @@ function gitBytes2(repository, args, input, allowed = [0]) {
     throw error;
   } finally {
     if (inputDescriptor !== void 0) closeSync2(inputDescriptor);
-    if (inputDirectory !== void 0) rmSync(inputDirectory, { recursive: true, force: true });
+    if (inputDirectory !== void 0) rmSync2(inputDirectory, { recursive: true, force: true });
   }
 }
 function gitLine2(repository, args, allowed = [0]) {
@@ -17916,8 +18045,8 @@ import {
   rm,
   writeFile
 } from "fs/promises";
-import { tmpdir as tmpdir2 } from "os";
-import { basename as basename7, dirname as dirname7, isAbsolute as isAbsolute9, join as join6, relative as relative9, resolve as resolve11, sep as sep9 } from "path";
+import { tmpdir as tmpdir3 } from "os";
+import { basename as basename7, dirname as dirname7, isAbsolute as isAbsolute9, join as join7, relative as relative9, resolve as resolve11, sep as sep9 } from "path";
 
 // src/closeout/execution-lease.ts
 import { createHash as createHash12, randomUUID } from "crypto";
@@ -17927,15 +18056,15 @@ import {
   chmodSync,
   existsSync as existsSync5,
   lstatSync as lstatSync6,
-  mkdirSync,
+  mkdirSync as mkdirSync2,
   readFileSync as readFileSync5,
   readdirSync as readdirSync5,
   realpathSync as realpathSync4,
   renameSync,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync3
+  rmSync as rmSync3,
+  writeFileSync as writeFileSync4
 } from "fs";
-import { dirname as dirname6, isAbsolute as isAbsolute8, join as join5, resolve as resolve10 } from "path";
+import { dirname as dirname6, isAbsolute as isAbsolute8, join as join6, resolve as resolve10 } from "path";
 var sqliteModule;
 function sqlite() {
   sqliteModule ??= createRequire(import.meta.url)("node:sqlite");
@@ -18047,7 +18176,7 @@ function repositoryVerificationCoordinationKey(repository) {
 }
 function ensurePrivateDirectory(path) {
   try {
-    mkdirSync(path, { mode: 448 });
+    mkdirSync2(path, { mode: 448 });
   } catch (error) {
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
     if (code !== "EEXIST") throw error;
@@ -18061,9 +18190,9 @@ function ensurePrivateDirectory(path) {
 }
 function executionLeasePaths(repository, key) {
   const common = gitCommonDirectory(repository);
-  const productRoot = ensurePrivateDirectory(join5(common, "mister-clean"));
-  const root = ensurePrivateDirectory(join5(productRoot, "execution-leases-v1"));
-  const database = join5(root, `${key}.sqlite`);
+  const productRoot = ensurePrivateDirectory(join6(common, "mister-clean"));
+  const root = ensurePrivateDirectory(join6(productRoot, "execution-leases-v1"));
+  const database = join6(root, `${key}.sqlite`);
   try {
     const databaseStat = lstatSync6(database);
     if (!databaseStat.isFile() || databaseStat.isSymbolicLink()) {
@@ -18075,8 +18204,8 @@ function executionLeasePaths(repository, key) {
   }
   return {
     database,
-    state: join5(root, `${key}.active.json`),
-    supervisorLock: join5(root, `${key}.supervisor.lock.json`)
+    state: join6(root, `${key}.active.json`),
+    supervisorLock: join6(root, `${key}.supervisor.lock.json`)
   };
 }
 function sqliteBusy(error) {
@@ -18181,14 +18310,14 @@ function parseSupervisorLock(path) {
   return { ...value, supervisor: parseProcessIdentity(value.supervisor, "execution supervisor lock identity") };
 }
 function writeLeaseState(path, state) {
-  const temporary = join5(dirname6(path), `.${state.lease_id}.${String(process.pid)}.tmp`);
-  writeFileSync3(temporary, `${JSON.stringify(state)}
+  const temporary = join6(dirname6(path), `.${state.lease_id}.${String(process.pid)}.tmp`);
+  writeFileSync4(temporary, `${JSON.stringify(state)}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
   try {
     renameSync(temporary, path);
     chmodSync(path, 384);
   } catch (error) {
-    rmSync2(temporary, { force: true });
+    rmSync3(temporary, { force: true });
     throw error;
   }
 }
@@ -18202,7 +18331,7 @@ function releaseDatabase(database) {
 function cleanupStaleStateTemps(root) {
   for (const name of readdirSync5(root)) {
     if (/^\.(?:[0-9a-f-]{36}\.[0-9]+|supervisor-[0-9]+-[0-9a-f-]{36})\.tmp$/u.test(name)) {
-      rmSync2(join5(root, name), { force: true });
+      rmSync3(join6(root, name), { force: true });
     }
   }
 }
@@ -18287,9 +18416,9 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
           canonicalTimestamp(now(), "execution contention clock")
         );
       }
-      rmSync2(paths.supervisorLock);
+      rmSync3(paths.supervisorLock);
     }
-    if (existsSync5(paths.state)) rmSync2(paths.state);
+    if (existsSync5(paths.state)) rmSync3(paths.state);
     cleanupStaleStateTemps(dirname6(paths.state));
     acquiredAt = canonicalTimestamp(now(), "execution lease clock");
     writeLeaseState(paths.state, {
@@ -18338,7 +18467,7 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
         if (lockStatus === "same") {
           throw new Error("execution lease cannot release while a supervised command owns custody");
         }
-        rmSync2(paths.supervisorLock);
+        rmSync3(paths.supervisorLock);
       }
       const groupStatuses = state.process_groups.map((group) => processGroupIdentityStatus(group));
       const unverifiableGroup = state.process_groups.find((_, index) => groupStatuses[index] === "unverifiable");
@@ -18355,7 +18484,7 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
       if (state.custody_census === "unverifiable") {
         throw new Error("execution lease cannot release after process-custody census became unverifiable");
       }
-      rmSync2(paths.state);
+      rmSync3(paths.state);
       released = true;
       let rollbackError;
       try {
@@ -18405,7 +18534,7 @@ var NativeGateBudgetInvalidError = class extends Error {
   code = "native_gate_budget_invalid";
 };
 function loadNativeGateBudgets(repository, knownGateIds) {
-  const configPath = join6(resolve11(repository), ...NATIVE_GATE_BUDGET_PATH.split("/"));
+  const configPath = join7(resolve11(repository), ...NATIVE_GATE_BUDGET_PATH.split("/"));
   let stat3;
   try {
     stat3 = lstatSync7(configPath);
@@ -18825,13 +18954,13 @@ function captureSubjectState(repository) {
 }
 async function copySubjectWorktree(subject, snapshot) {
   for (const entry of await readdir3(snapshot)) {
-    if (entry !== ".git") await rm(join6(snapshot, entry), { recursive: true, force: true });
+    if (entry !== ".git") await rm(join7(snapshot, entry), { recursive: true, force: true });
   }
   const sourceRoot = realpathSync5(subject);
   for (const entry of await readdir3(sourceRoot)) {
     if (entry === ".git") continue;
-    const source = join6(sourceRoot, entry);
-    const target = join6(snapshot, entry);
+    const source = join7(sourceRoot, entry);
+    const target = join7(snapshot, entry);
     await cp(source, target, {
       recursive: true,
       preserveTimestamps: true,
@@ -18870,9 +18999,9 @@ async function copyLocalExcludeRules(subject, snapshot, timeoutMs) {
 async function createExecutionSnapshot(subject, expected, options = {}) {
   const gitTimeoutMs = options.git_timeout_ms ?? SNAPSHOT_GIT_TIMEOUT_MS;
   assertPositiveInteger("git_timeout_ms", gitTimeoutMs);
-  const container = await mkdtemp(join6(tmpdir2(), "mister-clean-native-gate-snapshot-"));
-  const repository = join6(container, "repository");
-  const home = join6(container, "home");
+  const container = await mkdtemp(join7(tmpdir3(), "mister-clean-native-gate-snapshot-"));
+  const repository = join7(container, "repository");
+  const home = join7(container, "home");
   try {
     await mkdir(repository, { mode: 448 });
     await mkdir(home, { mode: 448 });
@@ -18960,7 +19089,7 @@ function trackedFile(repository, path) {
   const segments = path.split("/");
   let cursor = root;
   for (const segment of segments) {
-    cursor = join6(cursor, segment);
+    cursor = join7(cursor, segment);
     const stat4 = lstatSync7(cursor);
     if (stat4.isSymbolicLink()) throw new Error(`native gate discovery refuses symlink traversal at ${JSON.stringify(path)}`);
   }
@@ -20785,8 +20914,8 @@ function schema15LegacyNumericFieldErrors(value, path = "$") {
 import { createHash as createHash15 } from "crypto";
 import { execFile } from "child_process";
 import { access, copyFile, lstat as lstat5, mkdir as mkdir2, mkdtemp as mkdtemp2, readFile as readFile2, readdir as readdir4, realpath as realpath5, rm as rm2 } from "fs/promises";
-import { tmpdir as tmpdir3 } from "os";
-import { basename as basename9, dirname as dirname8, isAbsolute as isAbsolute11, join as join7, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
+import { tmpdir as tmpdir4 } from "os";
+import { basename as basename9, dirname as dirname8, isAbsolute as isAbsolute11, join as join8, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
 import { promisify } from "util";
 var HEX643 = /^[0-9a-f]{64}$/;
 var EVENT_TIMESTAMP_FIELDS = /* @__PURE__ */ new Set([
@@ -21000,12 +21129,12 @@ var nodeGitPort = {
       const environment = hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
       let result;
       if (args.length === 1 && args[0] === "write-tree") {
-        const temporary = await mkdtemp2(join7(tmpdir3(), "mc-readonly-index-"));
+        const temporary = await mkdtemp2(join8(tmpdir4(), "mc-readonly-index-"));
         try {
           const sourceIndex = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "index"]), { encoding: "utf8", env: environment })).stdout.trim();
           const sourceObjects = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects"]), { encoding: "utf8", env: environment })).stdout.trim();
-          const externalIndex = join7(temporary, "index");
-          const externalObjects = join7(temporary, "objects");
+          const externalIndex = join8(temporary, "index");
+          const externalObjects = join8(temporary, "objects");
           await mkdir2(externalObjects, { recursive: true });
           await copyFile(sourceIndex, externalIndex);
           result = await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "write-tree"]), {
@@ -21373,7 +21502,19 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
         if (repo && !allowPlaceholders && (await git2.run(repo, ["cat-file", "-e", `${String(evidence.commit ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push(`${epath}: commit does not exist in live repository`);
       } else if (name === "pushed" && evidence.kind === "remote_ref_resolution") {
         if (repo && !allowPlaceholders) {
-          const result = await git2.run(repo, ["ls-remote", String(evidence.remote ?? ""), String(evidence.ref ?? "")], [0, 2, 128]);
+          const ref = String(evidence.ref ?? "");
+          if (ref.startsWith("-")) {
+            errors.push(`${epath}: a pushed ref may not begin with '-'`);
+            continue;
+          }
+          let remoteUrl;
+          try {
+            remoteUrl = await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git2);
+          } catch (error) {
+            errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
+            continue;
+          }
+          const result = contactRemote(repo, remoteUrl, [], ref);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object5(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
         }
@@ -23671,13 +23812,13 @@ async function validateRegressionDelta(bundle, report, manifest2, base, files, c
 
 // src/closeout/bundle-live-validation.ts
 import { mkdtemp as mkdtemp3, rm as rm4 } from "fs/promises";
-import { tmpdir as tmpdir5 } from "os";
-import { dirname as dirname11, isAbsolute as isAbsolute17, join as join11, resolve as resolve19 } from "path";
+import { tmpdir as tmpdir6 } from "os";
+import { dirname as dirname11, isAbsolute as isAbsolute17, join as join12, resolve as resolve19 } from "path";
 
 // src/closeout/language-policy.ts
 import { createHash as createHash16 } from "crypto";
 import { existsSync as existsSync6, readFileSync as readFileSync7 } from "fs";
-import { join as join8, posix as posix2 } from "path";
+import { join as join9, posix as posix2 } from "path";
 var LANGUAGE_POLICY_PATH = ".mister-clean/language-policy.json";
 var LANGUAGE_POLICY_SCHEMA = "mister-clean.language-policy/1";
 var LANG_GUARD_ALLOW_PATH = ".lang-guard-allow";
@@ -23774,7 +23915,7 @@ function languagePolicyCandidatePaths(root) {
   return trackedShippablePaths(root);
 }
 function auditLanguagePolicy(root) {
-  const policyPath = join8(root, LANGUAGE_POLICY_PATH);
+  const policyPath = join9(root, LANGUAGE_POLICY_PATH);
   const empty = {
     record_type: "mister-clean.language-policy-audit",
     schema_version: "1.0",
@@ -23792,7 +23933,7 @@ function auditLanguagePolicy(root) {
     throw new LanguagePolicyInvalidError(LANGUAGE_POLICY_PATH, "unreadable");
   }
   const policy = parseLanguagePolicy(utf82(bytes2, LANGUAGE_POLICY_PATH));
-  const langGuardPath = join8(root, LANG_GUARD_ALLOW_PATH);
+  const langGuardPath = join9(root, LANG_GUARD_ALLOW_PATH);
   let langGuard = null;
   let langGuardGlobs = [];
   if (existsSync6(langGuardPath)) {
@@ -23843,7 +23984,7 @@ var import_yaml3 = __toESM(require_dist(), 1);
 import { createHash as createHash17 } from "crypto";
 import { execFileSync as execFileSync5 } from "child_process";
 import { lstatSync as lstatSync8, readFileSync as readFileSync8 } from "fs";
-import { isAbsolute as isAbsolute13, join as join9, relative as relative11, resolve as resolve14 } from "path";
+import { isAbsolute as isAbsolute13, join as join10, relative as relative11, resolve as resolve14 } from "path";
 var SENSITIVE_COMMAND = /(?:\bflyctl\s+deploy\b|\bwrangler\s+deploy\b|\bpnpm\s+publish\b|\bnpm\s+publish\b|\bdocker\s+push\b|\bkubectl\b|\bterraform\s+apply\b|\bgh\s+release\b|\bgit\s+push\b)/iu;
 var HEALTH_COMMAND = /(?:\bchecks?\s+list\b|\bhealthz\b|\bhealth(?:check)?\b)/iu;
 var FULL_COMMIT_REF = /^[0-9a-f]{40}$/u;
@@ -24292,7 +24433,7 @@ function auditGitHubActionsRepository(root) {
   let sensitiveWorkflowCount = 0;
   const audits = [];
   for (const path of paths) {
-    const absolute = join9(repository, path);
+    const absolute = join10(repository, path);
     const metadata = lstatSync8(absolute);
     if (!metadata.isFile()) {
       findings.push(finding2(path, "workflow_unparseable", "P1", "Tracked workflow is not a regular file.", [path]));
@@ -24723,10 +24864,10 @@ async function generatePackageManifest(root) {
 // src/closeout/native-gate-runner.ts
 import { randomUUID as randomUUID4 } from "crypto";
 import { spawnSync as spawnSync6 } from "child_process";
-import { accessSync as accessSync2, constants as constants4, existsSync as existsSync7, lstatSync as lstatSync10, mkdirSync as mkdirSync2, realpathSync as realpathSync6, symlinkSync } from "fs";
+import { accessSync as accessSync2, constants as constants4, existsSync as existsSync7, lstatSync as lstatSync10, mkdirSync as mkdirSync3, realpathSync as realpathSync6, symlinkSync } from "fs";
 import { lstat as lstat6, mkdir as mkdir3, realpath as realpath6, rm as rm3, writeFile as writeFile2 } from "fs/promises";
-import { homedir, tmpdir as tmpdir4 } from "os";
-import { basename as basename11, delimiter as delimiter2, dirname as dirname9, isAbsolute as isAbsolute14, join as join10, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
+import { homedir, tmpdir as tmpdir5 } from "os";
+import { basename as basename11, delimiter as delimiter2, dirname as dirname9, isAbsolute as isAbsolute14, join as join11, relative as relative13, resolve as resolve16, sep as sep12 } from "path";
 
 // src/closeout/execution-supervisor.ts
 import {
@@ -25113,7 +25254,7 @@ function evidenceOutputName(gateId, stream) {
 }
 async function writeOutput(evidenceRoot, gateId, stream, bytes2, complete) {
   const path = evidenceOutputName(gateId, stream);
-  await writeFile2(join10(evidenceRoot, path), bytes2, { flag: "wx", mode: 384 });
+  await writeFile2(join11(evidenceRoot, path), bytes2, { flag: "wx", mode: 384 });
   return { path, sha256: sha2567(bytes2), byte_count: bytes2.length, complete };
 }
 function executableCandidates(name, pathValue) {
@@ -25121,7 +25262,7 @@ function executableCandidates(name, pathValue) {
   const candidates = [];
   for (const directory of pathValue.split(delimiter2)) {
     if (!directory || !isAbsolute14(directory)) continue;
-    for (const extension of extensions) candidates.push(join10(directory, `${name}${extension}`));
+    for (const extension of extensions) candidates.push(join11(directory, `${name}${extension}`));
   }
   return candidates;
 }
@@ -25149,7 +25290,7 @@ var TOOLCHAIN_LOCATORS = [
   ["RUSTUP_HOME", ".rustup"],
   ["CARGO_HOME", ".cargo"],
   ["GOPATH", "go"],
-  ["GOMODCACHE", join10("go", "pkg", "mod")]
+  ["GOMODCACHE", join11("go", "pkg", "mod")]
 ];
 function toolchainLocators(environment = process.env, operatorHome = environment.HOME ?? homedir()) {
   const locators = {};
@@ -25159,15 +25300,15 @@ function toolchainLocators(environment = process.env, operatorHome = environment
       locators[name] = explicit;
       continue;
     }
-    const candidate = join10(operatorHome, conventional);
+    const candidate = join11(operatorHome, conventional);
     if (existsSync7(candidate)) locators[name] = candidate;
   }
   const rustup = environment.PATH === void 0 ? void 0 : resolveExecutable("rustup", environment.PATH);
-  if (rustup !== void 0) {
+  if (rustup !== void 0 && basename11(dirname9(rustup.resolved)) === "bin") {
     const cargoHome = dirname9(dirname9(rustup.resolved));
-    if (locators.CARGO_HOME === void 0 && basename11(dirname9(rustup.resolved)) === "bin") locators.CARGO_HOME = cargoHome;
+    if (locators.CARGO_HOME === void 0) locators.CARGO_HOME = cargoHome;
     if (locators.RUSTUP_HOME === void 0) {
-      const rustupHome = ["rustup", ".rustup"].map((name) => join10(dirname9(cargoHome), name)).find((candidate) => existsSync7(join10(candidate, "settings.toml")));
+      const rustupHome = ["rustup", ".rustup"].map((name) => join11(dirname9(cargoHome), name)).find((candidate) => existsSync7(join11(candidate, "settings.toml")));
       if (rustupHome !== void 0) locators.RUSTUP_HOME = rustupHome;
     }
   }
@@ -25230,28 +25371,28 @@ function gateToolchain() {
   return resolvedGateToolchain;
 }
 function gateShimDirectory(home) {
-  return join10(home, "toolchain-bin");
+  return join11(home, "toolchain-bin");
 }
 function materializeGateShims(home, gateExecutable) {
   const directory = gateShimDirectory(home);
-  mkdirSync2(directory, { recursive: true, mode: 448 });
+  mkdirSync3(directory, { recursive: true, mode: 448 });
   const entries2 = /* @__PURE__ */ new Map();
   for (const executable of gateToolchain()) entries2.set(basename11(executable.invoked), executable.resolved);
   if (gateExecutable) entries2.set(basename11(gateExecutable.invoked), gateExecutable.resolved);
   for (const [name, target] of entries2) {
-    if (!existsSync7(join10(directory, name))) symlinkSync(target, join10(directory, name));
+    if (!existsSync7(join11(directory, name))) symlinkSync(target, join11(directory, name));
   }
 }
 function scrubbedCargoHome(home) {
-  return join10(home, "cargo-home");
+  return join11(home, "cargo-home");
 }
 function materializeScrubbedCargoHome(home, operatorCargoHome = toolchainLocators().CARGO_HOME) {
   if (operatorCargoHome === void 0) return;
   const target = scrubbedCargoHome(home);
-  mkdirSync2(target, { recursive: true, mode: 448 });
+  mkdirSync3(target, { recursive: true, mode: 448 });
   for (const cache of ["registry", "git"]) {
-    const source = join10(operatorCargoHome, cache);
-    if (existsSync7(source) && !existsSync7(join10(target, cache))) symlinkSync(source, join10(target, cache), "dir");
+    const source = join11(operatorCargoHome, cache);
+    if (existsSync7(source) && !existsSync7(join11(target, cache))) symlinkSync(source, join11(target, cache), "dir");
   }
 }
 function scrubbedEnvironment(home, gateExecutable) {
@@ -25266,11 +25407,10 @@ function scrubbedEnvironment(home, gateExecutable) {
     CI: "1",
     NO_COLOR: "1",
     FORCE_COLOR: "0",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_OPTIONAL_LOCKS: "0",
+    ...hardenedGitEnv({}),
     NPM_CONFIG_OFFLINE: "true",
     YARN_ENABLE_NETWORK: "0",
-    BUN_INSTALL_CACHE_DIR: join10(home, "bun-cache"),
+    BUN_INSTALL_CACHE_DIR: join11(home, "bun-cache"),
     CARGO_NET_OFFLINE: "true",
     GOPROXY: "off",
     ...locators,
@@ -25292,7 +25432,7 @@ function signalProcessTree(child, signal) {
     if (process.platform === "win32") {
       const result = spawnSync6("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
         encoding: null,
-        env: scrubbedEnvironment(tmpdir4()),
+        env: scrubbedEnvironment(tmpdir5()),
         stdio: ["ignore", "ignore", "ignore"],
         windowsHide: true
       });
@@ -26995,7 +27135,18 @@ async function validateLiveRepositoryAndTarget(bundle, report, repo, files, git2
   if (observation.kind === "remote_ref_resolution") {
     const remote = String(observation.remote ?? "");
     const remoteRef = String(observation.remote_ref ?? "");
-    const result = await git2.run(repo, ["ls-remote", "--heads", remote, remoteRef], [0, 2, 128]);
+    if (remoteRef.startsWith("-")) {
+      errors.push("$.successor_readiness.target_observation.remote_ref: a remote ref may not begin with '-'");
+      return { head, subject, successor };
+    }
+    let remoteUrl;
+    try {
+      remoteUrl = await hardenedRemoteUrl(repo, remote, git2);
+    } catch (error) {
+      errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
+      return { head, subject, successor };
+    }
+    const result = contactRemote(repo, remoteUrl, ["--heads"], remoteRef);
     const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
     if (observed !== liveTarget) errors.push("$.successor_readiness.target_observation: remote ref differs from live target");
   }
@@ -27280,7 +27431,7 @@ async function validateLiveNativeGates(successor, closingRepositoryObject, accep
         if (!recordedDiscovery || !stableEqual2(liveDiscovery, recordedDiscovery)) {
           errors.push("$.live_native_gates.discovery: fresh canonical discovery differs from recorded successor discovery");
         }
-        const evidenceDirectory = await mkdtemp3(join11(tmpdir5(), "mister-clean-live-native-"));
+        const evidenceDirectory = await mkdtemp3(join12(tmpdir6(), "mister-clean-live-native-"));
         try {
           const liveCoverage = await runNativeGates(
             repo,
@@ -27868,13 +28019,13 @@ async function validateBundleFile(bundlePath, options = {}) {
 
 // src/closeout/prepare.ts
 import { createHash as createHash21 } from "crypto";
-import { existsSync as existsSync10, mkdirSync as mkdirSync3, readFileSync as readFileSync12, writeFileSync as writeFileSync4 } from "fs";
-import { dirname as dirname13, join as join13, resolve as resolve22 } from "path";
+import { existsSync as existsSync10, mkdirSync as mkdirSync4, readFileSync as readFileSync12, writeFileSync as writeFileSync5 } from "fs";
+import { dirname as dirname13, join as join14, resolve as resolve22 } from "path";
 
 // src/closeout/retirements.ts
 import { createHash as createHash20 } from "crypto";
 import { existsSync as existsSync9, readdirSync as readdirSync8, readFileSync as readFileSync11, statSync as statSync2 } from "fs";
-import { isAbsolute as isAbsolute19, join as join12, normalize as normalize2, resolve as resolve21, sep as sep15 } from "path";
+import { isAbsolute as isAbsolute19, join as join13, normalize as normalize2, resolve as resolve21, sep as sep15 } from "path";
 var RETIREMENT_RECORD_TYPE = "mister-clean.retirement";
 var RETIREMENT_SCHEMA_VERSION = "1.0";
 var RETIREMENT_DIRECTORY = "charter/retirements";
@@ -27901,12 +28052,12 @@ function isUnder(subject, root) {
   return subject === root || subject.startsWith(`${root}/`);
 }
 function censusInputPaths(repository, directory) {
-  const absolute = join12(repository, directory);
+  const absolute = join13(repository, directory);
   if (!existsSync9(absolute) || !statSync2(absolute).isDirectory()) return [];
   return readdirSync8(absolute).filter((name) => name.endsWith(".json")).sort().map((name) => `${directory}/${name}`);
 }
 function readJsonRecord(repository, relativePath, refusals) {
-  const absolute = join12(repository, relativePath);
+  const absolute = join13(repository, relativePath);
   try {
     const parsed = JSON.parse(readFileSync11(absolute, "utf8"));
     const record5 = object5(parsed);
@@ -27988,7 +28139,7 @@ function readRetirements(repository) {
     }
     records.push({
       record_path: relativePath,
-      record_sha256: sha256FileBytes(join12(repository, relativePath)),
+      record_sha256: sha256FileBytes(join13(repository, relativePath)),
       slug: String(record5.slug),
       roots: [...new Set(normalizedRoots)].sort(),
       ruling: {
@@ -28125,7 +28276,7 @@ function planningClass(path) {
   return "planning";
 }
 function loadTemplate(root, name) {
-  return structuredClone(readJson(join13(root, "assets", name)));
+  return structuredClone(readJson(join14(root, "assets", name)));
 }
 function unique2(values) {
   return [...new Set(values)];
@@ -28191,11 +28342,11 @@ async function collectPrepareEvidence(options, mode) {
   const executionLease = acquireRepositoryVerificationLease(repository, clock);
   let leaseTransferred = false;
   try {
-    const bundleDirectory = join13(resolve22(options.evidenceHome), "mister-clean", options.runId);
+    const bundleDirectory = join14(resolve22(options.evidenceHome), "mister-clean", options.runId);
     if (existsSync10(bundleDirectory)) {
       throw new Error(`refusing to overwrite existing run directory: ${bundleDirectory}`);
     }
-    mkdirSync3(bundleDirectory, { recursive: true });
+    mkdirSync4(bundleDirectory, { recursive: true });
     const templates = options.templateRoot ?? packageRoot();
     const head = baselineRepositoryObject.head_commit;
     const branch = git(repository, "branch", "--show-current") || "detached";
@@ -28225,13 +28376,13 @@ async function collectPrepareEvidence(options, mode) {
     let requestSource2 = null;
     let sourceKind = "reference_only";
     if (options.requestSource !== void 0 || options.requestText !== void 0) {
-      const path = join13(bundleDirectory, "operative-request.txt");
-      writeFileSync4(path, requestBytes);
+      const path = join14(bundleDirectory, "operative-request.txt");
+      writeFileSync5(path, requestBytes);
       requestSource2 = { path: "operative-request.txt", sha256: sha256File2(path) };
       sourceKind = "exact_bytes";
     }
     const criteriaIds2 = unique2(options.criteria ?? []);
-    writeJson(join13(bundleDirectory, "criteria-source.json"), {
+    writeJson(join14(bundleDirectory, "criteria-source.json"), {
       record_type: "mister-clean.criteria-source",
       request_ref: options.requestRef,
       request_sha256: requestSha256,
@@ -28246,16 +28397,16 @@ async function collectPrepareEvidence(options, mode) {
     const unclassifiedPlanningPaths = new Set(
       planningAudit.findings.filter((finding4) => finding4.code === "planning_input_unparsed").map((finding4) => finding4.path)
     );
-    writeJson(join13(bundleDirectory, "planning-audit.json"), planningAudit);
+    writeJson(join14(bundleDirectory, "planning-audit.json"), planningAudit);
     const planningAuditRef = {
       path: "planning-audit.json",
-      sha256: sha256File2(join13(bundleDirectory, "planning-audit.json"))
+      sha256: sha256File2(join14(bundleDirectory, "planning-audit.json"))
     };
     let publicSafetyInputRef;
     let publicSafetyDenylistPath;
     if (options.publicSafetyDenylistPath !== void 0) {
-      const inputPath = join13(bundleDirectory, "public-safety-denylist.txt");
-      writeFileSync4(inputPath, readFileSync12(resolve22(options.publicSafetyDenylistPath)));
+      const inputPath = join14(bundleDirectory, "public-safety-denylist.txt");
+      writeFileSync5(inputPath, readFileSync12(resolve22(options.publicSafetyDenylistPath)));
       publicSafetyDenylistPath = inputPath;
       publicSafetyInputRef = {
         kind: "public_safety_denylist",
@@ -28271,38 +28422,38 @@ async function collectPrepareEvidence(options, mode) {
       repository_object: baselineRepositoryObject,
       ...publicSafetyInputRef === void 0 ? {} : { input_sha256: publicSafetyInputRef.sha256 }
     } : void 0;
-    if (publicSafetyAudit) writeJson(join13(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
+    if (publicSafetyAudit) writeJson(join14(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
     const publicSafetyAuditRef = publicSafetyAudit === void 0 ? void 0 : {
       path: "public-safety-audit.json",
-      sha256: sha256File2(join13(bundleDirectory, "public-safety-audit.json"))
+      sha256: sha256File2(join14(bundleDirectory, "public-safety-audit.json"))
     };
     const githubActionsAudit = {
       ...auditGitHubActionsRepository(repository),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject
     };
-    writeJson(join13(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
+    writeJson(join14(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
     const githubActionsAuditRef = {
       path: "github-actions-audit.json",
-      sha256: sha256File2(join13(bundleDirectory, "github-actions-audit.json"))
+      sha256: sha256File2(join14(bundleDirectory, "github-actions-audit.json"))
     };
     const languagePolicyAudit = {
       ...auditLanguagePolicy(repository),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject
     };
-    writeJson(join13(bundleDirectory, "language-policy-audit.json"), languagePolicyAudit);
+    writeJson(join14(bundleDirectory, "language-policy-audit.json"), languagePolicyAudit);
     const languagePolicyAuditRef = {
       path: "language-policy-audit.json",
-      sha256: sha256File2(join13(bundleDirectory, "language-policy-audit.json"))
+      sha256: sha256File2(join14(bundleDirectory, "language-policy-audit.json"))
     };
     const semanticInputRefs = [];
     let semanticManifestPath;
     let semanticEvidencePackagePath;
     let semanticTrustPolicyPath;
     if (options.semanticManifestPath !== void 0) {
-      const inputPath = join13(bundleDirectory, "semantic-probe-manifest.json");
-      writeFileSync4(inputPath, readFileSync12(resolve22(options.semanticManifestPath)));
+      const inputPath = join14(bundleDirectory, "semantic-probe-manifest.json");
+      writeFileSync5(inputPath, readFileSync12(resolve22(options.semanticManifestPath)));
       semanticManifestPath = inputPath;
       semanticInputRefs.push({
         kind: "semantic_probe_manifest",
@@ -28311,10 +28462,10 @@ async function collectPrepareEvidence(options, mode) {
       });
     }
     if (options.semanticEvidencePackagePath !== void 0 && options.semanticTrustPolicyPath !== void 0) {
-      const packageInputPath = join13(bundleDirectory, "semantic-evidence-package.json");
-      const policyInputPath = join13(bundleDirectory, "semantic-trust-policy.json");
-      writeFileSync4(packageInputPath, readFileSync12(resolve22(options.semanticEvidencePackagePath)));
-      writeFileSync4(policyInputPath, readFileSync12(resolve22(options.semanticTrustPolicyPath)));
+      const packageInputPath = join14(bundleDirectory, "semantic-evidence-package.json");
+      const policyInputPath = join14(bundleDirectory, "semantic-trust-policy.json");
+      writeFileSync5(packageInputPath, readFileSync12(resolve22(options.semanticEvidencePackagePath)));
+      writeFileSync5(policyInputPath, readFileSync12(resolve22(options.semanticTrustPolicyPath)));
       semanticEvidencePackagePath = packageInputPath;
       semanticTrustPolicyPath = policyInputPath;
       semanticInputRefs.push({
@@ -28336,10 +28487,10 @@ async function collectPrepareEvidence(options, mode) {
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject
     };
-    writeJson(join13(bundleDirectory, "semantic-audit.json"), semanticAudit);
+    writeJson(join14(bundleDirectory, "semantic-audit.json"), semanticAudit);
     const semanticAuditRef = {
       path: "semantic-audit.json",
-      sha256: sha256File2(join13(bundleDirectory, "semantic-audit.json"))
+      sha256: sha256File2(join14(bundleDirectory, "semantic-audit.json"))
     };
     const detectorCoverage = createDetectorCoverage({
       baselineRepositoryObject,
@@ -28362,7 +28513,7 @@ async function collectPrepareEvidence(options, mode) {
       }
     });
     const nativeGateDiscovery = discoverNativeGates(repository, baselineRepositoryObject);
-    const nativeGateOutputDirectory = join13(bundleDirectory, "native-gate-output");
+    const nativeGateOutputDirectory = join14(bundleDirectory, "native-gate-output");
     leaseTransferred = true;
     const nativeGateCoverage = await runNativeGates(
       repository,
@@ -28374,8 +28525,8 @@ async function collectPrepareEvidence(options, mode) {
         execution_lease: executionLease
       }
     );
-    writeJson(join13(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
-    writeJson(join13(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
+    writeJson(join14(bundleDirectory, "native-gate-discovery.json"), nativeGateDiscovery);
+    writeJson(join14(bundleDirectory, "native-gate-coverage.json"), nativeGateCoverage);
     const nativeGateValidationTime = clock();
     const nativeGateIntegrityErrors = await validateNativeGateCoverage(
       nativeGateCoverage,
@@ -28391,7 +28542,7 @@ async function collectPrepareEvidence(options, mode) {
       nativeGateOutputDirectory,
       { validation_time: nativeGateValidationTime, repository }
     );
-    writeJson(join13(bundleDirectory, "native-gate-validation.json"), {
+    writeJson(join14(bundleDirectory, "native-gate-validation.json"), {
       record_type: "mister-clean.native-gate-validation",
       schema_version: "1.0",
       discovery_sha256: nativeGateDiscovery.catalog_sha256,
@@ -28433,7 +28584,7 @@ async function collectPrepareEvidence(options, mode) {
         stdout_ref: { ...execution.stdout_ref, path: `native-gate-output/${execution.stdout_ref.path}` },
         stderr_ref: { ...execution.stderr_ref, path: `native-gate-output/${execution.stderr_ref.path}` }
       };
-      writeJson(join13(bundleDirectory, path), record5);
+      writeJson(join14(bundleDirectory, path), record5);
       return {
         id: execution.gate_id,
         kind: execution.kind,
@@ -28447,7 +28598,7 @@ async function collectPrepareEvidence(options, mode) {
         warnings: 0,
         debt: passed ? 0 : 1,
         skipped: execution.state === "skipped" ? 1 : 0,
-        evidence_ref: { path, sha256: sha256File2(join13(bundleDirectory, path)) }
+        evidence_ref: { path, sha256: sha256File2(join14(bundleDirectory, path)) }
       };
     });
     if (nativeGateCoverage.closing_repository_object.sha256 !== baselineRepositoryObject.sha256) {
@@ -28529,7 +28680,7 @@ async function collectPrepareTopology(context) {
       const census = await captureFileCensus({
         repository_root: repository,
         roots: [rootText],
-        output_path: join13(bundleDirectory, `planning-census-${index + 1}.json`)
+        output_path: join14(bundleDirectory, `planning-census-${index + 1}.json`)
       });
       const artifacts = census.entries.map((entry) => ({
         path: entry.path,
@@ -28616,13 +28767,13 @@ async function collectPrepareTopology(context) {
     options.processPort === void 0 ? {} : { processPort: options.processPort }
   );
   const processes = successorProcessRows(processCensus);
-  writeJson(join13(bundleDirectory, "process-census.json"), processCensus);
+  writeJson(join14(bundleDirectory, "process-census.json"), processCensus);
   const processCensusRef = {
     path: "process-census.json",
-    sha256: sha256File2(join13(bundleDirectory, "process-census.json"))
+    sha256: sha256File2(join14(bundleDirectory, "process-census.json"))
   };
   const currentCandidates = ["CURRENT-STATE.md", "docs/CURRENT-STATE.md", "_STATUS.md", "README.md"];
-  const currentPath = currentCandidates.find((candidate) => existsSync10(join13(repository, candidate)));
+  const currentPath = currentCandidates.find((candidate) => existsSync10(join14(repository, candidate)));
   let policyRef = null;
   let targetObservation;
   if (upstream) {
@@ -28637,13 +28788,13 @@ async function collectPrepareTopology(context) {
       observed_at: now
     };
   } else {
-    writeJson(join13(bundleDirectory, "local-target-policy.json"), {
+    writeJson(join14(bundleDirectory, "local-target-policy.json"), {
       record_type: "mister-clean.local-target-policy",
       policy_ref: "no configured upstream; current branch is the conservative local target"
     });
     policyRef = {
       path: "local-target-policy.json",
-      sha256: sha256File2(join13(bundleDirectory, "local-target-policy.json"))
+      sha256: sha256File2(join14(bundleDirectory, "local-target-policy.json"))
     };
     targetObservation = {
       kind: "local_ref_resolution",
@@ -28677,9 +28828,9 @@ function stageRetirementRulings(repository, bundleDirectory, retirements) {
     if (observed !== sha25614) {
       throw new Error(`refusing to stage retirement ruling ${JSON.stringify(path)}: bytes hash to ${observed}, the record binds ${sha25614}`);
     }
-    const target = join13(bundleDirectory, path);
-    mkdirSync3(dirname13(target), { recursive: true });
-    writeFileSync4(target, bytes2);
+    const target = join14(bundleDirectory, path);
+    mkdirSync4(dirname13(target), { recursive: true });
+    writeFileSync5(target, bytes2);
     staged.add(path);
   }
 }
@@ -28698,9 +28849,9 @@ function bindRetirementRulings(debts, bundleDirectory, requestSha256, applicatio
     const source = sourceByDebt.get(String(debt.id));
     if (!source) throw new Error(`retired debt ${String(debt.id)} has no retirement application`);
     const ruling = exception.ref;
-    const relativePath = join13("retirement-rulings", `${String(debt.id)}.json`);
-    mkdirSync3(join13(bundleDirectory, "retirement-rulings"), { recursive: true });
-    writeJson(join13(bundleDirectory, relativePath), {
+    const relativePath = join14("retirement-rulings", `${String(debt.id)}.json`);
+    mkdirSync4(join14(bundleDirectory, "retirement-rulings"), { recursive: true });
+    writeJson(join14(bundleDirectory, relativePath), {
       record_type: "mister-clean.operator-ruling",
       schema_version: "1.0",
       debt_id: debt.id,
@@ -28715,7 +28866,7 @@ function bindRetirementRulings(debts, bundleDirectory, requestSha256, applicatio
     });
     return {
       ...debt,
-      exception: { ...exception, ref: { path: relativePath, sha256: sha256File2(join13(bundleDirectory, relativePath)) } }
+      exception: { ...exception, ref: { path: relativePath, sha256: sha256File2(join14(bundleDirectory, relativePath)) } }
     };
   });
 }
@@ -28995,7 +29146,7 @@ function assemblePrepareReport(context) {
         observed_at: execution?.finished_at ?? now,
         evidence_ref: {
           path: "native-gate-validation.json",
-          sha256: sha256File2(join13(bundleDirectory, "native-gate-validation.json"))
+          sha256: sha256File2(join14(bundleDirectory, "native-gate-validation.json"))
         }
       }]
     }, projection.normalizer, projection.cause_key, [
@@ -29127,11 +29278,11 @@ function assemblePrepareReport(context) {
       validation_error_count: nativeGateValidationErrors.length,
       discovery_ref: {
         path: "native-gate-discovery.json",
-        sha256: sha256File2(join13(bundleDirectory, "native-gate-discovery.json"))
+        sha256: sha256File2(join14(bundleDirectory, "native-gate-discovery.json"))
       },
       coverage_ref: {
         path: "native-gate-coverage.json",
-        sha256: sha256File2(join13(bundleDirectory, "native-gate-coverage.json"))
+        sha256: sha256File2(join14(bundleDirectory, "native-gate-coverage.json"))
       }
     }
   });
@@ -29208,7 +29359,7 @@ function assemblePrepareReport(context) {
     closing_object: closingRepositoryObject.sha256,
     closing_repository_object: closingRepositoryObject
   };
-  writeJson(join13(bundleDirectory, "regression-delta.json"), {
+  writeJson(join14(bundleDirectory, "regression-delta.json"), {
     record_type: "mister-clean.regression-delta",
     schema_version: REGRESSION_DELTA_SCHEMA_VERSION,
     ...regressionBinding,
@@ -29221,7 +29372,7 @@ function assemblePrepareReport(context) {
     accounting_schema: "1.5",
     evidence_ref: {
       path: "regression-delta.json",
-      sha256: sha256File2(join13(bundleDirectory, "regression-delta.json"))
+      sha256: sha256File2(join14(bundleDirectory, "regression-delta.json"))
     }
   };
   return {
@@ -29302,13 +29453,13 @@ function assemblePrepareBundle(context) {
   coordination.dispatcher = `mister-clean:${options.runId}`;
   coordination.integrator = `mister-clean:${options.runId}`;
   coordination.target = { ref: targetRef, expected_commit: targetCommit, observed_at: now };
-  writeJson(join13(bundleDirectory, "debris-census.json"), {
+  writeJson(join14(bundleDirectory, "debris-census.json"), {
     record_type: "mister-clean.debris-census",
     removed: 0,
     retained: 0,
     unclassified: 0
   });
-  writeJson(join13(bundleDirectory, "independent-review.json"), {
+  writeJson(join14(bundleDirectory, "independent-review.json"), {
     record_type: "mister-clean.independent-review",
     observed_at: now,
     mechanism: "not yet run",
@@ -29333,7 +29484,7 @@ function assemblePrepareBundle(context) {
       source_kind: sourceKind,
       request_source: requestSource2,
       source_refs: [
-        { path: "criteria-source.json", sha256: sha256File2(join13(bundleDirectory, "criteria-source.json")) }
+        { path: "criteria-source.json", sha256: sha256File2(join14(bundleDirectory, "criteria-source.json")) }
       ],
       request_sha256: requestSha256,
       discovered_count: criteriaIds2.length,
@@ -29380,7 +29531,7 @@ function assemblePrepareBundle(context) {
     current_state: currentPath ? {
       state: "candidate_unverified",
       path: currentPath,
-      sha256: sha256File2(join13(repository, currentPath)),
+      sha256: sha256File2(join14(repository, currentPath)),
       commit: head,
       generator: "discovered candidate; requires explicit designation",
       designation: null
@@ -29395,15 +29546,15 @@ function assemblePrepareBundle(context) {
     native_gate_control: {
       discovery_ref: {
         path: "native-gate-discovery.json",
-        sha256: sha256File2(join13(bundleDirectory, "native-gate-discovery.json"))
+        sha256: sha256File2(join14(bundleDirectory, "native-gate-discovery.json"))
       },
       coverage_ref: {
         path: "native-gate-coverage.json",
-        sha256: sha256File2(join13(bundleDirectory, "native-gate-coverage.json"))
+        sha256: sha256File2(join14(bundleDirectory, "native-gate-coverage.json"))
       },
       validation_ref: {
         path: "native-gate-validation.json",
-        sha256: sha256File2(join13(bundleDirectory, "native-gate-validation.json"))
+        sha256: sha256File2(join14(bundleDirectory, "native-gate-validation.json"))
       },
       evidence_root: "native-gate-output",
       required_count: nativeGateDiscovery.required_gate_ids.length,
@@ -29417,7 +29568,7 @@ function assemblePrepareBundle(context) {
       retained: 0,
       unclassified: 0,
       evidence: [
-        { path: "debris-census.json", sha256: sha256File2(join13(bundleDirectory, "debris-census.json")) }
+        { path: "debris-census.json", sha256: sha256File2(join14(bundleDirectory, "debris-census.json")) }
       ]
     },
     handoff: {
@@ -29439,21 +29590,21 @@ function assemblePrepareBundle(context) {
       unresolved: 0,
       evidence_ref: {
         path: "independent-review.json",
-        sha256: sha256File2(join13(bundleDirectory, "independent-review.json"))
+        sha256: sha256File2(join14(bundleDirectory, "independent-review.json"))
       }
     }
   };
-  writeJson(join13(bundleDirectory, "action-manifest.json"), manifest2);
-  writeJson(join13(bundleDirectory, "closeout-report.json"), report);
+  writeJson(join14(bundleDirectory, "action-manifest.json"), manifest2);
+  writeJson(join14(bundleDirectory, "closeout-report.json"), report);
   bundle.manifest = {
     path: "action-manifest.json",
-    sha256: sha256File2(join13(bundleDirectory, "action-manifest.json"))
+    sha256: sha256File2(join14(bundleDirectory, "action-manifest.json"))
   };
   bundle.report = {
     path: "closeout-report.json",
-    sha256: sha256File2(join13(bundleDirectory, "closeout-report.json"))
+    sha256: sha256File2(join14(bundleDirectory, "closeout-report.json"))
   };
-  const bundlePath = join13(bundleDirectory, "closure-bundle.json");
+  const bundlePath = join14(bundleDirectory, "closure-bundle.json");
   writeJson(bundlePath, bundle);
   const verifiedClosingRepositoryObject = captureRepositoryObject(repository);
   if (verifiedClosingRepositoryObject.sha256 !== closingRepositoryObject.sha256) {
@@ -29466,7 +29617,7 @@ function assemblePrepareBundle(context) {
 import { createHash as createHash22 } from "crypto";
 import { execFileSync as execFileSync6 } from "child_process";
 import { lstatSync as lstatSync12, readFileSync as readFileSync13 } from "fs";
-import { extname as extname5, join as join14, normalize as normalize3, posix as posix3, resolve as resolve23 } from "path";
+import { extname as extname5, join as join15, normalize as normalize3, posix as posix3, resolve as resolve23 } from "path";
 var SOURCE_EXTENSIONS2 = /* @__PURE__ */ new Set([".bash", ".cjs", ".go", ".js", ".jsx", ".mjs", ".py", ".rs", ".sh", ".ts", ".tsx"]);
 var FORBIDDEN_MAP_KEYS = Object.freeze(["__proto__", "constructor", "prototype"]);
 var INVENTORY_PATH = ".mister-clean/repository-boundaries.json";
@@ -29492,9 +29643,9 @@ function candidatePaths(root) {
 }
 function readableText(root, path) {
   try {
-    const metadata = lstatSync12(join14(root, path));
+    const metadata = lstatSync12(join15(root, path));
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1048576) return void 0;
-    return readFileSync13(join14(root, path), "utf8");
+    return readFileSync13(join15(root, path), "utf8");
   } catch {
     return void 0;
   }
@@ -29674,7 +29825,7 @@ function externalContracts(root, paths) {
   if (!paths.has(INVENTORY_PATH)) return { count: 0, findings: [] };
   let data;
   try {
-    data = JSON.parse(readFileSync13(join14(root, INVENTORY_PATH), "utf8"));
+    data = JSON.parse(readFileSync13(join15(root, INVENTORY_PATH), "utf8"));
   } catch (error) {
     return { count: 0, findings: [finding3("topology_inventory_invalid", INVENTORY_PATH, error instanceof Error ? error.message : String(error))] };
   }
@@ -29690,7 +29841,7 @@ function externalContracts(root, paths) {
       continue;
     }
     try {
-      const errors = wireContractErrors(contract, JSON.parse(readFileSync13(join14(root, contract.fixture), "utf8")));
+      const errors = wireContractErrors(contract, JSON.parse(readFileSync13(join15(root, contract.fixture), "utf8")));
       if (errors.length > 0) findings.push(finding3("external_producer_contract_invalid", contract.fixture, `${contract.id}: ${errors.join("; ")}`, [INVENTORY_PATH]));
     } catch (error) {
       findings.push(finding3("external_producer_contract_invalid", contract.fixture, error instanceof Error ? error.message : String(error), [INVENTORY_PATH]));
@@ -29762,29 +29913,29 @@ import { randomUUID as randomUUID6 } from "crypto";
 import { execFileSync as execFileSync7 } from "child_process";
 import {
   existsSync as existsSync11,
-  mkdirSync as mkdirSync5,
+  mkdirSync as mkdirSync6,
   realpathSync as realpathSync9,
-  rmSync as rmSync4,
-  writeFileSync as writeFileSync6
+  rmSync as rmSync5,
+  writeFileSync as writeFileSync7
 } from "fs";
 import { hostname } from "os";
-import { dirname as dirname15, join as join16, posix as pathPosix2 } from "path";
+import { dirname as dirname15, join as join17, posix as pathPosix2 } from "path";
 
 // src/closeout/action-lifecycle-runtime.ts
 import { createHash as createHash23, randomUUID as randomUUID5 } from "crypto";
 import {
   closeSync as closeSync4,
   copyFileSync,
-  mkdirSync as mkdirSync4,
+  mkdirSync as mkdirSync5,
   openSync as openSync4,
   readFileSync as readFileSync14,
   realpathSync as realpathSync8,
   renameSync as renameSync2,
-  rmSync as rmSync3,
+  rmSync as rmSync4,
   statSync as statSync3,
-  writeFileSync as writeFileSync5
+  writeFileSync as writeFileSync6
 } from "fs";
-import { dirname as dirname14, isAbsolute as isAbsolute20, join as join15, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
+import { dirname as dirname14, isAbsolute as isAbsolute20, join as join16, relative as relative16, resolve as resolve24, sep as sep16 } from "path";
 var HEX645 = /^[0-9a-f]{64}$/;
 function object6(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected object`);
@@ -29850,8 +30001,8 @@ function digestRef2(base, path) {
 }
 function writeEvidenceRecord(context, path, record5) {
   const absolute = resolveContained(context.base, path, "action evidence path");
-  mkdirSync4(dirname14(absolute), { recursive: true, mode: 448 });
-  writeFileSync5(absolute, jsonBytes(record5), { encoding: "utf8", mode: 384, flag: "wx" });
+  mkdirSync5(dirname14(absolute), { recursive: true, mode: 448 });
+  writeFileSync6(absolute, jsonBytes(record5), { encoding: "utf8", mode: 384, flag: "wx" });
   return digestRef2(context.base, path);
 }
 function readBoundEvidenceRecord(context, rawRef, label) {
@@ -29885,7 +30036,7 @@ function inferRepository(bundle, report) {
 function loadContext(bundleDirectory) {
   const base = realpathSync8(resolve24(bundleDirectory));
   if (!statSync3(base).isDirectory()) throw new Error(`bundle directory is not a directory: ${base}`);
-  const bundlePath = join15(base, "closure-bundle.json");
+  const bundlePath = join16(base, "closure-bundle.json");
   const bundle = readJson2(bundlePath);
   const reportRef = object6(bundle.report, "$.report");
   const manifestRef = object6(bundle.manifest, "$.manifest");
@@ -29918,23 +30069,23 @@ async function requireValidBundle(context, runtimeAttestation, verifyLive) {
 ${result.errors.join("\n")}`);
 }
 function lockPath(context) {
-  return join15(context.base, ".mister-clean-action.lock.json");
+  return join16(context.base, ".mister-clean-action.lock.json");
 }
 function lifecyclePath(context, id) {
-  return join15(context.base, "action-evidence", id, "lifecycle.json");
+  return join16(context.base, "action-evidence", id, "lifecycle.json");
 }
 function writeExclusive(path, value) {
-  mkdirSync4(dirname14(path), { recursive: true, mode: 448 });
+  mkdirSync5(dirname14(path), { recursive: true, mode: 448 });
   const descriptor = openSync4(path, "wx", 384);
   try {
-    writeFileSync5(descriptor, jsonBytes(value), "utf8");
+    writeFileSync6(descriptor, jsonBytes(value), "utf8");
   } finally {
     closeSync4(descriptor);
   }
 }
 function replaceJson(path, value) {
   const temporary = `${path}.tmp-${process.pid}-${randomUUID5()}`;
-  writeFileSync5(temporary, jsonBytes(value), { encoding: "utf8", mode: 384, flag: "wx" });
+  writeFileSync6(temporary, jsonBytes(value), { encoding: "utf8", mode: 384, flag: "wx" });
   renameSync2(temporary, path);
 }
 async function transactionalWrite(context, values, runtimeAttestation) {
@@ -29947,11 +30098,11 @@ async function transactionalWrite(context, values, runtimeAttestation) {
     ...sidecars.map((sidecar) => sidecar.path)
   ];
   if (new Set(paths).size !== paths.length) throw new Error("action transaction contains a duplicate output path");
-  const backupDirectory = join15(context.base, `.action-transaction-${randomUUID5()}`);
-  mkdirSync4(backupDirectory, { recursive: true, mode: 448 });
+  const backupDirectory = join16(context.base, `.action-transaction-${randomUUID5()}`);
+  mkdirSync5(backupDirectory, { recursive: true, mode: 448 });
   for (const path of paths) {
     resolveContained(context.base, portablePath2(context.base, path), "action transaction output");
-    copyFileSync(path, join15(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__")));
+    copyFileSync(path, join16(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__")));
   }
   try {
     if (values.regression) replaceJson(context.regressionPath, values.regression);
@@ -29963,14 +30114,14 @@ async function transactionalWrite(context, values, runtimeAttestation) {
     await requireValidBundle(candidate, runtimeAttestation, true);
   } catch (error) {
     for (const path of paths) {
-      const backup = join15(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__"));
+      const backup = join16(backupDirectory, portablePath2(context.base, path).replaceAll("/", "__"));
       const restore = `${path}.restore-${randomUUID5()}`;
       copyFileSync(backup, restore);
       renameSync2(restore, path);
     }
     throw error;
   } finally {
-    rmSync3(backupDirectory, { recursive: true, force: true });
+    rmSync4(backupDirectory, { recursive: true, force: true });
   }
 }
 function rehashBundle(bundle, report, manifest2, base) {
@@ -30225,9 +30376,9 @@ async function prepareSnapshot(context, evidenceHome, runId, runtimeAttestation,
   const directory = realpathSync9(prepared.bundleDirectory);
   const prefix = portablePath2(context.base, directory);
   const bundle = readJson2(prepared.bundlePath);
-  const report = readJson2(join16(directory, "closeout-report.json"));
-  const manifest2 = readJson2(join16(directory, "action-manifest.json"));
-  const regression = readJson2(join16(directory, "regression-delta.json"));
+  const report = readJson2(join17(directory, "closeout-report.json"));
+  const manifest2 = readJson2(join17(directory, "action-manifest.json"));
+  const regression = readJson2(join17(directory, "regression-delta.json"));
   const detectorCoverage = object6(regression.detector_coverage, "snapshot.regression.detector_coverage");
   const nativeControl = object6(object6(bundle.successor_readiness, "snapshot.successor_readiness").native_gate_control, "snapshot.native_gate_control");
   const discoveryRef = object6(nativeControl.discovery_ref, "snapshot.native_gate_control.discovery_ref");
@@ -30387,10 +30538,10 @@ function rowObservationIds(row) {
 function writeDebtResult(context, id, row, after, status, observedAt) {
   const path = `action-evidence/${id}/debt-results/${text2(row.debt_key, "debt_key")}.json`;
   const absolute = resolveContained(context.base, path, "debt result path");
-  mkdirSync5(dirname15(absolute), { recursive: true, mode: 448 });
+  mkdirSync6(dirname15(absolute), { recursive: true, mode: 448 });
   const command = `mister-clean action finish ${JSON.stringify(context.base)} --id ${JSON.stringify(id)} --status ${status}`;
   const result = "root debt absent from the post-action registered detector/native observation set";
-  writeFileSync6(absolute, jsonBytes({
+  writeFileSync7(absolute, jsonBytes({
     record_type: "mister-clean.debt-result",
     debt_id: row.id,
     kind: "gate_result",
@@ -30498,7 +30649,7 @@ function writeActionResult(context, lifecycle2, after, status, observedAt, hygie
     observed_at: observedAt,
     hygiene
   };
-  writeFileSync6(absolute, jsonBytes(record5), { encoding: "utf8", mode: 384 });
+  writeFileSync7(absolute, jsonBytes(record5), { encoding: "utf8", mode: 384 });
   return {
     kind: actionEvidenceKind(action.kind),
     object: after.sha256,
@@ -30605,10 +30756,10 @@ function lifecycleSnapshot(context, lifecycle2) {
   const pre = object6(lifecycle2.pre_snapshot, "lifecycle.pre_snapshot");
   const directory = resolveContained(context.base, pre.directory, "lifecycle.pre_snapshot.directory");
   const prefix = portablePath2(context.base, directory);
-  const bundle = readJson2(join16(directory, "closure-bundle.json"));
-  const report = readJson2(join16(directory, "closeout-report.json"));
-  const manifest2 = readJson2(join16(directory, "action-manifest.json"));
-  const regression = readJson2(join16(directory, "regression-delta.json"));
+  const bundle = readJson2(join17(directory, "closure-bundle.json"));
+  const report = readJson2(join17(directory, "closeout-report.json"));
+  const manifest2 = readJson2(join17(directory, "action-manifest.json"));
+  const regression = readJson2(join17(directory, "regression-delta.json"));
   const detectorCoverage = object6(regression.detector_coverage, "pre.detector_coverage");
   const nativeControl = object6(object6(bundle.successor_readiness, "pre.successor_readiness").native_gate_control, "pre.native_gate_control");
   const discoveryRef = object6(nativeControl.discovery_ref, "pre.native_gate_control.discovery_ref");
@@ -30672,10 +30823,10 @@ async function beginAction(options) {
     acquired_at: openedAt
   };
   writeExclusive(lockPath(context), lock);
-  const actionRoot = join16(context.base, "action-evidence", options.id);
+  const actionRoot = join17(context.base, "action-evidence", options.id);
   try {
     if (existsSync11(actionRoot)) throw new Error(`action evidence directory already exists: ${actionRoot}`);
-    mkdirSync5(actionRoot, { recursive: true, mode: 448 });
+    mkdirSync6(actionRoot, { recursive: true, mode: 448 });
     const branch = currentBranch(context.repository);
     const beforeHygiene = captureActionHygiene(context.repository, { now });
     if (beforeHygiene.processes.status !== "complete") {
@@ -30705,7 +30856,7 @@ async function beginAction(options) {
     );
     const pre = await prepareSnapshot(
       context,
-      join16(actionRoot, "pre-snapshot"),
+      join17(actionRoot, "pre-snapshot"),
       "pre",
       options.runtimeAttestation,
       now,
@@ -30863,8 +31014,8 @@ async function beginAction(options) {
       state: "open"
     };
   } catch (error) {
-    rmSync4(lockPath(context), { force: true });
-    rmSync4(actionRoot, { force: true, recursive: true });
+    rmSync5(lockPath(context), { force: true });
+    rmSync5(actionRoot, { force: true, recursive: true });
     throw error;
   }
 }
@@ -30915,7 +31066,7 @@ async function finishAction(options) {
   const attemptId = `post-${randomUUID6()}`;
   const post = await prepareSnapshot(
     context,
-    join16(context.base, "action-evidence", options.id, "finish-attempts", attemptId),
+    join17(context.base, "action-evidence", options.id, "finish-attempts", attemptId),
     "post",
     options.runtimeAttestation,
     now,
@@ -31104,7 +31255,7 @@ ${catalogErrors.join("\n")}`);
     bundle: hashedBundle,
     sidecars: [{ path: lifecyclePath(context, options.id), value: finalLifecycle }]
   }, options.runtimeAttestation);
-  rmSync4(lockPath(context), { force: true });
+  rmSync5(lockPath(context), { force: true });
   return {
     actionId: options.id,
     bundleDirectory: context.base,
@@ -31149,14 +31300,14 @@ var nodeCloseoutEngine = {
 };
 
 // src/mister-clean-invocation-journal.ts
-import { appendFileSync, existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync17 } from "fs";
+import { appendFileSync, existsSync as existsSync13, mkdirSync as mkdirSync7, readFileSync as readFileSync17 } from "fs";
 import { createHash as createHash26, randomUUID as randomUUID7 } from "crypto";
 import { basename as basename14, dirname as dirname17, isAbsolute as isAbsolute22 } from "path";
 
 // src/sealed-segments.ts
-import { chmodSync as chmodSync2, existsSync as existsSync12, readFileSync as readFileSync16, renameSync as renameSync4, statSync as statSync5, writeFileSync as writeFileSync7 } from "fs";
+import { chmodSync as chmodSync2, existsSync as existsSync12, readFileSync as readFileSync16, renameSync as renameSync4, statSync as statSync5, writeFileSync as writeFileSync8 } from "fs";
 import { createHash as createHash25 } from "crypto";
-import { basename as basename13, dirname as dirname16, join as join17 } from "path";
+import { basename as basename13, dirname as dirname16, join as join18 } from "path";
 var SEGMENT_MANIFEST_RECORD_TYPE = "mister-clean.segment-manifest";
 var SEGMENT_MANIFEST_SCHEMA_VERSION = "1";
 var SealedSegmentTamperedError = class extends Error {
@@ -31184,7 +31335,7 @@ function segmentLayout(livePath) {
   return {
     directory,
     livePath,
-    manifestPath: join17(directory, `${base}.segments.json`),
+    manifestPath: join18(directory, `${base}.segments.json`),
     sealedFile: (value) => `${base}.${ordinal(value)}.jsonl`,
     keyIndexFile: (value) => `${base}.${ordinal(value)}.keys.json`
   };
@@ -31205,7 +31356,7 @@ function segmentLines(text3, label) {
 }
 function writeAtomically(path, text3, mode) {
   const temporary = `${path}.tmp`;
-  writeFileSync7(temporary, text3, { encoding: "utf8", mode });
+  writeFileSync8(temporary, text3, { encoding: "utf8", mode });
   renameSync4(temporary, path);
 }
 function emptyManifest() {
@@ -31232,14 +31383,14 @@ function parseManifest2(layout) {
 }
 function recordSealedSegment(layout, manifest2, ordinal, summarize, sealedAt) {
   const file = layout.sealedFile(ordinal);
-  const bytes2 = readSegmentFile(join17(layout.directory, file));
+  const bytes2 = readSegmentFile(join18(layout.directory, file));
   const summary = summarize(segmentLines(utf83.decode(bytes2), file));
   let keyIndex = null;
   if (summary.keys !== void 0) {
     const keyFile = layout.keyIndexFile(ordinal);
     const keyText = `${canonicalJson([...summary.keys].sort())}
 `;
-    const keyPath = join17(layout.directory, keyFile);
+    const keyPath = join18(layout.directory, keyFile);
     if (existsSync12(keyPath)) chmodSync2(keyPath, 384);
     writeAtomically(keyPath, keyText, 384);
     chmodSync2(keyPath, 256);
@@ -31265,7 +31416,7 @@ function openSegments(layout, summarize, now = () => (/* @__PURE__ */ new Date()
   let manifest2 = parseManifest2(layout);
   for (; ; ) {
     const ordinal = manifest2.segments.length + 1;
-    const orphan = join17(layout.directory, layout.sealedFile(ordinal));
+    const orphan = join18(layout.directory, layout.sealedFile(ordinal));
     if (!existsSync12(orphan)) return manifest2;
     chmodSync2(orphan, 256);
     manifest2 = recordSealedSegment(layout, manifest2, ordinal, summarize, now());
@@ -31279,7 +31430,7 @@ function sealLiveSegmentIfFull(layout, input) {
   const size = statSync5(layout.livePath).size;
   if (size === 0 || size + input.incomingBytes <= input.maxSize) return false;
   const ordinal = manifest2.segments.length + 1;
-  const sealedPath = join17(layout.directory, layout.sealedFile(ordinal));
+  const sealedPath = join18(layout.directory, layout.sealedFile(ordinal));
   if (existsSync12(sealedPath)) throw new SegmentStoreInvalidError(`refusing to overwrite sealed segment ${layout.sealedFile(ordinal)}`);
   renameSync4(layout.livePath, sealedPath);
   chmodSync2(sealedPath, 256);
@@ -31288,14 +31439,14 @@ function sealLiveSegmentIfFull(layout, input) {
   return true;
 }
 function readSealedSegment(layout, segment) {
-  const bytes2 = readSegmentFile(join17(layout.directory, segment.file));
+  const bytes2 = readSegmentFile(join18(layout.directory, segment.file));
   const observed = sha25612(bytes2);
   if (observed !== segment.sha256) throw new SealedSegmentTamperedError(segment.file, segment.sha256, observed);
   return utf83.decode(bytes2);
 }
 function readSegmentKeys(layout, segment) {
   if (segment.key_index === null) throw new SegmentStoreInvalidError(`sealed segment ${segment.file} has no key index`);
-  const bytes2 = readSegmentFile(join17(layout.directory, segment.key_index.file));
+  const bytes2 = readSegmentFile(join18(layout.directory, segment.key_index.file));
   const observed = sha25612(bytes2);
   if (observed !== segment.key_index.sha256) throw new SealedSegmentTamperedError(segment.key_index.file, segment.key_index.sha256, observed);
   const keys = JSON.parse(utf83.decode(bytes2));
@@ -31378,7 +31529,7 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
     this.#segments = segmentLayout(path);
     this.#segmentMaxBytes = options.segmentMaxBytes ?? INVOCATION_JOURNAL_SEGMENT_MAX_BYTES;
     this.#betweenSealSteps = options.betweenSealSteps;
-    mkdirSync6(dirname17(path), { recursive: true });
+    mkdirSync7(dirname17(path), { recursive: true });
     this.#assertExistingIntegrity();
   }
   recordStart(input) {
@@ -31447,7 +31598,7 @@ function journalFromEnvironment(environment) {
 import { createHash as createHash27 } from "crypto";
 import { spawnSync as spawnSync7 } from "child_process";
 import { existsSync as existsSync14, readFileSync as readFileSync18, statSync as statSync6 } from "fs";
-import { join as join18 } from "path";
+import { join as join19 } from "path";
 var RECEIPT_FAMILIES = [
   "planning_graph",
   "public_safety",
@@ -31483,7 +31634,7 @@ function posixPath(prefix, path) {
 }
 function workingTreeBlobOids(repository, paths) {
   const regular = [...new Set(paths)].filter((path) => {
-    const absolute = join18(repository, path);
+    const absolute = join19(repository, path);
     try {
       return existsSync14(absolute) && statSync6(absolute).isFile();
     } catch {
@@ -31516,7 +31667,7 @@ function githubActionsRefText(repository, ref) {
   if (line === null || !Number.isInteger(line) || line < 1) return { text: "", line: null };
   let text3;
   try {
-    text3 = readFileSync18(join18(repository, path), "utf8");
+    text3 = readFileSync18(join19(repository, path), "utf8");
   } catch {
     return { text: "", line };
   }
@@ -31593,7 +31744,7 @@ function receiptFindingsFromAudit(family, audit, context) {
       severity = typeof row.severity === "string" ? row.severity : null;
       legacy = asString(row.fingerprint, "github_actions.fingerprint");
       kind = "line_content";
-      const auditRoot = prefix ? join18(context.repository, prefix) : context.repository;
+      const auditRoot = prefix ? join19(context.repository, prefix) : context.repository;
       const refs = [...new Set(row.refs)].sort().map((ref) => githubActionsRefText(auditRoot, ref));
       const texts = refs.map((item) => item.text);
       const lineDigests = texts.map(trimmedLineSha256);
@@ -31646,12 +31797,12 @@ function receiptFindingsFromAudit(family, audit, context) {
 
 // src/closeout/second-pass.ts
 import { existsSync as existsSync16, readFileSync as readFileSync20, realpathSync as realpathSync11, statSync as statSync7 } from "fs";
-import { dirname as dirname19, join as join20, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
+import { dirname as dirname19, join as join21, relative as relative19, resolve as resolve27, sep as sep19 } from "path";
 
 // src/run-receipt.ts
-import { appendFileSync as appendFileSync2, existsSync as existsSync15, mkdirSync as mkdirSync7, readFileSync as readFileSync19, realpathSync as realpathSync10, writeFileSync as writeFileSync8 } from "fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync15, mkdirSync as mkdirSync8, readFileSync as readFileSync19, realpathSync as realpathSync10, writeFileSync as writeFileSync9 } from "fs";
 import { createHash as createHash28, randomUUID as randomUUID8 } from "crypto";
-import { dirname as dirname18, isAbsolute as isAbsolute23, join as join19, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
+import { dirname as dirname18, isAbsolute as isAbsolute23, join as join20, relative as relative18, resolve as resolve26, sep as sep18 } from "path";
 var RUN_RECEIPT_RECORD_TYPE = "mister-clean.run-receipt";
 var RUN_RECEIPT_SCHEMA_VERSION = "1";
 var RECEIPT_INDEX_FILE = "receipts.index.jsonl";
@@ -31841,7 +31992,7 @@ function realOrResolved(path) {
   let cursor = resolved;
   for (; ; ) {
     try {
-      return join19(realpathSync10(cursor), ...[...pending].reverse());
+      return join20(realpathSync10(cursor), ...[...pending].reverse());
     } catch {
     }
     const parent = dirname18(cursor);
@@ -31892,7 +32043,7 @@ var LocalRunReceiptStore = class {
   constructor(root, options = {}) {
     if (!isAbsolute23(root)) throw new Error("receipt root must be an absolute machine-local path");
     this.#root = root;
-    this.#index = segmentLayout(join19(root, RECEIPT_INDEX_FILE));
+    this.#index = segmentLayout(join20(root, RECEIPT_INDEX_FILE));
     this.#segmentMaxBytes = options.segmentMaxBytes ?? RECEIPT_INDEX_SEGMENT_MAX_BYTES;
     this.#betweenSealSteps = options.betweenSealSteps;
   }
@@ -31904,7 +32055,7 @@ var LocalRunReceiptStore = class {
     if (containedIn(repository, this.#root)) throw new ReceiptRootInsideRepositoryError(this.#root);
   }
   receiptPath(receipt) {
-    return join19(this.#root, repositoryIdSha256(receipt.repository_id), `${receipt.receipt_id.replace(/^mc-receipt:/u, "")}.json`);
+    return join20(this.#root, repositoryIdSha256(receipt.repository_id), `${receipt.receipt_id.replace(/^mc-receipt:/u, "")}.json`);
   }
   /** Validate, refuse private content, then write the receipt (0600) and append the index line. */
   write(receipt, repository) {
@@ -31914,8 +32065,8 @@ var LocalRunReceiptStore = class {
     const violations = receiptPrivacyViolations(receipt);
     if (violations.length > 0) throw new ReceiptPrivacyError(violations);
     const path = this.receiptPath(receipt);
-    mkdirSync7(dirname18(path), { recursive: true, mode: 448 });
-    writeFileSync8(path, `${canonicalJson(receipt)}
+    mkdirSync8(dirname18(path), { recursive: true, mode: 448 });
+    writeFileSync9(path, `${canonicalJson(receipt)}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
     const entry = {
       receipt_id: receipt.receipt_id,
@@ -31937,7 +32088,7 @@ var LocalRunReceiptStore = class {
       summarize: summarizeReceiptIndexSegment,
       betweenSealSteps: this.#betweenSealSteps
     });
-    appendFileSync2(join19(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}
+    appendFileSync2(join20(this.#root, RECEIPT_INDEX_FILE), `${canonicalJson(entry)}
 `, { encoding: "utf8", flag: "a", mode: 384 });
     return path;
   }
@@ -31984,7 +32135,7 @@ var LocalRunReceiptStore = class {
       if (!readSegmentKeys(this.#index, segment).includes(receiptId)) continue;
       entry = indexEntries(readSealedSegment(this.#index, segment), segment.file, false).find((item) => item.receipt_id === receiptId);
     }
-    return entry === void 0 ? void 0 : join19(this.#root, entry.path);
+    return entry === void 0 ? void 0 : join20(this.#root, entry.path);
   }
 };
 function newReceiptId() {
@@ -32194,7 +32345,7 @@ function legacyBaselineFromBundle(reference) {
   const path = resolve27(reference);
   if (!existsSync16(path)) return void 0;
   const directory = statSync7(path).isDirectory() ? path : dirname19(path);
-  const deltaPath = join20(directory, "regression-delta.json");
+  const deltaPath = join21(directory, "regression-delta.json");
   if (!existsSync16(deltaPath)) return void 0;
   const delta = JSON.parse(readFileSync20(deltaPath, "utf8"));
   const coverage = delta.detector_coverage;
@@ -32210,7 +32361,7 @@ function legacyBaselineFromBundle(reference) {
     const family = detectorId;
     families.push(family);
     const resultRef = execution.result_ref;
-    const resultPath = typeof resultRef?.path === "string" ? join20(directory, resultRef.path) : void 0;
+    const resultPath = typeof resultRef?.path === "string" ? join21(directory, resultRef.path) : void 0;
     let fingerprints;
     if (resultPath !== void 0 && existsSync16(resultPath)) {
       fingerprints = findingFingerprintsFromAudit(detectorId, JSON.parse(readFileSync20(resultPath, "utf8")));
@@ -32315,13 +32466,13 @@ function runSecondPass(input) {
 
 // src/toolchain-pin.ts
 import { existsSync as existsSync17, readFileSync as readFileSync21 } from "fs";
-import { join as join21, resolve as resolve28 } from "path";
+import { join as join22, resolve as resolve28 } from "path";
 var BUN_VERSION_FILE = ".bun-version";
 function runningBunVersion() {
   return process.versions.bun ?? null;
 }
 function readBunPin(root) {
-  const path = join21(resolve28(root), BUN_VERSION_FILE);
+  const path = join22(resolve28(root), BUN_VERSION_FILE);
   if (!existsSync17(path)) return void 0;
   const version = readFileSync21(path, "utf8").trim();
   if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`${BUN_VERSION_FILE} must hold one exact version, got ${JSON.stringify(version)}`);
@@ -32421,7 +32572,7 @@ async function runSemantic(args, io) {
       runId,
       runtimeCases
     });
-    writeFileSync9(outputPath, `${canonicalJson(plan2)}
+    writeFileSync10(outputPath, `${canonicalJson(plan2)}
 `, { flag: "wx" });
     if (json2) io.stdout(JSON.stringify(plan2, null, 2));
     else io.stdout(`semantic-plan: WROTE candidates=${plan2.candidates.length} sha256=${plan2.plan_sha256} path=${outputPath}`);
@@ -32606,7 +32757,7 @@ async function runValidate(args, io, runtimeAttestation, onValidated) {
   if (structural && guardAuthorityPath !== void 0) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
-  if (template && !inside2(join22(packageRoot(import.meta.url), "assets"), path)) {
+  if (template && !inside2(join23(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
   }
@@ -32688,7 +32839,7 @@ async function runDetect(args, io) {
   }
   io.stdout(`detected: ${result.ecosystems.join(" ")}`);
   if (listOnly) return 0;
-  const reference = join22(packageRoot(import.meta.url), "references", "stack-adapters.md");
+  const reference = join23(packageRoot(import.meta.url), "references", "stack-adapters.md");
   if (!existsSync18(reference)) return 0;
   const text3 = readFileSync22(reference, "utf8");
   for (const ecosystem of result.ecosystems) {
@@ -32854,7 +33005,7 @@ async function runManifest(args, io) {
     }
   }
   const result = packageSurface ? await nodeCloseoutEngine.generatePackageManifest(root) : await nodeCloseoutEngine.generateManifest(root);
-  const path = join22(resolve29(root), "MANIFEST.sha256");
+  const path = join23(resolve29(root), "MANIFEST.sha256");
   if (check) {
     if (!existsSync18(path) || readFileSync22(path, "utf8") !== result.content) {
       io.stderr("manifest: FAIL (MANIFEST.sha256 is stale)");
@@ -32863,7 +33014,7 @@ async function runManifest(args, io) {
     io.stdout(`manifest: PASS (${result.entries.length} entries)`);
     return 0;
   }
-  writeFileSync9(path, result.content, "utf8");
+  writeFileSync10(path, result.content, "utf8");
   io.stdout(`manifest: wrote ${result.entries.length} entries`);
   return 0;
 }
@@ -32904,7 +33055,7 @@ async function runCensus(args, io) {
       exclusions,
       output_path: output
     });
-    writeFileSync9(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
+    writeFileSync10(output, canonicalJson(census), { encoding: "utf8", flag: "wx" });
     io.stdout(`CENSUS file_count=${census.summary.file_count} direct=${census.summary.direct_file_count} nested=${census.summary.nested_file_count} bytes=${census.summary.total_bytes} aggregate_sha256=${census.summary.aggregate_sha256} path=${resolve29(output)}`);
     return 0;
   }
@@ -33091,8 +33242,8 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
               { family: "semantic_boundary", file: "semantic-audit.json" },
               { family: "language_policy", file: "language-policy-audit.json" }
             ];
-            const results = families.filter((entry) => existsSync18(join22(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join22(bundle, entry.file)) }));
-            const delta = record4(readJson3(join22(bundle, "regression-delta.json")));
+            const results = families.filter((entry) => existsSync18(join23(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join23(bundle, entry.file)) }));
+            const delta = record4(readJson3(join23(bundle, "regression-delta.json")));
             const baselineObject = record4(delta?.baseline_repository_object);
             const verdict = "NOT_CLEAN";
             writeRunReceipt(io, receipts, {

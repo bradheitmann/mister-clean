@@ -1,0 +1,57 @@
+{
+  "done_sha256": "46c6e2d899a2d5ef7fe8a3c4d8915d70776c6b8cdaf6e6e8cc097505234ea19e",
+  "entries": [
+    {
+      "evidence_sha256": "72abab170f0ec9f54aebf12e6920b0368b34b619d0f85811b2e64ab573192926",
+      "proof": "1",
+      "recorded_utc": "2026-11-06T00:37:11Z",
+      "run_id": "chqa-13ca364-p1"
+    },
+    {
+      "evidence_sha256": "6493da3ebf15bb7a353900edf2734224f838dddf8feacb52f1c62680ed9d480a",
+      "proof": "2",
+      "recorded_utc": "2026-11-06T00:37:11Z",
+      "run_id": "chqa-13ca364-p2"
+    },
+    {
+      "evidence_sha256": "e01948c1367ef8be107ae9f4e64adddac12e5e953c576c1a0627f129695986dd",
+      "proof": "3",
+      "recorded_utc": "2026-11-06T00:37:11Z",
+      "run_id": "chqa-13ca364-p3"
+    },
+    {
+      "evidence_sha256": "7a31bfe2eddf9092acbfc339856fda7bfaddf803d8694561ac0e60d0bb10b428",
+      "proof": "4",
+      "recorded_utc": "2026-11-06T00:37:11Z",
+      "run_id": "chqa-13ca364-p4"
+    },
+    {
+      "evidence_sha256": "d2612b73460728186a328753f8a190edf109ce673fc9c472a121144cda6e4c82",
+      "proof": "5",
+      "recorded_utc": "2026-11-06T00:37:11Z",
+      "run_id": "chqa-13ca364-p5"
+    },
+    {
+      "evidence_sha256": "24f378e218dd6303902afa292de8c3672092b27d1f4aed827d0ad090dc9c41a8",
+      "proof": "6",
+      "recorded_utc": "2026-11-06T00:37:11Z",
+      "run_id": "chqa-13ca364-p6"
+    },
+    {
+      "evidence_sha256": "0b6796cd0aea28d78e302cf354998dd90ec49fd4a495d8a0030e2fec67560db6",
+      "proof": "7",
+      "recorded_utc": "2026-11-06T00:37:11Z",
+      "run_id": "chqa-13ca364-p7"
+    },
+    {
+      "evidence_sha256": "d3c7e3abbf706eddf080d823029cced56d7d65b6be35bc0c3376278c71cb350d",
+      "proof": "8",
+      "recorded_utc": "2026-11-06T02:53:12Z",
+      "run_id": "selfjudge-candidate-8100826"
+    }
+  ],
+  "head": "13ca3644220755778820a16240b861ddb5a3b13e",
+  "manifest_sha256": "143015729a843d06c03105670c46bde94d11e854a1d42cfc795ba5bdb817962b",
+  "schema_version": "charter.reopen/1",
+  "slice": "mg-s1b-git-env-hardening"
+}

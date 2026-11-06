@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { demoBanner, SameOriginSnapshotSource, sessionTokenFromFragment, sourceForLocation } from "./data-source.js";
+  import { demoBanner, SameOriginSnapshotSource, sourceForLocation, takeSessionTokenFromFragment } from "./data-source.js";
   import { resolveCapabilityQuery } from "./domain.js";
   import { ALL_CAPABILITY_DEFINITIONS, CAPABILITY_DEFINITIONS } from "../../src/control-plane/contracts/capability-taxonomy.js";
   import { CONTROL_PLANE_SNAPSHOT_SCHEMA_VERSION } from "../../src/control-plane/contracts/snapshot.js";
@@ -217,7 +217,7 @@
     status = "loading";
     errorMessage = "";
     try {
-      const sessionToken = sessionTokenFromFragment(window.location.hash);
+      const sessionToken = takeSessionTokenFromFragment(window);
       snapshot = await sourceForLocation(
         window.location.search,
         new SameOriginSnapshotSource(sessionToken === undefined ? {} : { sessionToken }),
