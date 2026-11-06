@@ -97,6 +97,21 @@ describe("scanPublicSafety", () => {
     expect(JSON.stringify(result)).not.toContain(`${"person"}@${"example.org"}`);
   });
 
+  it("reports file-url only when the scheme is followed by a host or path", async () => {
+    const root = await fixture("file-url-near-miss");
+    const scheme = ["file", "//"].join(":");
+    await put(root, "kinds.txt", `covered: (${scheme}, plain path)\nbare ${scheme}) and ${scheme} alone\n`);
+    await put(root, "urls.txt", `${scheme}/tmp/x\n${scheme}host/share\n${scheme}/${"Users"}/person/project\n`);
+
+    const result = await scanPublicSafety(root);
+    expect(result.findings.map(({ path, line, rule }) => ({ path, line, rule }))).toEqual([
+      { path: "urls.txt", line: 1, rule: "file-url" },
+      { path: "urls.txt", line: 2, rule: "file-url" },
+      { path: "urls.txt", line: 3, rule: "posix-home-path" },
+      { path: "urls.txt", line: 3, rule: "file-url" },
+    ]);
+  });
+
   it("allows only the exact public third-party legal contact on its canonical notice line", async () => {
     const root = await fixture("public-third-party-notice");
     const publicContact = ["eemeli", "gmail.com"].join("@");

@@ -1,0 +1,10 @@
+{
+  "accepted_unix_s": 1793960940,
+  "accepted_utc": "2026-11-06T10:29:00Z",
+  "base_commit": "55db0c73d1141f148128efac97a2616076cf9613",
+  "brief_sha256": "b6768770434c5528a744c4e529cb19d70c1e3c944cb2d6f52e156aa2a1ef10a9",
+  "done_sha256": "b8a327bb0783debb404434096b628f1e9d124ba7a713ae210491a5f839bdd238",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-ci-green-1",
+  "state": "accepted"
+}
