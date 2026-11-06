@@ -1,5 +1,5 @@
 {
-  "commit": "d9ff36a7c342254ab0a566e842ca03ebbc611eed",
+  "commit": "733f31f1824dff40f8fe6b2210e4c03d68b1d9ec",
   "entries": [
     {
       "mode": "100644",
@@ -94,9 +94,9 @@
     },
     {
       "mode": "100644",
-      "object": "7cffbd386fba711a4488dd2548b6e0ce8418b87c",
+      "object": "bd68c3f8cc50cdb376a43bb522ed190d5a56bc1b",
       "path": "MANIFEST.sha256",
-      "sha256": "ae1062bee6dbd1e0421a8bcbc9d59f9dc806ecbd43fc0ae703f47cdd4015f038",
+      "sha256": "25b3add0895b0cb9703239af14eb1771a45f96b765c32c6af040d06f0f0c595d",
       "type": "blob"
     },
     {
@@ -325,9 +325,9 @@
     },
     {
       "mode": "100644",
-      "object": "c36ef18a8565f4a6a39b4231f5b835008657f0e8",
+      "object": "7b8f7490fc0471e2ec75db77eabd94360e51ff03",
       "path": "bin/mister-clean.js",
-      "sha256": "f3bf6063ac10a942d8c4550177d2adf8f8d377c43d13a94f3d11b4f7456199c0",
+      "sha256": "c90add7238bac06b47a68f531692b2fd365b4b950658113d7ec48f8e3181fbf3",
       "type": "blob"
     },
     {
@@ -2390,16 +2390,16 @@
     },
     {
       "mode": "100644",
-      "object": "f9708e436dd4ab6b49fef629d96b9c64c5e1ed91",
+      "object": "83b4ff137ed6279ee02105348806f7f30cd3f27a",
       "path": "src/closeout/gate-sandbox.test.ts",
-      "sha256": "e6a3e8c3f9f8268f48587023ace716f2175f6de51ad86cdaa0f726a999856c9f",
+      "sha256": "744bfa76e8daecf3c812b668c79e306f02604198d06dee46259da5e899e2e3a7",
       "type": "blob"
     },
     {
       "mode": "100644",
-      "object": "357a11dd45c53eb5049aad8f359f57f8c6a59ab4",
+      "object": "093ef86d5048ee437e0e9e44f73faafa2172d3d3",
       "path": "src/closeout/gate-sandbox.ts",
-      "sha256": "22496e12c80fa0ac4b8b059038d186c66d82869553e1482e9743fb0dbc1ac8e2",
+      "sha256": "65e0040886a07bd6937a103ed01beb52b8bcef85c0219477f4547b930930e66d",
       "type": "blob"
     },
     {
@@ -3727,11 +3727,11 @@
     }
   ],
   "entry_count": 532,
-  "head": "d9ff36a7c342254ab0a566e842ca03ebbc611eed",
+  "head": "733f31f1824dff40f8fe6b2210e4c03d68b1d9ec",
   "kind": "git-commit-tree",
-  "manifest_sha256": "d172997ea81a7705960042a621cb00e0fb43501bf8f0a824b1071c5146474b3d",
+  "manifest_sha256": "7b6d6958a379abd72a91800cc455edc406df5e3d8036c3d7b159b7521144e44b",
   "schema_version": "charter.freeze/2",
   "selector": "git-ls-tree:HEAD",
   "slice": "mg-s1c-os-sandbox",
-  "tree": "588e30328df96ea63d0c3d97edd1bc29a4681055"
+  "tree": "00ea8a1a6dda5bda04290481744659714669c967"
 }
