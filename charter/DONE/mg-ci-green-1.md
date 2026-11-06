@@ -1,7 +1,7 @@
 # DONE: mg-ci-green-1 (main's hosted CI verify is green again)
 Slice: main's required CI job `verify` has failed on every main commit since the S1b acceptance records landed (4c236c9). The public-safety rule `file-url` (src/closeout/inspection.ts) matches the bare scheme `file://,` in the prose of qa/mg-s1b-git-env-hardening/receipt-chqa-proofs1-7.json, which names a URL kind and carries no path or host. Found by CH/QA of mg-forward-752 (CHQA-D1). Narrow the rule so it needs at least one host or path character after the scheme, with near-miss tests. The accepted receipt stays byte-for-byte unchanged: accepted evidence is never rewritten.
 Proofs (each re-openable before acceptance):
-1. Near-miss behaviour of `file-url`. A bare scheme followed by punctuation or whitespace (`file://,`, `file://)`, `file:// `) is NOT a finding. `file:///tmp/x`, `file://host/share` and a file URL naming a home directory ARE findings, and the home-directory case reports both file-url and posix-home-path.
+1. Near-miss behaviour of `file-url`. A bare scheme followed by punctuation or whitespace (`file://,`, `file://)`, `file:// `) is NOT a finding. a file URL with an absolute path, one with a host, and one naming a home directory ARE findings, and the home-directory case reports both file-url and posix-home-path.
    - reopen: `MISTER_CLEAN_SOURCE_DEVELOPMENT=1 node ./node_modules/vitest/vitest.mjs run --allowOnly=false --testTimeout=120000 src/closeout/inspection.test.ts -t "file-url"`
    - mutant: restore the previous pattern → the bare-scheme cases go RED.
 2. The repository's own public tree passes the scanner on the slice head.
