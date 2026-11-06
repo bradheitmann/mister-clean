@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { assertWellFormedUnicode, canonicalJson } from "../canonical-json.js";
+
 /**
  * Regression accounting has two deliberately different identity spaces:
  * detector/native observations and normalized completion debts. An observation
@@ -218,70 +220,6 @@ function compareCanonicalText(left: string, right: string): number {
     const leftPoint = leftNext.value.codePointAt(0)!;
     const rightPoint = rightNext.value.codePointAt(0)!;
     if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1;
-  }
-}
-
-function assertWellFormedUnicode(value: string, path: string): void {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) {
-        throw new Error(`${path}: canonical UTF-8 text cannot contain an unpaired surrogate`);
-      }
-      index += 1;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      throw new Error(`${path}: canonical UTF-8 text cannot contain an unpaired surrogate`);
-    }
-  }
-}
-
-function canonicalJson(value: unknown, path = "$", active = new Set<object>()): string {
-  if (value === null) return "null";
-  if (typeof value === "string") {
-    assertWellFormedUnicode(value, path);
-    return JSON.stringify(value);
-  }
-  if (typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error(`${path}: canonical JSON requires a finite number`);
-    return JSON.stringify(Object.is(value, -0) ? 0 : value);
-  }
-  if (typeof value !== "object") {
-    throw new Error(`${path}: value is not canonical JSON`);
-  }
-  if (active.has(value)) throw new Error(`${path}: canonical JSON cannot contain a cycle`);
-  active.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const encoded: string[] = [];
-      for (let index = 0; index < value.length; index += 1) {
-        if (!(index in value)) throw new Error(`${path}[${index}]: canonical JSON cannot contain an array hole`);
-        encoded.push(canonicalJson(value[index], `${path}[${index}]`, active));
-      }
-      return `[${encoded.join(",")}]`;
-    }
-
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new Error(`${path}: canonical JSON requires a plain object`);
-    }
-    const ownKeys = Reflect.ownKeys(value);
-    if (ownKeys.some((key) => typeof key === "symbol")) {
-      throw new Error(`${path}: canonical JSON cannot contain symbol keys`);
-    }
-    const keys = (ownKeys as string[]).sort(compareCanonicalText);
-    const encoded = keys.map((key) => {
-      assertWellFormedUnicode(key, `${path} object key`);
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor?.enumerable || !("value" in descriptor)) {
-        throw new Error(`${path}.${key}: canonical JSON requires enumerable data properties`);
-      }
-      return `${JSON.stringify(key)}:${canonicalJson(descriptor.value, `${path}.${key}`, active)}`;
-    });
-    return `{${encoded.join(",")}}`;
-  } finally {
-    active.delete(value);
   }
 }
 

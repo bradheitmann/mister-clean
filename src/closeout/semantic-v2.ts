@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { isTimestamp } from "../timestamp.js";
 import {
   auditSemanticRepository,
   discoverSemanticProbeCandidates,
@@ -221,7 +222,6 @@ export interface SemanticV2VerificationResult {
 }
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
 const VERDICT_KEYS = new Set(["disposition", "failed_cases", "passed_cases", "result", "verdict"]);
 
 const DIRECT_CHECKERS: Record<DirectSemanticKindV2, { readonly id: string; readonly version: string }> = {
@@ -243,10 +243,6 @@ const DIRECT_KINDS = new Set<SemanticProbeKind>(
 function isInside(root: string, path: string): boolean {
   const relation = relative(root, path);
   return relation === "" || (relation !== ".." && !relation.startsWith(`..${sep}`) && !isAbsolute(relation));
-}
-
-function validIsoTimestamp(value: string): boolean {
-  return ISO_TIMESTAMP.test(value) && !Number.isNaN(Date.parse(value));
 }
 
 function sourceRef(repository: string, rawRef: string): SemanticSourceRefV2 {
@@ -346,7 +342,7 @@ function verifyEvidenceRefs(evidenceRoot: string, refs: readonly SemanticEvidenc
   const errors: string[] = [];
   const root = realpathSync(resolve(evidenceRoot));
   for (const ref of refs) {
-    if (ref.store !== "evidence_bundle" || !validIsoTimestamp(ref.captured_at)
+    if (ref.store !== "evidence_bundle" || !isTimestamp(ref.captured_at, "rfc3339")
       || !ref.media_type.trim() || !ref.path.trim() || isAbsolute(ref.path)
       || ref.path === ".." || ref.path.startsWith("../") || !HEX_64.test(ref.sha256)) {
       errors.push(`semantic evidence reference is malformed: ${ref.path || "<blank>"}`);
@@ -401,7 +397,7 @@ function verifyPackagedEvidenceRefs(
   const parsed = evidenceFilesMap(files);
   const errors = [...parsed.errors];
   for (const ref of refs) {
-    if (ref.store !== "evidence_bundle" || !validIsoTimestamp(ref.captured_at)
+    if (ref.store !== "evidence_bundle" || !isTimestamp(ref.captured_at, "rfc3339")
       || !ref.media_type.trim() || !ref.path.trim() || !HEX_64.test(ref.sha256)) {
       errors.push(`semantic evidence reference is malformed: ${ref.path || "<blank>"}`);
       continue;
@@ -426,7 +422,7 @@ export function createSemanticPlanV2(input: {
   if (!HEX_64.test(input.candidateSetSha256) || !HEX_64.test(input.repositoryObjectSha256)) {
     throw new Error("semantic v2 plan requires SHA-256 candidate-set and RepositoryObject bindings");
   }
-  if (!input.runId.trim() || !input.challengeNonce.trim() || !validIsoTimestamp(input.observedAt)) {
+  if (!input.runId.trim() || !input.challengeNonce.trim() || !isTimestamp(input.observedAt, "rfc3339")) {
     throw new Error("semantic v2 plan requires run id, unique challenge nonce, and timezone-aware observed_at");
   }
   const repository = resolve(input.repository);
@@ -675,7 +671,7 @@ export function verifyRuntimeSemanticCandidateV2(input: {
   }
 
   if (attestation.record_type !== "mister-clean.semantic-attestation" || attestation.schema_version !== "2.0"
-    || !validIsoTimestamp(attestation.attested_at)) {
+    || !isTimestamp(attestation.attested_at, "rfc3339")) {
     errors.push("semantic attestation record_type, schema_version, or attested_at is invalid");
   }
   const expectedBinding = {

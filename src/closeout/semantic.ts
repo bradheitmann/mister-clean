@@ -13,6 +13,7 @@ import {
   planningLaneLifecycle,
 } from "./repository.js";
 import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { isTimestamp } from "../timestamp.js";
 
 export type SemanticProbeKind =
   | "acceptance_effect_liveness"
@@ -237,12 +238,6 @@ function evidenceRefs(value: unknown): SemanticEvidenceRef[] | undefined {
     refs.push({ path: ref.path.trim().replaceAll("\\", "/"), sha256: ref.sha256 });
   }
   return refs.sort((left, right) => left.path.localeCompare(right.path) || left.sha256.localeCompare(right.sha256));
-}
-
-function isoTimestamp(value: unknown): boolean {
-  return typeof value === "string"
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)
-    && !Number.isNaN(Date.parse(value));
 }
 
 function sha256(value: string): string {
@@ -1461,10 +1456,10 @@ function parseManifest(
   if (manifest.subject_commit !== expectedCommit) errors.push(invalidFinding(`subject_commit must equal current HEAD ${expectedCommit}`, [manifestRef]));
   if (manifest.subject_tree_sha256 !== expectedTreeSha256) errors.push(invalidFinding("subject_tree_sha256 must equal the current non-ignored working-tree snapshot", [manifestRef]));
   if (manifest.candidate_set_sha256 !== expectedCandidateSetSha256) errors.push(invalidFinding("candidate_set_sha256 must equal the complete discovered semantic candidate set", [manifestRef]));
-  if (!isoTimestamp(manifest.observed_at)) errors.push(invalidFinding("observed_at must be a timezone-aware ISO timestamp", [manifestRef]));
+  if (!isTimestamp(manifest.observed_at, "rfc3339")) errors.push(invalidFinding("observed_at must be a timezone-aware ISO timestamp", [manifestRef]));
   if (!Array.isArray(manifest.probes)) {
     errors.push(invalidFinding("probes must be an array", [manifestRef]));
-    return { definitions: [], errors, ...(isoTimestamp(manifest.observed_at) ? { observedAt: String(manifest.observed_at) } : {}), sha256: sha256(content) };
+    return { definitions: [], errors, ...(isTimestamp(manifest.observed_at, "rfc3339") ? { observedAt: String(manifest.observed_at) } : {}), sha256: sha256(content) };
   }
   const definitions: ProbeDefinition[] = [];
   const seen = new Set<string>();
@@ -1572,7 +1567,7 @@ function parseManifest(
   return {
     definitions,
     errors,
-    ...(isoTimestamp(manifest.observed_at) ? { observedAt: String(manifest.observed_at) } : {}),
+    ...(isTimestamp(manifest.observed_at, "rfc3339") ? { observedAt: String(manifest.observed_at) } : {}),
     sha256: sha256(content),
   };
 }

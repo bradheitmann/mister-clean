@@ -65,6 +65,7 @@ import {
   type RootDebtAccountingRow,
 } from "./regression-accounting.js";
 import type { FileRuntimeAttestationBinding } from "../runtime-binding.js";
+import { formatTimestamp } from "../timestamp.js";
 import { captureFileCensus } from "../census.js";
 import { auditGitHubActionsRepository } from "./github-actions.js";
 import { auditLanguagePolicy } from "./language-policy.js";
@@ -105,9 +106,6 @@ function asArray(value: unknown, path: string): unknown[] {
 }
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
-}
-function isoTimestamp(date: Date): string {
-  return date.toISOString();
 }
 function planningClass(path: string): string {
   const parts = path.split("/").map((part) => part.toLocaleLowerCase());
@@ -187,7 +185,7 @@ async function collectPrepareEvidence(
   const repository = resolve(git(requestedRepository, "rev-parse", "--show-toplevel"));
   const baselineRepositoryObject = captureRepositoryObject(repository);
   const clock = options.now ?? (() => new Date());
-  const now = isoTimestamp(clock());
+  const now = formatTimestamp(clock());
   const executionLease = acquireRepositoryVerificationLease(repository, clock);
   let leaseTransferred = false;
   try {
@@ -413,7 +411,7 @@ async function collectPrepareEvidence(
       coverage_sha256: nativeGateCoverage.coverage_sha256,
       status: nativeGateValidationErrors.length === 0 ? "pass" : "fail",
       errors: nativeGateValidationErrors,
-      observed_at: isoTimestamp(clock()),
+      observed_at: formatTimestamp(clock()),
     });
     if (nativeGateIntegrityErrors.length > 0) {
       throw new Error(

@@ -15,14 +15,19 @@ import { afterAll, describe, expect, it } from "vitest";
 import { canonicalJson, sha256Bytes } from "./canonical-json.js";
 import { canonical, digestBytes, equal } from "./closeout/action-lifecycle-runtime.js";
 import { identity, discoverNativeGates, stableEqual } from "./closeout/native-gates.js";
-import { canonicalObservationId, canonicalRootDebtKey } from "./closeout/regression-accounting.js";
+import { ROOT_DEBT_IDENTITY_SCHEME, canonicalObservationId, canonicalRootDebtKey } from "./closeout/regression-accounting.js";
 import { captureRepositoryObject } from "./closeout/repository-object.js";
 import {
   jsonCorpus,
+  oracle_accepted_release,
+  oracle_action_hygiene,
   oracle_action_lifecycle_runtime,
   oracle_canonical_json,
   oracle_native_gates,
+  oracle_regression_accounting,
+  oracle_snapshot,
 } from "./codec-oracles.test-fixture.js";
+import { CAPABILITY_DEFINITIONS } from "./control-plane/contracts/capability-taxonomy.js";
 import { createFixtureRepository, fixtureCommit } from "./test-support/fixture-repo.js";
 
 type Outcome = { readonly text: string } | { readonly threw: true };
@@ -487,5 +492,236 @@ describe("digest vectors", () => {
 
   it("the action-lifecycle stateDigest is unchanged", () => {
     expect(digestBytes(canonical(ACTION_STATE))).toBe(ACTION_STATE_DIGEST);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Differential and declared deltas (DONE proofs 1 and 2). Added after the golden commit.
+
+type Mode = "refuse" | "omit";
+
+/** UTF-16 code-unit order and Unicode code-point order disagree on this key pair. */
+function orderDisagrees(left: string, right: string): boolean {
+  const units = left < right ? -1 : left > right ? 1 : 0;
+  const leftPoints = [...left].map((character) => character.codePointAt(0)!);
+  const rightPoints = [...right].map((character) => character.codePointAt(0)!);
+  let points = 0;
+  for (let index = 0; points === 0 && index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
+    points = leftPoints[index]! < rightPoints[index]! ? -1 : leftPoints[index]! > rightPoints[index]! ? 1 : 0;
+  }
+  if (points === 0) points = leftPoints.length < rightPoints.length ? -1 : leftPoints.length > rightPoints.length ? 1 : 0;
+  return units !== points;
+}
+
+/** Delta 2(c) rows: some object holds two keys whose code-unit and code-point orders differ. */
+function hasCodePointOrderedKeys(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasCodePointOrderedKeys);
+  if (value === null || typeof value !== "object") return false;
+  const keys = Object.keys(value);
+  return keys.some((left, index) => keys.slice(index + 1).some((right) => orderDisagrees(left, right)))
+    || Object.values(value).some(hasCodePointOrderedKeys);
+}
+
+/** Delta 2(a) rows: an object with two or more keys sits somewhere inside an array. */
+function hasObjectInsideArray(value: unknown, insideArray = false): boolean {
+  if (Array.isArray(value)) return value.some((entry) => hasObjectInsideArray(entry, true));
+  if (value === null || typeof value !== "object") return false;
+  return (insideArray && Object.keys(value).length > 1) || Object.values(value).some((entry) => hasObjectInsideArray(entry, insideArray));
+}
+
+function cycle(): unknown {
+  const value: Record<string, unknown> = { a: 1 };
+  value.self = value;
+  return value;
+}
+
+function accessor(): unknown {
+  return Object.defineProperty({}, "a", { enumerable: true, get: () => 1 });
+}
+
+function nonEnumerable(): unknown {
+  return Object.defineProperty({ b: 1 }, "a", { enumerable: false, value: 1 });
+}
+
+class Point {
+  readonly x: number;
+  constructor(x: number) {
+    this.x = x;
+  }
+}
+
+interface Site {
+  readonly site: string;
+  readonly mode: Mode;
+  readonly encode: (value: unknown) => string;
+  readonly hand: readonly unknown[];
+  /** Rows of a declared delta for this site; the test asserts their exact shape separately. */
+  readonly delta?: (value: unknown) => boolean;
+}
+
+const ENCODER_SITES: readonly Site[] = [
+  {
+    site: "canonical-json.ts:10 canonicalJson",
+    mode: "refuse",
+    encode: (value) => oracle_canonical_json.canonicalJson(value),
+    hand: [{ a: undefined }, [Number.NaN], { a: Number.POSITIVE_INFINITY }, () => 1, 1n, Symbol("s"), { "\uffff": 1, "\u{10000}": 2 }],
+  },
+  {
+    site: "native-gates.ts:489 canonicalJson",
+    mode: "omit",
+    encode: (value) => oracle_native_gates.canonicalJson(value),
+    hand: [{ a: undefined, b: 1 }, { nested: { x: undefined, y: [1, { z: undefined }] } }, [undefined], { a: Number.NaN }, 1n, Symbol("s"), { b: undefined }],
+  },
+  {
+    site: "regression-accounting.ts:238 canonicalJson",
+    mode: "refuse",
+    encode: (value) => oracle_regression_accounting.canonicalJson(value),
+    hand: [cycle(), [1, , 2], Object.assign(Object.create(null) as object, { b: 1, a: 2 }), new Point(1), { [Symbol("k")]: 1 }, "\ud800", { "\udc00": 1 }, accessor(), nonEnumerable(), { a: undefined }, Number.NaN],
+    delta: hasCodePointOrderedKeys,
+  },
+  {
+    site: "accepted-release.ts:71 canonical",
+    mode: "refuse",
+    encode: (value) => oracle_accepted_release.canonical(value),
+    hand: [JSON.parse("{\"name\":\"@scope/pkg\",\"version\":\"1.0.0\",\"dist\":{\"tarball\":\"https://registry.invalid/pkg.tgz\",\"integrity\":\"sha512-x\"}}"), JSON.parse("[{\"b\":1,\"a\":[2,{\"d\":3,\"c\":4}]}]")],
+  },
+  {
+    site: "action-lifecycle-runtime.ts:58 canonical",
+    mode: "refuse",
+    encode: (value) => oracle_action_lifecycle_runtime.canonical(value),
+    hand: [structuredClone({ b: [1, { d: 1, c: -0 }], a: null })],
+  },
+  {
+    site: "action-hygiene.ts:222 canonical",
+    mode: "refuse",
+    encode: (value) => oracle_action_hygiene.canonical(value),
+    hand: [{ a: undefined }, { a: Number.NaN }, [Number.POSITIVE_INFINITY], () => 1, { path: "a b", branch: null, locked_reason: null, prunable_reason: null }],
+  },
+  {
+    site: "snapshot.ts:454 canonicalJsonForSnapshot",
+    mode: "refuse",
+    encode: (value) => oracle_snapshot.canonicalJsonForSnapshot(value),
+    // CAPABILITY_DEFINITIONS (objects inside an array) is a delta 2(a) row; it is asserted there.
+    hand: [{ starting_real_issues: 0, paid: 1, ending_real_issues: -0 }, [1, [2, { a: 1 }]]],
+    delta: (value) => hasObjectInsideArray(value),
+  },
+];
+
+describe("canonical json differential", () => {
+  it.each(ENCODER_SITES)("$site: the shared encoder in $mode mode emits identical bytes and refusals", ({ mode, encode, hand, delta }) => {
+    const mismatches: string[] = [];
+    let compared = 0;
+    // Hand rows sit outside the delta domains by construction; only corpus rows are classified.
+    for (const value of [...corpus.filter((entry) => !delta?.(entry)), ...hand]) {
+      compared += 1;
+      const expected = outcome(() => encode(value));
+      const actual = outcome(() => canonicalJson(value, { undefinedFields: mode }));
+      if ("threw" in expected) {
+        if (!("threw" in actual)) mismatches.push(`oracle threw, shared encoded: ${"text" in actual ? actual.text : ""}`);
+      } else if (!("text" in actual) || actual.text !== expected.text) {
+        mismatches.push(`oracle ${expected.text}`);
+      }
+    }
+    expect(compared).toBeGreaterThan(corpus.length / 2);
+    expect(mismatches.slice(0, 10)).toEqual([]);
+  });
+
+  it("the live native-gates wrappers keep omit mode: identity and stableEqual equal their oracles, undefined-field rows included", () => {
+    const undefinedRows = [{ a: undefined, b: 1 }, { nested: { x: undefined, y: [1, { z: undefined }] } }, { b: undefined }];
+    const mismatches: string[] = [];
+    for (const value of [...corpus, ...undefinedRows]) {
+      const expected = outcome(() => oracle_native_gates.identity(value));
+      if (JSON.stringify(outcome(() => identity(value))) !== JSON.stringify(expected)) mismatches.push(JSON.stringify(expected));
+    }
+    for (const [left, right] of pairs([...undefinedRows, { a: 1 }, { b: 1 }, {}])) {
+      if (stableEqual(left, right) !== oracle_native_gates.stableEqual(left, right)) mismatches.push("stableEqual");
+    }
+    expect(mismatches.slice(0, 10)).toEqual([]);
+  });
+
+  it("the live action-lifecycle-runtime wrappers equal their oracle on plain JSON", () => {
+    const mismatches = corpus.filter((value) => JSON.stringify(outcome(() => canonical(value))) !== JSON.stringify(outcome(() => oracle_action_lifecycle_runtime.canonical(value))));
+    expect(mismatches.length).toBe(0);
+  });
+
+  it("delta rows differ from their oracle only in key order and match the root encoder's bytes", () => {
+    // No JSON.parse here: node 26.12's JSON.parse can corrupt escaped keys after warm-up.
+    // The same characters in a different order is the parse-free form of "same value, other key order".
+    const sortedCharacters = (text: string): string => [...text].sort().join("");
+    for (const { encode, delta } of ENCODER_SITES) {
+      if (delta === undefined) continue;
+      const rows = corpus.filter(delta);
+      expect(rows.length).toBeGreaterThan(0);
+      let reordered = 0;
+      for (const value of rows) {
+        const shared = canonicalJson(value);
+        const oracle = encode(value);
+        expect(shared).toBe(oracle_canonical_json.canonicalJson(value));
+        expect(sortedCharacters(shared)).toBe(sortedCharacters(oracle));
+        if (shared !== oracle) reordered += 1;
+      }
+      expect(reordered).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("canonical json declared deltas", () => {
+  it("(a) snapshot comparisons are key-order-insensitive inside arrays", () => {
+    const reorderedCapabilities = CAPABILITY_DEFINITIONS.map((definition) => Object.fromEntries(Object.entries(definition).reverse()));
+    expect(oracle_snapshot.canonicalJsonForSnapshot(reorderedCapabilities)).not.toBe(oracle_snapshot.canonicalJsonForSnapshot(CAPABILITY_DEFINITIONS));
+    expect(canonicalJson(reorderedCapabilities)).toBe(canonicalJson(CAPABILITY_DEFINITIONS));
+  });
+
+  it("(b) action-lifecycle-runtime canonical and equal refuse an undefined field and NaN", () => {
+    expect(oracle_action_lifecycle_runtime.canonical({ a: undefined })).toBe("{\"a\":undefined}");
+    expect(oracle_action_lifecycle_runtime.canonical({ a: Number.NaN })).toBe("{\"a\":null}");
+    expect(oracle_action_lifecycle_runtime.equal({ a: Number.NaN }, { a: null })).toBe(true);
+    expect(() => canonical({ a: undefined })).toThrow(/undefined/u);
+    expect(() => canonical({ a: Number.NaN })).toThrow(/finite/u);
+    expect(() => equal({ a: Number.NaN }, { a: null })).toThrow(/finite/u);
+    expect(() => equal({ a: undefined }, {})).toThrow(/undefined/u);
+  });
+
+  it("(c) root-debt keys sort object keys by UTF-16 code units, as RFC 8785 does", () => {
+    const input = { repo_id: "repo", normalizer: "unicode@1", cause_key: { "\uffff": "bmp", "\u{10000}": "astral" } };
+    const preimage = [ROOT_DEBT_IDENTITY_SCHEME, input.repo_id, input.normalizer, input.cause_key];
+    expect(oracle_regression_accounting.canonicalJson(preimage)).toContain("{\"\uffff\":\"bmp\",\"\u{10000}\":\"astral\"}");
+    expect(canonicalJson(preimage)).toContain("{\"\u{10000}\":\"astral\",\"\uffff\":\"bmp\"}");
+    expect(canonicalRootDebtKey(input)).toBe(sha256Bytes(canonicalJson(preimage)));
+    expect(canonicalRootDebtKey(input)).not.toBe(sha256Bytes(oracle_regression_accounting.canonicalJson(preimage)));
+  });
+
+  it("(d) the shared encoder refuses what the base root encoder overflowed on or accepted", () => {
+    const rows: readonly [string, unknown][] = [
+      ["cycle", cycle()],
+      ["array hole", [1, , 2]],
+      ["non-plain prototype", new Point(1)],
+      ["Date", new Date(0)],
+      ["symbol key", { [Symbol("k")]: 1, a: 1 }],
+      ["lone surrogate value", "\ud800"],
+      ["lone surrogate key", { "\udc00": 1 }],
+      ["accessor property", accessor()],
+    ];
+    for (const [label, value] of rows) {
+      expect(() => canonicalJson(value), label).toThrow();
+    }
+    expect(() => oracle_canonical_json.canonicalJson(cycle())).toThrow(RangeError);
+    expect(oracle_canonical_json.canonicalJson([1, , 2])).toBe("[1,,2]");
+    expect(oracle_canonical_json.canonicalJson(new Point(1))).toBe("{\"x\":1}");
+    expect(oracle_canonical_json.canonicalJson(new Date(0))).toBe("{}");
+    expect(oracle_canonical_json.canonicalJson({ [Symbol("k")]: 1, a: 1 })).toBe("{\"a\":1}");
+    expect(oracle_canonical_json.canonicalJson("\ud800")).toBe("\"\\ud800\"");
+    expect(oracle_canonical_json.canonicalJson(accessor())).toBe("{\"a\":1}");
+  });
+
+  it("(d, extension) the lax site encoders' undefined-field, NaN and non-plain encodings are refused too", () => {
+    expect(oracle_accepted_release.canonical({ a: undefined })).toBe("{\"a\":undefined}");
+    expect(oracle_snapshot.canonicalJsonForSnapshot({ a: Number.NaN })).toBe("{\"a\":null}");
+    expect(oracle_native_gates.canonicalJson(new Date(0))).toBe("{}");
+    expect(oracle_action_hygiene.canonical(new Point(1))).toBe("{\"x\":1}");
+    expect(() => canonicalJson({ a: undefined })).toThrow();
+    expect(() => canonicalJson({ a: Number.NaN })).toThrow();
+    expect(() => canonicalJson(new Date(0), { undefinedFields: "omit" })).toThrow();
+    expect(() => canonicalJson(new Point(1))).toThrow();
   });
 });

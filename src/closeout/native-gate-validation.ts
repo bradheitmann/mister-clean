@@ -2,6 +2,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, basename, resolve } from "node:path";
 
+import { timestampMillis } from "../timestamp.js";
 import type { RepositoryObject } from "./repository-object.js";
 import {
   repositoryVerificationCoordinationKey,
@@ -101,9 +102,7 @@ export async function validateOutputRef(
 }
 
 export function validClock(value: string): number | undefined {
-  if (typeof value !== "string") return undefined;
-  const milliseconds = Date.parse(value);
-  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value ? milliseconds : undefined;
+  return timestampMillis(value, "canonical_utc");
 }
 
 /** The budget an execution ran under: the default, or a repository declaration with its provenance. */

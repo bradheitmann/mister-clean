@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { RELEASE_ATTESTATION_FILE, validateAttestationShape } from "../attestation.js";
+import { canonicalSha256 } from "../canonical-json.js";
 
 export interface AcceptedReleaseFileObservation {
   readonly absolute: string;
@@ -68,11 +69,13 @@ function exact(value: unknown, names: readonly string[], path: string, errors: s
   return record;
 }
 
-function canonical(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  const record = value as Json;
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`).join(",")}}`;
+/** Canonical digest of the registry response; undefined when it is outside canonical JSON, which then cannot match. */
+function responseDigest(response: Json): string | undefined {
+  try {
+    return canonicalSha256(response);
+  } catch {
+    return undefined;
+  }
 }
 
 function parseRecord(value: unknown, errors: string[]): AcceptedReleaseRecordV1 | undefined {
@@ -132,7 +135,7 @@ function parseEvidence(value: unknown, errors: string[]): RegistryEvidence | und
   if (response && (response.name !== evidence.package_name || response.version !== evidence.version)) errors.push("$.accepted_release.evidence.response: package/version do not bind registry response");
   if (dist && (dist.tarball !== evidence.tarball_url || dist.integrity !== evidence.dist_integrity)) errors.push("$.accepted_release.evidence.response.dist: tarball/integrity do not bind registry response");
   if (typeof evidence.response_sha256 !== "string" || !HEX64.test(evidence.response_sha256)) errors.push("$.accepted_release.evidence.response_sha256: required lowercase SHA-256");
-  else if (response && sha256(canonical(response)) !== evidence.response_sha256) errors.push("$.accepted_release.evidence.response_sha256: registry response digest mismatch");
+  else if (response && responseDigest(response) !== evidence.response_sha256) errors.push("$.accepted_release.evidence.response_sha256: registry response digest mismatch");
   if (errors.length > 0) return undefined;
   return { package_name: evidence.package_name as string, version: evidence.version as string, tarball_url: evidence.tarball_url as string, dist_integrity: evidence.dist_integrity as string, archive: archive as unknown as { sha512: string; byte_length: number }, retrieved_at: evidence.retrieved_at as string };
 }

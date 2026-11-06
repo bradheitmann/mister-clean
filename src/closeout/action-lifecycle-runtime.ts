@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { canonicalEqual, canonicalJson } from "../canonical-json.js";
 import { validateBundleFile } from "./bundle.js";
 import type { ActionHygieneSnapshot } from "./action-hygiene.js";
 import { sha256File } from "./repository.js";
@@ -55,17 +56,13 @@ export function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+/** Canonical JSON of an action record; refuses undefined fields and non-finite numbers. */
 export function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") {
-    const record = value as JsonObject;
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
+  return canonicalJson(value);
 }
 
 export function equal(left: unknown, right: unknown): boolean {
-  return canonical(left) === canonical(right);
+  return canonicalEqual(left, right);
 }
 
 export function frozenDetectorPolicyEqual(left: unknown, right: unknown): boolean {
