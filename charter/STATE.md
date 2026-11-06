@@ -19,6 +19,7 @@ Not proven / known gaps:
 - Pre-existing: control-plane sqlite/HTTP tests time out under load in the container (self-judge gate debt DEBT-NATIVE-GATE-17ED5EBED7B18D8C); owned by S6.
 - Every new commit needs a fresh SEM-EXECUTABLE attestation (S4).
 Exact last-green command(s):
+- post-merge self-judge mg-main-postmerge-s2a-1 (installed 7.5.1, container) on main 74e23b1: prepare exit 0, no debt class beyond the baseline (semantic re-attestation; control-plane load timeouts DEBT-NATIVE-GATE-17ED5EBED7B18D8C; the bare-scheme file-url instances, flagged only by the pinned rule). Hosted CI verify on 74e23b1: success.
 - `charter gate mg-s2a-codecs --accept --receipt qa/mg-s2a-codecs/receipt.json` after `charter receipt ... --verify-tree <mg/s2a-codecs tip>` matched the recorded freeze: accepted.
 - `charter receipt qa/mg-forward-752/receipt.json --verify-tree <mg/forward-752 at 69709ec>` matched the recorded freeze; `charter gate mg-forward-752 --accept --receipt qa/mg-forward-752/receipt.json`: accepted.
 - hosted CI verify run 42203311538 (branch mg/forward-752, head 69709ec): success; main 8013fd3 run 42203080467: verify success.
