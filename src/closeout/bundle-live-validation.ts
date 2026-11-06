@@ -20,6 +20,7 @@ import {
   nativeGateFailureObservations,
   type NativeGateCoverage,
   type NativeGateDiscovery,
+  type RunNativeGateOptions,
 } from "./native-gates.js";
 import { runNativeGates } from "./native-gate-runner.js";
 import { validateNativeGateCoverage } from "./native-gate-validation.js";
@@ -400,6 +401,7 @@ async function validateLiveNativeGates(
   successor: JsonObject, closingRepositoryObject: JsonObject | undefined,
   acceptedObservationIds: ReadonlySet<string>, bundlePath: string, repo: string,
   files: FilePort, errors: string[],
+  nativeGateOptions: LiveNativeGateOptions,
 ): Promise<void> {
     if (closingRepositoryObject) {
       const nativeControl = object(successor.native_gate_control);
@@ -439,6 +441,7 @@ async function validateLiveNativeGates(
               repo,
               liveDiscovery,
               evidenceDirectory,
+              nativeGateOptions,
             );
             const liveNativeErrors = await validateNativeGateCoverage(
               liveCoverage,
@@ -448,6 +451,12 @@ async function validateLiveNativeGates(
               { validation_time: new Date(), require_passing: false, repository: repo },
             );
             for (const error of liveNativeErrors) errors.push(`$.live_native_gates.execution: ${error}`);
+            // Fail closed: a live rerun the operator allowed to run unsandboxed is never CLEAN.
+            for (const execution of liveCoverage.executions) {
+              if (execution.sandbox === "none") {
+                errors.push(`$.live_native_gates.execution[${JSON.stringify(execution.gate_id)}]: the gate ran without an OS sandbox, so it cannot be CLEAN`);
+              }
+            }
             const liveFailureIds = sortedUnique(nativeGateFailureObservations(
               liveDiscovery,
               liveCoverage,
@@ -492,9 +501,13 @@ function validateLiveClosingRecheck(
     }
 }
 
+/** Operator choices for the live native-gate rerun, from the validate command line. */
+export type LiveNativeGateOptions = Pick<RunNativeGateOptions, "allow_unsandboxed_gates">;
+
 export async function validateLive(
   bundle: JsonObject, report: JsonObject, manifest: JsonObject, bundlePath: string,
   repo: string, ports: BundlePorts, guardAuthorityPath: string | undefined, trust: LiveTrust, errors: string[],
+  nativeGateOptions: LiveNativeGateOptions = {},
 ): Promise<void> {
   const { files, git } = ports;
   if (!(await files.exists(repo))) { errors.push(`$.live_repo: repository not found: ${repo}`); return; }
@@ -509,7 +522,7 @@ export async function validateLive(
     await validateLiveSuccessorFiles(successor, manifest, repo, subject, files, git, errors);
     const { closingRepositoryObject, coverage } = await loadLiveRegressionBoundary(report, bundlePath, repo, files, errors);
     const acceptedObservationIds = await validateLiveDetectors(report, bundlePath, repo, coverage, files, git, trust, errors);
-    await validateLiveNativeGates(successor, closingRepositoryObject, acceptedObservationIds, bundlePath, repo, files, errors);
+    await validateLiveNativeGates(successor, closingRepositoryObject, acceptedObservationIds, bundlePath, repo, files, errors, nativeGateOptions);
     validateLiveClosingRecheck(closingRepositoryObject, repo, errors);
     void bundlePath;
   } catch (error) {

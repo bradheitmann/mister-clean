@@ -1,0 +1,7 @@
+{
+  "base_commit": "9b503a3e96d9597ea2996e766b7f17c1b7280428",
+  "brief_sha256": "2d139e984965e80ba2b3305360b918872c86bad6154cadb6b645ccf55b30fa16",
+  "done_sha256": "fa88be7883fa0df7edc82930a6d313ffa810341f0f7ffb96fbd7d571c52f6d6b",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-s1c-os-sandbox"
+}

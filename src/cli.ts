@@ -33,6 +33,7 @@ import {
   type SemanticPlanV2,
 } from "./closeout/semantic-v2.js";
 import { TRUST_POLICY_PIN_FLAG, trustPolicyPins, validateReceiptVerdict } from "./closeout/trust-root.js";
+import { ALLOW_UNSANDBOXED_GATES_FLAG } from "./closeout/gate-sandbox.js";
 import type { FileRuntimeAttestationBinding } from "./runtime-binding.js";
 import { canonicalJson } from "./canonical-json.js";
 import type { ValidatedBundleBinding } from "./closeout/bundle-runtime.js";
@@ -233,6 +234,7 @@ async function runPrepare(
   // Backward-compatible no-op: tracked shippable content is always assessed.
   removeFlag(args, "--public-safety");
   const executeSemanticProbes = removeFlag(args, "--execute-semantic-probes");
+  const allowUnsandboxedGates = removeFlag(args, ALLOW_UNSANDBOXED_GATES_FLAG);
   const criteria = removeRepeatedOption(args, "--criterion");
   assertNoArgs(args);
   if (requestSource !== undefined && requestText !== undefined) {
@@ -260,6 +262,7 @@ async function runPrepare(
     ...(semanticTrustPolicyPath === undefined ? {} : { semanticTrustPolicyPath }),
     ...(publicSafetyDenylistPath === undefined ? {} : { publicSafetyDenylistPath }),
     executeSemanticProbes,
+    ...(allowUnsandboxedGates ? { allowUnsandboxedGates } : {}),
     criteria,
     runtimeAttestation,
   });
@@ -356,6 +359,7 @@ async function runValidate(
   const acceptedEvaluatorPath = removeOption(args, "--accepted-evaluator");
   const guardAuthorityPath = removeOption(args, "--guard-authority");
   const pinFlags = removeRepeatedOption(args, TRUST_POLICY_PIN_FLAG);
+  const allowUnsandboxedGates = removeFlag(args, ALLOW_UNSANDBOXED_GATES_FLAG);
   assertNoArgs(args);
   if (kind !== "bundle" && (structural || repo !== undefined || acceptedEvaluatorPath !== undefined)) {
     throw new UsageError("--structural, --repo, and --accepted-evaluator are only valid for bundle validation");
@@ -384,6 +388,9 @@ async function runValidate(
   if (structural && guardAuthorityPath !== undefined) {
     throw new UsageError("--guard-authority is only valid for live bundle validation");
   }
+  if (allowUnsandboxedGates && (kind !== "bundle" || structural)) {
+    throw new UsageError(`${ALLOW_UNSANDBOXED_GATES_FLAG} is only valid for live bundle validation`);
+  }
   if (template && !inside(join(packageRoot(import.meta.url), "assets"), path)) {
     io.stderr("ERROR: --template is only valid for the skill's bundled assets/ templates; a real record must validate without placeholders");
     return 2;
@@ -399,6 +406,7 @@ async function runValidate(
       ...(acceptedEvaluatorPath === undefined ? {} : { acceptedEvaluatorPath }),
       ...(guardAuthorityPath === undefined ? {} : { guardAuthorityPath }),
       trustPolicyPins: pins,
+      ...(allowUnsandboxedGates ? { allowUnsandboxedGates } : {}),
       onValidated: (binding) => { bound = binding; },
     });
     if (result.failureKind === "load") {

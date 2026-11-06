@@ -75,7 +75,7 @@ describe("repository-declared native-gate time budgets", () => {
     expect(budgets?.gates.get("node:.:test")).toEqual({ timeout_ms: DECLARED_MS, reason: "the fixture gate sleeps past the run default" });
     const { coverage, errors } = await run(repo, evidence);
     expect(errors).toEqual([]);
-    expect(coverage.schema_version).toBe("1.5");
+    expect(coverage.schema_version).toBe("1.6");
     const execution = coverage.executions[0]!;
     expect(execution.state).toBe("passed");
     expect(execution.budget).toEqual({

@@ -584,7 +584,9 @@ async function validateBundleUnsafe(
   const trust = { pins: options.trustPolicyPins ?? [], used: new Set<string>() };
   if (clean || liveGuard) {
     if (clean && !verifyLive) errors.push("$.verdict: CLEAN requires live verification");
-    else if (verifyLive && repo && repoExists) await validateLive(bundle, report, manifest, bundlePath, repo, ports, options.guardAuthorityPath, trust, errors);
+    else if (verifyLive && repo && repoExists) await validateLive(bundle, report, manifest, bundlePath, repo, ports, options.guardAuthorityPath, trust, errors, {
+      ...(options.allowUnsandboxedGates === undefined ? {} : { allow_unsandboxed_gates: options.allowUnsandboxedGates }),
+    });
   }
   return {
     errors,

@@ -64,6 +64,8 @@ export interface BundleValidationOptions {
   readonly repoPath?: string;
   /** Live-verifier-minted identity of the CLI performing validation. */
   readonly runtimeAttestation?: FileRuntimeAttestationBinding;
+  /** Run the live native-gate rerun with no OS sandbox when none is available; never CLEAN. */
+  readonly allowUnsandboxedGates?: boolean;
   /** Judge-supplied SHA-256 pins of the trust policies a CLEAN verdict may rest on; never read from the bundle. */
   readonly trustPolicyPins?: readonly string[];
   /** Receives what was validated, taken from the exact bytes read (never re-read afterwards). */

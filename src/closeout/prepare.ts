@@ -82,6 +82,8 @@ export interface PrepareCloseoutOptions {
   readonly semanticTrustPolicyPath?: string;
   readonly executeSemanticProbes?: boolean;
   readonly nativeGateTimeoutMs?: number;
+  /** Run native gates with no OS sandbox when none is available; the bundle then cannot be CLEAN. */
+  readonly allowUnsandboxedGates?: boolean;
   /** Injectable for deterministic tests; production uses the native ps+lsof adapter. */
   readonly processPort?: ActionHygieneProcessPort;
   /** Live-verifier-minted identity of the CLI that executes the detector run. */
@@ -385,6 +387,7 @@ async function collectPrepareEvidence(
       nativeGateOutputDirectory,
       {
         ...(options.nativeGateTimeoutMs === undefined ? {} : { timeout_ms: options.nativeGateTimeoutMs }),
+        ...(options.allowUnsandboxedGates === undefined ? {} : { allow_unsandboxed_gates: options.allowUnsandboxedGates }),
         now: clock,
         execution_lease: executionLease,
       },
