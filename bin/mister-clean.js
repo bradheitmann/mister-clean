@@ -18711,6 +18711,9 @@ var HEX642 = /^[0-9a-f]{64}$/;
 var GIT_OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 var UTF82 = new TextDecoder("utf-8", { fatal: true });
 var UTF8_LENIENT = new TextDecoder("utf-8");
+function compareUtf8Bytes(left, right) {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
 var NATIVE_GATE_KINDS = /* @__PURE__ */ new Set([
   "established_ci",
   "repository_tests",
@@ -18988,7 +18991,7 @@ function trackedIndexEntries(repository, timeoutMs) {
     entries2.push({ mode: rawMode, oid, path });
     start = index + 1;
   }
-  return entries2.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+  return entries2.sort((left, right) => compareUtf8Bytes(left.path, right.path));
 }
 function reachabilityRefs(repository, timeoutMs) {
   const bytes2 = gitBytes3(repository, [
@@ -19179,7 +19182,7 @@ function trackedPaths2(repository) {
     paths.push(path);
     start = index + 1;
   }
-  return paths.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+  return paths.sort(compareUtf8Bytes);
 }
 function trackedFile(repository, path) {
   validatePortablePath2(path, "tracked file");
@@ -19320,7 +19323,7 @@ function verificationRunnerSafetyFindings(repository, paths) {
       });
     }
   }
-  return findings.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
+  return findings.sort((left, right) => compareUtf8Bytes(left.path, right.path) || left.line - right.line);
 }
 function packageManager(value) {
   if (typeof value !== "string") return void 0;
@@ -19773,7 +19776,7 @@ function validateDiscoveryIntegrity(discovery) {
         seen2.add(candidate.path);
         paths.push(candidate.path);
       });
-      const canonical2 = [...paths].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+      const canonical2 = [...paths].sort(compareUtf8Bytes);
       if (!stableEqual(paths, canonical2)) errors.push("discovery.excluded_candidates is not in canonical path order");
     }
   }
@@ -19793,7 +19796,7 @@ function validateDiscoveryIntegrity(discovery) {
       validRefs.push(ref);
     });
     const actualOrder = validRefs.map((ref) => ref.path);
-    const canonicalOrder = [...actualOrder].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+    const canonicalOrder = [...actualOrder].sort(compareUtf8Bytes);
     if (!stableEqual(actualOrder, canonicalOrder)) errors.push("discovery.source_refs is not in canonical path order");
   }
   const seen = /* @__PURE__ */ new Set();
@@ -19839,7 +19842,7 @@ function discoverNativeGates(repository, repositoryObject) {
   const refs = [
     ...sourcePaths.map((path) => sourceRef(root, path)),
     ...runnerSourcePaths.map((path) => sourceRef(root, path, "runner_source"))
-  ].sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
+  ].sort((left, right) => compareUtf8Bytes(left.path, right.path) || compareUtf8Bytes(left.kind, right.kind));
   let gates = [
     ...discoverNodeGates(root, candidatePaths2, refs),
     ...discoverFixedGates(candidatePaths2, refs)
@@ -24583,7 +24586,8 @@ var PUBLIC_SAFETY_RULES = [
   ["posix-home-path", /\/(?:Users|home)\/[^/\s]+\//],
   ["windows-home-path", /\b[A-Za-z]:\\Users\\[^\\\s]+\\/],
   ["email-address", /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i],
-  ["file-url", /\bfile:\/\/[^\s)>'\"]+/i],
+  // A bare scheme followed by punctuation names a URL kind; it locates nothing.
+  ["file-url", /\bfile:\/\/[^\s)>'\"]*[A-Za-z0-9_~\/%.-]/i],
   ["private-key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   [
     "credential-assignment",
