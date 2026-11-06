@@ -8246,7 +8246,6 @@ function canonicalIdentity(value) {
 }
 
 // src/canonical-json.ts
-import { createHash as createHash3 } from "crypto";
 function compareCodeUnits(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -8316,14 +8315,17 @@ function encode(value, omit, path, active) {
 function canonicalJson(value, options = {}) {
   return encode(value, options.undefinedFields === "omit", "$", /* @__PURE__ */ new Set());
 }
+function canonicalEqual(left, right, options = {}) {
+  return canonicalJson(left, options) === canonicalJson(right, options);
+}
+
+// src/canonical-digest.ts
+import { createHash as createHash3 } from "crypto";
 function sha256Bytes(value) {
   return createHash3("sha256").update(value).digest("hex");
 }
 function canonicalSha256(value, options = {}) {
   return sha256Bytes(canonicalJson(value, options));
-}
-function canonicalEqual(left, right, options = {}) {
-  return canonicalJson(left, options) === canonicalJson(right, options);
 }
 
 // src/timestamp.ts

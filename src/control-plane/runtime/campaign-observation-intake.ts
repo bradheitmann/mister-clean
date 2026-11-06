@@ -3,7 +3,8 @@ import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync, rea
 import { basename, dirname, isAbsolute } from "node:path";
 
 import type { OpenControlPlaneDatabase } from "../persistence/sqlite.js";
-import { canonicalJson, sha256Bytes } from "../../canonical-json.js";
+import { canonicalJson } from "../../canonical-json.js";
+import { sha256Bytes } from "../../canonical-digest.js";
 import { isTimestamp } from "../../timestamp.js";
 
 const OBSERVATION_KEYS = [

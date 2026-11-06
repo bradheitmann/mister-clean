@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { canonicalJson } from "../canonical-json.js";
+import { sha256Bytes } from "../canonical-digest.js";
 import {
   auditSemanticEvidencePackageV2,
   createSemanticPlanV2,

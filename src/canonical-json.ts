@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
-
-import type { Sha256 } from "./control-plane/contracts/primitives.js";
-
+/**
+ * The one canonical-JSON encoder. Pure: no Node module imports, so browser code
+ * (the control-plane app reaches it through snapshot.ts) never depends on node:crypto.
+ * Digests live in canonical-digest.ts.
+ */
 export interface CanonicalJsonOptions {
   /**
    * What an object field whose value is `undefined` means. "refuse" (the default)
@@ -90,15 +91,6 @@ function encode(value: unknown, omit: boolean, path: string, active: Set<object>
  */
 export function canonicalJson(value: unknown, options: CanonicalJsonOptions = {}): string {
   return encode(value, options.undefinedFields === "omit", "$", new Set());
-}
-
-export function sha256Bytes(value: string | Uint8Array): Sha256 {
-  return createHash("sha256").update(value).digest("hex") as Sha256;
-}
-
-/** SHA-256 hex of the canonical JSON of `value`. */
-export function canonicalSha256(value: unknown, options: CanonicalJsonOptions = {}): Sha256 {
-  return sha256Bytes(canonicalJson(value, options));
 }
 
 /** Whether two values have the same canonical JSON. Throws when either is outside the domain. */

@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { RELEASE_ATTESTATION_FILE, validateAttestationShape } from "../attestation.js";
-import { canonicalSha256 } from "../canonical-json.js";
+import { canonicalSha256 } from "../canonical-digest.js";
 
 export interface AcceptedReleaseFileObservation {
   readonly absolute: string;

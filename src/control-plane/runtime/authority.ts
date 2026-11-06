@@ -1,6 +1,7 @@
 import * as z from "zod";
 
-import { canonicalJson, sha256Bytes } from "../../canonical-json.js";
+import { canonicalJson } from "../../canonical-json.js";
+import { sha256Bytes } from "../../canonical-digest.js";
 import { isTimestamp } from "../../timestamp.js";
 import type { RepositorySubject, Sha256 } from "../contracts/primitives.js";
 import type { RemediationWaveManifest } from "../contracts/wave-directive.js";

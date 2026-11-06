@@ -14,7 +14,8 @@ import { createHash, createPrivateKey, createPublicKey, sign, verify, type KeyOb
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { canonicalJson, sha256Bytes } from "../src/canonical-json.js";
+import { canonicalJson } from "../src/canonical-json.js";
+import { sha256Bytes } from "../src/canonical-digest.js";
 
 export const PRIVATE_KEY_ENV = "MISTER_CLEAN_ATTESTATION_PRIVATE_KEY_PEM";
 export const KEY_ID_ENV = "MISTER_CLEAN_ATTESTATION_KEY_ID";

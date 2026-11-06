@@ -12,7 +12,8 @@
  */
 import { createHash, createPublicKey, verify } from "node:crypto";
 
-import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { canonicalJson } from "../canonical-json.js";
+import { sha256Bytes } from "../canonical-digest.js";
 import { isTimestamp } from "../timestamp.js";
 
 export const TRUST_POLICY_PIN_ENV = "MISTER_CLEAN_TRUST_POLICY_SHA256";

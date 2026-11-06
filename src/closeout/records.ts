@@ -1,7 +1,8 @@
 import { posix as pathPosix } from "node:path";
 
 import { canonicalIdentity, foldCase } from "./normalization.js";
-import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { canonicalJson } from "../canonical-json.js";
+import { sha256Bytes } from "../canonical-digest.js";
 import { isTimestamp } from "../timestamp.js";
 
 /** Pure validation of Mister Clean's closeout report and action-manifest records.

@@ -12,7 +12,8 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { canonicalJson, sha256Bytes } from "./canonical-json.js";
+import { canonicalJson } from "./canonical-json.js";
+import { sha256Bytes } from "./canonical-digest.js";
 import { canonical, digestBytes, equal } from "./closeout/action-lifecycle-runtime.js";
 import { identity, discoverNativeGates, stableEqual } from "./closeout/native-gates.js";
 import { ROOT_DEBT_IDENTITY_SCHEME, canonicalObservationId, canonicalRootDebtKey } from "./closeout/regression-accounting.js";

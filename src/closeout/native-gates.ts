@@ -25,7 +25,8 @@ import {
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { canonicalEqual, canonicalJson, canonicalSha256 } from "../canonical-json.js";
+import { canonicalSha256 } from "../canonical-digest.js";
+import { canonicalEqual, canonicalJson } from "../canonical-json.js";
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import {
   repositoryVerificationCoordinationKey,

@@ -2,7 +2,8 @@ import { verify } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { canonicalJson } from "../canonical-json.js";
+import { sha256Bytes } from "../canonical-digest.js";
 import { isTimestamp } from "../timestamp.js";
 import {
   auditSemanticRepository,

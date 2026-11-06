@@ -17,7 +17,8 @@ import { platform, tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { TextDecoder } from "node:util";
 
-import { canonicalJson, canonicalSha256 } from "../canonical-json.js";
+import { canonicalSha256 } from "../canonical-digest.js";
+import { canonicalJson } from "../canonical-json.js";
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import { repositoryIdentity } from "./repository.js";
 import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
