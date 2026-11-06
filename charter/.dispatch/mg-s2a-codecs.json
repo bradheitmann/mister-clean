@@ -1,0 +1,7 @@
+{
+  "base_commit": "6587c79e5d8b2bdc95ba5065ff02c47ed198c100",
+  "brief_sha256": "88f85ae47702e52ca887d624d03aa8b00d07be9a0eb704753e51624924a31e3e",
+  "done_sha256": "22d78b1f85e2378d6560621e11c2495199f0efaa252fdb6adaeffde87068cae5",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-s2a-codecs"
+}
