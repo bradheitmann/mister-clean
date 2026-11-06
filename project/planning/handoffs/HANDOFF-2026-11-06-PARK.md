@@ -216,6 +216,15 @@ This repository runs no shared service. Parking stops no service. The control-pl
 | reveng | `ablations/view-ab.ts`, consumed in reveng's round-18 ablation. Reveng is last in the field-run order. | None in this session. | The ablation consumption, recorded in an earlier STATE. | reveng's Mister Clean deep clean (last, by owner order). | None now. Reveng continues and is exempt from the park directive. |
 | dsgncrsh (outside this workspace) | 7.5.2, which fixes the prepare refusal on mixed-case gate source refs. | None. | 7.5.2 released; see §9 for the archive digest. | dsgncrsh installs and attests 7.5.2 itself. | dsgncrsh: install and attest. |
 
-## 9. Park-point completion
+## 9. Park-point completion (filled in at the park point)
 
-Filled in by the records commit on main that lands with this handoff: the mg-pii-name-1 landing result, the v7.5.2 archive digest, the push verification, and "PARKED".
+- **mg-pii-name-1:** LANDED on main as merge f44fe0e (land-check: passed as an accepted slice). Public main now has 0 whole-word hits on the owner's first name and 0 owner-PII pattern matches. Earlier revisions still contain the name, because history is not rewritten.
+- **v7.5.2:** RELEASED. GitHub release v7.5.2, tag on 1d06f2a; asset bradheitmann-mister-clean-7.5.2.tgz, sha256 c2cc2d71a5d070906f3bd549e515dce504f22feaced414fff2646b5b2da1e15c, built and verified by CI tag run 42173874345. Not installed by this PM; sent to dsgncrsh-95. No npm publish.
+- **Final refs:**
+  - main: 6b71440 (unmeasured cost rows, records only);
+  - release/7.5.x: d225c03;
+  - handoff/park-20261106: this commit.
+  All were pushed non-force, and each remote ref was read back after the push.
+- **Pin disposition:** the fleet pin stays v7.5.1 (recent and usable). v7.5.2 is an owner-requested patch for one consumer and does not repin the fleet. main is a checkpoint (S0, S1, S1b), not a release.
+- **Odin field-run support:** odin-close-4 and the retired-corpus run were disarmed before they started; their inputs are preserved privately and deferred into odin's handoff.
+- **PARKED: no new work.**
