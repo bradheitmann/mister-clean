@@ -645,7 +645,7 @@ describe("canonical json differential", () => {
   });
 
   it("delta rows differ from their oracle only in key order and match the root encoder's bytes", () => {
-    // No JSON.parse here: node 26.12's JSON.parse can corrupt escaped keys after warm-up.
+    // No JSON.parse here: node 26.12's JSON.parse corrupts escaped keys after warm-up (repro-json-parse-key.ts).
     // The same characters in a different order is the parse-free form of "same value, other key order".
     const sortedCharacters = (text: string): string => [...text].sort().join("");
     for (const { encode, delta } of ENCODER_SITES) {
