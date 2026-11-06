@@ -251,8 +251,10 @@ These are sanitized accounts. The exact commit and ref identities and the custod
   2. Then it performs an ordinary non-force `git worktree remove` under the repository's lifecycle rules.
   3. `--force` is never used.
 
-  Where removing preserved untracked residue needs a deletion the agent's permissions don't allow, the owner's standing instruction (2026-11-06) is that the deletion is presented to him in the conversation as a `!` command, never left as an unexplained approval prompt.
-- *Open issue, recorded and not resolved here.* A/PO-ASTRA's correction says there is no owner-deletion workaround and that the owner stays out of the loop. The owner's direct instruction to this PM on 2026-11-06 was that approval-needing deletions come to him as `!` commands. The two must be reconciled by the owner; this handoff records both.
+- *Reconciliation, adopted by A/PO-ASTRA (2026-11-06).*
+  - Ordinary removals that an agent can perform stay with agents: preserved first, non-force, under lifecycle custody. They are never handed to the owner.
+  - The owner's direct 2026-11-06 instruction to this PM governs only actions that genuinely need the owner's approval. Those are presented to him in the conversation as `!` commands, never as an unexplained approval prompt.
+  - Ignored-state loss from this incident stays UNKNOWN.
 - *Residual risk.* The rule is enforced by instruction, not by a hook. Ignored-state loss from this incident is unknown.
 
 **Related, outside this repository.** This PM's odin field-run brief inlined the owner-PII search pattern, and it was copied into a public odin revision. Odin contained it under the owner's ruling (b); see odin's handoff. The corrective instruction is that patterns live only in the private pattern file and briefs reference the file.
