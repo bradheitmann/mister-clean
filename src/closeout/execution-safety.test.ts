@@ -492,6 +492,40 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       },
     );
 
+    it.each([["ext:: command", "command"], ["plain path", "local"]] as const)(
+      "a pushInsteadOf rewrite onto a %s transport cannot redirect the contacted remote",
+      async (_name, kind) => {
+        // CH/QA CHQA-D1: url.<base>.pushInsteadOf had no test. The remote proof must
+        // check and contact the fetch URL; a push rewrite must never reach a command
+        // or a local repository.
+        const root = scratch(`push-insteadof-${kind}`);
+        const local = join(root, "local");
+        createFixtureRepository(join(local, "repo"), { identity: { name: "Local Fixture", email: "local.invalid" } });
+        writeFileSync(join(local, "repo", "README.md"), "local\n");
+        fixtureCommit(join(local, "repo"), "local");
+        const marker = join(root, "push-command-ran");
+        const program = join(root, "push-command.sh");
+        writeFileSync(program, `#!/bin/sh\necho ran >> "${marker}"\n`);
+        chmodSync(program, 0o755);
+        const repo = join(root, "repo");
+        createFixtureRepository(repo, { identity: { name: "Push Rewrite Fixture", email: "push-rewrite.invalid" } });
+        writeFileSync(join(repo, "README.md"), "fixture\n");
+        fixtureCommit(repo, "fixture");
+        appendFileSync(join(repo, ".git", "config"), [
+          "[remote \"origin\"]", "\turl = https://first.invalid/repo",
+          kind === "command" ? `[url "ext::${program} "]` : `[url "${local}/"]`, "\tpushInsteadOf = https://first.invalid/",
+          "[protocol \"ext\"]", "\tallow = always",
+          "",
+        ].join("\n"));
+        const checked = await hardenedRemoteUrl(repo, "origin", nodeGitPort);
+        expect(checked).toBe("https://first.invalid/repo");
+        const contacted = contactRemote(repo, checked, ["--heads"], "refs/heads/main");
+        expect(contacted.code).not.toBe(0);
+        expect(contacted.stdout).toBe("");
+        expect(existsSync(marker)).toBe(false);
+      },
+    );
+
     it("live validation refuses a target proof whose remote name is option-shaped", async () => {
       const value = await cleanBundleFixture();
       Object.assign(successor(value).target_observation as RecordValue, {
