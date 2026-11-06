@@ -19882,11 +19882,33 @@ function operatorHomes(environment = process.env) {
   }
   return [...homes];
 }
+function nodeModulesTree(path) {
+  const parts = path.split(sep10);
+  const at = parts.indexOf("node_modules");
+  return at > 0 ? parts.slice(0, at + 1).join(sep10) : void 0;
+}
+function packageDirectory(path) {
+  let directory = dirname8(path);
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (existsSync6(join8(directory, "package.json"))) return directory;
+    const parent = dirname8(directory);
+    if (parent === directory) return void 0;
+    directory = parent;
+  }
+  return void 0;
+}
 function toolchainDirectories(executable) {
-  const directory = dirname8(canonicalPath(executable.resolved));
-  if (basename8(directory) !== "bin") return [directory];
-  const prefix = dirname8(directory);
-  return [directory, join8(prefix, "lib"), join8(prefix, "libexec")];
+  const resolved = canonicalPath(executable.resolved);
+  const directory = dirname8(resolved);
+  const directories = [directory];
+  if (basename8(directory) === "bin") directories.push(join8(dirname8(directory), "lib"), join8(dirname8(directory), "libexec"));
+  for (const path of [resolved, canonicalPath(dirname8(executable.invoked))]) {
+    const tree = nodeModulesTree(path);
+    if (tree !== void 0) directories.push(tree);
+  }
+  const owner = packageDirectory(resolved);
+  if (owner !== void 0) directories.push(owner);
+  return directories;
 }
 function gateSandboxPolicy(paths, toolchain, locators, homes = operatorHomes()) {
   const writable = [...new Set([paths.home, paths.snapshot, paths.temp].map(canonicalPath))];
