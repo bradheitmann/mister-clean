@@ -8,7 +8,7 @@
  * operator's real credential stores are never read.
  */
 import { createServer, type Server } from "node:net";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,10 +38,11 @@ const CONTAINER_MARKED = process.platform === "linux"
 const SENTINEL = ["fixture", "not", "a", "real", "credential"].join("-");
 
 const roots: string[] = [];
-const saved = { HOME: process.env.HOME, CARGO_HOME: process.env.CARGO_HOME };
+const saved = { HOME: process.env.HOME, CARGO_HOME: process.env.CARGO_HOME, PATH: process.env.PATH };
 afterEach(() => {
   if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
   if (saved.CARGO_HOME === undefined) delete process.env.CARGO_HOME; else process.env.CARGO_HOME = saved.CARGO_HOME;
+  process.env.PATH = saved.PATH;
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -417,6 +418,37 @@ describe("gate sandbox (master-gate S1c)", { timeout: 240_000 }, () => {
 
   describe("toolchains under sandbox", () => {
     const has = (name: string): boolean => resolveExecutable(name, process.env.PATH ?? "") !== undefined;
+
+    it.skipIf(!SANDBOX_EXEC_PRESENT)("toolchains under sandbox: a package manager installed under the operator's home reaches its own package tree, and the home's credentials stay denied", async () => {
+      // CH/QA CHQA-D1: setup-pnpm installs pnpm at ~/setup-pnpm/node_modules/.bin/pnpm,
+      // whose package and dependencies sit in the sibling node_modules.
+      const { home, credentials } = operatorHome();
+      const modules = join(home, "setup-pm", "node_modules");
+      plant(join(modules, "pm-core", "lib", "core.sh"), "PM_CORE=loaded\n");
+      plant(join(modules, "pnpm", "package.json"), "{\"name\":\"pnpm\",\"version\":\"0.0.0-fixture\"}\n");
+      plant(join(modules, "pnpm", "bin", "pnpm"), [
+        "#!/bin/sh",
+        `. "${join(modules, "pm-core", "lib", "core.sh")}" || exit 3`,
+        "echo \"pm:$PM_CORE\"",
+        readAttempt("ssh", credentials.ssh!),
+        "",
+      ].join("\n"));
+      chmodSync(join(modules, "pnpm", "bin", "pnpm"), 0o755);
+      mkdirSync(join(modules, ".bin"));
+      symlinkSync(join("..", "pnpm", "bin", "pnpm"), join(modules, ".bin", "pnpm"));
+      process.env.PATH = `${join(modules, ".bin")}:${process.env.PATH ?? ""}`;
+      const root = scratch("toolchain-home-pm");
+      const repo = join(root, "repo");
+      createFixtureRepository(repo, { identity: { name: "Toolchain Fixture", email: "toolchain.invalid" } });
+      writeFileSync(join(repo, "package.json"), `${JSON.stringify({ name: "home-pm-fixture", private: true, scripts: { test: "true" } }, null, 2)}\n`);
+      writeFileSync(join(repo, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+      fixtureCommit(repo, "fixture");
+      const { execution, stdout, stderr } = await runProbe(repo, join(root, "evidence"));
+      expect(execution.sandbox).toBe("sandbox-exec");
+      expect(execution.resolved_executable).toBe(realpathSync(join(modules, "pnpm", "bin", "pnpm")));
+      expect(stdout, stderr).toBe("pm:loaded\ndenied:ssh\n");
+      expect(`${execution.state}:${String(execution.failure_reason)}`, stderr).toBe("passed:null");
+    });
     beforeEach(() => {
       if (!SANDBOX_EXEC_PRESENT && BWRAP === undefined) process.stderr.write("toolchains under sandbox: skipped, no OS sandbox on this host\n");
     });

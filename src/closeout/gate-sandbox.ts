@@ -183,16 +183,47 @@ export function operatorHomes(environment: NodeJS.ProcessEnv = process.env): rea
   return [...homes];
 }
 
+/** The outermost `node_modules` directory on `path`, which holds a package and its dependencies. */
+function nodeModulesTree(path: string): string | undefined {
+  const parts = path.split(sep);
+  const at = parts.indexOf("node_modules");
+  return at > 0 ? parts.slice(0, at + 1).join(sep) : undefined;
+}
+
+/** The nearest directory above `path` that holds a package.json, within a few levels. */
+function packageDirectory(path: string): string | undefined {
+  let directory = dirname(path);
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (existsSync(join(directory, "package.json"))) return directory;
+    const parent = dirname(directory);
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+  return undefined;
+}
+
 /**
  * The directories a resolved toolchain executable needs readable: the one that
- * holds the real file and, for a `bin` directory, its `lib` and `libexec`
- * siblings (node's npm, git's helpers). Never a whole home.
+ * holds the real file; for a `bin` directory, its `lib` and `libexec` siblings
+ * (node's npm, git's helpers); and the executable's own install tree. That tree
+ * is the package directory of the real file plus the outermost `node_modules`
+ * the real file or its PATH entry sits in, so a package manager installed under
+ * the operator's home (setup-pnpm's node_modules/.bin/pnpm, ~/Library/pnpm)
+ * still reaches its package and dependencies. The caller drops any directory
+ * that is, or contains, a whole home.
  */
 function toolchainDirectories(executable: ResolvedExecutable): readonly string[] {
-  const directory = dirname(canonicalPath(executable.resolved));
-  if (basename(directory) !== "bin") return [directory];
-  const prefix = dirname(directory);
-  return [directory, join(prefix, "lib"), join(prefix, "libexec")];
+  const resolved = canonicalPath(executable.resolved);
+  const directory = dirname(resolved);
+  const directories = [directory];
+  if (basename(directory) === "bin") directories.push(join(dirname(directory), "lib"), join(dirname(directory), "libexec"));
+  for (const path of [resolved, canonicalPath(dirname(executable.invoked))]) {
+    const tree = nodeModulesTree(path);
+    if (tree !== undefined) directories.push(tree);
+  }
+  const owner = packageDirectory(resolved);
+  if (owner !== undefined) directories.push(owner);
+  return directories;
 }
 
 /**
