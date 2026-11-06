@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { canonicalJson, sha256Bytes } from "./authority.js";
@@ -24,7 +23,7 @@ import type { OpenControlPlaneDatabase } from "../persistence/sqlite.js";
 import { readQualificationEvidence } from "./sqlite-store.js";
 import { verifiedReceiptForBinding, type VerifiedEvaluationIdentityReceipt } from "./evaluation-identity-receipt.js";
 import type { CapabilityEvaluatorExecutionReceipt } from "./capability-evaluator-execution.js";
-import { hardenedGitArgs, hardenedGitEnv } from "../../closeout/git-hardening.js";
+import { gitExecFileSync } from "../../closeout/git-hardening.js";
 
 export interface RetainedEvaluationEvidence {
   readonly sha256: Sha256;
@@ -230,16 +229,10 @@ function resolveGitCheckout(path: string, field: string): ResolvedGitCheckout {
   let canonicalCommonDirectory: string;
   try {
     // Never inherit a caller's Git selection.  GIT_DIR/GIT_WORK_TREE can make
-    // a non-repository directory appear to be a checkout of another project.
-    const gitEnvironment: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
-    for (const name of [
-      "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
-      "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-      "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
-    ]) delete gitEnvironment[name];
-    const git = (parameters: readonly string[]): string => execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", requestedRoot, ...parameters]), {
+    // a non-repository directory appear to be a checkout of another project;
+    // the runner's hardened environment drops every inherited GIT_* name.
+    const git = (parameters: readonly string[]): string => gitExecFileSync(requestedRoot, parameters, {
       encoding: "utf8",
-      env: hardenedGitEnv(gitEnvironment),
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
     const topLevel = git(["rev-parse", "--show-toplevel"]);

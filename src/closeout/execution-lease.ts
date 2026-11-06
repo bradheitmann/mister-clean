@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitExecFileSync } from "./git-hardening.js";
 import { formatTimestamp } from "../timestamp.js";
 
 type SqliteModule = typeof import("node:sqlite");
@@ -195,15 +195,10 @@ export function validateExecutionLeaseReceipt(
 
 export function gitCommonDirectory(repository: string): string {
   const root = realpathSync(resolve(repository));
-  const output = execFileSync(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"]),
-    {
-      encoding: "utf8",
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  ).trim();
+  const output = gitExecFileSync(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
   if (!output || !isAbsolute(output)) throw new Error("git did not return an absolute common directory");
   return realpathSync(output);
 }

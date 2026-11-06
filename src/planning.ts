@@ -1,17 +1,16 @@
-import { execFileSync } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isSourceDevelopmentEntrypoint, rootForModule, verifyReleaseAttestation, RuntimeAttestationError } from "./attestation.js";
 import { auditPlanningArtifacts, type PlanningAuditResult, type PlanningSource } from "./closeout/planning-analysis/policy.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./closeout/git-hardening.js";
+import { gitExecFileSync } from "./closeout/git-hardening.js";
 
 const packageRoot = await rootForModule(import.meta.url);
 const sourceDevelopment = process.env.MISTER_CLEAN_SOURCE_DEVELOPMENT === "1"
   && isSourceDevelopmentEntrypoint(packageRoot, import.meta.url);
 if (sourceDevelopment) {
   if (!existsSync(join(packageRoot, ".git"))
-    || await realpath(execFileSync("git", hardenedGitArgs(["rev-parse", "--show-toplevel"], packageRoot), { cwd: packageRoot, encoding: "utf8", env: hardenedGitEnv() }).trim()) !== await realpath(packageRoot)) {
+    || await realpath(gitExecFileSync(packageRoot, ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim()) !== await realpath(packageRoot)) {
     throw new Error("source-development planning requires the verified Git package root");
   }
 } else {

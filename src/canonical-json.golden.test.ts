@@ -737,3 +737,23 @@ describe("canonical json declared deltas", () => {
     expect(() => canonical(new Date(0))).toThrow();
   });
 });
+
+// S2a's delta 2(b) named only object fields; the shared encoder also refuses
+// undefined and NaN inside arrays and at the top level (carried declaration).
+describe("S2A-QA-D1", () => {
+  it("canonicalJson(undefined) throws", () => {
+    expect(() => canonicalJson(undefined)).toThrow(/not canonical JSON/u);
+  });
+
+  it("canonicalJson(NaN) throws", () => {
+    expect(() => canonicalJson(Number.NaN)).toThrow(/finite number/u);
+  });
+
+  it("canonicalJson([undefined]) throws", () => {
+    expect(() => canonicalJson([undefined])).toThrow(/\$\[0\]: value is not canonical JSON/u);
+  });
+
+  it("canonicalJson([NaN]) throws", () => {
+    expect(() => canonicalJson([Number.NaN])).toThrow(/\$\[0\]: canonical JSON requires a finite number/u);
+  });
+});

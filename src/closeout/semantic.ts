@@ -12,7 +12,7 @@ import {
   git,
   planningLaneLifecycle,
 } from "./repository.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitSpawnSync } from "./git-hardening.js";
 import { isTimestamp } from "../timestamp.js";
 
 export type SemanticProbeKind =
@@ -923,9 +923,8 @@ export function semanticCandidateSetSha256(candidates: readonly SemanticProbeCan
 
 function repositoryObjectPaths(repository: string): string[] {
   const root = resolve(repository);
-  const listed = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"]), {
+  const listed = gitSpawnSync(root, ["ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -1091,8 +1090,7 @@ function structuredRecordId(record: Record<string, unknown>): string | undefined
 
 function ignoredByRepository(root: string, portablePath: string): boolean {
   if (isAbsolute(portablePath) || portablePath === ".." || portablePath.startsWith("../")) return false;
-  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "check-ignore", "-q", "--", portablePath]), {
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
+  const result = gitSpawnSync(root, ["check-ignore", "-q", "--", portablePath], {
     stdio: "ignore",
   });
   return result.status === 0;

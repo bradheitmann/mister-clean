@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   lstat,
@@ -15,7 +14,7 @@ import {
   mintServerAttestationBinding,
   type FileRuntimeAttestationBinding,
 } from "./runtime-binding.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./closeout/git-hardening.js";
+import { gitExecFileSync } from "./closeout/git-hardening.js";
 
 export const RELEASE_ATTESTATION_FILE = "RELEASE_ATTESTATION.json";
 export const RELEASE_ATTESTATION_RECORD_TYPE = "mister-clean.release-attestation";
@@ -530,9 +529,8 @@ export async function verifyReleaseAttestation(
 }
 
 function runGit(root: string, args: readonly string[]): string {
-  return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", root, ...args]), {
+  return gitExecFileSync(root, args, {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 }
@@ -595,16 +593,11 @@ async function releaseInputErrors(
     }
     let committed: Buffer;
     try {
-      committed = execFileSync(
-        "git",
-        hardenedGitArgs(["--no-optional-locks", "-C", root, "show", `${commit}:${path}`]),
-        {
-          encoding: "buffer",
-          env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
-          maxBuffer: 256 * 1024 * 1024,
-          stdio: ["ignore", "pipe", "ignore"],
-        },
-      );
+      committed = gitExecFileSync(root, ["show", `${commit}:${path}`], {
+        encoding: "buffer",
+        maxBuffer: 256 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
     } catch {
       errors.push(`release input: must be tracked at ${commit}: ${path}`);
       continue;

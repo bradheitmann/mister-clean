@@ -7,7 +7,7 @@
  * name two ledger directories written by vitest.ledger.config.ts; otherwise it
  * skips, so it never passes vacuously inside the ordinary suites.
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -146,18 +146,32 @@ function headRecords(test: string, records: readonly GitSpawnRecord[]): GitSpawn
   return (DELTA_D_TESTS as readonly string[]).includes(test) ? records.filter((record) => !isRemoteContact(record)) : [...records];
 }
 
-/** A record's compared identity: everything except the base-only `line`. */
+/**
+ * A record's compared identity: everything except the base-only `line`. Run
+ * names the instrument's normalisation leaves partly in place are normalised
+ * here, on both sides alike: a randomUUID in a directory name, a mkdtemp name
+ * nested inside another (`-lGvHk5-XXXXXX`), and mkdtemp directories a fixture
+ * makes directly under /tmp rather than under the run's TMPDIR.
+ */
 function key(record: GitSpawnRecord): string {
   const { line: _line, ...compared } = record;
-  return stableStringify(compared);
+  return stableStringify(compared)
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{6}(?:[0-9a-f]{6}|XXXXXX)/gu, "<UUID>")
+    .replace(/-[A-Za-z0-9]{6}-XXXXXX/gu, "-XXXXXX-XXXXXX")
+    .replace(/(?:\/private)?\/tmp\/([^/"\s]*?)[A-Za-z0-9]{6}(?=[/"\s]|$)/gu, "<SYSTMP>/$1XXXXXX");
 }
+
+/**
+ * MISTER_CLEAN_GIT_LEDGER_NO_DELTAS=1 compares two ledgers of the same bytes
+ * (a determinism check of the instrument): no delta is applied, so it is
+ * strictly stricter than the base/head comparison.
+ */
+const NO_DELTAS = process.env.MISTER_CLEAN_GIT_LEDGER_NO_DELTAS === "1";
 
 describe.skipIf(!ENABLED)("git spawn ledger comparison (needs MISTER_CLEAN_GIT_LEDGER_BASE and MISTER_CLEAN_GIT_LEDGER_HEAD)", () => {
   it("transformed base and head hold the same git spawn records for every test id", () => {
     const base = readLedger(BASE);
     const head = readLedger(HEAD);
-    expect(base.size, "the base ledger is empty").toBeGreaterThan(0);
-    expect(head.size, "the head ledger is empty").toBeGreaterThan(0);
 
     // Liveness: every base site was reached on base, and its file+function on head.
     const baseRecords = [...base.values()].flat();
@@ -169,15 +183,14 @@ describe.skipIf(!ENABLED)("git spawn ledger comparison (needs MISTER_CLEAN_GIT_L
       if (functions.size === 0) { missedBase.push(`${file}:${line}`); continue; }
       for (const fn of functions) if (!headRecordList.some((record) => atSite(record, [file, fn]))) missedHead.push(`${file}:${line} (${fn})`);
     }
-    expect(missedBase, "base sites the base run never reached").toEqual([]);
-    expect(missedHead, "base sites whose function the head run never reached").toEqual([]);
 
+    // Every result is computed and reported before any assertion, so a red run names all of its causes.
     const counts: DeltaCounts = { a: 0, b: 0, c: 0, d: 0 };
     const differences: string[] = [];
     let compared = 0;
     for (const [test, records] of base) {
-      const expected = new Set(transformBase(test, records, counts).map(key));
-      const actual = new Set(headRecords(test, head.get(test) ?? []).map(key));
+      const expected = new Set((NO_DELTAS ? records : transformBase(test, records, counts)).map(key));
+      const actual = new Set((NO_DELTAS ? head.get(test) ?? [] : headRecords(test, head.get(test) ?? [])).map(key));
       if (!head.has(test)) { differences.push(`${test}: absent from the head ledger`); continue; }
       compared += expected.size;
       for (const record of expected) if (!actual.has(record)) differences.push(`${test}: base-only ${record}`);
@@ -185,10 +198,19 @@ describe.skipIf(!ENABLED)("git spawn ledger comparison (needs MISTER_CLEAN_GIT_L
     }
     const headOnly = [...head.keys()].filter((test) => !base.has(test));
     const undeclared = headOnly.filter((test) => !HEAD_ONLY_PREFIXES.some((prefix) => test.startsWith(prefix)));
+    // MISTER_CLEAN_GIT_LEDGER_REPORT, when set, receives every difference, one per line.
+    const report = process.env.MISTER_CLEAN_GIT_LEDGER_REPORT ?? "";
+    if (report !== "") writeFileSync(report, differences.map((difference) => `${difference}\n`).join(""));
     process.stdout.write(`${stableStringify({
       base_tests: base.size, head_tests: head.size, compared_records: compared, transformed: counts,
       head_only_tests: headOnly.length, sites_covered: BASE_SITES.length - missedBase.length,
+      missed_base: missedBase, missed_head: missedHead, undeclared_head_only: undeclared,
+      differences: differences.length, first_differences: differences.slice(0, 10),
     })}\n`);
+    expect(base.size, "the base ledger is empty").toBeGreaterThan(0);
+    expect(head.size, "the head ledger is empty").toBeGreaterThan(0);
+    expect(missedBase, "base sites the base run never reached").toEqual([]);
+    expect(missedHead, "base sites whose function the head run never reached").toEqual([]);
     expect(undeclared, "head tests with git spawns and no base counterpart, outside the declared new describes").toEqual([]);
     expect(differences.slice(0, 40), `${differences.length} differing records`).toEqual([]);
   });

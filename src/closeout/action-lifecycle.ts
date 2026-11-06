@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import {
   closeSync,
   copyFileSync,
@@ -74,7 +73,7 @@ import {
   type BundleContext,
   type JsonObject,
 } from "./action-lifecycle-runtime.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitExecFileSync } from "./git-hardening.js";
 
 const ACTION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const ACTION_HYGIENE_CONTRACT = "mister-clean.action-hygiene/1.0";
@@ -174,9 +173,8 @@ interface ActionHygieneEvidence {
 
 function currentBranch(repository: string): string {
   try {
-    return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "symbolic-ref", "--quiet", "--short", "HEAD"]), {
+    return gitExecFileSync(repository, ["symbolic-ref", "--quiet", "--short", "HEAD"], {
       encoding: "utf8",
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     }).trim();
   } catch {
     throw new Error("action begin requires a named branch; a modifying lifecycle cannot honestly assign a detached worktree");
@@ -771,9 +769,8 @@ function writeActionResult(
 }
 
 function gitLines(repository: string, args: readonly string[]): string[] {
-  const output = execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+  const output = gitExecFileSync(repository, args, {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
   }).trim();
   return output ? output.split("\n") : [];
 }
@@ -843,9 +840,8 @@ function actionRows(regression: JsonObject): ActionObservationSets[] {
 }
 
 function ensureCleanWorkingTree(repository: string): void {
-  const status = execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "status", "--porcelain=v1", "--untracked-files=all"]), {
+  const status = gitExecFileSync(repository, ["status", "--porcelain=v1", "--untracked-files=all"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
   });
   if (status.trim()) throw new Error("action finish requires a clean working tree; commit or otherwise resolve the action's repository changes first");
 }

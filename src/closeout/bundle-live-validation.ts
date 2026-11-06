@@ -28,7 +28,7 @@ import { captureRepositoryObject } from "./repository-object.js";
 import { auditSemanticRepository } from "./semantic.js";
 import { auditSemanticEvidencePackageV2 } from "./semantic-v2.js";
 import { exceptionSignatureErrors, trustPolicyPinError } from "./trust-root.js";
-import { contactRemote, hardenedRemoteUrl } from "./git-hardening.js";
+import { GitRemoteRefError, contactConfiguredRemote } from "./git-hardening.js";
 import {
   HEX64,
   array,
@@ -85,22 +85,17 @@ async function validateLiveRepositoryAndTarget(
     if (observation.kind === "remote_ref_resolution") {
       const remote = String(observation.remote ?? "");
       const remoteRef = String(observation.remote_ref ?? "");
-      // Both strings come from the bundle. Resolve the exact remote's URL, check its
-      // transport, then contact that URL directly (never the name), with
-      // --end-of-options so an option-shaped remote or ref cannot become a git option.
-      if (remoteRef.startsWith("-")) {
-        errors.push("$.successor_readiness.target_observation.remote_ref: a remote ref may not begin with '-'");
-        return { head, subject, successor };
-      }
-      let remoteUrl: string;
+      // Both strings come from the bundle. contactConfiguredRemote refuses an
+      // option-shaped ref or remote, resolves the exact remote's URL, checks its
+      // transport, then contacts that URL directly (never the name), in isolation.
+      let result: { readonly stdout: string };
       try {
-        remoteUrl = await hardenedRemoteUrl(repo, remote, git);
+        result = await contactConfiguredRemote(repo, remote, remoteRef, ["--heads"], git);
       } catch (error) {
-        errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
+        if (error instanceof GitRemoteRefError) errors.push("$.successor_readiness.target_observation.remote_ref: a remote ref may not begin with '-'");
+        else errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
         return { head, subject, successor };
       }
-      // Contacted outside any config, so no second insteadOf can redirect the checked URL.
-      const result = contactRemote(repo, remoteUrl, ["--heads"], remoteRef);
       const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
       if (observed !== liveTarget) errors.push("$.successor_readiness.target_observation: remote ref differs from live target");
     }

@@ -93,3 +93,78 @@ describe("codecs", () => {
     expect(occurrences(names, new Set(["src/timestamp.ts", "src/canonical-json.ts"]))).toEqual([]);
   });
 });
+
+describe("git runner", () => {
+  const RUNNER = "src/closeout/git-hardening.ts";
+  /** The only src/ modules that may import node:child_process, and the program expressions each may spawn. */
+  const SPAWN_PROGRAMS: Readonly<Record<string, readonly string[]>> = {
+    [RUNNER]: ["\"git\""],
+    "src/closeout/action-hygiene.ts": ["\"ps\"", "\"lsof\""],
+    "src/closeout/execution-lease.ts": ["\"powershell.exe\"", "\"ps\""],
+    "src/closeout/execution-supervisor.ts": ["\"/bin/ps\"", "\"taskkill\"", "spec.executable", "process.execPath"],
+    "src/closeout/native-gate-runner.ts": ["\"taskkill\""],
+    "src/closeout/semantic.ts": ["command"],
+    "src/control-plane/runtime/cmux-visual-readback.ts": ["DEFAULT_CMUX_BINARY"],
+  };
+  /**
+   * Self-facing release scripts keep their base git spawns, frozen per file
+   * (obligation: S6). prepare_release_archive.ts is absent from the DONE's
+   * count of 16; its one spawn is a multi-line call at base 74e23b1.
+   */
+  const SCRIPT_GIT_SPAWNS: Readonly<Record<string, number>> = {
+    "scripts/generate_codebase_history.ts": 1,
+    "scripts/prepare_release_archive.ts": 1,
+    "scripts/release_capsule.ts": 6,
+    "scripts/verify_generated_candidate.ts": 4,
+    "scripts/verify_packed_cli.ts": 5,
+  };
+  const CHILD_PROCESS = /["'](?:node:)?child_process["']/u;
+  // Every child_process spawn API and the promisified alias in use; the program is the first argument.
+  const SPAWN_CALL = new RegExp(`(?<![.\\w$])(?:${["spawnSync", "execFileSync", "execFileAsync", "execFile", "execSync", "spawn", "fork", "exec"].join("|")})\\(\\s*([^,)]+?)\\s*[,)]`, "gu");
+
+  function spawnPrograms(text: string): { readonly program: string; readonly line: number }[] {
+    return [...text.matchAll(SPAWN_CALL)].map((match) => ({ program: match[1]!, line: text.slice(0, match.index).split("\n").length }));
+  }
+
+  const sources = (prefix: string) => productionSources().filter((source) => source.path.startsWith(prefix)).map((source) => ({ path: source.path, text: source.lines.join("\n") }));
+
+  it("(a) only the seven allowed src/ modules import node:child_process", () => {
+    const importers = sources("src/").filter((source) => CHILD_PROCESS.test(source.text)).map((source) => source.path).sort();
+    expect(importers).toEqual(Object.keys(SPAWN_PROGRAMS).sort());
+  });
+
+  it("(b) the literal \"git\" is a spawn program only in git-hardening.ts", () => {
+    const offenders = sources("src/").filter((source) => source.path !== RUNNER)
+      .flatMap((source) => spawnPrograms(source.text).filter((spawn) => spawn.program === "\"git\"").map((spawn) => `${source.path}:${spawn.line}`));
+    expect(offenders).toEqual([]);
+  });
+
+  it("(c) every spawn in an allowed module names a program on that module's list", () => {
+    const offenders: string[] = [];
+    for (const source of sources("src/")) {
+      const allowed = SPAWN_PROGRAMS[source.path];
+      if (allowed === undefined) continue;
+      for (const spawn of spawnPrograms(source.text)) {
+        if (!allowed.includes(spawn.program)) offenders.push(`${source.path}:${spawn.line} ${spawn.program}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("(d) hardenedGitArgs and hardenedGitEnv are called outside git-hardening.ts only by native-gate-runner.ts", () => {
+    const callers = occurrences(/\bhardenedGit(?:Args|Env)\(/u, new Set([RUNNER])).filter((site) => site.startsWith("src/"));
+    expect(callers.map((site) => site.replace(/:\d+$/u, ""))).toEqual(["src/closeout/native-gate-runner.ts"]);
+  });
+
+  it("(e) scripts/ keeps its frozen per-file git spawn counts", () => {
+    const counts: Record<string, number> = {};
+    const sites: string[] = [];
+    for (const source of sources("scripts/")) {
+      const spawns = spawnPrograms(source.text).filter((spawn) => spawn.program === "\"git\"");
+      if (spawns.length === 0) continue;
+      counts[source.path] = spawns.length;
+      sites.push(...spawns.map((spawn) => `${source.path}:${spawn.line}`));
+    }
+    expect(counts, sites.join("\n")).toEqual(SCRIPT_GIT_SPAWNS);
+  });
+});

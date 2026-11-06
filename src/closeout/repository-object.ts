@@ -1,5 +1,4 @@
 import { createHash, type Hash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import {
   closeSync,
   constants,
@@ -13,7 +12,7 @@ import {
   type BigIntStats,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitSpawnSync } from "./git-hardening.js";
 
 export interface RepositoryObject {
   readonly record_type: "mister-clean.repository-object";
@@ -82,9 +81,8 @@ function errorMessage(error: unknown): string {
 }
 
 function gitBytes(repository: string, args: readonly string[]): Buffer {
-  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+  const result = gitSpawnSync(repository, args, {
     encoding: null,
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
     maxBuffer: MAX_GIT_OUTPUT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -121,16 +119,11 @@ function gitLine(repository: string, args: readonly string[]): string {
 
 function gitCheckIgnored(repository: string, path: string, directory: boolean): boolean {
   const candidate = directory ? `${path}/` : path;
-  const result = spawnSync(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", repository, "check-ignore", "--quiet", "--no-index", "--", candidate]),
-    {
-      encoding: null,
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
-      maxBuffer: MAX_GIT_OUTPUT_BYTES,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  const result = gitSpawnSync(repository, ["check-ignore", "--quiet", "--no-index", "--", candidate], {
+    encoding: null,
+    maxBuffer: MAX_GIT_OUTPUT_BYTES,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   if (result.error) throw new Error(`git check-ignore failed: ${errorMessage(result.error)}`);
   if (result.status === 0) return true;
   if (result.status === 1) return false;

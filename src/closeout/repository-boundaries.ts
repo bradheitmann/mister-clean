@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync } from "node:fs";
 import { extname, join, normalize, posix, resolve } from "node:path";
 
 import { GIT_OUTPUT_LIMIT_BYTES } from "./repository.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitExecFileSync } from "./git-hardening.js";
 
 export type ParserSurfaceShape = "bun" | "custom" | "go" | "node" | "python" | "rust" | "shell";
 
@@ -76,9 +75,8 @@ function finding(
 }
 
 function candidatePaths(root: string): string[] {
-  return execFileSync("git", hardenedGitArgs(["-C", root, "ls-files", "-co", "--exclude-standard", "-z"]), {
+  return gitExecFileSync(root, ["ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
   }).split("\0").filter(Boolean).sort();
 }
@@ -135,8 +133,7 @@ function unsafeParsedMaps(source: string): string[] {
 
 function ignored(root: string, path: string): boolean {
   try {
-    execFileSync("git", hardenedGitArgs(["-C", root, "check-ignore", "-q", "--", path]), {
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
+    gitExecFileSync(root, ["check-ignore", "-q", "--", path], {
       stdio: "ignore",
     });
     return true;
