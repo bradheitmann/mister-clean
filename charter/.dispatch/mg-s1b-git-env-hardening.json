@@ -1,7 +1,10 @@
 {
+  "accepted_unix_s": 1793933597,
+  "accepted_utc": "2026-11-06T02:53:17Z",
   "base_commit": "36402787d9a175ea97a417cf6b4abd210e33318a",
   "brief_sha256": "e3871d4bc9989b7df9aef6e0c6579403ee0cfb344f1676d9f68690acb733f87f",
   "done_sha256": "46c6e2d899a2d5ef7fe8a3c4d8915d70776c6b8cdaf6e6e8cc097505234ea19e",
   "schema_version": "charter.dispatch/1",
-  "slice": "mg-s1b-git-env-hardening"
+  "slice": "mg-s1b-git-env-hardening",
+  "state": "accepted"
 }

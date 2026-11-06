@@ -1,0 +1,128 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-s1b-git-env-hardening",
+  "verifies": "mg-s1b-git-env-hardening",
+  "candidate_commit": "13ca3644220755778820a16240b861ddb5a3b13e",
+  "frozen": {
+    "manifest_sha256": "143015729a843d06c03105670c46bde94d11e854a1d42cfc795ba5bdb817962b",
+    "head": "13ca3644220755778820a16240b861ddb5a3b13e"
+  },
+  "dispatch": {
+    "base_commit": "36402787d9a175ea97a417cf6b4abd210e33318a",
+    "brief_sha256": "e3871d4bc9989b7df9aef6e0c6579403ee0cfb344f1676d9f68690acb733f87f"
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5.5",
+    "verifier": "openai/gpt-6.1-terra"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "Proof 1: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-proof-1.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/B-result.json; gate git credentials: 2 passed, 38 skipped, exit 0.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C02",
+      "description": "Proof 2: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-proof-2.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/B-result.json; git env scrub: 3 passed, 37 skipped, exit 0.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C03",
+      "description": "Proof 3: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-proof-3.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json; git program keys: 22 passed, 18 skipped, exit 0. This does not prove pushInsteadOf, which is an obligation CHQA-D1.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C04",
+      "description": "Proof 4: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-proof-4.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/B-result.json; driver enumeration fails closed: 2 passed, 38 skipped, exit 0.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C05",
+      "description": "Proof 5: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-proof-5.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json; token fragment cleared: 2 passed, 68 skipped, exit 0 using the app Vite configuration. The prescribed root reopen command remains broken; MCQA-D2 is an obligation.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C06",
+      "description": "Proof 6: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-proof-6.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json; derivation guards: 3 passed, 4 skipped, exit 0.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C07",
+      "description": "Proof 7: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-proof-7.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json; CI verify succeeded on 8100826f9cce113ade647e604435bdb169a2e2e2, which CH/QA identifies as the frozen head plus a freeze record only. The separate non-required charter job failed its source probe; charter check --strict was not run there.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C08",
+      "description": "Proof 8: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/selfjudge-candidate/evidence-proof-8.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress2.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress3-main.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress4-main.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress4-candidate.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress5-main.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress6-cicheck.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress7-cicheck-cause.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress8-cicheck-bun.txt and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress9-cicheck-main.txt. The pre-merge-equivalent candidate self-judge reported a semantic debt and two failed native gates, versus one semantic debt in the cited main baseline. Independent stress reproduced intermittent campaign-observer authoritative importer failures on main 3d46c86 and on the candidate freeze-record successor, and reproduced the same two SQLite timeout tests on main and candidate under Bun. The observed native gate failures are pre-existing obligations, not evidence of candidate-introduced debt. Main's stress3 failure and candidate's self-judge failure include the same finite-watch test and importer-failure symptom; the exact importer root cause is not established by these logs. This is an evidence review, not a fresh post-merge run.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C09",
+      "description": "MCQA-D1 defect fix: inspected /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/mcqa/receipt-1-rejected-47f1ea2.json, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-d1.txt, /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/A-result.json and /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/evidence-d1-mechanism.txt. CH/QA reports the frozen-head second-insteadOf regressions passed for file:// and plain-path targets (2 passed, 38 skipped); its mechanism check shows the checked URL reaches the local fixture inside repository configuration but not in the isolated contact context. The earlier high-severity bypass is addressed, subject to the carried test-coverage obligations.",
+      "classification": "inspected"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "CHQA-D1",
+      "severity": "medium",
+      "title": "pushInsteadOf is claimed as a proven D2 key in charter/DONE but no test case exists for it",
+      "status": "obligation",
+      "evidence": "execution-safety.test.ts:465 covers exactly two configurations (\"file:// rewrite\", \"plain path rewrite\"); grep -rn pushInsteadOf src/ returns 0 hits and the only repository occurrence is charter/DONE/mg-s1b-git-env-hardening.md:14, which lists url.*.pushInsteadOf under proof 3 with mutant \"remove one key from the list -> RED, for every key\". Behaviour measured in chqa/evidence-d1-mechanism.txt: pushInsteadOf does not affect git remote get-url or ls-remote (contactRemote is not exploitable through it today) and no git push argv exists in src/, but the same checked URL is redirected on a push (push --dry-run exit 0). Not a bypass of the D1 fix: contactRemote still contacts exactly the checked URL. Source: /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json."
+    },
+    {
+      "id": "CHQA-D2",
+      "severity": "low",
+      "title": "Refusal of a first-transport file:// or plain-path rewrite is unasserted",
+      "status": "obligation",
+      "evidence": "The tests prove only that a second rewrite to file:// or a plain path is ignored at contact time (execution-safety.test.ts:465-501). The transport-refusal arm is asserted for ext:: only (execution-safety.test.ts:508-531). The code is correct on reading (file->\"file\", plain path->\"path\", neither in [https, ssh] -> GitRemoteTransportError at git-hardening.ts:170/209) but the refusal behaviour is unproven by test. Source: /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json."
+    },
+    {
+      "id": "CHQA-D3",
+      "severity": "low",
+      "title": "A second insteadOf arriving from global or system config at contact time is untested",
+      "status": "obligation",
+      "evidence": "The D1 fixture writes both rewrites into the repository's own .git/config (execution-safety.test.ts:477-483). No test writes url.*.into a global/XDG or system gitconfig and then proves contactRemote's isolation (git-hardening.ts:222-243: temp cwd outside any repository, GIT_CONFIG_GLOBAL=<empty file>, GIT_CONFIG_NOSYSTEM=1, GIT_CEILING_DIRECTORIES). Code inspection says the isolation holds; no proof exercises it. Source: /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json."
+    },
+    {
+      "id": "CHQA-D4",
+      "severity": "low",
+      "title": "charter/DONE carries no proof entry for the MCQA-D1 fix itself",
+      "status": "obligation",
+      "evidence": "charter/DONE/mg-s1b-git-env-hardening.md records only F1, D2, D4, D5, D6 and the locator tests; grep -rnE 'D1' charter/ returns 0 hits. The regression happens to sit inside describe(\"git program keys\") (execution-safety.test.ts:332-548) so proof 3's reopen re-runs it incidentally, but no proof line states the defect, the fixture or its mutant, contrary to charter rule 2 (done = every proof in DONE executed). Source: /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json."
+    },
+    {
+      "id": "MCQA-D2",
+      "severity": "low",
+      "title": "The prescribed proof 5 reopen command fails without the app Svelte configuration",
+      "status": "obligation",
+      "evidence": "The DONE root-level proof-5 command (node ./node_modules/vitest/vitest.mjs run control-plane-app -t \"token fragment cleared\") cannot collect control-plane-app/src/zero-data-render.test.ts because App.svelte is parsed without the Svelte plugin, so it exits non-zero as written. Running the app's own config from inside control-plane-app (chqa/evidence-proof-5.txt) passes 2 tests and establishes the behaviour, but does not make the recorded reopen command green. Correct the contract command in a bounded follow-up; this frozen checkout is not to be edited. Source: /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/receipt.json."
+    },
+    {
+      "id": "MCQA-D3",
+      "severity": "medium",
+      "title": "bun importer flake in the gate snapshot, pre-existing",
+      "status": "obligation",
+      "evidence": "/Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/selfjudge-candidate/evidence-proof-8.txt; /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress3-main.txt; /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress4-candidate.txt; /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/selfjudge-candidate/out/mister-clean/mg-s1b-candidate-1/native-gate-output/cargo-tools-campaign-observer-test.78e30521-47c3-4705-8969-7ca93a58b20b.stdout.bin. The authoritative importer failed intermittently on main 3d46c86 and the candidate successor; the finite-watch failure occurred on both. The logs do not establish the exact importer root cause."
+    },
+    {
+      "id": "MCQA-D4",
+      "severity": "medium",
+      "title": "sqlite tests fail on main in the container, pre-existing",
+      "status": "obligation",
+      "evidence": "/Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/selfjudge-candidate/out/mister-clean/mg-s1b-candidate-1/native-gate-output/node-.-ci-check.eeea2b1f-5103-4b9f-9a49-558983b699bf.stderr.bin; /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress8-cicheck-bun.txt; /Users/bradleyheitmann/.local/share/agent-private/mister-clean/master-gate/s1b/chqa/D/evidence-proof-8-stress9-cicheck-main.txt. The candidate ci-check's two named SQLite tests timed out; those same tests timed out on main 3d46c86 under Bun in the container. Independent runs also recorded additional SQLite timeouts."
+    }
+  ],
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8"
+  ]
+}
