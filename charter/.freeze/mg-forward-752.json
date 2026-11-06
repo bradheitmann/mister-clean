@@ -1,5 +1,5 @@
 {
-  "commit": "82419c5b79716dc120a476a5f5d242ce9fc235e8",
+  "commit": "d2da4d75ea5b419a30478959f502453d55562bd2",
   "entries": [
     {
       "mode": "100644",
@@ -94,9 +94,9 @@
     },
     {
       "mode": "100644",
-      "object": "783673a0c39260a0ecffb578fd6749a2da3bc6a7",
+      "object": "f3608edefe0b1adb6b41e28bf793615379df07bb",
       "path": "MANIFEST.sha256",
-      "sha256": "1757b226068af8e220e1508c3ff80cc6a4978591ec43488635ebd52912585feb",
+      "sha256": "c7e621a5fdfcecf0e4f862266e3ddd46a67f2f3663b00ca6eb1c7cb54a986bf6",
       "type": "blob"
     },
     {
@@ -325,9 +325,23 @@
     },
     {
       "mode": "100644",
-      "object": "8eadefb242d9729270ecd70e81bd8e982a1ff953",
+      "object": "20dfed3878d967e25d2c58506d3cdbb7dc6c51ba",
       "path": "bin/mister-clean.js",
-      "sha256": "97d96836fd98468ce0de1a1d6383adb5915cfaaada5cc8bbe38732e97a5b40df",
+      "sha256": "cbb19925af12e0414a04c9c05da48db6079f23c9732839ab3c1ced5c2445b5ce",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "8db7cf27be5023aec79d1c2e1579f9f085ae3eb2",
+      "path": "charter/.dispatch/mg-ci-green-1.json",
+      "sha256": "c5607ac418cbeb5c45ffe076ff5ceafba4ef3278fcca61bb3a9d1e8bea6d4c85",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "28146d268636d791066e8cbb1ec87732864c33d3",
+      "path": "charter/.dispatch/mg-ci-green-1.sha256",
+      "sha256": "12958e46ca4dbd8d93e9b5a8f8f06e2c9d8e79ca32dc3f1e5fe839d5e86ce4f3",
       "type": "blob"
     },
     {
@@ -374,9 +388,9 @@
     },
     {
       "mode": "100644",
-      "object": "7063a9ee46aa5fb03efa74e87ddcb4011fa5298d",
+      "object": "860ad7237ab4a6279d8ca6d83747fce73ed3e8dc",
       "path": "charter/COST.jsonl",
-      "sha256": "ce59e62dda1de991c3253f468fa6cfd864a454d34c4ef67fc149ff57dc07f6e6",
+      "sha256": "ddc7cee01375625a51a529615c9a933e31c7bacd44f9088ce705310c20349e6e",
       "type": "blob"
     },
     {
@@ -461,6 +475,13 @@
       "object": "761fc4bc2d368850ce7b6659927cbc5de3a47814",
       "path": "charter/DONE/language-policy-root-debts.md",
       "sha256": "3c007e35b57c61b17e5b8f9715864957225541dea7d40e976f57eb2106443f76",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "e99ae5c2b91eadfac28958329886694626a324a7",
+      "path": "charter/DONE/mg-ci-green-1.md",
+      "sha256": "b8a327bb0783debb404434096b628f1e9d124ba7a713ae210491a5f839bdd238",
       "type": "blob"
     },
     {
@@ -633,9 +654,9 @@
     },
     {
       "mode": "100644",
-      "object": "6e1d8354e03dccd01d9980a7f40bb97db239d9b6",
+      "object": "4d804197e291527a5734be6a6e24a23384426138",
       "path": "charter/STATE.md",
-      "sha256": "f64d8dc675eba91fc97e7f769d2d51692aad20fd00a7fd3b83f1c5336860bffb",
+      "sha256": "5c9a17b923d4617cebd6de028b715a16a12d5c4e52a185334cc5de48fc473df3",
       "type": "blob"
     },
     {
@@ -1543,6 +1564,13 @@
     },
     {
       "mode": "100644",
+      "object": "228afbcd36a71ab9e6176b00007c3000107b72c1",
+      "path": "qa/mg-ci-green-1/receipt.json",
+      "sha256": "6221e71abb07686ba4a0f96c24628ec26ced7c3d9727bec194d675060a9074ff",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
       "object": "6ff5105bf4cce0d3c1d5cb4ca616d093c2c686c5",
       "path": "qa/mg-pii-name-1/receipt.json",
       "sha256": "8f8d717d55b89a45fe268ec7c06789810dad1ca0c2318ca1ab4b6dd9921fa249",
@@ -2383,16 +2411,16 @@
     },
     {
       "mode": "100644",
-      "object": "0d0afcbcf2c03a2c54f911d34616a8f39b7eed80",
+      "object": "6b10e85d12636ab243bdd4a4a73943dfa94378a7",
       "path": "src/closeout/inspection.test.ts",
-      "sha256": "f7d6d4aa3511819a3c7e0dda672047103916c28f749127e53cbad4b97367b3b4",
+      "sha256": "92ee65d5c21cd24e32ab22e1c3ccc559f44b2d4f8e2fa68f00739f47a00dfb9e",
       "type": "blob"
     },
     {
       "mode": "100644",
-      "object": "66493d483c46489ad4d993c1e5f3019690422bef",
+      "object": "d76fd6148373d52a6e7a2738870c365fb978a153",
       "path": "src/closeout/inspection.ts",
-      "sha256": "dfed2c9bd93652b19a5bc78d7a243022be68615267598380444d636cb0398c65",
+      "sha256": "abec4da124a92c440468b42809785706a47bfc3b992e7b03564ba0af4d627d05",
       "type": "blob"
     },
     {
@@ -2432,9 +2460,9 @@
     },
     {
       "mode": "100644",
-      "object": "a32c7ecff508b26ddc125e5dc481e6e184d77f81",
+      "object": "4e639c1051129e64277da5ac50e8968435ed16d1",
       "path": "src/closeout/native-gate-runner-finding-order.test.ts",
-      "sha256": "6314925538fb131b7b9735ee1806a43c1042332bccd5d184b2a9eb872c8bc4a1",
+      "sha256": "283fde22c0c63cfef1313e71c314e21fddd332e1199de14dca7f164e63148c59",
       "type": "blob"
     },
     {
@@ -2446,9 +2474,9 @@
     },
     {
       "mode": "100644",
-      "object": "35a419a48016b87cc92112cf9762269e6c4ade03",
+      "object": "551d6635134403c9948b3e4bc0a7aeff4d9e5ec5",
       "path": "src/closeout/native-gate-source-ref-order.test.ts",
-      "sha256": "4b246322ab7f78276bfcb1f5435d5168de341be19f60d60eeb9c969744162a7f",
+      "sha256": "38565fc24cdf329aebc31d57073c399488891a7957bff41137b8044ef3382df1",
       "type": "blob"
     },
     {
@@ -3656,12 +3684,12 @@
       "type": "blob"
     }
   ],
-  "entry_count": 522,
-  "head": "82419c5b79716dc120a476a5f5d242ce9fc235e8",
+  "entry_count": 526,
+  "head": "d2da4d75ea5b419a30478959f502453d55562bd2",
   "kind": "git-commit-tree",
-  "manifest_sha256": "a6fb999f00ca7b9577a50303a2324ec30eca09890b1a4fc05e869a907132372f",
+  "manifest_sha256": "b7bd50dfeda9defa5112ea246df552bb8d06f41a798795ad18330626ac62adbc",
   "schema_version": "charter.freeze/2",
   "selector": "git-ls-tree:HEAD",
   "slice": "mg-forward-752",
-  "tree": "9438e1d1e37eeeae88e1214dc2619959035a1e34"
+  "tree": "09473558c58e157d00a1457d307b805c1bc04329"
 }
