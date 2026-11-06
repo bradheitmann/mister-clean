@@ -1,5 +1,5 @@
 {
-  "commit": "d8b9197735095478cb948acfd32f1678be290993",
+  "commit": "d9ff36a7c342254ab0a566e842ca03ebbc611eed",
   "entries": [
     {
       "mode": "100644",
@@ -94,9 +94,9 @@
     },
     {
       "mode": "100644",
-      "object": "6946ebfaf1b82c4530ece4d06ac44bf889d47462",
+      "object": "7cffbd386fba711a4488dd2548b6e0ce8418b87c",
       "path": "MANIFEST.sha256",
-      "sha256": "4b30c69e309c518e3258d6b873913fcf141b0e89215320846fee2a568cbc1bb4",
+      "sha256": "ae1062bee6dbd1e0421a8bcbc9d59f9dc806ecbd43fc0ae703f47cdd4015f038",
       "type": "blob"
     },
     {
@@ -325,9 +325,37 @@
     },
     {
       "mode": "100644",
-      "object": "89fe7e9a8180f0fb207a5f2820227a0fece6ee50",
+      "object": "c36ef18a8565f4a6a39b4231f5b835008657f0e8",
       "path": "bin/mister-clean.js",
-      "sha256": "413e30d9d3e24ac6bb6e754dcea2fceda0537a1cea13bc1814a0d043ba9a9fcc",
+      "sha256": "f3bf6063ac10a942d8c4550177d2adf8f8d377c43d13a94f3d11b4f7456199c0",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "8db7cf27be5023aec79d1c2e1579f9f085ae3eb2",
+      "path": "charter/.dispatch/mg-ci-green-1.json",
+      "sha256": "c5607ac418cbeb5c45ffe076ff5ceafba4ef3278fcca61bb3a9d1e8bea6d4c85",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "28146d268636d791066e8cbb1ec87732864c33d3",
+      "path": "charter/.dispatch/mg-ci-green-1.sha256",
+      "sha256": "12958e46ca4dbd8d93e9b5a8f8f06e2c9d8e79ca32dc3f1e5fe839d5e86ce4f3",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "52db8502e7048549e36e520a2c37efd44fbddbeb",
+      "path": "charter/.dispatch/mg-forward-752.json",
+      "sha256": "be3c192e380c788e3e629e1a9fcc4187062274ad08bd344bb7f6f97ba6e200c9",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "9e3ff16e4026e9a2eac19f0e54c4699555d9eba1",
+      "path": "charter/.dispatch/mg-forward-752.sha256",
+      "sha256": "d98088ce39d9f3faaffe306cdce038d95d3e9f07bcae19368273791e5afb99c1",
       "type": "blob"
     },
     {
@@ -374,9 +402,9 @@
     },
     {
       "mode": "100644",
-      "object": "7063a9ee46aa5fb03efa74e87ddcb4011fa5298d",
+      "object": "1c708629312ed074b9d953694ee1c02ba4a88587",
       "path": "charter/COST.jsonl",
-      "sha256": "ce59e62dda1de991c3253f468fa6cfd864a454d34c4ef67fc149ff57dc07f6e6",
+      "sha256": "e1a9f13bfb071b0751720764e212fbb139904a40b23e1709ceaa44cb32e77201",
       "type": "blob"
     },
     {
@@ -430,6 +458,13 @@
     },
     {
       "mode": "100644",
+      "object": "4d06e26b21ec6c651e24f5561796b540f70dfc05",
+      "path": "charter/DONE/gate-source-ref-byte-order.md",
+      "sha256": "4442af315f9f1cceecd548485730f58f3699837233e50b476688116a8b7c8692",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
       "object": "7b0e7be6039ff330ef24ae25dee39e3bf762da5a",
       "path": "charter/DONE/gate-toolchain-locators.md",
       "sha256": "279aea97adbd7f390a63a29ba43496a3df2b1c6acf878e74a3bc5cd79d8732d0",
@@ -454,6 +489,20 @@
       "object": "761fc4bc2d368850ce7b6659927cbc5de3a47814",
       "path": "charter/DONE/language-policy-root-debts.md",
       "sha256": "3c007e35b57c61b17e5b8f9715864957225541dea7d40e976f57eb2106443f76",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "e99ae5c2b91eadfac28958329886694626a324a7",
+      "path": "charter/DONE/mg-ci-green-1.md",
+      "sha256": "b8a327bb0783debb404434096b628f1e9d124ba7a713ae210491a5f839bdd238",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "fc83ce382004b7dc330bd5d1834594f7a0623e25",
+      "path": "charter/DONE/mg-forward-752.md",
+      "sha256": "1881c19d5c7e26dc958addba800915fa1d18388dd31ab349e94776caa4e78dbe",
       "type": "blob"
     },
     {
@@ -549,6 +598,13 @@
     },
     {
       "mode": "100644",
+      "object": "55c9166af743346ac05b4c80daa342a8a742e430",
+      "path": "charter/DONE/runner-findings-byte-order.md",
+      "sha256": "a73b8df8f768745925dbf1a569bfeda65aa1d4fbcda350651231640931e28072",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
       "object": "590b2f12ee3597ba752d01ee847e7cd5287e141d",
       "path": "charter/DONE/second-pass-flaky-per-family.md",
       "sha256": "23f6b746c5f75b9642f2757db42a0c6865287f9a1a4f799deefddecb9b8252a3",
@@ -619,9 +675,9 @@
     },
     {
       "mode": "100644",
-      "object": "6e1d8354e03dccd01d9980a7f40bb97db239d9b6",
+      "object": "7aef591027fdaa55283d32264c7e60c3b01f8247",
       "path": "charter/STATE.md",
-      "sha256": "f64d8dc675eba91fc97e7f769d2d51692aad20fd00a7fd3b83f1c5336860bffb",
+      "sha256": "b20b33dd289a80b92c16b795af73bc361e6f4bd3ddb6a9f125f24467f67b2470",
       "type": "blob"
     },
     {
@@ -1529,6 +1585,20 @@
     },
     {
       "mode": "100644",
+      "object": "228afbcd36a71ab9e6176b00007c3000107b72c1",
+      "path": "qa/mg-ci-green-1/receipt.json",
+      "sha256": "6221e71abb07686ba4a0f96c24628ec26ced7c3d9727bec194d675060a9074ff",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "3fa29a6e674e96037501417becd3aa81895c01ab",
+      "path": "qa/mg-forward-752/receipt.json",
+      "sha256": "62346aa18b545b3e5bd936d3f2bb257f28f9212512fd83862d9ed703a6aeced3",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
       "object": "6ff5105bf4cce0d3c1d5cb4ca616d093c2c686c5",
       "path": "qa/mg-pii-name-1/receipt.json",
       "sha256": "8f8d717d55b89a45fe268ec7c06789810dad1ca0c2318ca1ab4b6dd9921fa249",
@@ -2383,16 +2453,16 @@
     },
     {
       "mode": "100644",
-      "object": "0d0afcbcf2c03a2c54f911d34616a8f39b7eed80",
+      "object": "6b10e85d12636ab243bdd4a4a73943dfa94378a7",
       "path": "src/closeout/inspection.test.ts",
-      "sha256": "f7d6d4aa3511819a3c7e0dda672047103916c28f749127e53cbad4b97367b3b4",
+      "sha256": "92ee65d5c21cd24e32ab22e1c3ccc559f44b2d4f8e2fa68f00739f47a00dfb9e",
       "type": "blob"
     },
     {
       "mode": "100644",
-      "object": "66493d483c46489ad4d993c1e5f3019690422bef",
+      "object": "d76fd6148373d52a6e7a2738870c365fb978a153",
       "path": "src/closeout/inspection.ts",
-      "sha256": "dfed2c9bd93652b19a5bc78d7a243022be68615267598380444d636cb0398c65",
+      "sha256": "abec4da124a92c440468b42809785706a47bfc3b992e7b03564ba0af4d627d05",
       "type": "blob"
     },
     {
@@ -2432,9 +2502,23 @@
     },
     {
       "mode": "100644",
+      "object": "4e639c1051129e64277da5ac50e8968435ed16d1",
+      "path": "src/closeout/native-gate-runner-finding-order.test.ts",
+      "sha256": "283fde22c0c63cfef1313e71c314e21fddd332e1199de14dca7f164e63148c59",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
       "object": "eb22b69090a6f11ba19d5cfbb8a7d4fbf5e0c9fa",
       "path": "src/closeout/native-gate-runner.ts",
       "sha256": "4df989d46c78c21914916998e9af093b4ae9b809bed2c0401a5fa16a9c944da9",
+      "type": "blob"
+    },
+    {
+      "mode": "100644",
+      "object": "551d6635134403c9948b3e4bc0a7aeff4d9e5ec5",
+      "path": "src/closeout/native-gate-source-ref-order.test.ts",
+      "sha256": "38565fc24cdf329aebc31d57073c399488891a7957bff41137b8044ef3382df1",
       "type": "blob"
     },
     {
@@ -2453,9 +2537,9 @@
     },
     {
       "mode": "100644",
-      "object": "ac58390693989b5c4c95c6189bbf08775437c10c",
+      "object": "8617bae414331c5dd55bc90d0a0a457fef203f74",
       "path": "src/closeout/native-gates.ts",
-      "sha256": "ce446efc8933f3b6a304a09e31b60c9bb802b8f0fd32c9a2002413616e61fd80",
+      "sha256": "864cb62f6e9f2de41ebce0a49ad54e5f80629749ab91ac32d3ef0edadbd84347",
       "type": "blob"
     },
     {
@@ -3642,12 +3726,12 @@
       "type": "blob"
     }
   ],
-  "entry_count": 520,
-  "head": "d8b9197735095478cb948acfd32f1678be290993",
+  "entry_count": 532,
+  "head": "d9ff36a7c342254ab0a566e842ca03ebbc611eed",
   "kind": "git-commit-tree",
-  "manifest_sha256": "0dc281a0f8e816d8f698011c31287ad1320654bf99313dec5d6da745d2c84f4e",
+  "manifest_sha256": "d172997ea81a7705960042a621cb00e0fb43501bf8f0a824b1071c5146474b3d",
   "schema_version": "charter.freeze/2",
   "selector": "git-ls-tree:HEAD",
   "slice": "mg-s1c-os-sandbox",
-  "tree": "a0eb10d264b94f7ab698a6398f7dcd104e487fcd"
+  "tree": "588e30328df96ea63d0c3d97edd1bc29a4681055"
 }
