@@ -24548,7 +24548,8 @@ var PUBLIC_SAFETY_RULES = [
   ["posix-home-path", /\/(?:Users|home)\/[^/\s]+\//],
   ["windows-home-path", /\b[A-Za-z]:\\Users\\[^\\\s]+\\/],
   ["email-address", /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i],
-  ["file-url", /\bfile:\/\/[^\s)>'\"]+/i],
+  // A bare scheme followed by punctuation names a URL kind; it locates nothing.
+  ["file-url", /\bfile:\/\/[^\s)>'\"]*[A-Za-z0-9_~\/%.-]/i],
   ["private-key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   [
     "credential-assignment",
