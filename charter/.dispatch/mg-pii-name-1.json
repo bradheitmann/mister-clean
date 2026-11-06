@@ -1,0 +1,10 @@
+{
+  "accepted_unix_s": 1793946496,
+  "accepted_utc": "2026-11-06T06:28:16Z",
+  "base_commit": "aa4a17c8c70c98f236f5673be6c7fcab080f3b9a",
+  "brief_sha256": "6116ecad8ae00eae0a8cd7468ffde4e5765f1b0482eb331720421bdc7bbd8295",
+  "done_sha256": "402315dd9bc8804f71668bfe3f2e3d220fbb4a0a997e2b52f2fc525d3a2f5311",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-pii-name-1",
+  "state": "accepted"
+}

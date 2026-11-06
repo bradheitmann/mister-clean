@@ -1,0 +1,96 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-pii-name-1",
+  "verifies": "mg-pii-name-1",
+  "candidate_commit": "58890d1a9afb4643e076d2dbf2aec6de8c59e9df",
+  "frozen": {
+    "manifest_sha256": "a8b891c6b80716d80862bee6fb37b62fa494abcac64c62c54a42ec88c125f604",
+    "head": "58890d1a9afb4643e076d2dbf2aec6de8c59e9df"
+  },
+  "dispatch": {
+    "base_commit": "aa4a17c8c70c98f236f5673be6c7fcab080f3b9a",
+    "brief_sha256": "6116ecad8ae00eae0a8cd7468ffde4e5765f1b0482eb331720421bdc7bbd8295"
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5.5",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "proof": "1",
+      "description": "Proof 1 re-opened by me, from inside the frozen checkout: `git grep -I -n -w -i -c -f <private owner-first-name file> -- . | wc -l` prints 0 (exit 0) — no whole-word match of the owner's first name in any tracked file. Counts only were read; the private pattern file was never printed. Evidence: ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/evidence-proof-1.txt.",
+      "classification": "executed",
+      "command": "timeout 120 git grep -I -n -w -i -c -f ~/.local/share/agent-private/owner-first-name.txt -- . | wc -l",
+      "exit_code": 0,
+      "status": "pass (0 files matched)"
+    },
+    {
+      "id": "C02",
+      "proof": "2",
+      "description": "Proof 2 re-opened by me: `git grep -I -i -c -F -f <private owner-pii-patterns file> | wc -l` prints 0 (exit 0) — no owner-PII pattern (home path, username, address, contact form) matches any tracked file. Counts only; the pattern file was never printed. Evidence: ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/evidence-proof-2.txt.",
+      "classification": "executed",
+      "command": "timeout 120 git grep -I -i -c -F -f ~/.local/share/agent-private/owner-pii-patterns.txt | wc -l",
+      "exit_code": 0,
+      "status": "pass (0 files matched)"
+    },
+    {
+      "id": "C03",
+      "proof": "3",
+      "description": "Proof 3 re-opened by me: `node ~/.claude/skills/mister-clean/bin/mister-clean.js audit planning . --json` reports status \"pass\", findings [], raw_finding_count 0, root_debt_count 0, artifactCount 13, planningRootCount 2, exitCode 0. The audit wrote its own receipt outside the checkout; `git status --porcelain` on the checkout stayed empty (read-only held). Evidence: ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/evidence-proof-3.txt.",
+      "classification": "executed",
+      "command": "timeout 120 node ~/.claude/skills/mister-clean/bin/mister-clean.js audit planning . --json",
+      "exit_code": 0,
+      "status": "pass (status=pass, findings=0)"
+    },
+    {
+      "id": "C04",
+      "proof": "4",
+      "description": "Proof 4 re-opened by me, both arms. (a) `git diff --stat d547fc5 58890d1 -- project/` shows exactly project/planning/EVAL-STANDARDIZATION-PLAN.md (2 insertions, 2 deletions) and project/planning/ROADMAP.md (1 insertion, 1 deletion): 2 files changed, 3 insertions(+), 3 deletions(-). (b) `charter check --strict` prints 'charter: ok', exit 0, with one pre-existing non-blocking warning that slice mg-s1b-git-env-hardening has no cost rows in charter/COST.jsonl (unrelated to this slice, present at the base). Full line-by-line review in ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/evidence-diff.txt: the 6 changed lines are the 3 intended name-to-role substitutions and nothing else; commit 58890d1 touches no file outside project/ except this slice's charter/.dispatch and charter/DONE records.",
+      "classification": "executed",
+      "command": "timeout 120 git diff --stat d547fc5 58890d1 -- project/ ; timeout 120 ~/.local/share/charter/bin/ef2b92e911540155af27759ffadb2d9d3a04fd2a/bin/charter check --strict",
+      "exit_code": 0,
+      "status": "pass (3+/3- in 2 files; charter: ok)"
+    },
+    {
+      "id": "C05",
+      "proof": "receipt",
+      "description": "Self-validation of this receipt, informational (not one of the 4 DONE proofs): `charter receipt --root <frozen checkout> <qa/receipt.json>` accepts the schema, slice, verdict, commit, frozen, dispatch and model fields and then exits 1 at the reopen-attestation gate, because the frozen checkout carries no charter/.freeze/mg-pii-name-1.json and the pinned DONE has no reopened markers; `charter reopen` itself refuses without a freeze record. Both records can only be written inside the checkout, which CH/QA is forbidden to modify, so the four attestations are carried here as C01-C04 plus evidence-proof-1..4.txt and the gap is obligation CHQA-D3. Evidence: ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/evidence-receipt-validation.txt.",
+      "classification": "executed",
+      "command": "timeout 120 charter receipt --root <frozen checkout> <qa/receipt.json> ; timeout 120 charter reopen --root <scratch> mg-pii-name-1 --proof 1 --run-id chqa-58890d1-p1 --evidence <qa/evidence-proof-1.txt>",
+      "exit_code": 1,
+      "status": "refused only on the missing freeze/reopen records (read-only rule); all receipt fields validated"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "CHQA-D1",
+      "severity": "low",
+      "title": "earlier revisions in the public history still contain the name (history not rewritten, owner ruling)",
+      "status": "obligation",
+      "evidence": "Proofs 1 and 2 scan the current tree only (git grep over tracked files at the frozen head), so they are green while older commits still carry the owner's first name; rewriting that history is excluded by the owner ruling recorded in charter/DONE/mg-pii-name-1.md ('Earlier revisions still contain the name, and history is not rewritten'). The exposure is therefore bounded to historical revisions of an already-public repository, accepted by the owner. Count only, never the name itself: the name appears in the pre-fix revisions of the 3 planning lines removed by 58890d1 and in no file at the frozen head. Carried as an obligation on the next bounded slice, per charter rule 2. Source: ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/receipt.json."
+    },
+    {
+      "id": "CHQA-D2",
+      "severity": "low",
+      "title": "Two of the three substitutions render as a capitalised mid-sentence 'The owner' instead of the prescribed lowercase 'the owner'",
+      "status": "obligation",
+      "evidence": "charter/DONE/mg-pii-name-1.md prescribes 'Replace each with \"the owner\"'. project/planning/EVAL-STANDARDIZATION-PLAN.md:21 does that correctly ('Authority: the owner requested...'), but EVAL-STANDARDIZATION-PLAN.md:24 and project/planning/ROADMAP.md:34 read '...assigns implementation after / The owner confirms staffing.' and '...features after / The owner confirms staffing.' — each continues a sentence that begins on the previous wrapped line, so the article is capitalised mid-sentence (it inherited the capital of the replaced proper noun). Meaning, scope and readers' interpretation are unchanged; no proof in the DONE list is affected and no PII remains. Typographic only, recorded rather than fixed because the checkout is frozen and read-only. Evidence: ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/evidence-diff.txt."
+    },
+    {
+      "id": "CHQA-D3",
+      "severity": "low",
+      "title": "No charter/.freeze/mg-pii-name-1.json exists, so the recorded frozen manifest cannot be recomputed here and charter receipt cannot reach exit 0",
+      "status": "obligation",
+      "evidence": "charter/.freeze in the frozen checkout holds only mg-s1b-git-env-hardening.json plus its reopen/ record; the manifest_sha256 a8b891c6b80716d80862bee6fb37b62fa494abcac64c62c54a42ec88c125f604 recorded in this receipt comes from the dispatch brief (TASK.md) and appears nowhere in the checkout or in ~/.local/share/agent-private/mister-clean/, so it is attested by the gate rather than verifiable by re-running `charter freeze` here. Consequence: `charter receipt --root <checkout> <receipt>` exits 1 at the reopen-attestation gate and `charter reopen` refuses without a freeze record; both would require writing inside the read-only checkout. CH/QA therefore did not mint attestations. Evidence: ~/.local/share/agent-private/mister-clean/master-gate/pii1/qa/evidence-receipt-validation.txt."
+    }
+  ],
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4"
+  ]
+}

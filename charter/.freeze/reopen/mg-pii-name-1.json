@@ -1,0 +1,33 @@
+{
+  "done_sha256": "402315dd9bc8804f71668bfe3f2e3d220fbb4a0a997e2b52f2fc525d3a2f5311",
+  "entries": [
+    {
+      "evidence_sha256": "0e9ee7c9bbdbd91873110197706c42978bc46733c7e5caf5243c0388e8947d13",
+      "proof": "1",
+      "recorded_utc": "2026-11-06T06:28:07Z",
+      "run_id": "chqa-58890d1-p1"
+    },
+    {
+      "evidence_sha256": "fe620a5a7b8dee6eb5239791be746aef01e4bbea1b045cef3e8aaf03579da79b",
+      "proof": "2",
+      "recorded_utc": "2026-11-06T06:28:07Z",
+      "run_id": "chqa-58890d1-p2"
+    },
+    {
+      "evidence_sha256": "d4e22087d22c055cc7e8d56338a59a98ec8959052867c1acd6682f3a44bb146a",
+      "proof": "3",
+      "recorded_utc": "2026-11-06T06:28:07Z",
+      "run_id": "chqa-58890d1-p3"
+    },
+    {
+      "evidence_sha256": "bc1c304a6e84cda67458a5bb71ac641e28838b1f9eaf1d4cca824d8700b16cfd",
+      "proof": "4",
+      "recorded_utc": "2026-11-06T06:28:07Z",
+      "run_id": "chqa-58890d1-p4"
+    }
+  ],
+  "head": "58890d1a9afb4643e076d2dbf2aec6de8c59e9df",
+  "manifest_sha256": "a8b891c6b80716d80862bee6fb37b62fa494abcac64c62c54a42ec88c125f604",
+  "schema_version": "charter.reopen/1",
+  "slice": "mg-pii-name-1"
+}

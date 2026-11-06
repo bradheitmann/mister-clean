@@ -31,7 +31,7 @@ the proposed interactive interface. It adds no second backlog or database.
 
 Swarm Hug in cmux handles existing debt after its infrastructure repairs pass
 independent review. The Mister Clean cmux team handles these new features after
-Brad confirms staffing. A/PO-ASTRA assigns scope; EXEC PM owns bounded execution
+The owner confirms staffing. A/PO-ASTRA assigns scope; EXEC PM owns bounded execution
 and independent review. Herdr is not in the execution path. No staffing,
 publication, store migration or fleet action is implied by this document.
 
