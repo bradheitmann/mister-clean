@@ -19,9 +19,9 @@ cross-project evaluation system in which native and registered extension
 categories share admission, evidence, query, and report contracts without
 confusing operational telemetry with independently verified quality.
 
-Authority: Brad requested this plan on 2026-10-05. A/PO-ASTRA owns scope and
+Authority: the owner requested this plan on 2026-10-05. A/PO-ASTRA owns scope and
 acceptance; the Mister Clean workspace EXEC PM assigns implementation after
-Brad confirms staffing. Swarm Hug handles existing-debt remediation only after
+The owner confirms staffing. Swarm Hug handles existing-debt remediation only after
 its own infrastructure repairs are independently accepted. Herdr is not an
 execution dependency. This document grants no publication, fleet, credential,
 database migration, or worker-launch authority.
