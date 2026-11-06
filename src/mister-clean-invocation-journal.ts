@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute } from "node:path";
 
 import { canonicalJson } from "./canonical-json.js";
+import { isTimestamp } from "./timestamp.js";
 import { openSegments, sealLiveSegmentIfFull, segmentLayout, segmentTexts, type SegmentLayout, type SegmentSummary } from "./sealed-segments.js";
 
 /**
@@ -66,7 +67,7 @@ function parseJournalLine(line: string, at: string): JournalLine {
       || typeof record.invocation_id !== "string" || (record.run_event_id !== null && typeof record.run_event_id !== "string")
       || (record.status !== "SUCCEEDED" && record.status !== "FAILED") || typeof record.exit_code !== "number" || !Number.isInteger(record.exit_code) || record.exit_code < 0 || record.exit_code > 255
       || (record.status === "SUCCEEDED" && record.exit_code !== 0) || (record.status === "FAILED" && record.exit_code === 0)
-      || typeof record.observed_at !== "string" || !canonicalTimestamp(record.observed_at) || line !== canonicalJson(record)) {
+      || typeof record.observed_at !== "string" || !isTimestamp(record.observed_at, "canonical_utc") || line !== canonicalJson(record)) {
       throw new Error(`Mister Clean invocation journal has an invalid terminal receipt at ${at}`);
     }
     return { event: "finished", invocation_id: record.invocation_id, terminal: { status: record.status, exit_code: record.exit_code, observed_at: record.observed_at, run_event_id: record.run_event_id as string | null } };
@@ -123,10 +124,6 @@ export function readMisterCleanInvocationJournal(path: string): readonly Importe
   }).sort((left, right) => left.invocation_id.localeCompare(right.invocation_id));
 }
 
-function canonicalTimestamp(value: string): boolean {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
-}
 
 function sameKeys(record: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(record).sort((left, right) => left.localeCompare(right));
@@ -189,7 +186,7 @@ export class AppendOnlyLocalMisterCleanInvocationJournal implements MisterCleanI
 
   recordEnd(input: { readonly invocation_id: string; readonly run_event_id: string | null; readonly status: "SUCCEEDED" | "FAILED"; readonly exit_code: number; readonly occurred_at: string }): void {
     if (!Number.isInteger(input.exit_code) || input.exit_code < 0 || input.exit_code > 255 || (input.status === "SUCCEEDED" && input.exit_code !== 0) || (input.status === "FAILED" && input.exit_code === 0)) throw new Error("Mister Clean terminal receipt has an invalid status/exit code");
-    if (!canonicalTimestamp(input.occurred_at)) throw new Error("Mister Clean terminal receipt requires a canonical timestamp");
+    if (!isTimestamp(input.occurred_at, "canonical_utc")) throw new Error("Mister Clean terminal receipt requires a canonical timestamp");
     this.#append({ record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "finished", invocation_id: input.invocation_id, run_event_id: input.run_event_id, status: input.status, exit_code: input.exit_code, observed_at: input.occurred_at });
   }
 

@@ -1,0 +1,63 @@
+{
+  "done_sha256": "2a75181506894afa24657506f6bbae5d09d7b2a4bdca17df0dee15664839b90b",
+  "entries": [
+    {
+      "evidence_sha256": "b9ac054ead2697d384cbde5a81905a4c880d2feaadc0543f47ac49135e4d0ce1",
+      "proof": "1",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p1"
+    },
+    {
+      "evidence_sha256": "f70c3ea414a743e0137734cc48e08f57e98b3a34a23f0427c22283742873e421",
+      "proof": "2",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p2"
+    },
+    {
+      "evidence_sha256": "f8d0248c9ee0d6f72a8863239c79d43af282b6166ee8d38df5d6c42d48ddccc6",
+      "proof": "3",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p3"
+    },
+    {
+      "evidence_sha256": "184aa59c78a295b7ebbe287ff6b7dfe4771db063c45530af66f5d603b13c7f3d",
+      "proof": "4",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p4"
+    },
+    {
+      "evidence_sha256": "5feb4f8485ab8714739f534b35b3aa6f6edaf95a12893cb75192c3bf2d3e00ec",
+      "proof": "5",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p5"
+    },
+    {
+      "evidence_sha256": "f1a4261d018bcbe415a28eb44b0ab0fe4c11ddc3baef5eaa48dd567f5e931405",
+      "proof": "6",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p6"
+    },
+    {
+      "evidence_sha256": "a23f465af497a2fecf70d623c314caf71b87a5436f585caeb80c953bc7e1a28e",
+      "proof": "7",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p7"
+    },
+    {
+      "evidence_sha256": "e7a138f7cb170d248029473f6bc12790d3b262da57438170804541c648e18510",
+      "proof": "8",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p8"
+    },
+    {
+      "evidence_sha256": "2266c5a0da07af2c3da10bd6f19bb3919a36cb34c8397d6c7ce066c86ed26048",
+      "proof": "9",
+      "recorded_utc": "2026-11-06T15:17:44Z",
+      "run_id": "chqa-b30c7c8-p9"
+    }
+  ],
+  "head": "b30c7c84344e1eccaa0cd5c1c5cac857ee7c7dcd",
+  "manifest_sha256": "9f46bbedff5193d1fa72f7f7e4dcf14f1f0f6698f306aa0f9abc2bc6329bf762",
+  "schema_version": "charter.reopen/1",
+  "slice": "mg-s2a-codecs"
+}

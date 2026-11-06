@@ -1,3 +1,4 @@
+import { canonicalJson } from "../../canonical-json.js";
 import type { Sha256 } from "./primitives.js";
 import * as z from "zod";
 import { CAPABILITY_DEFINITIONS } from "./capability-taxonomy.js";
@@ -304,7 +305,7 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
       throw new Error("Invalid control-plane snapshot at snapshot.runs: current run subject does not match current subject");
     }
   }
-  if (strictSnapshot.capabilities.length !== CAPABILITY_DEFINITIONS.length || canonicalJsonForSnapshot(strictSnapshot.capabilities) !== canonicalJsonForSnapshot(CAPABILITY_DEFINITIONS)) {
+  if (strictSnapshot.capabilities.length !== CAPABILITY_DEFINITIONS.length || canonicalJson(strictSnapshot.capabilities) !== canonicalJson(CAPABILITY_DEFINITIONS)) {
     throw new Error("Invalid control-plane snapshot at snapshot.capabilities: not canonical taxonomy");
   }
   const canonicalIssueIds = new Set(strictSnapshot.issues.map((issue) => issue.issue_id));
@@ -412,7 +413,7 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
   }
   const currentRun = strictSnapshot.runs.find((run) => run.run_id === strictSnapshot.current_run_id);
   if (currentRun === undefined) throw new Error("Invalid control-plane snapshot at snapshot.current_run_id: current run is absent");
-  if (canonicalJsonForSnapshot(currentRun.debt_flow) !== canonicalJsonForSnapshot(strictSnapshot.current_flow)) {
+  if (canonicalJson(currentRun.debt_flow) !== canonicalJson(strictSnapshot.current_flow)) {
     throw new Error("Invalid control-plane snapshot at snapshot.current_flow: does not match current run debt flow");
   }
   const hasExactIssueSet = (actual: readonly string[], expected: ReadonlySet<string>): boolean => {
@@ -449,10 +450,4 @@ export function parseCanonicalLiveSnapshot(value: unknown, options: { readonly a
   // Return the strict wire object without convenience aliases. A parser output
   // must be valid input to the same parser, including after JSON transport.
   return strictSnapshot;
-}
-
-function canonicalJsonForSnapshot(value: unknown): string {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return JSON.stringify(value);
-  const object = value as Record<string, unknown>;
-  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonicalJsonForSnapshot(object[key])}`).join(",")}}`;
 }

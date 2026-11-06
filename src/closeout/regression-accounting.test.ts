@@ -110,11 +110,11 @@ describe("canonical regression identities", () => {
     })).toThrow(/canonical JSON/);
   });
 
-  it("orders canonical JSON by Unicode code point without locale-dependent comparison", () => {
+  it("orders canonical JSON by UTF-16 code unit (RFC 8785) without locale-dependent comparison", () => {
     const bmpKey = "\uE000";
     const astralKey = "\u{10000}";
     const causeKey = { [astralKey]: "astral", [bmpKey]: "bmp" };
-    const canonicalCause = `{${JSON.stringify(bmpKey)}:"bmp",${JSON.stringify(astralKey)}:"astral"}`;
+    const canonicalCause = `{${JSON.stringify(astralKey)}:"astral",${JSON.stringify(bmpKey)}:"bmp"}`;
     const expectedPreimage = `[`
       + `${JSON.stringify(ROOT_DEBT_IDENTITY_SCHEME)},`
       + `${JSON.stringify(REPO_ID)},`

@@ -7260,7 +7260,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse(src, reviver, options) {
+    function parse2(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -7301,7 +7301,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse;
+    exports.parse = parse2;
     exports.parseAllDocuments = parseAllDocuments;
     exports.parseDocument = parseDocument2;
     exports.stringify = stringify;
@@ -8083,8 +8083,8 @@ async function capturePass(repositoryRoot, roots, exclusions) {
     validateRelativePath(root, "census root");
     const absolute = resolve2(repositoryRoot, ...root.split("/"));
     if (!isInside(repositoryRoot, absolute)) throw new Error(`census root escapes repository: ${root}`);
-    const canonical4 = await realpath2(absolute);
-    if (canonical4 !== absolute || !isInside(repositoryRoot, canonical4)) {
+    const canonical2 = await realpath2(absolute);
+    if (canonical2 !== absolute || !isInside(repositoryRoot, canonical2)) {
       throw new Error(`census root resolves through a symbolic-link path: ${root}`);
     }
     const info = await lstat2(absolute);
@@ -8246,27 +8246,178 @@ function canonicalIdentity(value) {
 }
 
 // src/canonical-json.ts
-import { createHash as createHash3 } from "crypto";
 function compareCodeUnits(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
-function canonicalJson(value) {
-  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
+function assertWellFormedUnicode(value, path) {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 55296 && codeUnit <= 56319) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 56320 && next <= 57343)) {
+        throw new Error(`${path}: canonical UTF-8 text cannot contain an unpaired surrogate`);
+      }
+      index += 1;
+    } else if (codeUnit >= 56320 && codeUnit <= 57343) {
+      throw new Error(`${path}: canonical UTF-8 text cannot contain an unpaired surrogate`);
+    }
+  }
+}
+function encode(value, omit, path, active) {
+  if (value === null) return "null";
+  if (typeof value === "string") {
+    assertWellFormedUnicode(value, path);
+    return JSON.stringify(value);
+  }
+  if (typeof value === "boolean") return JSON.stringify(value);
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("Canonical JSON cannot encode a non-finite number");
+    if (!Number.isFinite(value)) throw new Error(`${path}: canonical JSON requires a finite number`);
     return JSON.stringify(Object.is(value, -0) ? 0 : value);
   }
-  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
-  if (typeof value !== "object") throw new Error("Canonical JSON encountered a non-JSON value");
-  const record5 = value;
-  const entries2 = Object.keys(record5).sort(compareCodeUnits).map((key) => {
-    if (record5[key] === void 0) throw new Error("Canonical JSON cannot encode undefined");
-    return `${JSON.stringify(key)}:${canonicalJson(record5[key])}`;
-  });
-  return `{${entries2.join(",")}}`;
+  if (typeof value !== "object") throw new Error(`${path}: value is not canonical JSON`);
+  if (active.has(value)) throw new Error(`${path}: canonical JSON cannot contain a cycle`);
+  active.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const encoded2 = [];
+      for (let index = 0; index < value.length; index += 1) {
+        if (!(index in value)) throw new Error(`${path}[${index}]: canonical JSON cannot contain an array hole`);
+        encoded2.push(encode(value[index], omit, `${path}[${index}]`, active));
+      }
+      return `[${encoded2.join(",")}]`;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error(`${path}: canonical JSON requires a plain object`);
+    }
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key === "symbol")) {
+      throw new Error(`${path}: canonical JSON cannot contain symbol keys`);
+    }
+    const encoded = [];
+    for (const key of ownKeys.sort(compareCodeUnits)) {
+      assertWellFormedUnicode(key, `${path} object key`);
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor?.enumerable || !("value" in descriptor)) {
+        throw new Error(`${path}.${key}: canonical JSON requires enumerable data properties`);
+      }
+      if (descriptor.value === void 0) {
+        if (omit) continue;
+        throw new Error(`${path}.${key}: canonical JSON cannot encode undefined`);
+      }
+      encoded.push(`${JSON.stringify(key)}:${encode(descriptor.value, omit, `${path}.${key}`, active)}`);
+    }
+    return `{${encoded.join(",")}}`;
+  } finally {
+    active.delete(value);
+  }
 }
+function canonicalJson(value, options = {}) {
+  return encode(value, options.undefinedFields === "omit", "$", /* @__PURE__ */ new Set());
+}
+function canonicalEqual(left, right, options = {}) {
+  return canonicalJson(left, options) === canonicalJson(right, options);
+}
+
+// src/canonical-digest.ts
+import { createHash as createHash3 } from "crypto";
 function sha256Bytes(value) {
   return createHash3("sha256").update(value).digest("hex");
+}
+function canonicalSha256(value, options = {}) {
+  return sha256Bytes(canonicalJson(value, options));
+}
+
+// src/timestamp.ts
+var GRAMMARS = {
+  record: { separators: "T ", fractionRequired: false, fractionMin: 1, fractionMax: 9, offsets: true, minimumYear: 1 },
+  rfc3339: { separators: "T", fractionRequired: false, fractionMin: 1, fractionMax: Number.POSITIVE_INFINITY, offsets: true, minimumYear: 0 },
+  utc_ms: { separators: "T", fractionRequired: false, fractionMin: 3, fractionMax: 3, offsets: false, minimumYear: 0 },
+  utc_ns: { separators: "T", fractionRequired: false, fractionMin: 1, fractionMax: 9, offsets: false, minimumYear: 0 },
+  canonical_utc: { separators: "T", fractionRequired: true, fractionMin: 3, fractionMax: 3, offsets: false, minimumYear: 0 }
+};
+function isDigit(code) {
+  return code >= 48 && code <= 57;
+}
+function daysInMonth(year, month) {
+  if (month === 2) return year % 4 === 0 && year % 100 !== 0 || year % 400 === 0 ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+function parse(value, grammar) {
+  let index = 0;
+  const digits = (count) => {
+    let result = 0;
+    for (let end = index + count; index < end; index += 1) {
+      const code = value.charCodeAt(index);
+      if (!isDigit(code)) return void 0;
+      result = result * 10 + (code - 48);
+    }
+    return result;
+  };
+  const literal = (accepted) => {
+    const character = value[index];
+    if (character === void 0 || !accepted.includes(character)) return false;
+    index += 1;
+    return true;
+  };
+  const year = digits(4);
+  if (year === void 0 || !literal("-")) return void 0;
+  const month = digits(2);
+  if (month === void 0 || !literal("-")) return void 0;
+  const day = digits(2);
+  if (day === void 0 || !literal(grammar.separators)) return void 0;
+  const hour = digits(2);
+  if (hour === void 0 || !literal(":")) return void 0;
+  const minute = digits(2);
+  if (minute === void 0 || !literal(":")) return void 0;
+  const second = digits(2);
+  if (second === void 0) return void 0;
+  let fraction = "";
+  if (value[index] === ".") {
+    const start = index + 1;
+    index = start;
+    while (index < value.length && isDigit(value.charCodeAt(index))) index += 1;
+    fraction = value.slice(start, index);
+    if (fraction.length < grammar.fractionMin || fraction.length > grammar.fractionMax) return void 0;
+  } else if (grammar.fractionRequired) {
+    return void 0;
+  }
+  let offset = 0;
+  const sign = value[index];
+  if (sign === "Z") {
+    index += 1;
+  } else if (grammar.offsets && (sign === "+" || sign === "-")) {
+    index += 1;
+    const offsetHour = digits(2);
+    if (offsetHour === void 0) return void 0;
+    if (value[index] === ":") index += 1;
+    const offsetMinute = digits(2);
+    if (offsetMinute === void 0 || offsetHour > 23 || offsetMinute > 59) return void 0;
+    offset = (sign === "+" ? 1 : -1) * (offsetHour * 60 + offsetMinute);
+  } else {
+    return void 0;
+  }
+  if (index !== value.length) return void 0;
+  if (year < grammar.minimumYear || month < 1 || month > 12) return void 0;
+  if (day < 1 || day > daysInMonth(year, month)) return void 0;
+  if (hour > 23 || minute > 59 || second > 59) return void 0;
+  return { year, month, day, hour, minute, second, fraction, offset };
+}
+function isTimestamp(value, profile) {
+  return typeof value === "string" && parse(value, GRAMMARS[profile]) !== void 0;
+}
+function timestampMillis(value, profile) {
+  if (typeof value !== "string") return void 0;
+  const instant = parse(value, GRAMMARS[profile]);
+  if (instant === void 0) return void 0;
+  const date = /* @__PURE__ */ new Date(0);
+  date.setUTCFullYear(instant.year, instant.month - 1, instant.day);
+  date.setUTCHours(instant.hour, instant.minute, instant.second, Number(instant.fraction.slice(0, 3).padEnd(3, "0")));
+  return date.getTime() - instant.offset * 6e4;
+}
+function formatTimestamp(date, label) {
+  if (label !== void 0 && !Number.isFinite(date.getTime())) throw new Error(`${label} returned an invalid date`);
+  return date.toISOString();
 }
 
 // src/closeout/records.ts
@@ -8428,26 +8579,7 @@ function array(value) {
 function nonempty(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
-function isoTimestamp(value) {
-  if (!nonempty(value)) return false;
-  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:?\d{2})$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  const zone = match[7] ?? "";
-  if (year < 1 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return false;
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  if (day < 1 || day > daysInMonth) return false;
-  if (zone !== "Z") {
-    const offset = zone.slice(1).replace(":", "");
-    if (Number(offset.slice(0, 2)) > 23 || Number(offset.slice(2)) > 59) return false;
-  }
-  return !Number.isNaN(Date.parse(value));
-}
+var recordTimestamp = (value) => isTimestamp(value, "record");
 function digestRef(value) {
   const ref = object(value);
   return !!ref && nonempty(ref.path) && typeof ref.sha256 === "string" && /^[0-9a-f]{64}$/.test(ref.sha256);
@@ -8716,7 +8848,7 @@ function validateReport(data, allowPlaceholders = false, bundleContext = false) 
       requireKeys(exception, ["actor", "at", "ref", "scope", "rationale"], `${path}.exception`, errors);
       if (exception) {
         for (const key of ["actor", "scope", "rationale"]) if (!nonempty(exception[key])) errors.push(`${path}.exception.${key}: required for accepted_exception`);
-        if (!isoTimestamp(exception.at)) errors.push(`${path}.exception.at: required timezone-aware ISO-8601 timestamp`);
+        if (!recordTimestamp(exception.at)) errors.push(`${path}.exception.at: required timezone-aware ISO-8601 timestamp`);
         if (!digestRef(exception.ref)) errors.push(`${path}.exception.ref: required digest-bound evidence reference {path,sha256}`);
       }
     } else if (debt.state === "accepted_exception") errors.push(`${path}.disposition: state=accepted_exception requires disposition=accepted_exception`);
@@ -8724,7 +8856,7 @@ function validateReport(data, allowPlaceholders = false, bundleContext = false) 
     if (disposition === "decision_or_coordination_required") decisionRows.push(nonempty(debt.id) ? debt.id : `#${index}`);
     if (debt.state === "satisfied") {
       const typed = (array(debt.evidence) ?? []).map(object).filter((entry) => !!entry);
-      const valid = typed.some((entry) => DEBT_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every((key) => nonempty(entry[key])) && isoTimestamp(entry.observed_at) && digestRef(entry.evidence_ref));
+      const valid = typed.some((entry) => DEBT_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every((key) => nonempty(entry[key])) && recordTimestamp(entry.observed_at) && digestRef(entry.evidence_ref));
       if (!valid) errors.push(`${path}.evidence: satisfied debt requires allowlisted, time-bound, digest-referenced execution evidence`);
     }
   }
@@ -8800,7 +8932,7 @@ function validateReport(data, allowPlaceholders = false, bundleContext = false) 
         if (state === "satisfied") {
           const typed = (array(dimension.evidence) ?? []).map(object).filter((entry) => !!entry);
           const allowed = DIMENSION_EVIDENCE_KINDS[name] ?? /* @__PURE__ */ new Set();
-          if (!typed.some((entry) => allowed.has(String(entry.kind)) && ["object", "command", "result"].every((key) => nonempty(entry[key])) && isoTimestamp(entry.observed_at))) errors2.push(`$.dimensions.${name}: CLEAN requires time-bound evidence kind ${[...allowed].sort().join(", ")} with object/command/result`);
+          if (!typed.some((entry) => allowed.has(String(entry.kind)) && ["object", "command", "result"].every((key) => nonempty(entry[key])) && recordTimestamp(entry.observed_at))) errors2.push(`$.dimensions.${name}: CLEAN requires time-bound evidence kind ${[...allowed].sort().join(", ")} with object/command/result`);
         } else if (state === "not_applicable") {
           notApplicable++;
           if (!array(dimension.evidence)?.length && !nonempty(dimension.notes)) errors2.push(`$.dimensions.${name}: CLEAN requires evidence/notes rationale for not_applicable`);
@@ -8833,7 +8965,7 @@ function validateReport(data, allowPlaceholders = false, bundleContext = false) 
     if (!allowPlaceholders2) {
       if (typeof repo2.commit !== "string" || !/^[0-9a-f]{7,40}$/.test(repo2.commit)) errors2.push("$.repo.commit: required 7-40 char hex object id");
       for (const field2 of ["target_commit", "candidate_commit", "merge_base"]) if (typeof target2?.[field2] !== "string" || !/^[0-9a-f]{7,40}$/.test(target2[field2])) errors2.push(`$.target_binding.${field2}: required 7-40 char hex object id`);
-      if (!isoTimestamp(report2.generated_at)) errors2.push("$.generated_at: required timezone-aware ISO-8601 timestamp");
+      if (!recordTimestamp(report2.generated_at)) errors2.push("$.generated_at: required timezone-aware ISO-8601 timestamp");
     }
     const objectCommits = /* @__PURE__ */ new Map();
     for (const [name, raw] of Object.entries(claims2 ?? {})) {
@@ -8980,7 +9112,7 @@ function validatePushGate(action, lane, coordination, repo, parents, path, error
   if (nonempty(repo.commit) && gate.candidate_commit !== repo.commit) {
     errors.push(`${path}.push_gate.candidate_commit: must equal repo.commit`);
   }
-  if (!(allowPlaceholders && findPlaceholders(gate.observed_at).length > 0) && !isoTimestamp(gate.observed_at)) {
+  if (!(allowPlaceholders && findPlaceholders(gate.observed_at).length > 0) && !recordTimestamp(gate.observed_at)) {
     errors.push(`${path}.push_gate.observed_at: required ISO timestamp`);
   }
   if (gate.writers_frozen !== true) errors.push(`${path}.push_gate.writers_frozen: expected true`);
@@ -9059,7 +9191,7 @@ function validateCoordinationDomains(coordination, path, errors, allowPlaceholde
     if (!sha2563(domain.state_digest, allowPlaceholders)) {
       errors.push(`${domainPath}.state_digest: required SHA-256 of the invariant-bearing state`);
     }
-    if (!(allowPlaceholders && findPlaceholders(domain.observed_at).length > 0) && !isoTimestamp(domain.observed_at)) {
+    if (!(allowPlaceholders && findPlaceholders(domain.observed_at).length > 0) && !recordTimestamp(domain.observed_at)) {
       errors.push(`${domainPath}.observed_at: required ISO timestamp`);
     }
     if (!digestRefOrPlaceholder(domain.evidence_ref, allowPlaceholders)) {
@@ -9192,7 +9324,7 @@ function validateCoordination(value, path, errors, allowPlaceholders, schemaVers
     if (!commitObject(target.expected_commit, allowPlaceholders)) {
       errors.push(`${path}.target.expected_commit: required 7-40 char hex object id`);
     }
-    if (!(allowPlaceholders && findPlaceholders(target.observed_at).length > 0) && !isoTimestamp(target.observed_at)) {
+    if (!(allowPlaceholders && findPlaceholders(target.observed_at).length > 0) && !recordTimestamp(target.observed_at)) {
       errors.push(`${path}.target.observed_at: required ISO timestamp`);
     }
   }
@@ -9324,7 +9456,7 @@ function validateCoordination(value, path, errors, allowPlaceholders, schemaVers
           if (bootstrap.worktree !== lane.worktree) errors.push(`${lanePath}.bootstrap.worktree: must equal the assigned worktree`);
           if (bootstrap.branch !== lane.branch) errors.push(`${lanePath}.bootstrap.branch: must equal the assigned branch`);
           if (bootstrap.head !== lane.baseline_commit) errors.push(`${lanePath}.bootstrap.head: must equal the assigned baseline_commit`);
-          if (!(allowPlaceholders && findPlaceholders(bootstrap.observed_at).length > 0) && !isoTimestamp(bootstrap.observed_at)) {
+          if (!(allowPlaceholders && findPlaceholders(bootstrap.observed_at).length > 0) && !recordTimestamp(bootstrap.observed_at)) {
             errors.push(`${lanePath}.bootstrap.observed_at: required ISO timestamp`);
           }
           if (!(allowPlaceholders && findPlaceholders(bootstrap.evidence_ref).length > 0) && !digestRef(bootstrap.evidence_ref)) {
@@ -9475,7 +9607,7 @@ function validateCoordinationCas(action, lanes, domains, path, errors, allowPlac
     for (const field2 of ["expected_state_digest", "observed_state_digest", "result_state_digest"]) {
       if (!sha2563(entry[field2], allowPlaceholders)) errors.push(`${entryPath}.${field2}: required SHA-256`);
     }
-    if (!(allowPlaceholders && findPlaceholders(entry.observed_at).length > 0) && !isoTimestamp(entry.observed_at)) {
+    if (!(allowPlaceholders && findPlaceholders(entry.observed_at).length > 0) && !recordTimestamp(entry.observed_at)) {
       errors.push(`${entryPath}.observed_at: required ISO timestamp`);
     }
     if (!digestRefOrPlaceholder(entry.evidence_ref, allowPlaceholders)) {
@@ -9551,7 +9683,7 @@ function validateGuard(manifest2, actions, lanes, errors, allowPlaceholders, sch
     if (!exactGitObject(guard.candidate_tree, allowPlaceholders)) {
       errors.push("$.guard.candidate_tree: required exact 40- or 64-character staged-tree object");
     }
-    if (!(allowPlaceholders && findPlaceholders(guard.minted_at).length > 0) && !isoTimestamp(guard.minted_at)) {
+    if (!(allowPlaceholders && findPlaceholders(guard.minted_at).length > 0) && !recordTimestamp(guard.minted_at)) {
       errors.push("$.guard.minted_at: required timezone-aware candidate-mint timestamp");
     }
     if (guard.writers_frozen !== true) errors.push("$.guard.writers_frozen: candidate review requires frozen writers");
@@ -9618,11 +9750,11 @@ function validateGuard(manifest2, actions, lanes, errors, allowPlaceholders, sch
       if (!sha2563(receipt[field2], allowPlaceholders)) errors.push(`${path}.${field2}: required SHA-256`);
     }
     for (const field2 of ["started_at", "finished_at"]) {
-      if (!(allowPlaceholders && findPlaceholders(receipt[field2]).length > 0) && !isoTimestamp(receipt[field2])) {
+      if (!(allowPlaceholders && findPlaceholders(receipt[field2]).length > 0) && !recordTimestamp(receipt[field2])) {
         errors.push(`${path}.${field2}: required timezone-aware ISO timestamp`);
       }
     }
-    if (isoTimestamp(receipt.started_at) && isoTimestamp(receipt.finished_at) && Date.parse(String(receipt.started_at)) > Date.parse(String(receipt.finished_at))) {
+    if (recordTimestamp(receipt.started_at) && recordTimestamp(receipt.finished_at) && Date.parse(String(receipt.started_at)) > Date.parse(String(receipt.finished_at))) {
       errors.push(`${path}: started_at cannot follow finished_at`);
     }
     if (!GUARD_CONCLUSIONS.has(String(receipt.conclusion))) {
@@ -9680,10 +9812,10 @@ function validateGuard(manifest2, actions, lanes, errors, allowPlaceholders, sch
             errors.push(`${path}.mister_clean_evaluator.${field2}: required SHA-256`);
           }
         }
-        if (!(allowPlaceholders && findPlaceholders(evaluator.resolved_at).length > 0) && !isoTimestamp(evaluator.resolved_at)) {
+        if (!(allowPlaceholders && findPlaceholders(evaluator.resolved_at).length > 0) && !recordTimestamp(evaluator.resolved_at)) {
           errors.push(`${path}.mister_clean_evaluator.resolved_at: required timezone-aware ISO timestamp`);
         }
-        if (isoTimestamp(evaluator.resolved_at) && isoTimestamp(receipt.started_at) && Date.parse(String(evaluator.resolved_at)) > Date.parse(String(receipt.started_at))) {
+        if (recordTimestamp(evaluator.resolved_at) && recordTimestamp(receipt.started_at) && Date.parse(String(evaluator.resolved_at)) > Date.parse(String(receipt.started_at))) {
           errors.push(`${path}.mister_clean_evaluator.resolved_at: evaluator identity must be resolved before the run starts`);
         }
         if (!digestRefOrPlaceholder(evaluator.evidence_ref, allowPlaceholders)) {
@@ -9785,7 +9917,7 @@ function validateGuard(manifest2, actions, lanes, errors, allowPlaceholders, sch
   const barrierReady = barrierState === "open" || barrierState === "crossed";
   if (barrierReady) {
     if (barrier.approved_tree !== guard.candidate_tree) errors.push("$.guard.commit_barrier.approved_tree: must equal guard candidate_tree");
-    if (!(allowPlaceholders && findPlaceholders(barrier.opened_at).length > 0) && !isoTimestamp(barrier.opened_at)) {
+    if (!(allowPlaceholders && findPlaceholders(barrier.opened_at).length > 0) && !recordTimestamp(barrier.opened_at)) {
       errors.push("$.guard.commit_barrier.opened_at: required timezone-aware timestamp");
     }
     if (selectedReceipts.length !== 4) errors.push("$.guard.commit_barrier.receipt_ids: exact-tree barrier requires exactly four final receipts");
@@ -9817,10 +9949,10 @@ function validateGuard(manifest2, actions, lanes, errors, allowPlaceholders, sch
       if (receipt.repository_mutated !== false) {
         errors.push("$.guard.commit_barrier.receipt_ids: a receipt that mutated the repository is stale; mint a new tree and obtain a non-mutating final receipt");
       }
-      if (isoTimestamp(guard.minted_at) && isoTimestamp(receipt.started_at) && Date.parse(String(guard.minted_at)) > Date.parse(String(receipt.started_at))) {
+      if (recordTimestamp(guard.minted_at) && recordTimestamp(receipt.started_at) && Date.parse(String(guard.minted_at)) > Date.parse(String(receipt.started_at))) {
         errors.push("$.guard.commit_barrier.receipt_ids: guard.minted_at must not follow a selected receipt started_at");
       }
-      if (isoTimestamp(receipt.finished_at) && isoTimestamp(barrier.opened_at) && Date.parse(String(receipt.finished_at)) > Date.parse(String(barrier.opened_at))) {
+      if (recordTimestamp(receipt.finished_at) && recordTimestamp(barrier.opened_at) && Date.parse(String(receipt.finished_at)) > Date.parse(String(barrier.opened_at))) {
         errors.push("$.guard.commit_barrier.receipt_ids: every selected receipt must finish before the barrier opens");
       }
     }
@@ -9832,14 +9964,14 @@ function validateGuard(manifest2, actions, lanes, errors, allowPlaceholders, sch
     const qa = byRole.get("qa");
     const clean = byRole.get("mister_clean");
     const holdout = byRole.get("holdout");
-    if (dev && qa && isoTimestamp(dev.finished_at) && isoTimestamp(qa.started_at) && Date.parse(String(dev.finished_at)) > Date.parse(String(qa.started_at))) {
+    if (dev && qa && recordTimestamp(dev.finished_at) && recordTimestamp(qa.started_at) && Date.parse(String(dev.finished_at)) > Date.parse(String(qa.started_at))) {
       errors.push("$.guard.commit_barrier.receipt_ids: QA must start after DEV finishes the exact candidate");
     }
-    if (dev && clean && isoTimestamp(dev.finished_at) && isoTimestamp(clean.started_at) && Date.parse(String(dev.finished_at)) > Date.parse(String(clean.started_at))) {
+    if (dev && clean && recordTimestamp(dev.finished_at) && recordTimestamp(clean.started_at) && Date.parse(String(dev.finished_at)) > Date.parse(String(clean.started_at))) {
       errors.push("$.guard.commit_barrier.receipt_ids: Mister Clean must start after DEV finishes the exact candidate");
     }
     for (const prior of [dev, qa, clean]) {
-      if (prior && holdout && isoTimestamp(prior.finished_at) && isoTimestamp(holdout.started_at) && Date.parse(String(prior.finished_at)) > Date.parse(String(holdout.started_at))) {
+      if (prior && holdout && recordTimestamp(prior.finished_at) && recordTimestamp(holdout.started_at) && Date.parse(String(prior.finished_at)) > Date.parse(String(holdout.started_at))) {
         errors.push("$.guard.commit_barrier.receipt_ids: holdout must remain the final independent pass");
       }
     }
@@ -9915,7 +10047,7 @@ function validateGuardActions(manifest2, guard, actions, lanes, selectedIds, bar
     const action = object(raw);
     if (!action) continue;
     if (nonempty(action.id)) actionById.set(action.id, action);
-    if (action.status === "executed" && LOCAL_MUTATION_KINDS.has(String(action.kind)) && isoTimestamp(action.recorded_at) && isoTimestamp(guard.minted_at) && Date.parse(String(action.recorded_at)) > Date.parse(String(guard.minted_at)) && status !== "invalidated") {
+    if (action.status === "executed" && LOCAL_MUTATION_KINDS.has(String(action.kind)) && recordTimestamp(action.recorded_at) && recordTimestamp(guard.minted_at) && Date.parse(String(action.recorded_at)) > Date.parse(String(guard.minted_at)) && status !== "invalidated") {
       errors.push(`$.guard: executed mutation ${String(action.id)} occurred after candidate mint; invalidate receipts and mint a new tree`);
     }
     if (action.kind === "git_commit" && (action.status === "executed" || nonempty(action.after_object) || object(action.outcome)?.state === "verified")) {
@@ -9931,7 +10063,7 @@ function validateGuardActions(manifest2, guard, actions, lanes, selectedIds, bar
       }
       if (action.status === "executed") executedCommits.push(action);
       if (String(manifest2.schema_version) === "1.3" && manifest2.manifest_kind === "closeout_guard" && action.status === "executed") {
-        if (barrierState === "crossed" && isoTimestamp(action.recorded_at) && isoTimestamp(barrier.opened_at) && Date.parse(String(action.recorded_at)) < Date.parse(String(barrier.opened_at))) {
+        if (barrierState === "crossed" && recordTimestamp(action.recorded_at) && recordTimestamp(barrier.opened_at) && Date.parse(String(action.recorded_at)) < Date.parse(String(barrier.opened_at))) {
           errors.push(`$.actions[${actionIndex}].recorded_at: crossed git_commit cannot precede guard.commit_barrier.opened_at`);
         }
         validateGuardCommitCas(
@@ -10013,15 +10145,15 @@ function validateGuardCommitCas(action, coordination, baselineCommit, barrierOpe
   if (!nonempty(mutex.lease_id)) errors.push(`${path}.cas.mutex.lease_id: required`);
   if (!Number.isSafeInteger(mutex.fencing_token) || Number(mutex.fencing_token) < 1) errors.push(`${path}.cas.mutex.fencing_token: required positive integer`);
   for (const field2 of ["acquired_at", "mutation_observed_at", "expires_at", "released_at"]) {
-    if (!(allowPlaceholders && findPlaceholders(mutex[field2]).length > 0) && !isoTimestamp(mutex[field2])) errors.push(`${path}.cas.mutex.${field2}: required ISO timestamp`);
+    if (!(allowPlaceholders && findPlaceholders(mutex[field2]).length > 0) && !recordTimestamp(mutex[field2])) errors.push(`${path}.cas.mutex.${field2}: required ISO timestamp`);
   }
-  if (["acquired_at", "mutation_observed_at", "expires_at", "released_at"].every((field2) => isoTimestamp(mutex[field2]))) {
+  if (["acquired_at", "mutation_observed_at", "expires_at", "released_at"].every((field2) => recordTimestamp(mutex[field2]))) {
     const acquired = Date.parse(String(mutex.acquired_at));
     const observed = Date.parse(String(mutex.mutation_observed_at));
     const expires = Date.parse(String(mutex.expires_at));
     const released = Date.parse(String(mutex.released_at));
     if (!(acquired <= observed && observed <= expires && released >= observed)) errors.push(`${path}.cas.mutex: invalid lease interval`);
-    if (isoTimestamp(barrierOpenedAt) && observed < Date.parse(String(barrierOpenedAt))) {
+    if (recordTimestamp(barrierOpenedAt) && observed < Date.parse(String(barrierOpenedAt))) {
       errors.push(`${path}.cas.mutex.mutation_observed_at: cannot precede guard.commit_barrier.opened_at`);
     }
     const maxLeaseSeconds = Number(object(coordination?.integration_mutex)?.max_lease_seconds);
@@ -10090,7 +10222,7 @@ function validateManifest(data, allowPlaceholders = false) {
       requireKeys(action.outcome, ["state", "evidence"], `${path}.outcome`, errors);
       if (!claimsVerifiedOutcome) errors.push(`${path}.outcome.state: executed action requires verified`);
       const typed = (array(outcome?.evidence) ?? []).map(object).filter((entry) => !!entry);
-      if (!typed.some((entry) => ACTION_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every((key) => nonempty(entry[key])) && isoTimestamp(entry.observed_at) && digestRef(entry.evidence_ref))) {
+      if (!typed.some((entry) => ACTION_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every((key) => nonempty(entry[key])) && recordTimestamp(entry.observed_at) && digestRef(entry.evidence_ref))) {
         errors.push(`${path}.outcome.evidence: verified terminal action requires allowlisted, time-bound, digest-referenced execution evidence`);
       }
     }
@@ -10154,7 +10286,7 @@ function validateManifest(data, allowPlaceholders = false) {
       if (action.status === "executed" && !nonempty(action.after_object)) {
         errors.push(`${path}.after_object: executed operation requires the resulting object`);
       }
-      if (!(allowPlaceholders && findPlaceholders(action.recorded_at).length > 0) && !isoTimestamp(action.recorded_at)) {
+      if (!(allowPlaceholders && findPlaceholders(action.recorded_at).length > 0) && !recordTimestamp(action.recorded_at)) {
         errors.push(`${path}.recorded_at: required ISO timestamp`);
       }
       const parents = array(action.parent_operation_ids);
@@ -10255,11 +10387,11 @@ function validateManifest(data, allowPlaceholders = false) {
             }
             const timestampFields = ["acquired_at", "mutation_observed_at", "expires_at", "released_at"];
             for (const field2 of timestampFields) {
-              if (!(allowPlaceholders && findPlaceholders(mutex[field2]).length > 0) && !isoTimestamp(mutex[field2])) {
+              if (!(allowPlaceholders && findPlaceholders(mutex[field2]).length > 0) && !recordTimestamp(mutex[field2])) {
                 errors.push(`${path}.cas.mutex.${field2}: required ISO timestamp`);
               }
             }
-            if (timestampFields.every((field2) => isoTimestamp(mutex[field2]))) {
+            if (timestampFields.every((field2) => recordTimestamp(mutex[field2]))) {
               const acquired = Date.parse(String(mutex.acquired_at));
               const mutation = Date.parse(String(mutex.mutation_observed_at));
               const expires = Date.parse(String(mutex.expires_at));
@@ -14448,9 +14580,6 @@ function evidenceRefs(value) {
   }
   return refs.sort((left, right) => left.path.localeCompare(right.path) || left.sha256.localeCompare(right.sha256));
 }
-function isoTimestamp2(value) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value) && !Number.isNaN(Date.parse(value));
-}
 function sha2564(value) {
   return createHash8("sha256").update(value).digest("hex");
 }
@@ -15471,10 +15600,10 @@ function parseManifest(manifestPath, manifestRef, repository, expectedCommit, ex
   if (manifest2.subject_commit !== expectedCommit) errors.push(invalidFinding(`subject_commit must equal current HEAD ${expectedCommit}`, [manifestRef]));
   if (manifest2.subject_tree_sha256 !== expectedTreeSha256) errors.push(invalidFinding("subject_tree_sha256 must equal the current non-ignored working-tree snapshot", [manifestRef]));
   if (manifest2.candidate_set_sha256 !== expectedCandidateSetSha256) errors.push(invalidFinding("candidate_set_sha256 must equal the complete discovered semantic candidate set", [manifestRef]));
-  if (!isoTimestamp2(manifest2.observed_at)) errors.push(invalidFinding("observed_at must be a timezone-aware ISO timestamp", [manifestRef]));
+  if (!isTimestamp(manifest2.observed_at, "rfc3339")) errors.push(invalidFinding("observed_at must be a timezone-aware ISO timestamp", [manifestRef]));
   if (!Array.isArray(manifest2.probes)) {
     errors.push(invalidFinding("probes must be an array", [manifestRef]));
-    return { definitions: [], errors, ...isoTimestamp2(manifest2.observed_at) ? { observedAt: String(manifest2.observed_at) } : {}, sha256: sha2564(content) };
+    return { definitions: [], errors, ...isTimestamp(manifest2.observed_at, "rfc3339") ? { observedAt: String(manifest2.observed_at) } : {}, sha256: sha2564(content) };
   }
   const definitions = [];
   const seen = /* @__PURE__ */ new Set();
@@ -15578,7 +15707,7 @@ function parseManifest(manifestPath, manifestRef, repository, expectedCommit, ex
   return {
     definitions,
     errors,
-    ...isoTimestamp2(manifest2.observed_at) ? { observedAt: String(manifest2.observed_at) } : {},
+    ...isTimestamp(manifest2.observed_at, "rfc3339") ? { observedAt: String(manifest2.observed_at) } : {},
     sha256: sha2564(content)
   };
 }
@@ -16779,11 +16908,12 @@ function exact(value, names, path, errors) {
   for (const key of names) if (!(key in record5)) errors.push(`${path}.${key}: missing field`);
   return record5;
 }
-function canonical(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  const record5 = value;
-  return `{${Object.keys(record5).sort().map((key) => `${JSON.stringify(key)}:${canonical(record5[key])}`).join(",")}}`;
+function responseDigest(response) {
+  try {
+    return canonicalSha256(response);
+  } catch {
+    return void 0;
+  }
 }
 function parseRecord(value, errors) {
   const record5 = exact(value, ["record_type", "schema_version", "package_name", "version", "registry_integrity", "archive", "installed_package_root", "entrypoint", "files", "accepted_at", "evidence_ref"], "$.accepted_release", errors);
@@ -16844,7 +16974,7 @@ function parseEvidence(value, errors) {
   if (response && (response.name !== evidence.package_name || response.version !== evidence.version)) errors.push("$.accepted_release.evidence.response: package/version do not bind registry response");
   if (dist && (dist.tarball !== evidence.tarball_url || dist.integrity !== evidence.dist_integrity)) errors.push("$.accepted_release.evidence.response.dist: tarball/integrity do not bind registry response");
   if (typeof evidence.response_sha256 !== "string" || !HEX64.test(evidence.response_sha256)) errors.push("$.accepted_release.evidence.response_sha256: required lowercase SHA-256");
-  else if (response && sha2565(canonical(response)) !== evidence.response_sha256) errors.push("$.accepted_release.evidence.response_sha256: registry response digest mismatch");
+  else if (response && responseDigest(response) !== evidence.response_sha256) errors.push("$.accepted_release.evidence.response_sha256: registry response digest mismatch");
   if (errors.length > 0) return void 0;
   return { package_name: evidence.package_name, version: evidence.version, tarball_url: evidence.tarball_url, dist_integrity: evidence.dist_integrity, archive, retrieved_at: evidence.retrieved_at };
 }
@@ -17245,25 +17375,11 @@ var OPERATION_PATHS = [
   ["sequencer", "sequencer"]
 ];
 var LOCK_SCAN_EXCLUSIONS = /* @__PURE__ */ new Set(["objects", "logs", "lfs", "rr-cache", "modules"]);
-function canonical2(value) {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("canonical action-hygiene evidence refuses non-finite numbers");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonical2).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries2 = Object.entries(value).sort(([left], [right]) => compare2(left, right));
-    if (entries2.some(([, item]) => item === void 0)) throw new Error("canonical action-hygiene evidence refuses undefined fields");
-    return `{${entries2.map(([key, item]) => `${JSON.stringify(key)}:${canonical2(item)}`).join(",")}}`;
-  }
-  throw new Error(`canonical action-hygiene evidence refuses ${typeof value}`);
-}
 function sha2566(value) {
   return createHash11("sha256").update(value).digest("hex");
 }
 function identity(value) {
-  return sha2566(canonical2(value));
+  return canonicalSha256(value);
 }
 function decode(bytes2, source) {
   try {
@@ -17514,7 +17630,7 @@ function captureIgnored(repository) {
   }
   const requested = paths.map((row) => decode(row, "git ls-files ignored path")).sort(compare2);
   const returned = rows.map((row) => row.path).sort(compare2);
-  if (canonical2(requested) !== canonical2(returned)) throw new Error("git check-ignore provenance does not exactly cover ignored paths");
+  if (canonicalJson(requested) !== canonicalJson(returned)) throw new Error("git check-ignore provenance does not exactly cover ignored paths");
   rows.sort((left, right) => compare2(left.path, right.path));
   return { rows, state_sha256: identity(rows) };
 }
@@ -17719,7 +17835,7 @@ function captureRelevantProcessCensus(worktreePaths, options = {}) {
       const cwd = observed?.cwd === null || observed?.cwd === void 0 ? void 0 : observedPath(observed.cwd);
       const open2 = relevantOpenPaths(observed?.open_paths ?? [], scopeRoots);
       if (!after) continue;
-      if (!before || canonical2(before) !== canonical2(after)) {
+      if (!before || canonicalJson(before) !== canonicalJson(after)) {
         errors.push(`process ${pid} changed identity during census`);
         continue;
       }
@@ -17952,7 +18068,7 @@ function deriveActionHygieneDelta(before, after, primaryBranch) {
     if (change.key === before.primary_worktree) {
       const priorTopology = { path: prior.path, branch: prior.branch, locked_reason: prior.locked_reason, prunable_reason: prior.prunable_reason };
       const nextTopology = { path: next.path, branch: next.branch, locked_reason: next.locked_reason, prunable_reason: next.prunable_reason };
-      if (canonical2(priorTopology) !== canonical2(nextTopology) || next.head !== after.git.repository_object.head_commit || next.branch !== primaryRef) {
+      if (canonicalJson(priorTopology) !== canonicalJson(nextTopology) || next.head !== after.git.repository_object.head_commit || next.branch !== primaryRef) {
         violations.push(violation("worktree_topology_changed", change));
       }
     } else {
@@ -18147,11 +18263,6 @@ function validateExecutionLeaseReceipt(value, label, errors) {
     errors.push(`${label}: release precedes acquisition`);
   }
   return errors.length === before;
-}
-function canonicalTimestamp(value, label) {
-  const milliseconds = value.getTime();
-  if (!Number.isFinite(milliseconds)) throw new Error(`${label} returned an invalid date`);
-  return value.toISOString();
 }
 function gitCommonDirectory(repository) {
   const root = realpathSync4(resolve10(repository));
@@ -18362,7 +18473,7 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
       throw new ExecutionResourceBusyError(
         resource,
         key,
-        canonicalTimestamp(now(), "execution contention clock")
+        formatTimestamp(now(), "execution contention clock")
       );
     }
     throw error;
@@ -18394,7 +18505,7 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
         throw new ExecutionResourceBusyError(
           resource,
           key,
-          canonicalTimestamp(now(), "execution contention clock")
+          formatTimestamp(now(), "execution contention clock")
         );
       }
     }
@@ -18413,14 +18524,14 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
         throw new ExecutionResourceBusyError(
           resource,
           key,
-          canonicalTimestamp(now(), "execution contention clock")
+          formatTimestamp(now(), "execution contention clock")
         );
       }
       rmSync3(paths.supervisorLock);
     }
     if (existsSync5(paths.state)) rmSync3(paths.state);
     cleanupStaleStateTemps(dirname6(paths.state));
-    acquiredAt = canonicalTimestamp(now(), "execution lease clock");
+    acquiredAt = formatTimestamp(now(), "execution lease clock");
     writeLeaseState(paths.state, {
       record_type: "mister-clean.execution-lease-state",
       schema_version: "1.1",
@@ -18495,7 +18606,7 @@ function acquireRepositoryVerificationLease(repository, now = () => /* @__PURE__
         database.close();
       }
       if (rollbackError !== void 0) throw rollbackError;
-      const releasedAt = canonicalTimestamp(now(), "execution lease clock");
+      const releasedAt = formatTimestamp(now(), "execution lease clock");
       if (Date.parse(releasedAt) < Date.parse(acquiredAt)) {
         throw new Error("execution lease clock moved backward before release");
       }
@@ -18709,28 +18820,15 @@ var FORBIDDEN_SCRIPT_PATTERNS = [
 function errorMessage2(error) {
   return error instanceof Error ? error.message : String(error);
 }
-function canonicalJson2(value) {
-  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("canonical JSON refuses a non-finite number");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson2(entry)).join(",")}]`;
-  if (typeof value === "object") {
-    const record5 = value;
-    const fields = Object.keys(record5).filter((key) => record5[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson2(record5[key])}`);
-    return `{${fields.join(",")}}`;
-  }
-  throw new Error(`canonical JSON refuses ${typeof value}`);
-}
+var OMIT_UNDEFINED = { undefinedFields: "omit" };
 function sha2567(value) {
   return createHash13("sha256").update(value).digest("hex");
 }
 function identity2(value) {
-  return sha2567(canonicalJson2(value));
+  return canonicalSha256(value, OMIT_UNDEFINED);
 }
 function stableEqual(left, right) {
-  return canonicalJson2(left) === canonicalJson2(right);
+  return canonicalEqual(left, right, OMIT_UNDEFINED);
 }
 function withoutField(value, field2) {
   const record5 = { ...value };
@@ -19457,10 +19555,10 @@ function validateExactKeys(value, expected, label, errors) {
     return void 0;
   }
   const actual = Object.keys(raw).sort();
-  const canonical4 = [...expected].sort();
-  if (!stableEqual(actual, canonical4)) {
-    const missing = canonical4.filter((key) => !Object.hasOwn(raw, key));
-    const unexpected = actual.filter((key) => !canonical4.includes(key));
+  const canonical2 = [...expected].sort();
+  if (!stableEqual(actual, canonical2)) {
+    const missing = canonical2.filter((key) => !Object.hasOwn(raw, key));
+    const unexpected = actual.filter((key) => !canonical2.includes(key));
     if (missing.length > 0) errors.push(`${label} is missing keys: ${missing.join(", ")}`);
     if (unexpected.length > 0) errors.push(`${label} has unexpected keys: ${unexpected.join(", ")}`);
   }
@@ -19577,7 +19675,7 @@ function validateGateDefinition(value, label, discoveryRefs, errors) {
     raw.source_refs.forEach((ref, index) => {
       const refLabel = `${label}.source_refs[${String(index)}]`;
       if (!validateSourceRef(ref, refLabel, errors)) return;
-      const key = canonicalJson2(ref);
+      const key = canonicalJson(ref, OMIT_UNDEFINED);
       if (seen.has(key)) errors.push(`${refLabel} is duplicated`);
       seen.add(key);
       if (!discoveryRefs.some((candidate) => stableEqual(candidate, ref))) {
@@ -19678,8 +19776,8 @@ function validateDiscoveryIntegrity(discovery) {
         seen2.add(candidate.path);
         paths.push(candidate.path);
       });
-      const canonical4 = [...paths].sort(compareUtf8Bytes);
-      if (!stableEqual(paths, canonical4)) errors.push("discovery.excluded_candidates is not in canonical path order");
+      const canonical2 = [...paths].sort(compareUtf8Bytes);
+      if (!stableEqual(paths, canonical2)) errors.push("discovery.excluded_candidates is not in canonical path order");
     }
   }
   validateRepositoryObjectSchema(raw.repository_object, "discovery.repository_object", errors);
@@ -19765,7 +19863,7 @@ function discoverNativeGates(repository, repositoryObject) {
       disposition: "absent",
       basis: "nonpreemptible_timeout_wrapper",
       source_refs: refs.filter((ref) => ref.kind === "runner_source"),
-      script_sha256: sha2567(canonicalJson2(runnerFindings))
+      script_sha256: sha2567(canonicalJson(runnerFindings, OMIT_UNDEFINED))
     }));
   }
   const record5 = {
@@ -19841,9 +19939,7 @@ async function validateOutputRef(value, label, evidenceRoot) {
   return errors;
 }
 function validClock(value) {
-  if (typeof value !== "string") return void 0;
-  const milliseconds = Date.parse(value);
-  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value ? milliseconds : void 0;
+  return timestampMillis(value, "canonical_utc");
 }
 function validateBudgetEvidence(value, label, errors) {
   const before = errors.length;
@@ -20186,67 +20282,6 @@ function compareCanonicalText(left, right) {
     if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1;
   }
 }
-function assertWellFormedUnicode(value, path) {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 55296 && codeUnit <= 56319) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 56320 && next <= 57343)) {
-        throw new Error(`${path}: canonical UTF-8 text cannot contain an unpaired surrogate`);
-      }
-      index += 1;
-    } else if (codeUnit >= 56320 && codeUnit <= 57343) {
-      throw new Error(`${path}: canonical UTF-8 text cannot contain an unpaired surrogate`);
-    }
-  }
-}
-function canonicalJson3(value, path = "$", active = /* @__PURE__ */ new Set()) {
-  if (value === null) return "null";
-  if (typeof value === "string") {
-    assertWellFormedUnicode(value, path);
-    return JSON.stringify(value);
-  }
-  if (typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error(`${path}: canonical JSON requires a finite number`);
-    return JSON.stringify(Object.is(value, -0) ? 0 : value);
-  }
-  if (typeof value !== "object") {
-    throw new Error(`${path}: value is not canonical JSON`);
-  }
-  if (active.has(value)) throw new Error(`${path}: canonical JSON cannot contain a cycle`);
-  active.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const encoded2 = [];
-      for (let index = 0; index < value.length; index += 1) {
-        if (!(index in value)) throw new Error(`${path}[${index}]: canonical JSON cannot contain an array hole`);
-        encoded2.push(canonicalJson3(value[index], `${path}[${index}]`, active));
-      }
-      return `[${encoded2.join(",")}]`;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new Error(`${path}: canonical JSON requires a plain object`);
-    }
-    const ownKeys = Reflect.ownKeys(value);
-    if (ownKeys.some((key) => typeof key === "symbol")) {
-      throw new Error(`${path}: canonical JSON cannot contain symbol keys`);
-    }
-    const keys = ownKeys.sort(compareCanonicalText);
-    const encoded = keys.map((key) => {
-      assertWellFormedUnicode(key, `${path} object key`);
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor?.enumerable || !("value" in descriptor)) {
-        throw new Error(`${path}.${key}: canonical JSON requires enumerable data properties`);
-      }
-      return `${JSON.stringify(key)}:${canonicalJson3(descriptor.value, `${path}.${key}`, active)}`;
-    });
-    return `{${encoded.join(",")}}`;
-  } finally {
-    active.delete(value);
-  }
-}
 function assertExactLabel(value, name) {
   if (value.length === 0 || value !== value.trim() || /[\u0000-\u001f\u007f]/u.test(value)) {
     throw new Error(`${name}: must be a non-empty exact string without controls or surrounding whitespace`);
@@ -20272,7 +20307,7 @@ function assertSha256(value, name) {
 function canonicalObservationId(input) {
   assertSourceId(input.source_id);
   assertSha256(input.source_native_fingerprint, "source_native_fingerprint");
-  return sha2568(canonicalJson3([
+  return sha2568(canonicalJson([
     OBSERVATION_IDENTITY_SCHEME,
     input.source_id,
     input.source_native_fingerprint
@@ -20281,7 +20316,7 @@ function canonicalObservationId(input) {
 function canonicalRootDebtKey(input) {
   assertExactLabel(input.repo_id, "repo_id");
   assertNormalizer(input.normalizer);
-  return sha2568(canonicalJson3([
+  return sha2568(canonicalJson([
     ROOT_DEBT_IDENTITY_SCHEME,
     input.repo_id,
     input.normalizer,
@@ -20361,7 +20396,7 @@ function rootDebtLedgerDigest(repoId, rootDebts) {
     origin: originProjection(row.origin),
     observation_ids: canonicalObservationSet(row.observation_ids)
   }));
-  return sha2568(canonicalJson3({
+  return sha2568(canonicalJson({
     identity_scheme: ROOT_DEBT_IDENTITY_SCHEME,
     repo_id: repoId,
     rows
@@ -20380,7 +20415,7 @@ function actionProjection(action) {
 }
 function observationLedgerDigest(baselineObservationIds, closingObservationIds, actionObservations) {
   const actions = [...actionObservations].sort((left, right) => compareCanonicalText(left.action_id, right.action_id)).map(actionProjection);
-  return sha2568(canonicalJson3({
+  return sha2568(canonicalJson({
     identity_scheme: OBSERVATION_IDENTITY_SCHEME,
     baseline_observation_ids: canonicalObservationSet(baselineObservationIds),
     closing_observation_ids: canonicalObservationSet(closingObservationIds),
@@ -20965,7 +21000,7 @@ function owned(value) {
   ])).has(normalized);
 }
 function iso2(value) {
-  return isoTimestamp(value);
+  return recordTimestamp(value);
 }
 function validateRepositoryObject(value, path, errors, expectedSha256) {
   const record5 = requireObject(value, [
@@ -25912,13 +25947,9 @@ var TRUST_POLICY_PIN_ENV = "MISTER_CLEAN_TRUST_POLICY_SHA256";
 var TRUST_POLICY_PIN_FLAG = "--trust-policy-sha256";
 var TRUST_POLICY_RECORD_TYPE = "mister-clean.semantic-trust-policy";
 var HEX644 = /^[0-9a-f]{64}$/u;
-var ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
 var EXCEPTION_SIGNER_ROLES = /* @__PURE__ */ new Set(["owner", "principal"]);
 function record3(value) {
   return !!value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function validIsoTimestamp(value) {
-  return typeof value === "string" && ISO_TIMESTAMP.test(value) && !Number.isNaN(Date.parse(value));
 }
 function trustPolicyPins(flags, environment) {
   const pins = /* @__PURE__ */ new Set();
@@ -25957,7 +25988,7 @@ function trustKeyIdentity(key) {
 }
 function trustKeyWindowError(key, at) {
   if (key.valid_to === void 0) return "has no valid_to; an open-ended trust-policy key is refused";
-  if (!validIsoTimestamp(key.valid_from) || !validIsoTimestamp(key.valid_to) || !validIsoTimestamp(at) || Date.parse(at) < Date.parse(key.valid_from) || Date.parse(at) > Date.parse(key.valid_to)) {
+  if (!isTimestamp(key.valid_from, "rfc3339") || !isTimestamp(key.valid_to, "rfc3339") || !isTimestamp(at, "rfc3339") || Date.parse(at) < Date.parse(key.valid_from) || Date.parse(at) > Date.parse(key.valid_to)) {
     return "is outside its validity window";
   }
   return void 0;
@@ -26028,7 +26059,6 @@ function validateReceiptVerdict(input) {
 
 // src/closeout/semantic-v2.ts
 var HEX_64 = /^[0-9a-f]{64}$/u;
-var ISO_TIMESTAMP2 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
 var VERDICT_KEYS = /* @__PURE__ */ new Set(["disposition", "failed_cases", "passed_cases", "result", "verdict"]);
 var DIRECT_CHECKERS = {
   authoritative_projection: { id: "mister-clean/authoritative-projection", version: "2.0.0" },
@@ -26046,9 +26076,6 @@ var DIRECT_KINDS = new Set(
 function isInside2(root, path) {
   const relation = relative14(root, path);
   return relation === "" || relation !== ".." && !relation.startsWith(`..${sep13}`) && !isAbsolute15(relation);
-}
-function validIsoTimestamp2(value) {
-  return ISO_TIMESTAMP2.test(value) && !Number.isNaN(Date.parse(value));
 }
 function sourceRef2(repository, rawRef) {
   const [rawPath, fragment = ""] = rawRef.split("#", 2);
@@ -26134,7 +26161,7 @@ function verifyEvidenceRefs(evidenceRoot, refs) {
   const errors = [];
   const root = realpathSync7(resolve17(evidenceRoot));
   for (const ref of refs) {
-    if (ref.store !== "evidence_bundle" || !validIsoTimestamp2(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || isAbsolute15(ref.path) || ref.path === ".." || ref.path.startsWith("../") || !HEX_64.test(ref.sha256)) {
+    if (ref.store !== "evidence_bundle" || !isTimestamp(ref.captured_at, "rfc3339") || !ref.media_type.trim() || !ref.path.trim() || isAbsolute15(ref.path) || ref.path === ".." || ref.path.startsWith("../") || !HEX_64.test(ref.sha256)) {
       errors.push(`semantic evidence reference is malformed: ${ref.path || "<blank>"}`);
       continue;
     }
@@ -26180,7 +26207,7 @@ function verifyPackagedEvidenceRefs(files, refs) {
   const parsed = evidenceFilesMap(files);
   const errors = [...parsed.errors];
   for (const ref of refs) {
-    if (ref.store !== "evidence_bundle" || !validIsoTimestamp2(ref.captured_at) || !ref.media_type.trim() || !ref.path.trim() || !HEX_64.test(ref.sha256)) {
+    if (ref.store !== "evidence_bundle" || !isTimestamp(ref.captured_at, "rfc3339") || !ref.media_type.trim() || !ref.path.trim() || !HEX_64.test(ref.sha256)) {
       errors.push(`semantic evidence reference is malformed: ${ref.path || "<blank>"}`);
       continue;
     }
@@ -26194,7 +26221,7 @@ function createSemanticPlanV2(input) {
   if (!HEX_64.test(input.candidateSetSha256) || !HEX_64.test(input.repositoryObjectSha256)) {
     throw new Error("semantic v2 plan requires SHA-256 candidate-set and RepositoryObject bindings");
   }
-  if (!input.runId.trim() || !input.challengeNonce.trim() || !validIsoTimestamp2(input.observedAt)) {
+  if (!input.runId.trim() || !input.challengeNonce.trim() || !isTimestamp(input.observedAt, "rfc3339")) {
     throw new Error("semantic v2 plan requires run id, unique challenge nonce, and timezone-aware observed_at");
   }
   const repository = resolve17(input.repository);
@@ -26393,7 +26420,7 @@ function verifyRuntimeSemanticCandidateV2(input) {
       }
     }
   }
-  if (attestation.record_type !== "mister-clean.semantic-attestation" || attestation.schema_version !== "2.0" || !validIsoTimestamp2(attestation.attested_at)) {
+  if (attestation.record_type !== "mister-clean.semantic-attestation" || attestation.schema_version !== "2.0" || !isTimestamp(attestation.attested_at, "rfc3339")) {
     errors.push("semantic attestation record_type, schema_version, or attested_at is invalid");
   }
   const expectedBinding = {
@@ -28111,7 +28138,7 @@ function readRetirements(repository) {
       continue;
     }
     if (!nonempty(ruling.author)) refusals.push(`${relativePath}: ruling.author is required`);
-    if (!isoTimestamp(ruling.at)) refusals.push(`${relativePath}: ruling.at must be a timezone-aware ISO-8601 timestamp`);
+    if (!recordTimestamp(ruling.at)) refusals.push(`${relativePath}: ruling.at must be a timezone-aware ISO-8601 timestamp`);
     if (!nonempty(ruling.scope)) refusals.push(`${relativePath}: ruling.scope is required`);
     const evidence = object5(ruling.evidence);
     const evidencePath = normalizeRepositoryPath(evidence?.path);
@@ -28271,9 +28298,6 @@ function asObject(value, path) {
 function sha25611(value) {
   return createHash21("sha256").update(value).digest("hex");
 }
-function isoTimestamp3(date) {
-  return date.toISOString();
-}
 function planningClass(path) {
   const parts = path.split("/").map((part) => part.toLocaleLowerCase());
   for (const part of parts) if (PLANNING_LANE_NAMES.has(part)) return part;
@@ -28342,7 +28366,7 @@ async function collectPrepareEvidence(options, mode) {
   const repository = resolve22(git(requestedRepository, "rev-parse", "--show-toplevel"));
   const baselineRepositoryObject = captureRepositoryObject(repository);
   const clock = options.now ?? (() => /* @__PURE__ */ new Date());
-  const now = isoTimestamp3(clock());
+  const now = formatTimestamp(clock());
   const executionLease = acquireRepositoryVerificationLease(repository, clock);
   let leaseTransferred = false;
   try {
@@ -28553,7 +28577,7 @@ async function collectPrepareEvidence(options, mode) {
       coverage_sha256: nativeGateCoverage.coverage_sha256,
       status: nativeGateValidationErrors.length === 0 ? "pass" : "fail",
       errors: nativeGateValidationErrors,
-      observed_at: isoTimestamp3(clock())
+      observed_at: formatTimestamp(clock())
     });
     if (nativeGateIntegrityErrors.length > 0) {
       throw new Error(
@@ -29956,16 +29980,11 @@ function text2(value, path) {
 function clone(value) {
   return structuredClone(value);
 }
-function canonical3(value) {
-  if (Array.isArray(value)) return `[${value.map(canonical3).join(",")}]`;
-  if (value && typeof value === "object") {
-    const record5 = value;
-    return `{${Object.keys(record5).sort().map((key) => `${JSON.stringify(key)}:${canonical3(record5[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
+function canonical(value) {
+  return canonicalJson(value);
 }
 function equal(left, right) {
-  return canonical3(left) === canonical3(right);
+  return canonicalEqual(left, right);
 }
 function frozenDetectorPolicyEqual(left, right) {
   const normalize4 = (value) => {
@@ -30219,7 +30238,7 @@ function actionCoordination(context, actionId2, debt, target, before, branch, op
   if (lanes.some((lane2) => lane2.id === laneId || lane2.task_id === taskId)) {
     throw new Error(`coordination lane/task already exists for action ${actionId2}`);
   }
-  const stateDigest = digestBytes(canonical3({
+  const stateDigest = digestBytes(canonical({
     debt_key: debt.debt_key,
     disposition: debt.disposition,
     observation_ids: rowObservationIds(debt),
@@ -31478,12 +31497,12 @@ function parseJournalLine(line, at) {
     const current = sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_status", "evaluation_run_event_id"]);
     const legacy = sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "command", "argv_sha256", "observed_at", "identity_provenance", "evaluation_run_event_id"]);
     if (!current && !legacy || typeof record5.invocation_id !== "string" || typeof record5.command !== "string" || typeof record5.argv_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(record5.argv_sha256) || typeof record5.observed_at !== "string" || record5.identity_provenance !== "UNOBSERVED" || record5.evaluation_run_event_id !== null || current && record5.evaluation_status !== "PENDING_IDENTITY_EVALUATION") throw new Error(`Mister Clean invocation journal has an invalid start receipt at ${at}`);
-    const canonical4 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
-    if (line !== canonicalJson(canonical4)) throw new Error(`Mister Clean invocation journal has a non-canonical receipt at ${at}`);
+    const canonical2 = current ? { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, identity_provenance: "UNOBSERVED", evaluation_status: "PENDING_IDENTITY_EVALUATION", evaluation_run_event_id: null } : { record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "started", invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, identity_provenance: "UNOBSERVED", evaluation_run_event_id: null };
+    if (line !== canonicalJson(canonical2)) throw new Error(`Mister Clean invocation journal has a non-canonical receipt at ${at}`);
     return { event: "started", value: { invocation_id: record5.invocation_id, command: record5.command, argv_sha256: record5.argv_sha256, observed_at: record5.observed_at, receipt_sha256: sha25613(line), terminal_status: null, terminal_exit_code: null, terminal_observed_at: null, terminal_run_event_id: null } };
   }
   if (record5.event === "finished") {
-    if (!sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "status", "exit_code", "observed_at"]) || typeof record5.invocation_id !== "string" || record5.run_event_id !== null && typeof record5.run_event_id !== "string" || record5.status !== "SUCCEEDED" && record5.status !== "FAILED" || typeof record5.exit_code !== "number" || !Number.isInteger(record5.exit_code) || record5.exit_code < 0 || record5.exit_code > 255 || record5.status === "SUCCEEDED" && record5.exit_code !== 0 || record5.status === "FAILED" && record5.exit_code === 0 || typeof record5.observed_at !== "string" || !canonicalTimestamp2(record5.observed_at) || line !== canonicalJson(record5)) {
+    if (!sameKeys(record5, ["record_type", "schema_version", "event", "invocation_id", "run_event_id", "status", "exit_code", "observed_at"]) || typeof record5.invocation_id !== "string" || record5.run_event_id !== null && typeof record5.run_event_id !== "string" || record5.status !== "SUCCEEDED" && record5.status !== "FAILED" || typeof record5.exit_code !== "number" || !Number.isInteger(record5.exit_code) || record5.exit_code < 0 || record5.exit_code > 255 || record5.status === "SUCCEEDED" && record5.exit_code !== 0 || record5.status === "FAILED" && record5.exit_code === 0 || typeof record5.observed_at !== "string" || !isTimestamp(record5.observed_at, "canonical_utc") || line !== canonicalJson(record5)) {
       throw new Error(`Mister Clean invocation journal has an invalid terminal receipt at ${at}`);
     }
     return { event: "finished", invocation_id: record5.invocation_id, terminal: { status: record5.status, exit_code: record5.exit_code, observed_at: record5.observed_at, run_event_id: record5.run_event_id } };
@@ -31508,10 +31527,6 @@ function summarizeJournalSegment(lines2) {
     }
   });
   return { records: lines2.length, first: observed[0] ?? null, last: observed.at(-1) ?? null };
-}
-function canonicalTimestamp2(value) {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 function sameKeys(record5, expected) {
   const keys = Object.keys(record5).sort((left, right) => left.localeCompare(right));
@@ -31564,7 +31579,7 @@ var AppendOnlyLocalMisterCleanInvocationJournal = class {
   }
   recordEnd(input) {
     if (!Number.isInteger(input.exit_code) || input.exit_code < 0 || input.exit_code > 255 || input.status === "SUCCEEDED" && input.exit_code !== 0 || input.status === "FAILED" && input.exit_code === 0) throw new Error("Mister Clean terminal receipt has an invalid status/exit code");
-    if (!canonicalTimestamp2(input.occurred_at)) throw new Error("Mister Clean terminal receipt requires a canonical timestamp");
+    if (!isTimestamp(input.occurred_at, "canonical_utc")) throw new Error("Mister Clean terminal receipt requires a canonical timestamp");
     this.#append({ record_type: "mister-clean.invocation-receipt", schema_version: "1.0", event: "finished", invocation_id: input.invocation_id, run_event_id: input.run_event_id, status: input.status, exit_code: input.exit_code, observed_at: input.occurred_at });
   }
   #append(record5) {
@@ -31847,11 +31862,6 @@ function exactKeys(record5, expected, path, errors) {
   errors.push(`${path}: expected exactly the keys ${wanted.join(",")}; got ${keys.join(",")}`);
   return false;
 }
-function canonicalTimestamp3(value) {
-  if (typeof value !== "string") return false;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
-}
 function isRepositoryRelativePath(path) {
   if (path.length === 0 || isAbsolute23(path) || path.startsWith("/") || path.includes("\\")) return false;
   if (/^[A-Za-z]:/u.test(path) || /[\u0000-\u001f\u007f]/u.test(path)) return false;
@@ -31963,8 +31973,8 @@ function runReceiptErrors(value) {
   }
   if (!["CLEAN", "NOT_CLEAN", "AUDIT_ONLY"].includes(String(record5.verdict))) errors.push("$.verdict: expected CLEAN, NOT_CLEAN or AUDIT_ONLY");
   if (!Number.isInteger(record5.exit_code) || Number(record5.exit_code) < 0 || Number(record5.exit_code) > 255) errors.push("$.exit_code: expected 0..255");
-  if (!canonicalTimestamp3(record5.observed_at)) errors.push("$.observed_at: expected canonical ISO timestamp");
-  if (!canonicalTimestamp3(record5.finished_at)) errors.push("$.finished_at: expected canonical ISO timestamp");
+  if (!isTimestamp(record5.observed_at, "canonical_utc")) errors.push("$.observed_at: expected canonical ISO timestamp");
+  if (!isTimestamp(record5.finished_at, "canonical_utc")) errors.push("$.finished_at: expected canonical ISO timestamp");
   return errors;
 }
 function receiptPrivacyViolations(receipt) {

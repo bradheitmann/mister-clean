@@ -13,6 +13,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { canonicalJson } from "./canonical-json.js";
+import { isTimestamp } from "./timestamp.js";
 import {
   ANCHOR_KINDS,
   RECEIPT_FAMILIES,
@@ -157,12 +158,6 @@ function exactKeys(record: Record<string, unknown>, expected: readonly string[],
   return false;
 }
 
-function canonicalTimestamp(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
-}
-
 export function isRepositoryRelativePath(path: string): boolean {
   if (path.length === 0 || isAbsolute(path) || path.startsWith("/") || path.includes("\\")) return false;
   if (/^[A-Za-z]:/u.test(path) || /[\u0000-\u001f\u007f]/u.test(path)) return false;
@@ -267,8 +262,8 @@ export function runReceiptErrors(value: unknown): string[] {
   }
   if (!["CLEAN", "NOT_CLEAN", "AUDIT_ONLY"].includes(String(record.verdict))) errors.push("$.verdict: expected CLEAN, NOT_CLEAN or AUDIT_ONLY");
   if (!Number.isInteger(record.exit_code) || Number(record.exit_code) < 0 || Number(record.exit_code) > 255) errors.push("$.exit_code: expected 0..255");
-  if (!canonicalTimestamp(record.observed_at)) errors.push("$.observed_at: expected canonical ISO timestamp");
-  if (!canonicalTimestamp(record.finished_at)) errors.push("$.finished_at: expected canonical ISO timestamp");
+  if (!isTimestamp(record.observed_at, "canonical_utc")) errors.push("$.observed_at: expected canonical ISO timestamp");
+  if (!isTimestamp(record.finished_at, "canonical_utc")) errors.push("$.finished_at: expected canonical ISO timestamp");
   return errors;
 }
 

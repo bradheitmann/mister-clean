@@ -3,7 +3,9 @@ import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync, rea
 import { basename, dirname, isAbsolute } from "node:path";
 
 import type { OpenControlPlaneDatabase } from "../persistence/sqlite.js";
-import { canonicalJson, sha256Bytes } from "../../canonical-json.js";
+import { canonicalJson } from "../../canonical-json.js";
+import { sha256Bytes } from "../../canonical-digest.js";
+import { isTimestamp } from "../../timestamp.js";
 
 const OBSERVATION_KEYS = [
   "schema_version", "observation_id", "campaign_id", "project", "slice", "activity",
@@ -13,7 +15,6 @@ const OBSERVATION_KEYS = [
 ] as const;
 const SOURCE_KEYS = ["path", "line", "record_sha256"] as const;
 const SHA256 = /^[0-9a-f]{64}$/u;
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u;
 const MAX_JOURNAL_BYTES = 16 * 1024 * 1024;
 
 export interface CampaignExecutionObservation {
@@ -77,7 +78,7 @@ function parseObservation(value: unknown): CampaignExecutionObservation {
     }
   }
   const timestamp = boundedText(item.timestamp, "timestamp", 32);
-  if (!ISO_TIMESTAMP.test(timestamp) || !Number.isFinite(Date.parse(timestamp))) throw new Error("timestamp must be ISO UTC");
+  if (!isTimestamp(timestamp, "utc_ns")) throw new Error("timestamp must be ISO UTC");
   const { observation_id: suppliedId, ...identity } = item;
   const expectedId = `obs:${sha256Bytes(canonicalJson(identity))}`;
   if (suppliedId !== expectedId) throw new Error("campaign observation_id does not match canonical record digest");

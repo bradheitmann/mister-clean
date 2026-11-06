@@ -6,6 +6,7 @@ import * as z from "zod";
 import type { DirectiveId, EvidenceRef, RepositorySubject, RunId } from "../contracts/primitives.js";
 import type { DirectiveState, ManifestRevision } from "../contracts/wave-directive.js";
 import { canonicalJson, type RuntimeBoundReceipt, sha256Bytes } from "./authority.js";
+import { isTimestamp } from "../../timestamp.js";
 import type { EvidenceInput } from "./protocol.js";
 
 const STATE_CLAIMS: Readonly<Partial<Record<DirectiveState, string>>> = Object.freeze({
@@ -22,7 +23,7 @@ const STATE_CLAIMS: Readonly<Partial<Record<DirectiveState, string>>> = Object.f
 
 const identifier = z.string().min(1).max(512).regex(/^[^\u0000-\u001f\u007f]+$/);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
-const isoTimestamp = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/);
+const utcTimestamp = z.string().refine((value) => isTimestamp(value, "utc_ms"));
 
 const directiveEvidenceSchema = z.object({
   record_type: z.literal("mister-clean.directive-state-evidence"),
@@ -38,7 +39,7 @@ const directiveEvidenceSchema = z.object({
   lane_id: identifier.nullable(),
   actor: identifier,
   claims: z.array(identifier).min(1).max(100),
-  observed_at: isoTimestamp,
+  observed_at: utcTimestamp,
 }).strict();
 
 const receiptEvidenceSchema = z.object({
@@ -56,7 +57,7 @@ const receiptEvidenceSchema = z.object({
   actor: identifier,
   claims: z.array(identifier).min(1).max(1_000),
   conclusion: z.literal("pass"),
-  observed_at: isoTimestamp,
+  observed_at: utcTimestamp,
 }).strict();
 
 export interface DirectiveEvidenceVerificationRequest {

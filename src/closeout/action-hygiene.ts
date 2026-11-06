@@ -17,6 +17,8 @@ import { platform, tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { TextDecoder } from "node:util";
 
+import { canonicalSha256 } from "../canonical-digest.js";
+import { canonicalJson } from "../canonical-json.js";
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import { repositoryIdentity } from "./repository.js";
 import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
@@ -219,27 +221,12 @@ export interface CaptureActionHygieneOptions {
   readonly processPort?: ActionHygieneProcessPort;
 }
 
-function canonical(value: unknown): string {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("canonical action-hygiene evidence refuses non-finite numbers");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => compare(left, right));
-    if (entries.some(([, item]) => item === undefined)) throw new Error("canonical action-hygiene evidence refuses undefined fields");
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
-  }
-  throw new Error(`canonical action-hygiene evidence refuses ${typeof value}`);
-}
-
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
 function identity(value: unknown): string {
-  return sha256(canonical(value));
+  return canonicalSha256(value);
 }
 
 function decode(bytes: Uint8Array, source: string): string {
@@ -484,7 +471,7 @@ function captureIgnored(repository: string): ActionHygieneWorktree["ignored"] {
   }
   const requested = paths.map((row) => decode(row, "git ls-files ignored path")).sort(compare);
   const returned = rows.map((row) => row.path).sort(compare);
-  if (canonical(requested) !== canonical(returned)) throw new Error("git check-ignore provenance does not exactly cover ignored paths");
+  if (canonicalJson(requested) !== canonicalJson(returned)) throw new Error("git check-ignore provenance does not exactly cover ignored paths");
   rows.sort((left, right) => compare(left.path, right.path));
   return { rows, state_sha256: identity(rows) };
 }
@@ -697,7 +684,7 @@ export function captureRelevantProcessCensus(
       // A process that has physically disappeared by the closing ps sample is
       // not a live boundary row. New or identity-reused PIDs remain unstable.
       if (!after) continue;
-      if (!before || canonical(before) !== canonical(after)) {
+      if (!before || canonicalJson(before) !== canonicalJson(after)) {
         errors.push(`process ${pid} changed identity during census`);
         continue;
       }
@@ -974,7 +961,7 @@ export function deriveActionHygieneDelta(
     if (change.key === before.primary_worktree) {
       const priorTopology = { path: prior.path, branch: prior.branch, locked_reason: prior.locked_reason, prunable_reason: prior.prunable_reason };
       const nextTopology = { path: next.path, branch: next.branch, locked_reason: next.locked_reason, prunable_reason: next.prunable_reason };
-      if (canonical(priorTopology) !== canonical(nextTopology)
+      if (canonicalJson(priorTopology) !== canonicalJson(nextTopology)
         || next.head !== after.git.repository_object.head_commit
         || next.branch !== primaryRef) {
         violations.push(violation("worktree_topology_changed", change));

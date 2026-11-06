@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { formatTimestamp } from "../timestamp.js";
 
 type SqliteModule = typeof import("node:sqlite");
 type DatabaseSync = import("node:sqlite").DatabaseSync;
@@ -190,12 +191,6 @@ export function validateExecutionLeaseReceipt(
     errors.push(`${label}: release precedes acquisition`);
   }
   return errors.length === before;
-}
-
-function canonicalTimestamp(value: Date, label: string): string {
-  const milliseconds = value.getTime();
-  if (!Number.isFinite(milliseconds)) throw new Error(`${label} returned an invalid date`);
-  return value.toISOString();
 }
 
 export function gitCommonDirectory(repository: string): string {
@@ -459,7 +454,7 @@ export function acquireRepositoryVerificationLease(
       throw new ExecutionResourceBusyError(
         resource,
         key,
-        canonicalTimestamp(now(), "execution contention clock"),
+        formatTimestamp(now(), "execution contention clock"),
       );
     }
     throw error;
@@ -493,7 +488,7 @@ export function acquireRepositoryVerificationLease(
         throw new ExecutionResourceBusyError(
           resource,
           key,
-          canonicalTimestamp(now(), "execution contention clock"),
+          formatTimestamp(now(), "execution contention clock"),
         );
       }
     }
@@ -512,14 +507,14 @@ export function acquireRepositoryVerificationLease(
         throw new ExecutionResourceBusyError(
           resource,
           key,
-          canonicalTimestamp(now(), "execution contention clock"),
+          formatTimestamp(now(), "execution contention clock"),
         );
       }
       rmSync(paths.supervisorLock);
     }
     if (existsSync(paths.state)) rmSync(paths.state);
     cleanupStaleStateTemps(dirname(paths.state));
-    acquiredAt = canonicalTimestamp(now(), "execution lease clock");
+    acquiredAt = formatTimestamp(now(), "execution lease clock");
     writeLeaseState(paths.state, {
       record_type: "mister-clean.execution-lease-state",
       schema_version: "1.1",
@@ -594,7 +589,7 @@ export function acquireRepositoryVerificationLease(
         database.close();
       }
       if (rollbackError !== undefined) throw rollbackError;
-      const releasedAt = canonicalTimestamp(now(), "execution lease clock");
+      const releasedAt = formatTimestamp(now(), "execution lease clock");
       if (Date.parse(releasedAt) < Date.parse(acquiredAt)) {
         throw new Error("execution lease clock moved backward before release");
       }

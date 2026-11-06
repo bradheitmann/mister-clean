@@ -1,0 +1,125 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-s2a-codecs",
+  "verifies": "mg-s2a-codecs",
+  "candidate_commit": "b30c7c84344e1eccaa0cd5c1c5cac857ee7c7dcd",
+  "frozen": {
+    "manifest_sha256": "9f46bbedff5193d1fa72f7f7e4dcf14f1f0f6698f306aa0f9abc2bc6329bf762",
+    "head": "b30c7c84344e1eccaa0cd5c1c5cac857ee7c7dcd"
+  },
+  "dispatch": {
+    "base_commit": "69d1237669fe5c647d4075c5193c45c59b560d06",
+    "brief_sha256": "88f85ae47702e52ca887d624d03aa8b00d07be9a0eb704753e51624924a31e3e"
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5.5",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa-s2a/evidence-proof-1.txt (proof 1, canonical JSON differential): the DONE reopen command R src/canonical-json.golden.test.ts -t 'canonical json differential' in the clean checkout at tip 7b2124a -> exit 0, Tests 10 passed | 15 skipped (25); -t 'oracle fidelity' -> exit 0, 4 passed | 21 skipped; the text check of all 26 private oracle ranges against `git show 4240c0e:<path>` -> exit_p1c=0 with 26 OK lines, so the fixture copies are verbatim base source. Mutants m1a (localeCompare key sort) and m1b (omit mode removed) both drove proof 1 RED (qa-s2a/evidence-mutants.txt). Evidence file: qa-s2a/evidence-proof-1.txt, sha256 b9ac054ead2697d384cbde5a81905a4c880d2feaadc0543f47ac49135e4d0ce1; mutants sha256 eac64e8487f8b045e8e5acd58853b1718704a3da8aae29599a0b4768986a558d.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa-s2a/evidence-proof-2.txt (proof 2, declared canonical-JSON deltas 2(a)-2(d)): R src/canonical-json.golden.test.ts -t 'canonical json declared deltas' -> exit_p2=0, Tests 4 passed | 21 skipped (25). The delta-2(a) site mutant m2a (snapshot.ts routed back to the base oracle) survives proof 2 because zod re-emits object keys in schema order and the base site already compared equal; the QA probe (appendices A-C of evidence-mutants.txt, three assertions PASS) establishes that the encoder-level delta is real, so the survival is explained rather than a missed defect. Evidence file: qa-s2a/evidence-proof-2.txt, sha256 f70c3ea414a743e0137734cc48e08f57e98b3a34a23f0427c22283742873e421.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa-s2a/evidence-proof-3.txt (proof 3, timestamp differential under node and bun): R src/timestamp.golden.test.ts -t 'timestamp differential' -> exit_p3_node=0, Tests 13 passed | 10 skipped (23); MISTER_CLEAN_SOURCE_DEVELOPMENT=1 bun ./node_modules/vitest/vitest.mjs run --allowOnly=false src/timestamp.golden.test.ts -t 'timestamp differential' -> exit_p3_bun=0, 13 passed | 10 skipped (23). Both engines agree over the full cartesian corpus for all 11 validator sites and 2 formatters. Mutants m3a (utc_ms fraction widened to 1-9) and m3a-bun drove node and bun RED. Evidence file: qa-s2a/evidence-proof-3.txt, sha256 f8d0248c9ee0d6f72a8863239c79d43af282b6166ee8d38df5d6c42d48ddccc6.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa-s2a/evidence-proof-4.txt (proof 4, the declared calendar delta): R src/timestamp.golden.test.ts -t 'calendar refusal' -> exit_p4=0, Tests 7 passed | 16 skipped (23); the bun variant -> exit_p4_bun=0, 7 passed | 16 skipped. Mutant m4a (days-in-month check skipped / hour 24 allowed) drove proof 4 RED (evidence-mutants.txt). Evidence file: qa-s2a/evidence-proof-4.txt, sha256 184aa59c78a295b7ebbe287ff6b7dfe4771db063c45530af66f5d603b13c7f3d.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa-s2a/evidence-proof-5.txt (proof 5, persisted digest vectors): R src/canonical-json.golden.test.ts -t 'digest vectors' on head -> exit_p5_head=0, Tests 7 passed | 18 skipped (25), and the same command on the golden commit e9d729b -> exit_p5_golden=0, 7 passed | 4 skipped (11). The PM-ruled replacement of `git diff --quiet` is satisfied: IDENTICAL-RANGE PASS, golden lines 26-491 == head lines 32-497 of src/canonical-json.golden.test.ts (466 lines byte-identical), so no vector was edited; the only changed pre-existing lines are two import lines. Mutant m5a drove proof 5 RED. Evidence file: qa-s2a/evidence-proof-5.txt, sha256 5feb4f8485ab8714739f534b35b3aa6f6edaf95a12893cb75192c3bf2d3e00ec.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa-s2a/evidence-proof-6.txt (proof 6, single implementation): R src/backbone-single-implementation.test.ts -t 'codecs' -> exit_p6=0, Test Files 1 passed, Tests 5 passed (5). Mutant m6a (native-gates private canonicalJson restored) drove it RED. The independent sweep in qa-s2a/evidence-review.txt section (2) re-runs the guard's four conditions over non-test .ts under src/, scripts/ and tools/ and finds no surviving duplicate inside the declared scope: the encoder template occurs only in src/canonical-json.ts plus the two scope-excluded *.test-fixture.ts files, no JSON.stringify(key) + ':' variant, no [0-9]{4}- date-regex variant, no timestamp-ish validator outside src/timestamp.ts, and exactly the 5 allowlisted Date.parse grammars. Evidence file: qa-s2a/evidence-proof-6.txt, sha256 f1a4261d018bcbe415a28eb44b0ab0fe4c11ddc3baef5eaa48dd567f5e931405.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa-s2a/evidence-proof-7.txt (proof 7, regression set): (i) build in the frozen-head archive copy (git archive b30c7c8 + cloned node_modules) under bun 1.4.0: `bun run build:raw` exit 0, then `cmp` of the regenerated bin/mister-clean.js (sha256 e559e568efca017ca5b7ab415f065d552d1ac2c7c741b39e416e38a6afd794eb) and MANIFEST.sha256 (d69ec233cd413321045c0b4ace3f454349925e495840587aaf5ff63eac7f871d) against `git show b30c7c8:<path>`: IDENTICAL both, and no externalized warning in the build log. (ii) tsc --noEmit (project TypeScript) exit 0 with 0 bytes of output; `bun run sync:cli:check` exit 0; `bun run manifest:package:check` exit 0 (PASS, 82 entries); `bun run audit:public` exit 0 (PASS, 83 files). (iii) `charter check --strict` run against the archive copy, never against the read-only checkout: exit 0, charter: ok; the DEV's own run is s2/evidence/s2a/final/charter.log. (iv) the DONE bun set (10 files): exit 0, 10 files / 52 tests passed. (v) the DONE node set (21 files) under command R with --no-file-parallelism: attempt 1 -> 20 passed / 1 failed file, 538 passed / 3 failed tests, all 3 being 30000 ms timeouts in src/closeout/bundle.test.ts plus their afterEach cleanup races with no assertion failure, under host load ~40; attempt 2 -> killed by the mandated timeout 1500 with 2 suite-timeout failures in src/closeout/native-gates.test.ts at load 44; THIS RUN, each previously-failing file ALONE under R: src/closeout/bundle.test.ts exit 0, Test Files 1 passed (1), Tests 128 passed (128), 523.47s, uptime load 24.85/25.35/26.12 -> 12.50/15.07/20.22; src/closeout/native-gates.test.ts exit 0, 1 passed (1), Tests 27 passed (27), 81.58s, load 13.18/15.17/20.23 -> 10.76/13.88/19.25. Timeout-free rerun achieved, so the base-copy comparison required by the fallback rule was not needed. Corroboration: the DEV's full node set on this frozen head is green (s2/evidence/s2a/final3/regress-node.log, Test Files 23 passed, Tests 543 passed, no FAIL line) and hosted CI ran the full suite green (C08). Evidence file: qa-s2a/evidence-proof-7.txt, sha256 a23f465af497a2fecf70d623c314caf71b87a5436f585caeb80c953bc7e1a28e.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa-s2a/evidence-proof-8.txt (proof 8, hosted CI): `gh run list --repo bradheitmann/mister-clean --branch mg/s2a-codecs --json databaseId,headSha,status,conclusion,name` -> run 42221367096 (Dependency audit) conclusion success and run 42221367106 (CI) conclusion failure, both on headSha 7b2124abe83ed967d41bc86d4b243be4a31a9073, the branch tip that carries frozen head b30c7c8. `gh run view 42221367106 --json jobs,headSha`: the REQUIRED job verify conclusion=success, status=completed, including step Reconstruct and verify the exact candidate in one clean capsule (success) and step Verify campaign SQLite reader and strict TypeScript intake helper (success); the only failing job is the one named charter (non-required; fails as NOT CHECKED while the charter source is unreachable), which fails at step probe the charter source and is declared non-required in its own name (pre-existing CI infrastructure, recorded as observation S2A-QA-D4). Dependency audit run 42221367096: success. Evidence file: qa-s2a/evidence-proof-8.txt, sha256 e7a138f7cb170d248029473f6bc12790d3b262da57438170804541c648e18510.",
+      "classification": "executed"
+    },
+    {
+      "id": "C09",
+      "description": "qa-s2a/evidence-proof-9.txt (proof 9, pre-merge self-judge; PM evidence re-read by QA): the judge ran the installed 7.5.1 in container mister-clean-judge:7.5.0d on a fresh clone of 7b2124a, prepare exit 0, run id mg-s2a-selfjudge-1, and reported no debt class beyond main's known baseline (4 public_safety_file-url instances, all in files from main; the carried semantic re-attestation; DEBT-NATIVE-GATE-7F4A61F65D3B8434 cargo:tools:campaign-observer:test). QA re-read the raw outputs (s2/selfjudge/out/mister-clean/mg-s2a-selfjudge-1/, s2/observer-rerun/*.log) and specifically audited the flagged test offset_timestamps_and_crlf_checkpoint_match_authoritative_intake at tools/campaign-observer/tests/capture.rs:313-353: the fixture timestamps it feeds are normalised by the observer's utc_timestamp() (main.rs:29-39) into Z-shaped values only, and the slice's changed check (campaign-observation-intake.ts:81, isTimestamp(value, utc_ns)) accepts exactly the set the pre-slice regex accepted, measured row by row in qa-s2a/probes/timestamp-fixture-check.ts (output sha256 dae63af1e8e4fa1cb70d92a77012c7282465afb06cbb7dfab8675fb7d71de9e4). The judge's FAILED line is authoritative importer failed (status Some(1)), the baseline importer flake: 6 of 6 reruns green (15 of 15 on mg-s2a-codecs x3 and on main x3), and the same debt id flapped with a different test on the mg-forward-752 judge. QA judgement: PROOF 9 HOLDS; not a regression of this slice. Evidence file: qa-s2a/evidence-proof-9.txt, sha256 2266c5a0da07af2c3da10bd6f19bb3919a36cb34c8397d6c7ce066c86ed26048; PM source s2/selfjudge/evidence-proof-9.txt.",
+      "classification": "executed"
+    },
+    {
+      "id": "C10",
+      "description": "qa-s2a/evidence-review.txt (independent review of `git diff 4240c0e b30c7c8 -- src/ scripts/`, 36 files, 1968 insertions, 285 deletions; the slice's own commits are e9d729b, bbb8cd8, 29f44c7, 20efc3b, 0117dac, ddf84fe, with the mg-forward-752 / mg-ci-green-1 / test-timeout commits correctly attributed to other slices): (1) all 7 encoder sites and all 11 timestamp sites plus 2 formatters checked against their base copies, with no behaviour change outside the declared deltas (the delta 2(b) wording observation is S2A-QA-D1); (2) no surviving duplicate inside the guard's declared scope; (3) no import of src/canonical-digest.ts reachable from control-plane-app, its import closure contains no node: builtin, and vite reported no externalized warning; (4) exactly one changed assertion in an existing test, src/closeout/regression-accounting.test.ts (title and expected preimage bytes for the UTF-16 code-unit order) = declared delta 2(c), every other touched test file import-line only, no test file deleted (git diff --diff-filter=D empty). Verdict: no substantiated defect. Evidence file: qa-s2a/evidence-review.txt, sha256 d77826bc3735b59e3b8ce587118c668255522a3a07acbb917bf1c1abda598d86.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "S2A-QA-D1",
+      "severity": "info",
+      "title": "Delta 2(b) is worded as an undefined field, but head also throws on undefined/NaN outside object fields (array elements, top-level values) at the action-lifecycle and snapshot sites",
+      "status": "obligation",
+      "evidence": "Measured in qa-s2a/evidence-review.txt section (1): [undefined] -> base action-lifecycle [] vs head THROWS; [NaN] -> base [null] vs head THROWS; bare undefined/NaN -> base undefined/null vs head THROWS; equal([undefined], []) -> base true vs head THROWS. Reachability was checked and the class cannot occur: beginAction runs requireValidBundle -> bundle validation -> validateReport before the only canonical() call, every equal() argument is JSON-derived or a struct with no optional fields, and snapshot's inputs come from zod schemas with no optional key among the two compared values (zod 4.6.7 also rejects NaN). No substantiated behaviour change outside the declared deltas. Owed to the next bounded slice: one line in charter/DONE/mg-s2a-codecs.md widening delta 2(b)'s wording. Not blocking.",
+      "classification": "executed"
+    },
+    {
+      "id": "S2A-QA-D2",
+      "severity": "info",
+      "title": "Proof 7's node set is timeout-flaky on this host at load >= 40 (timeouts only, no assertion failures)",
+      "status": "resolved",
+      "evidence": "qa-s2a/evidence-proof-7.txt: attempt 1 gave 3 x 30000 ms timeouts in src/closeout/bundle.test.ts at load ~40; attempt 2 was killed by the mandated timeout 1500 with 2 suite-timeout failures in src/closeout/native-gates.test.ts at load 44 (other agents running vitest in test-tmp worktrees). No assertion failed in either attempt. This run: both files alone under the DONE command R exit 0 with zero timeouts (bundle 128 passed / 523.47s at load 24.85 -> 12.50; native-gates 27 passed / 81.58s at load 13.18 -> 10.76), plus the DEV's 543/543 on this head and green hosted CI. Environmental, not a code defect. Closed for this receipt, recorded so a future low-load rerun is not mistaken for a new failure.",
+      "classification": "executed"
+    },
+    {
+      "id": "S2A-QA-D3",
+      "severity": "info",
+      "title": "The judge's import-failure diagnostic receipt behind the flagged campaign-observer test was not retained, so the importer's stderr is unattested",
+      "status": "open",
+      "evidence": "The panic message names a receipt under the container's /tmp/mister-clean-native-gate-snapshot-*/.../source-receipts/import-failure-<sha>.json, which is gone with the container, and nothing under s2/selfjudge/out/ records the importer's stderr. QA therefore rests the proof-9 judgement on evidence that does exist: profile equivalence measured directly (qa-s2a/probes/timestamp-fixture-check.out) and 6/6 green reruns on both refs (s2/observer-rerun/*.log). No action owed for this slice; noted so the gap is not read as a hidden failure.",
+      "classification": "executed"
+    },
+    {
+      "id": "S2A-QA-D4",
+      "severity": "info",
+      "title": "The non-required charter CI job fails as NOT CHECKED while the charter source is unreachable from the runner",
+      "status": "open",
+      "evidence": "Unchanged from main and not this slice's to fix: in run 42221367106 the charter (non-required) job concluded failure at step probe the charter source, so the workflow-level conclusion reads failure while the required verify job is green (qa-s2a/evidence-proof-8.txt). `charter check --strict` was run by QA against the frozen-head archive copy instead of the read-only checkout: exit 0, charter: ok (qa-s2a/evidence-proof-7.txt); the DEV's own run is s2/evidence/s2a/final/charter.log. Does not gate this receipt.",
+      "classification": "executed"
+    },
+    {
+      "id": "S2A-QA-D5",
+      "severity": "info",
+      "title": "An encoder template survives in two scope-excluded *.test-fixture.ts files (pre-existing)",
+      "status": "open",
+      "evidence": "qa-s2a/evidence-review.txt section (2): the encoder template occurs only in src/canonical-json.ts plus src/codec-oracles.test-fixture.ts and src/closeout/bundle.test-fixture.ts. bundle.test-fixture.ts is unchanged by this diff and pre-existing, and *.test-fixture.ts is excluded by the DONE's stated guard scope, so this is an observation, not a missed duplicate. Recorded for the mg-s2e finding-reducer obligation.",
+      "classification": "executed"
+    }
+  ],
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9"
+  ]
+}

@@ -3,7 +3,8 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symli
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { canonicalJson, sha256Bytes } from "../../canonical-json.js";
+import { canonicalJson } from "../../canonical-json.js";
+import { sha256Bytes } from "../../canonical-digest.js";
 import { openControlPlaneDatabase } from "../persistence/sqlite.js";
 
 const directories: string[] = [];

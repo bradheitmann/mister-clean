@@ -12,7 +12,9 @@
  */
 import { createHash, createPublicKey, verify } from "node:crypto";
 
-import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { canonicalJson } from "../canonical-json.js";
+import { sha256Bytes } from "../canonical-digest.js";
+import { isTimestamp } from "../timestamp.js";
 
 export const TRUST_POLICY_PIN_ENV = "MISTER_CLEAN_TRUST_POLICY_SHA256";
 export const TRUST_POLICY_PIN_FLAG = "--trust-policy-sha256";
@@ -38,15 +40,10 @@ export interface TrustPolicy {
 }
 
 const HEX64 = /^[0-9a-f]{64}$/u;
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u;
 const EXCEPTION_SIGNER_ROLES: ReadonlySet<string> = new Set(["owner", "principal"]);
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return !!value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
-function validIsoTimestamp(value: unknown): value is string {
-  return typeof value === "string" && ISO_TIMESTAMP.test(value) && !Number.isNaN(Date.parse(value));
 }
 
 /**
@@ -99,7 +96,7 @@ export function trustKeyIdentity(key: Pick<TrustPolicyKey, "public_key_pem">): s
 /** Validity-window refusal for a key at a signing time; a key without valid_to is refused. */
 export function trustKeyWindowError(key: TrustPolicyKey, at: string): string | undefined {
   if (key.valid_to === undefined) return "has no valid_to; an open-ended trust-policy key is refused";
-  if (!validIsoTimestamp(key.valid_from) || !validIsoTimestamp(key.valid_to) || !validIsoTimestamp(at)
+  if (!isTimestamp(key.valid_from, "rfc3339") || !isTimestamp(key.valid_to, "rfc3339") || !isTimestamp(at, "rfc3339")
     || Date.parse(at) < Date.parse(key.valid_from) || Date.parse(at) > Date.parse(key.valid_to)) {
     return "is outside its validity window";
   }

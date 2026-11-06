@@ -1,19 +1,20 @@
 import * as z from "zod";
 
-import { canonicalJson, sha256Bytes } from "../../canonical-json.js";
+import { canonicalJson } from "../../canonical-json.js";
+import { sha256Bytes } from "../../canonical-digest.js";
+import { isTimestamp } from "../../timestamp.js";
 import type { RepositorySubject, Sha256 } from "../contracts/primitives.js";
 import type { RemediationWaveManifest } from "../contracts/wave-directive.js";
 
 export { canonicalJson, sha256Bytes };
 
 const CONTROL_FREE = /^[^\u0000-\u001f\u007f]+$/;
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 
 const boundedString = (maximum = 4096) => z.string().min(1).max(maximum).regex(CONTROL_FREE);
 const identifier = boundedString(512);
 const sha256 = z.string().regex(SHA256);
-const isoTimestamp = z.string().regex(ISO_TIMESTAMP).refine((value) => Number.isFinite(Date.parse(value)));
+const utcTimestamp = z.string().refine((value) => isTimestamp(value, "utc_ms"));
 
 const evidenceRefSchema = z.object({
   path: boundedString(4096),
@@ -27,7 +28,7 @@ export const repositorySubjectSchema = z.object({
   commit: boundedString(512),
   tree: boundedString(512),
   repository_object_sha256: sha256,
-  observed_at: isoTimestamp,
+  observed_at: utcTimestamp,
 }).strict();
 
 const coordinationExpectationSchema = z.object({
@@ -46,7 +47,7 @@ const leaseExpectationSchema = z.object({
   worktree: boundedString(4096),
   branch: boundedString(1024),
   owner: identifier,
-  expires_at: isoTimestamp,
+  expires_at: utcTimestamp,
 }).strict();
 
 const assignmentSchema = z.object({
@@ -147,7 +148,7 @@ export const remediationWaveManifestSchema = z.object({
   revision: z.number().int().positive(),
   parent_manifest_sha256: sha256.nullable(),
   run_id: identifier,
-  created_at: isoTimestamp,
+  created_at: utcTimestamp,
   created_by: identifier,
   authority_mode: z.enum(["ADVISE", "OPERATE"]),
   repository: repositorySubjectSchema,
@@ -186,7 +187,7 @@ export const remediationWaveManifestSchema = z.object({
   excluded_actions: z.array(boundedString(4096)).max(10_000),
   self_audit: z.object({
     status: z.enum(["passed", "failed"]),
-    checked_at: isoTimestamp,
+    checked_at: utcTimestamp,
     evidence: z.array(evidenceRefSchema).min(1).max(1_000),
   }).strict(),
 }).strict().superRefine((manifest, context) => {
@@ -239,7 +240,7 @@ export const runtimeBoundReceiptSchema = z.object({
   actor: identifier,
   claims: z.array(identifier).min(1).max(1_000),
   conclusion: z.enum(["pass", "fail"]),
-  sealed_at: isoTimestamp.nullable(),
+  sealed_at: utcTimestamp.nullable(),
   evidence: z.array(evidenceRefSchema).min(1).max(1_000),
 }).strict();
 

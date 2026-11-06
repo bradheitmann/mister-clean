@@ -12,7 +12,8 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalJson, sha256Bytes } from "../src/canonical-json.js";
+import { canonicalJson } from "../src/canonical-json.js";
+import { sha256Bytes } from "../src/canonical-digest.js";
 import { KEY_ID_ENV, PRIVATE_KEY_ENV, loadPrivateKey, runAttestSign, signAttestation } from "./attest_sign.js";
 
 const SCRIPT = resolve(fileURLToPath(import.meta.url), "..", "attest_sign.ts");

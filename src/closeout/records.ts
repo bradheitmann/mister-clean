@@ -1,7 +1,9 @@
 import { posix as pathPosix } from "node:path";
 
 import { canonicalIdentity, foldCase } from "./normalization.js";
-import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { canonicalJson } from "../canonical-json.js";
+import { sha256Bytes } from "../canonical-digest.js";
+import { isTimestamp } from "../timestamp.js";
 
 /** Pure validation of Mister Clean's closeout report and action-manifest records.
  *
@@ -114,26 +116,9 @@ export function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-export function isoTimestamp(value: unknown): boolean {
-  if (!nonempty(value)) return false;
-  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:?\d{2})$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  const zone = match[7] ?? "";
-  if (year < 1 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return false;
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  if (day < 1 || day > daysInMonth) return false;
-  if (zone !== "Z") {
-    const offset = zone.slice(1).replace(":", "");
-    if (Number(offset.slice(0, 2)) > 23 || Number(offset.slice(2)) > 59) return false;
-  }
-  return !Number.isNaN(Date.parse(value));
-}
+/** Closeout record timestamps: the `record` profile of src/timestamp.ts, exported here for its importers. */
+const recordTimestamp = (value: unknown): boolean => isTimestamp(value, "record");
+export { recordTimestamp as isoTimestamp };
 
 export function digestRef(value: unknown): boolean {
   const ref = object(value);
@@ -374,11 +359,11 @@ export function validateReport(data: unknown, allowPlaceholders = false, bundleC
     if (!nonempty(debt.repair_boundary)) errors.push(`${path}.repair_boundary: required nonempty (every debt names where its repair lands)`);
     const disposition = debt.disposition;
     if (disposition === undefined) errors.push(`${path}.disposition: required (one of ${[...DISPOSITIONS].sort().join(", ")})`); else if (!DISPOSITIONS.has(String(disposition))) errors.push(`${path}.disposition: unsupported ${JSON.stringify(disposition)}`);
-    if (disposition === "accepted_exception") { if (debt.state !== "accepted_exception") errors.push(`${path}: accepted_exception disposition requires state=accepted_exception (one row, one terminal bucket)`); const exception = object(debt.exception); requireKeys(exception, ["actor", "at", "ref", "scope", "rationale"], `${path}.exception`, errors); if (exception) { for (const key of ["actor", "scope", "rationale"]) if (!nonempty(exception[key])) errors.push(`${path}.exception.${key}: required for accepted_exception`); if (!isoTimestamp(exception.at)) errors.push(`${path}.exception.at: required timezone-aware ISO-8601 timestamp`); if (!digestRef(exception.ref)) errors.push(`${path}.exception.ref: required digest-bound evidence reference {path,sha256}`); } }
+    if (disposition === "accepted_exception") { if (debt.state !== "accepted_exception") errors.push(`${path}: accepted_exception disposition requires state=accepted_exception (one row, one terminal bucket)`); const exception = object(debt.exception); requireKeys(exception, ["actor", "at", "ref", "scope", "rationale"], `${path}.exception`, errors); if (exception) { for (const key of ["actor", "scope", "rationale"]) if (!nonempty(exception[key])) errors.push(`${path}.exception.${key}: required for accepted_exception`); if (!recordTimestamp(exception.at)) errors.push(`${path}.exception.at: required timezone-aware ISO-8601 timestamp`); if (!digestRef(exception.ref)) errors.push(`${path}.exception.ref: required digest-bound evidence reference {path,sha256}`); } }
     else if (debt.state === "accepted_exception") errors.push(`${path}.disposition: state=accepted_exception requires disposition=accepted_exception`);
     if (STALE_DOC_CLASSES.has(String(debt.class)) && disposition === "accepted_exception") errors.push(`${path}.disposition: a reviewer-reported stale doc/comment is PAYABLE regardless of severity label -- accepted_exception is for irreparable historical limits only; fix the doc before CLEAN`);
     if (disposition === "decision_or_coordination_required") decisionRows.push(nonempty(debt.id) ? debt.id : `#${index}`);
-    if (debt.state === "satisfied") { const typed = (array(debt.evidence) ?? []).map(object).filter((entry): entry is ObjectRecord => !!entry); const valid = typed.some(entry => DEBT_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every(key => nonempty(entry[key])) && isoTimestamp(entry.observed_at) && digestRef(entry.evidence_ref)); if (!valid) errors.push(`${path}.evidence: satisfied debt requires allowlisted, time-bound, digest-referenced execution evidence`); }
+    if (debt.state === "satisfied") { const typed = (array(debt.evidence) ?? []).map(object).filter((entry): entry is ObjectRecord => !!entry); const valid = typed.some(entry => DEBT_EVIDENCE_KINDS.has(String(entry.kind)) && ["object", "command", "result"].every(key => nonempty(entry[key])) && recordTimestamp(entry.observed_at) && digestRef(entry.evidence_ref)); if (!valid) errors.push(`${path}.evidence: satisfied debt requires allowlisted, time-bound, digest-referenced execution evidence`); }
   }
   const residuals = array(report.residuals) ?? [];
   for (const [index, raw] of residuals.entries()) {
@@ -437,7 +422,7 @@ function validateReportCleanReadiness(
     if (decisionRows.length) errors.push(`$.verdict: CLEAN forbidden -- decision_or_coordination_required present: ${decisionRows.join(", ")}`);
     for (const [index, raw] of residuals.entries()) if (object(raw)?.kind === "blocked") errors.push(`$.verdict: CLEAN forbidden -- residuals[${index}] is blocked`);
     let notApplicable = 0;
-    for (const name of REQUIRED_DIMENSIONS) { const dimension = object(dimensions?.[name]) ?? {}; const state = dimension.state; if (state === "satisfied") { const typed = (array(dimension.evidence) ?? []).map(object).filter((entry): entry is ObjectRecord => !!entry); const allowed = DIMENSION_EVIDENCE_KINDS[name] ?? new Set<string>(); if (!typed.some(entry => allowed.has(String(entry.kind)) && ["object", "command", "result"].every(key => nonempty(entry[key])) && isoTimestamp(entry.observed_at))) errors.push(`$.dimensions.${name}: CLEAN requires time-bound evidence kind ${[...allowed].sort().join(", ")} with object/command/result`); } else if (state === "not_applicable") { notApplicable++; if (!array(dimension.evidence)?.length && !nonempty(dimension.notes)) errors.push(`$.dimensions.${name}: CLEAN requires evidence/notes rationale for not_applicable`); } else errors.push(`$.dimensions.${name}: CLEAN requires satisfied (or evidenced not_applicable), got ${JSON.stringify(state)}`); }
+    for (const name of REQUIRED_DIMENSIONS) { const dimension = object(dimensions?.[name]) ?? {}; const state = dimension.state; if (state === "satisfied") { const typed = (array(dimension.evidence) ?? []).map(object).filter((entry): entry is ObjectRecord => !!entry); const allowed = DIMENSION_EVIDENCE_KINDS[name] ?? new Set<string>(); if (!typed.some(entry => allowed.has(String(entry.kind)) && ["object", "command", "result"].every(key => nonempty(entry[key])) && recordTimestamp(entry.observed_at))) errors.push(`$.dimensions.${name}: CLEAN requires time-bound evidence kind ${[...allowed].sort().join(", ")} with object/command/result`); } else if (state === "not_applicable") { notApplicable++; if (!array(dimension.evidence)?.length && !nonempty(dimension.notes)) errors.push(`$.dimensions.${name}: CLEAN requires evidence/notes rationale for not_applicable`); } else errors.push(`$.dimensions.${name}: CLEAN requires satisfied (or evidenced not_applicable), got ${JSON.stringify(state)}`); }
     if (report.mode === "CLOSE" && notApplicable === REQUIRED_DIMENSIONS.length) errors.push("$.dimensions: CLEAN in CLOSE mode cannot mark every dimension not_applicable");
     for (const [name, raw] of Object.entries(claims ?? {})) { const claim = object(raw); if (!claim) continue; if (claim.state === undefined || claim.state === "not_assessed") errors.push(`$.claims.${name}: CLEAN forbids an unassessed claim (state=${JSON.stringify(claim.state)}); establish it or mark not_applicable with policy_ref`); else if (claim.state === "established" && generic(claim.evidence)) errors.push(`$.claims.${name}: CLEAN requires SPECIFIC established evidence, not a generic token`); }
     const census = object(report.debt_census); if (!census) errors.push("$.debt_census: required for CLEAN (discovered/paid/accepted_exception ints; empty ledger is not a census)"); else { const discovered = census.discovered, paid = census.paid, accepted = census.accepted_exception; if (![discovered, paid, accepted].every(value => typeof value === "number" && Number.isInteger(value))) errors.push("$.debt_census: discovered/paid/accepted_exception must be integers"); else { const d = discovered as number, p = paid as number, a = accepted as number; if (d !== p + a) errors.push(`$.debt_census: discovered (${d}) must equal paid (${p}) + accepted_exception (${a})`); if (d !== seenIds.size) errors.push(`$.debt_census.discovered (${d}) != unique completion_debts ledger entries (${seenIds.size})`); const satisfied = debts.filter(raw => object(raw)?.state === "satisfied").length; const exceptions = debts.filter(raw => object(raw)?.state === "accepted_exception").length; if (p !== satisfied) errors.push(`$.debt_census.paid (${p}) != satisfied ledger entries (${satisfied})`); if (a !== exceptions) errors.push(`$.debt_census.accepted_exception (${a}) != accepted_exception ledger entries (${exceptions})`); } }
@@ -446,7 +431,7 @@ function validateReportCleanReadiness(
   if (!allowPlaceholders) {
     if (typeof repo.commit !== "string" || !/^[0-9a-f]{7,40}$/.test(repo.commit)) errors.push("$.repo.commit: required 7-40 char hex object id");
     for (const field of ["target_commit", "candidate_commit", "merge_base"]) if (typeof target?.[field] !== "string" || !/^[0-9a-f]{7,40}$/.test(target[field] as string)) errors.push(`$.target_binding.${field}: required 7-40 char hex object id`);
-    if (!isoTimestamp(report.generated_at)) errors.push("$.generated_at: required timezone-aware ISO-8601 timestamp");
+    if (!recordTimestamp(report.generated_at)) errors.push("$.generated_at: required timezone-aware ISO-8601 timestamp");
   }
   const objectCommits = new Map<string, string>();
   for (const [name, raw] of Object.entries(claims ?? {})) { const claim = object(raw); if (!claim) continue; for (const event of array(claim.evidence) ?? []) { const evidence = object(event); if (evidence?.independence !== undefined && !["established", "not_established", "legacy_unrecoverable"].includes(String(evidence.independence))) errors.push(`$.claims.${name}: independence must be established|not_established|legacy_unrecoverable`); else if (evidence?.independence === "legacy_unrecoverable") for (const key of ["authority", "scope"]) if (!nonempty(evidence[key])) errors.push(`$.claims.${name}: legacy_unrecoverable requires ${key}`); if (evidence?.kind === "independent_qa_verdict" && normalizeActor(evidence.reviewer) && normalizeActor(evidence.reviewer) === normalizeActor(evidence.implementer) && claim.state === "established") errors.push(`$.claims.${name}: reviewer and implementer normalize to the same actor (${JSON.stringify(evidence.reviewer)}) -- independence cannot be established`); } if (claim.state === "not_applicable" && (!nonempty(claim.na_reason) || !nonempty(claim.policy_ref))) errors.push(`$.claims.${name}: not_applicable requires na_reason AND policy_ref (a policy-bound citation, not generic rationale)`); if (claim.state === "established") { const evidence = (array(claim.evidence) ?? []).map(object).find(item => !!item && nonempty(item.commit)); if (evidence) objectCommits.set(name, evidence.commit as string); } }
@@ -577,7 +562,7 @@ function validatePushGate(
   if (nonempty(repo.commit) && gate.candidate_commit !== repo.commit) {
     errors.push(`${path}.push_gate.candidate_commit: must equal repo.commit`);
   }
-  if (!(allowPlaceholders && findPlaceholders(gate.observed_at).length > 0) && !isoTimestamp(gate.observed_at)) {
+  if (!(allowPlaceholders && findPlaceholders(gate.observed_at).length > 0) && !recordTimestamp(gate.observed_at)) {
     errors.push(`${path}.push_gate.observed_at: required ISO timestamp`);
   }
   if (gate.writers_frozen !== true) errors.push(`${path}.push_gate.writers_frozen: expected true`);
@@ -675,7 +660,7 @@ function validateCoordinationDomains(
     if (!sha256(domain.state_digest, allowPlaceholders)) {
       errors.push(`${domainPath}.state_digest: required SHA-256 of the invariant-bearing state`);
     }
-    if (!(allowPlaceholders && findPlaceholders(domain.observed_at).length > 0) && !isoTimestamp(domain.observed_at)) {
+    if (!(allowPlaceholders && findPlaceholders(domain.observed_at).length > 0) && !recordTimestamp(domain.observed_at)) {
       errors.push(`${domainPath}.observed_at: required ISO timestamp`);
     }
     if (!digestRefOrPlaceholder(domain.evidence_ref, allowPlaceholders)) {
@@ -817,7 +802,7 @@ function validateCoordination(
     if (!commitObject(target.expected_commit, allowPlaceholders)) {
       errors.push(`${path}.target.expected_commit: required 7-40 char hex object id`);
     }
-    if (!(allowPlaceholders && findPlaceholders(target.observed_at).length > 0) && !isoTimestamp(target.observed_at)) {
+    if (!(allowPlaceholders && findPlaceholders(target.observed_at).length > 0) && !recordTimestamp(target.observed_at)) {
       errors.push(`${path}.target.observed_at: required ISO timestamp`);
     }
   }
@@ -931,7 +916,7 @@ function validateCoordination(
           if (bootstrap.worktree !== lane.worktree) errors.push(`${lanePath}.bootstrap.worktree: must equal the assigned worktree`);
           if (bootstrap.branch !== lane.branch) errors.push(`${lanePath}.bootstrap.branch: must equal the assigned branch`);
           if (bootstrap.head !== lane.baseline_commit) errors.push(`${lanePath}.bootstrap.head: must equal the assigned baseline_commit`);
-          if (!(allowPlaceholders && findPlaceholders(bootstrap.observed_at).length > 0) && !isoTimestamp(bootstrap.observed_at)) {
+          if (!(allowPlaceholders && findPlaceholders(bootstrap.observed_at).length > 0) && !recordTimestamp(bootstrap.observed_at)) {
             errors.push(`${lanePath}.bootstrap.observed_at: required ISO timestamp`);
           }
           if (!(allowPlaceholders && findPlaceholders(bootstrap.evidence_ref).length > 0) && !digestRef(bootstrap.evidence_ref)) {
@@ -1082,7 +1067,7 @@ function validateCoordinationCas(
     for (const field of ["expected_state_digest", "observed_state_digest", "result_state_digest"] as const) {
       if (!sha256(entry[field], allowPlaceholders)) errors.push(`${entryPath}.${field}: required SHA-256`);
     }
-    if (!(allowPlaceholders && findPlaceholders(entry.observed_at).length > 0) && !isoTimestamp(entry.observed_at)) {
+    if (!(allowPlaceholders && findPlaceholders(entry.observed_at).length > 0) && !recordTimestamp(entry.observed_at)) {
       errors.push(`${entryPath}.observed_at: required ISO timestamp`);
     }
     if (!digestRefOrPlaceholder(entry.evidence_ref, allowPlaceholders)) {
@@ -1160,7 +1145,7 @@ function validateGuard(
     if (!exactGitObject(guard.candidate_tree, allowPlaceholders)) {
       errors.push("$.guard.candidate_tree: required exact 40- or 64-character staged-tree object");
     }
-    if (!(allowPlaceholders && findPlaceholders(guard.minted_at).length > 0) && !isoTimestamp(guard.minted_at)) {
+    if (!(allowPlaceholders && findPlaceholders(guard.minted_at).length > 0) && !recordTimestamp(guard.minted_at)) {
       errors.push("$.guard.minted_at: required timezone-aware candidate-mint timestamp");
     }
     if (guard.writers_frozen !== true) errors.push("$.guard.writers_frozen: candidate review requires frozen writers");
@@ -1223,11 +1208,11 @@ function validateGuard(
       if (!sha256(receipt[field], allowPlaceholders)) errors.push(`${path}.${field}: required SHA-256`);
     }
     for (const field of ["started_at", "finished_at"] as const) {
-      if (!(allowPlaceholders && findPlaceholders(receipt[field]).length > 0) && !isoTimestamp(receipt[field])) {
+      if (!(allowPlaceholders && findPlaceholders(receipt[field]).length > 0) && !recordTimestamp(receipt[field])) {
         errors.push(`${path}.${field}: required timezone-aware ISO timestamp`);
       }
     }
-    if (isoTimestamp(receipt.started_at) && isoTimestamp(receipt.finished_at)
+    if (recordTimestamp(receipt.started_at) && recordTimestamp(receipt.finished_at)
       && Date.parse(String(receipt.started_at)) > Date.parse(String(receipt.finished_at))) {
       errors.push(`${path}: started_at cannot follow finished_at`);
     }
@@ -1279,10 +1264,10 @@ function validateGuard(
           }
         }
         if (!(allowPlaceholders && findPlaceholders(evaluator.resolved_at).length > 0)
-          && !isoTimestamp(evaluator.resolved_at)) {
+          && !recordTimestamp(evaluator.resolved_at)) {
           errors.push(`${path}.mister_clean_evaluator.resolved_at: required timezone-aware ISO timestamp`);
         }
-        if (isoTimestamp(evaluator.resolved_at) && isoTimestamp(receipt.started_at)
+        if (recordTimestamp(evaluator.resolved_at) && recordTimestamp(receipt.started_at)
           && Date.parse(String(evaluator.resolved_at)) > Date.parse(String(receipt.started_at))) {
           errors.push(`${path}.mister_clean_evaluator.resolved_at: evaluator identity must be resolved before the run starts`);
         }
@@ -1378,7 +1363,7 @@ function validateGuard(
   const barrierReady = barrierState === "open" || barrierState === "crossed";
   if (barrierReady) {
     if (barrier.approved_tree !== guard.candidate_tree) errors.push("$.guard.commit_barrier.approved_tree: must equal guard candidate_tree");
-    if (!(allowPlaceholders && findPlaceholders(barrier.opened_at).length > 0) && !isoTimestamp(barrier.opened_at)) {
+    if (!(allowPlaceholders && findPlaceholders(barrier.opened_at).length > 0) && !recordTimestamp(barrier.opened_at)) {
       errors.push("$.guard.commit_barrier.opened_at: required timezone-aware timestamp");
     }
     if (selectedReceipts.length !== 4) errors.push("$.guard.commit_barrier.receipt_ids: exact-tree barrier requires exactly four final receipts");
@@ -1407,11 +1392,11 @@ function validateGuard(
       if (receipt.repository_mutated !== false) {
         errors.push("$.guard.commit_barrier.receipt_ids: a receipt that mutated the repository is stale; mint a new tree and obtain a non-mutating final receipt");
       }
-      if (isoTimestamp(guard.minted_at) && isoTimestamp(receipt.started_at)
+      if (recordTimestamp(guard.minted_at) && recordTimestamp(receipt.started_at)
         && Date.parse(String(guard.minted_at)) > Date.parse(String(receipt.started_at))) {
         errors.push("$.guard.commit_barrier.receipt_ids: guard.minted_at must not follow a selected receipt started_at");
       }
-      if (isoTimestamp(receipt.finished_at) && isoTimestamp(barrier.opened_at)
+      if (recordTimestamp(receipt.finished_at) && recordTimestamp(barrier.opened_at)
         && Date.parse(String(receipt.finished_at)) > Date.parse(String(barrier.opened_at))) {
         errors.push("$.guard.commit_barrier.receipt_ids: every selected receipt must finish before the barrier opens");
       }
@@ -1424,16 +1409,16 @@ function validateGuard(
     const qa = byRole.get("qa");
     const clean = byRole.get("mister_clean");
     const holdout = byRole.get("holdout");
-    if (dev && qa && isoTimestamp(dev.finished_at) && isoTimestamp(qa.started_at)
+    if (dev && qa && recordTimestamp(dev.finished_at) && recordTimestamp(qa.started_at)
       && Date.parse(String(dev.finished_at)) > Date.parse(String(qa.started_at))) {
       errors.push("$.guard.commit_barrier.receipt_ids: QA must start after DEV finishes the exact candidate");
     }
-    if (dev && clean && isoTimestamp(dev.finished_at) && isoTimestamp(clean.started_at)
+    if (dev && clean && recordTimestamp(dev.finished_at) && recordTimestamp(clean.started_at)
       && Date.parse(String(dev.finished_at)) > Date.parse(String(clean.started_at))) {
       errors.push("$.guard.commit_barrier.receipt_ids: Mister Clean must start after DEV finishes the exact candidate");
     }
     for (const prior of [dev, qa, clean]) {
-      if (prior && holdout && isoTimestamp(prior.finished_at) && isoTimestamp(holdout.started_at)
+      if (prior && holdout && recordTimestamp(prior.finished_at) && recordTimestamp(holdout.started_at)
         && Date.parse(String(prior.finished_at)) > Date.parse(String(holdout.started_at))) {
         errors.push("$.guard.commit_barrier.receipt_ids: holdout must remain the final independent pass");
       }
@@ -1516,7 +1501,7 @@ function validateGuardActions(
     if (!action) continue;
     if (nonempty(action.id)) actionById.set(action.id, action);
     if (action.status === "executed" && LOCAL_MUTATION_KINDS.has(String(action.kind))
-      && isoTimestamp(action.recorded_at) && isoTimestamp(guard.minted_at)
+      && recordTimestamp(action.recorded_at) && recordTimestamp(guard.minted_at)
       && Date.parse(String(action.recorded_at)) > Date.parse(String(guard.minted_at))
       && status !== "invalidated") {
       errors.push(`$.guard: executed mutation ${String(action.id)} occurred after candidate mint; invalidate receipts and mint a new tree`);
@@ -1535,7 +1520,7 @@ function validateGuardActions(
       }
       if (action.status === "executed") executedCommits.push(action);
       if (String(manifest.schema_version) === "1.3" && manifest.manifest_kind === "closeout_guard" && action.status === "executed") {
-        if (barrierState === "crossed" && isoTimestamp(action.recorded_at) && isoTimestamp(barrier.opened_at)
+        if (barrierState === "crossed" && recordTimestamp(action.recorded_at) && recordTimestamp(barrier.opened_at)
           && Date.parse(String(action.recorded_at)) < Date.parse(String(barrier.opened_at))) {
           errors.push(`$.actions[${actionIndex}].recorded_at: crossed git_commit cannot precede guard.commit_barrier.opened_at`);
         }
@@ -1628,15 +1613,15 @@ function validateGuardCommitCas(
   if (!nonempty(mutex.lease_id)) errors.push(`${path}.cas.mutex.lease_id: required`);
   if (!Number.isSafeInteger(mutex.fencing_token) || Number(mutex.fencing_token) < 1) errors.push(`${path}.cas.mutex.fencing_token: required positive integer`);
   for (const field of ["acquired_at", "mutation_observed_at", "expires_at", "released_at"] as const) {
-    if (!(allowPlaceholders && findPlaceholders(mutex[field]).length > 0) && !isoTimestamp(mutex[field])) errors.push(`${path}.cas.mutex.${field}: required ISO timestamp`);
+    if (!(allowPlaceholders && findPlaceholders(mutex[field]).length > 0) && !recordTimestamp(mutex[field])) errors.push(`${path}.cas.mutex.${field}: required ISO timestamp`);
   }
-  if (["acquired_at", "mutation_observed_at", "expires_at", "released_at"].every((field) => isoTimestamp(mutex[field]))) {
+  if (["acquired_at", "mutation_observed_at", "expires_at", "released_at"].every((field) => recordTimestamp(mutex[field]))) {
     const acquired = Date.parse(String(mutex.acquired_at));
     const observed = Date.parse(String(mutex.mutation_observed_at));
     const expires = Date.parse(String(mutex.expires_at));
     const released = Date.parse(String(mutex.released_at));
     if (!(acquired <= observed && observed <= expires && released >= observed)) errors.push(`${path}.cas.mutex: invalid lease interval`);
-    if (isoTimestamp(barrierOpenedAt) && observed < Date.parse(String(barrierOpenedAt))) {
+    if (recordTimestamp(barrierOpenedAt) && observed < Date.parse(String(barrierOpenedAt))) {
       errors.push(`${path}.cas.mutex.mutation_observed_at: cannot precede guard.commit_barrier.opened_at`);
     }
     const maxLeaseSeconds = Number(object(coordination?.integration_mutex)?.max_lease_seconds);
@@ -1694,7 +1679,7 @@ export function validateManifest(data: unknown, allowPlaceholders = false): stri
       const typed = (array(outcome?.evidence) ?? []).map(object).filter((entry): entry is ObjectRecord => !!entry);
       if (!typed.some(entry => ACTION_EVIDENCE_KINDS.has(String(entry.kind))
         && ["object", "command", "result"].every(key => nonempty(entry[key]))
-        && isoTimestamp(entry.observed_at) && digestRef(entry.evidence_ref))) {
+        && recordTimestamp(entry.observed_at) && digestRef(entry.evidence_ref))) {
         errors.push(`${path}.outcome.evidence: verified terminal action requires allowlisted, time-bound, digest-referenced execution evidence`);
       }
     }
@@ -1755,7 +1740,7 @@ export function validateManifest(data: unknown, allowPlaceholders = false): stri
       if (action.status === "executed" && !nonempty(action.after_object)) {
         errors.push(`${path}.after_object: executed operation requires the resulting object`);
       }
-      if (!(allowPlaceholders && findPlaceholders(action.recorded_at).length > 0) && !isoTimestamp(action.recorded_at)) {
+      if (!(allowPlaceholders && findPlaceholders(action.recorded_at).length > 0) && !recordTimestamp(action.recorded_at)) {
         errors.push(`${path}.recorded_at: required ISO timestamp`);
       }
       const parents = array(action.parent_operation_ids);
@@ -1846,11 +1831,11 @@ export function validateManifest(data: unknown, allowPlaceholders = false): stri
             }
             const timestampFields = ["acquired_at", "mutation_observed_at", "expires_at", "released_at"] as const;
             for (const field of timestampFields) {
-              if (!(allowPlaceholders && findPlaceholders(mutex[field]).length > 0) && !isoTimestamp(mutex[field])) {
+              if (!(allowPlaceholders && findPlaceholders(mutex[field]).length > 0) && !recordTimestamp(mutex[field])) {
                 errors.push(`${path}.cas.mutex.${field}: required ISO timestamp`);
               }
             }
-            if (timestampFields.every((field) => isoTimestamp(mutex[field]))) {
+            if (timestampFields.every((field) => recordTimestamp(mutex[field]))) {
               const acquired = Date.parse(String(mutex.acquired_at));
               const mutation = Date.parse(String(mutex.mutation_observed_at));
               const expires = Date.parse(String(mutex.expires_at));

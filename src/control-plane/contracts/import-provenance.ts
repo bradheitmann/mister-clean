@@ -1,6 +1,7 @@
 import * as z from "zod";
 
 import { canonicalJson, sha256Bytes, remediationWaveManifestSchema } from "../runtime/authority.js";
+import { isTimestamp } from "../../timestamp.js";
 import {
   FILE_CENSUS_ALGORITHM_ID,
   FILE_CENSUS_ALGORITHM_VERSION,
@@ -11,14 +12,13 @@ import {
 import type { RepositorySubject, Sha256 } from "./primitives.js";
 
 const CONTROL_FREE = /^[^\u0000-\u001f\u007f]+$/;
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const UNKNOWN = "UNKNOWN" as const;
 
 const boundedString = (maximum = 4096) => z.string().min(1).max(maximum).regex(CONTROL_FREE);
 const identifier = boundedString(512);
 const sha256 = z.string().regex(SHA256);
-const isoTimestamp = z.string().regex(ISO_TIMESTAMP).refine((value) => Number.isFinite(Date.parse(value)));
+const utcTimestamp = z.string().refine((value) => isTimestamp(value, "utc_ms"));
 const knownOrUnknown = (maximum = 512) => z.union([boundedString(maximum), z.literal(UNKNOWN)]);
 
 export const IMPORT_CONTRACT_ERROR_CODES = [
@@ -84,7 +84,7 @@ export const repositorySubjectSchema = z.object({
   commit: boundedString(512),
   tree: boundedString(512),
   repository_object_sha256: sha256,
-  observed_at: isoTimestamp,
+  observed_at: utcTimestamp,
 }).strict();
 
 export const importRepositoryObjectSchema = z.object({
@@ -383,7 +383,7 @@ export const authorityTransitionSchema = z.object({
   subject_repository_object_sha256: sha256,
   evidence_source: sourceDescriptorSchema,
   evidence_record_sha256: sha256,
-  occurred_at: isoTimestamp,
+  occurred_at: utcTimestamp,
   transition_sha256: sha256,
 }).strict().superRefine((transition, context) => {
   const allowed = transition.transition_kind === "closure"
@@ -407,7 +407,7 @@ export const authorityTransitionSchema = z.object({
 export const importObservedRecordSchema = z.object({
   record_type: z.literal("mister-clean.import-observed"),
   schema_version: z.literal("1.0"),
-  observed_at: isoTimestamp,
+  observed_at: utcTimestamp,
   source: sourceDescriptorSchema,
   parser: parserDescriptorSchema,
   subject_binding: subjectBindingSchema,
@@ -445,7 +445,7 @@ export const importObservedRecordSchema = z.object({
 export const knownNowInterpretationSchema = z.object({
   record_type: z.literal("mister-clean.import-known-now"),
   schema_version: z.literal("1.0"),
-  interpreted_at: isoTimestamp,
+  interpreted_at: utcTimestamp,
   observed_record_sha256: sha256,
   content_id: sha256,
   source: sourceDescriptorSchema,

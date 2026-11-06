@@ -11,7 +11,8 @@ import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { canonicalJson, sha256Bytes } from "../canonical-json.js";
+import { canonicalJson } from "../canonical-json.js";
+import { sha256Bytes } from "../canonical-digest.js";
 import { runCli, type CliIO } from "../cli.js";
 import { nodeCloseoutEngine } from "./engine.js";
 import { nodeBundlePorts, nodeFilePort } from "./bundle.js";

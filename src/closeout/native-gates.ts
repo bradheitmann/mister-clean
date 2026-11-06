@@ -25,6 +25,8 @@ import {
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { canonicalSha256 } from "../canonical-digest.js";
+import { canonicalEqual, canonicalJson } from "../canonical-json.js";
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
 import {
   repositoryVerificationCoordinationKey,
@@ -496,34 +498,19 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("canonical JSON refuses a non-finite number");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const fields = Object.keys(record)
-      .filter((key) => record[key] !== undefined)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`);
-    return `{${fields.join(",")}}`;
-  }
-  throw new Error(`canonical JSON refuses ${typeof value}`);
-}
+/** Gate records drop `undefined` fields when hashed, as they always have (A6-6). */
+const OMIT_UNDEFINED = { undefinedFields: "omit" } as const;
 
 export function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
 export function identity(value: unknown): string {
-  return sha256(canonicalJson(value));
+  return canonicalSha256(value, OMIT_UNDEFINED);
 }
 
 export function stableEqual(left: unknown, right: unknown): boolean {
-  return canonicalJson(left) === canonicalJson(right);
+  return canonicalEqual(left, right, OMIT_UNDEFINED);
 }
 
 export function withoutField<T extends object>(value: T, field: keyof T): Record<string, unknown> {
@@ -1529,7 +1516,7 @@ function validateGateDefinition(
     raw.source_refs.forEach((ref, index) => {
       const refLabel = `${label}.source_refs[${String(index)}]`;
       if (!validateSourceRef(ref, refLabel, errors)) return;
-      const key = canonicalJson(ref);
+      const key = canonicalJson(ref, OMIT_UNDEFINED);
       if (seen.has(key)) errors.push(`${refLabel} is duplicated`);
       seen.add(key);
       if (!discoveryRefs.some((candidate) => stableEqual(candidate, ref))) {
@@ -1742,7 +1729,7 @@ export function discoverNativeGates(
       disposition: "absent",
       basis: "nonpreemptible_timeout_wrapper",
       source_refs: refs.filter((ref) => ref.kind === "runner_source"),
-      script_sha256: sha256(canonicalJson(runnerFindings)),
+      script_sha256: sha256(canonicalJson(runnerFindings, OMIT_UNDEFINED)),
     }));
   }
   const record = {
