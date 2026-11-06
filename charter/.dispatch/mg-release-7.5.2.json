@@ -1,0 +1,10 @@
+{
+  "accepted_unix_s": 1793946025,
+  "accepted_utc": "2026-11-06T06:20:25Z",
+  "base_commit": "1302a09d4d5fba6772fee80b1149431943708058",
+  "brief_sha256": "748f781bb6660f7b08880b378da6c723403f4c9b147a88f0da5ef56941bd541f",
+  "done_sha256": "ea3efe071e88c1b29a08b2c75bf55dbbc255c0aa037d0956fb1982bc655ec686",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-release-7.5.2",
+  "state": "accepted"
+}

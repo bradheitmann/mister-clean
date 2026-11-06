@@ -371,6 +371,16 @@ export const HEX64 = /^[0-9a-f]{64}$/;
 const GIT_OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
 const UTF8_LENIENT = new TextDecoder("utf-8");
+
+/**
+ * The one canonical path order for native-gate records: raw UTF-8 bytes, never
+ * locale collation. Producers and validators both sort with this comparator so
+ * a mixed-case tree (`Cargo.toml` beside `bun.lock`) emits exactly the order
+ * `validateDiscoveryIntegrity` accepts.
+ */
+function compareUtf8Bytes(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
 export const NATIVE_GATE_KINDS = new Set<NativeGateKind>([
   "established_ci", "repository_tests", "lint", "typecheck", "build",
 ]);
@@ -712,7 +722,7 @@ function trackedIndexEntries(repository: string, timeoutMs: number): readonly Na
     entries.push({ mode: rawMode as NativeGateIndexEntry["mode"], oid, path });
     start = index + 1;
   }
-  return entries.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+  return entries.sort((left, right) => compareUtf8Bytes(left.path, right.path));
 }
 
 function reachabilityRefs(repository: string, timeoutMs: number): readonly NativeGateReachabilityRef[] {
@@ -931,7 +941,7 @@ function trackedPaths(repository: string): readonly string[] {
     paths.push(path);
     start = index + 1;
   }
-  return paths.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+  return paths.sort(compareUtf8Bytes);
 }
 
 function trackedFile(repository: string, path: string): string {
@@ -1093,7 +1103,7 @@ function verificationRunnerSafetyFindings(
       });
     }
   }
-  return findings.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
+  return findings.sort((left, right) => compareUtf8Bytes(left.path, right.path) || left.line - right.line);
 }
 
 export function auditVerificationRunnerSafety(repository: string): readonly VerificationRunnerSafetyFinding[] {
@@ -1622,7 +1632,7 @@ export function validateDiscoveryIntegrity(discovery: NativeGateDiscovery): read
         seen.add(candidate.path);
         paths.push(candidate.path);
       });
-      const canonical = [...paths].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+      const canonical = [...paths].sort(compareUtf8Bytes);
       if (!stableEqual(paths, canonical)) errors.push("discovery.excluded_candidates is not in canonical path order");
     }
   }
@@ -1643,7 +1653,7 @@ export function validateDiscoveryIntegrity(discovery: NativeGateDiscovery): read
       validRefs.push(ref);
     });
     const actualOrder = validRefs.map((ref) => ref.path);
-    const canonicalOrder = [...actualOrder].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+    const canonicalOrder = [...actualOrder].sort(compareUtf8Bytes);
     if (!stableEqual(actualOrder, canonicalOrder)) errors.push("discovery.source_refs is not in canonical path order");
   }
   const seen = new Set<string>();
@@ -1710,7 +1720,7 @@ export function discoverNativeGates(
   const refs = [
     ...sourcePaths.map((path) => sourceRef(root, path)),
     ...runnerSourcePaths.map((path) => sourceRef(root, path, "runner_source")),
-  ].sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
+  ].sort((left, right) => compareUtf8Bytes(left.path, right.path) || compareUtf8Bytes(left.kind, right.kind));
   let gates = [
     ...discoverNodeGates(root, candidatePaths, refs),
     ...discoverFixedGates(candidatePaths, refs),

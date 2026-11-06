@@ -1,0 +1,90 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-release-7.5.2",
+  "verifies": "mg-release-7.5.2",
+  "candidate_commit": "1d06f2a58a26f8dab1b55ab91734376349afa4b6",
+  "frozen": {
+    "manifest_sha256": "a9868bb8d7edcf05e98e881705d30d510a6133b173b808bef02004829376695c",
+    "head": "1d06f2a58a26f8dab1b55ab91734376349afa4b6"
+  },
+  "dispatch": {
+    "base_commit": "1302a09d4d5fba6772fee80b1149431943708058",
+    "brief_sha256": "748f781bb6660f7b08880b378da6c723403f4c9b147a88f0da5ef56941bd541f"
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5.5",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "chqa/evidence-proof-1.txt (proof 1): MISTER_CLEAN_SOURCE_DEVELOPMENT=1 timeout 300 node ./node_modules/vitest/vitest.mjs run --allowOnly=false src/closeout/native-gate-source-ref-order.test.ts in the frozen checkout: exit 0, 1 test file passed, 1 passed. The source-ref byte-order fix holds. Home-directory prefix written as ~.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "chqa/evidence-proof-2.txt (proof 2): same runner with src/closeout/native-gate-runner-finding-order.test.ts: exit 0, 1 test file passed, 1 passed. The runner-finding byte-order fix holds.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "chqa/evidence-proof-3.txt (proof 3): rel752/proof3.sh run twice on a scratch git repository with root Cargo.toml/Cargo.lock, bun.lock, package.json and apps/web/package.json. Installed 7.5.1 (~/.claude/skills/mister-clean/bin/mister-clean.js): prepare exit=2, canonical-order-error=present, first error \"ERROR: discovery.source_refs is not in canonical path order\". Candidate (<checkout>/src/cli.ts): prepare exit=0, canonical-order-error=absent, receipt WROTE mode=CLOSE findings=0. The released defect is gone and the regression mutant (7.5.1 in place of the candidate) reproduces it.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "chqa/evidence-proof-4.txt plus chqa/evidence-proof-4-postbuild.txt (proof 4): grep '\"version\"' package.json -> 7.5.2 and grep '^  version:' SKILL.md -> 7.5.2. In the clean checkout the two checks fail only because the gitignored dist/ build output is absent (21 of the 82 MANIFEST.sha256 entries are ./dist/*, .gitignore:16; all other 61 entries exist and their hashes match). Rebuilt in a byte-faithful copy under chqa/scratch/repo with the pinned bun 1.4.0 (checkout untouched): build:scorecard, build:materials, tsup and the control-plane vite build regenerate the committed bytes (scorecard hash 64d3db8619cf, bundle asset names index-DmC-s3mW.css/index-tVGyIvA1.js identical to MANIFEST), then sync:cli:check -> \"Verified standalone CLI\" exit 0 and manifest . --package --check -> \"manifest: PASS (82 entries)\" exit 0. Hosted CI builds first and runs the same checks green (C05). Note: bin/mister-clean.js --version prints the usage line and exits 2 in both the installed 7.5.1 and the candidate (identical, pre-existing behaviour; the contract's attest alternative needs a tagged release, out of scope pre-tag).",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "chqa/evidence-proof-5.txt (proof 5): timeout 60 gh run view 42153763715 --repo [redacted]/mister-clean --json jobs,headSha: exit 0, headSha f5b75c6084ee1a79a7fc18e164ee7de4cd43ef29, required job \"verify\" conclusion success (clean-capsule reconstruction, ablation self-test, SQLite reader and strict-TS intake helper all success). The separate job \"charter (non-required; fails as NOT CHECKED while the charter source is unreachable)\" failed at \"probe the charter source\"; it is declared non-required in its own name. git fetch -q origin release/7.5.2 plus git diff --stat 1d06f2a origin/release/7.5.2 shows exactly one commit (f5b75c6 \"charter: freeze record for mg-release-7.5.2\") adding charter/.freeze/mg-release-7.5.2.json (3541 insertions, 1 file), and the freeze record cites head 1d06f2a58a26f8dab1b55ab91734376349afa4b6 with manifest_sha256 a9868bb8d7edcf05e98e881705d30d510a6133b173b808bef02004829376695c. Account name in URLs redacted for the no-personal-data rule; output otherwise retained.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "chqa/evidence-proof-6.txt (proof 6): dogfood judge.log records HEAD f5b75c6 up origin/release/7.5.2 and prepare exit 0; closeout-report completion_debts holds two items. (a) DEBT-SEMANTIC-SET-C3D33598A87A6B55 with candidate_set_sha256 c3d33598a87a6b55542aef8d3931eeb63082269c668df93063cb8fe1d107246b and debt_key 46bf097f...f801, origin class \"baseline\" — byte-identical to the single debt in the 7.5.1 baseline report (baseline/out/mister-clean/mg-baseline-1, HEAD 2fb1d17), so pre-existing. (b) DEBT-NATIVE-GATE-17ED5EBED7B18D8C (node:.:ci-check, nonzero exit): the gate log shows all four failures are \"Test timed out in 5000ms\" in src/control-plane/persistence/migrations.test.ts, runtime/sqlite-store.test.ts, runtime/evaluation-intake.e2e.test.ts and runtime/snapshot-producer.test.ts (4 failed | 28 passed files, 4 failed | 210 passed tests, zero assertion failures, 199.52s summed test time in 50.20s wall = parallel load). git diff --stat v7.5.1 1d06f2a -- src/control-plane control-plane-app pnpm-lock.yaml .bun-version is EMPTY, so the release changed none of that code, its lockfile or its timeout configuration; the same four files pass on the frozen head here (chqa/evidence-proof-6-localtests.txt: 4 files, 11 passed in 2.19s under bun); and hosted CI runs the same ci:check green at the same bytes (C05). It is an instance of the pre-existing O-LOAD-1 timing-under-contention obligation already recorded in charter/STATE.md. Neither debt was introduced by this release.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "CHQA-D1",
+      "severity": "low",
+      "title": "The contract's proof-4 reopen command cannot pass on a clean, unbuilt checkout",
+      "status": "obligation",
+      "evidence": "`bun run sync:cli:check` and `bun run manifest:package:check` as written in charter/DONE/mg-release-7.5.2.md exit 1 in the frozen checkout: dist/ is gitignored (.gitignore:16) and 21 of the 82 MANIFEST.sha256 entries are ./dist/*, so sync:cli:check hits ENOENT dist/cli.js and manifest:package:check reports stale. After rebuilding those artifacts in a byte-faithful copy under chqa/scratch/repo with pinned bun 1.4.0 both checks pass unchanged (chqa/evidence-proof-4.txt, chqa/evidence-proof-4-postbuild.txt), and hosted CI builds before checking, so the release claim holds. Pre-existing repo design, identical in 7.5.1; record the build precondition next to the reopen command in a bounded follow-up. The frozen checkout was not edited."
+    },
+    {
+      "id": "CHQA-D2",
+      "severity": "low",
+      "title": "Dogfood semantic re-attestation debt is the 7.5.1 baseline debt, carried",
+      "status": "obligation",
+      "evidence": "DEBT-SEMANTIC-SET-C3D33598A87A6B55 (candidate_set_sha256 c3d33598a87a6b55542aef8d3931eeb63082269c668df93063cb8fe1d107246b, origin class \"baseline\") appears identically in the 7.5.1 baseline closeout report (mg-baseline-1) and in the rel752 dogfood. The attestation binds the commit, so a re-attestation is owed on every release; it is the known S4 item named in the slice contract. Not introduced by 7.5.2; needs one triage of the single semantic candidate set on the next bounded slice."
+    },
+    {
+      "id": "CHQA-D3",
+      "severity": "low",
+      "title": "Dogfood node ci-check failed on four 5000ms timeouts in control-plane sqlite/HTTP tests",
+      "status": "obligation",
+      "evidence": "DEBT-NATIVE-GATE-17ED5EBED7B18D8C: node:.:ci-check exited nonzero in the judge container with four \"Test timed out in 5000ms\" failures and no assertion failures. The release diff (v7.5.1..1d06f2a) touches nothing under src/control-plane/, control-plane-app/, pnpm-lock.yaml or any test-timeout configuration; the same four files pass 11/11 in 2.19s on the frozen head; hosted CI runs the identical ci:check green at f5b75c6; charter/STATE.md already carries O-LOAD-1 (timing tests report contention) and records the local suite as not a gate. Not introduced by 7.5.2; belongs to the pre-existing load/lease obligation family (O-LOAD-1, O-SUITE-LEASE-1) for the next minor slice."
+    },
+    {
+      "id": "CHQA-D4",
+      "severity": "low",
+      "title": "The non-required charter CI job fails as NOT CHECKED on the release head",
+      "status": "obligation",
+      "evidence": "Run 42153763715's job \"charter (non-required; fails as NOT CHECKED while the charter source is unreachable)\" concluded failure at step \"probe the charter source\", so charter check --strict never ran in that CI run. The job is declared non-required in its own name and the required \"verify\" job is green at f5b75c6, so this does not block the release; the unreachable charter-source probe is pre-existing CI infrastructure, not a 7.5.2 change."
+    }
+  ],
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+  ]
+}
