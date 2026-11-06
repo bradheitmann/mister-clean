@@ -244,9 +244,15 @@ These are sanitized accounts. The exact commit and ref identities and the custod
 
 **Incident 2: a prohibited forced worktree removal.**
 - *What happened.* A temporary worktree, used only to record one slice's dispatch, was removed with `git worktree remove --force`. AGENTS.md prohibits forced worktree removal.
-- *Outcome.* `git status` showed its only content was the untracked dispatch record. That record had been copied out beforehand and checked, and the copy was later committed and is on main. No loss was observed. Ignored files were not listed separately before the removal, so their absence is not proven.
+- *Outcome.* `git status` showed one untracked item, the dispatch record. That record had been copied out beforehand and checked, and the copy was later committed and is on main, so the tracked and untracked content is preserved. **Ignored-state loss is UNKNOWN.** Ignored files were not inventoried before the forced removal, so their absence is not proven, and no-loss is not claimed for them.
 - *History rewritten:* no.
-- *Corrective instruction.* "Never --force" is recorded in the program's lifecycle log. The correct route is to give the owner a `!` command deleting the single untracked directory, then run a plain `git worktree remove`.
-- *Residual risk.* None known beyond the rule breach. The rule is enforced by instruction, not by a hook.
+- *Corrective instruction, the actual route.*
+  1. An agent first preserves the worktree's tracked, untracked AND ignored content under verified custody, and checks that each preserved copy can be recovered.
+  2. Then it performs an ordinary non-force `git worktree remove` under the repository's lifecycle rules.
+  3. `--force` is never used.
+
+  Where removing preserved untracked residue needs a deletion the agent's permissions don't allow, the owner's standing instruction (2026-11-06) is that the deletion is presented to him in the conversation as a `!` command, never left as an unexplained approval prompt.
+- *Open issue, recorded and not resolved here.* A/PO-ASTRA's correction says there is no owner-deletion workaround and that the owner stays out of the loop. The owner's direct instruction to this PM on 2026-11-06 was that approval-needing deletions come to him as `!` commands. The two must be reconciled by the owner; this handoff records both.
+- *Residual risk.* The rule is enforced by instruction, not by a hook. Ignored-state loss from this incident is unknown.
 
 **Related, outside this repository.** This PM's odin field-run brief inlined the owner-PII search pattern, and it was copied into a public odin revision. Odin contained it under the owner's ruling (b); see odin's handoff. The corrective instruction is that patterns live only in the private pattern file and briefs reference the file.
