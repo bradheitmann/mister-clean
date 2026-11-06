@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { captureRepositoryObject, type RepositoryObject } from "./repository-object.js";
+import type { GateSandboxHost, GateSandboxMechanism } from "./gate-sandbox.js";
 import {
   repositoryVerificationCoordinationKey,
   type ExecutionLeaseReceipt,
@@ -156,6 +157,8 @@ export interface NativeGateExecution {
   readonly failure_reason: NativeGateFailureReason | null;
   /** Absent only on a legacy coverage record (schema 1.4). */
   readonly budget?: NativeGateBudgetEvidence;
+  /** The OS sandbox the gate ran under. Absent only on a legacy coverage record (schema 1.4 or 1.5). */
+  readonly sandbox?: GateSandboxMechanism;
   readonly command: NativeGateCommand;
   readonly command_sha256: string;
   readonly resolved_executable: string | null;
@@ -175,8 +178,8 @@ export interface NativeGateExecution {
 
 export interface NativeGateCoverage {
   readonly record_type: "mister-clean.native-gate-coverage";
-  /** `1.4` records predate per-execution budget evidence; fresh runs write `1.5`. */
-  readonly schema_version: "1.4" | "1.5";
+  /** `1.4` records predate per-execution budget evidence, `1.5` records predate the sandbox record; fresh runs write `1.6`. */
+  readonly schema_version: "1.4" | "1.5" | "1.6";
   readonly discovery_sha256: string;
   readonly closing_repository_object: RepositoryObject;
   readonly required_gate_ids: readonly string[];
@@ -215,6 +218,10 @@ export interface RunNativeGateOptions {
   readonly now?: () => Date;
   /** A caller may acquire before emitting any run evidence, then transfer ownership here. */
   readonly execution_lease?: HeldExecutionLease;
+  /** Run gates with no OS sandbox when none is available; the record then says "none" and is never CLEAN. */
+  readonly allow_unsandboxed_gates?: boolean;
+  /** Injectable for deterministic tests; production detects the sandbox on the real host. */
+  readonly sandbox_host?: GateSandboxHost;
 }
 
 export interface ValidateNativeGateOptions {
@@ -263,7 +270,9 @@ export const COVERAGE_RECORD_TYPE = "mister-clean.native-gate-coverage";
 export const DISCOVERY_SCHEMA_VERSION = "1.4";
 /** Discovery records written before `excluded_candidates` existed; still readable. */
 const LEGACY_DISCOVERY_SCHEMA_VERSION = "1.3";
-export const COVERAGE_SCHEMA_VERSION = "1.5";
+export const COVERAGE_SCHEMA_VERSION = "1.6";
+/** Coverage records written before the per-execution sandbox record; still readable, never CLEAN with executed gates. */
+export const BUDGET_COVERAGE_SCHEMA_VERSION = "1.5";
 /** Coverage records written before per-execution budget evidence; still readable. */
 export const LEGACY_COVERAGE_SCHEMA_VERSION = "1.4";
 

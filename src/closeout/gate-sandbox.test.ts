@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { runCli } from "../cli.js";
 import { createFixtureRepository, fixtureCommit } from "../test-support/fixture-repo.js";
 import {
   GateSandboxUnavailableError,
@@ -26,7 +27,7 @@ import {
 } from "./gate-sandbox.js";
 import { discoverNativeGates } from "./native-gates.js";
 import { validateNativeGateCoverage } from "./native-gate-validation.js";
-import { resolveExecutable, runNativeGates } from "./native-gate-runner.js";
+import { resolveExecutable, runNativeGates, toolchainLocators } from "./native-gate-runner.js";
 import { captureRepositoryObject } from "./repository-object.js";
 
 const SANDBOX_EXEC_PRESENT = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec");
@@ -208,7 +209,7 @@ describe("gate sandbox (master-gate S1c)", { timeout: 240_000 }, () => {
     it("macos profile: the generated profile names every write root, credential location and network denial", () => {
       const { home, cargo } = operatorHome();
       const gate = scratch("macos-profile-text");
-      const policy = gateSandboxPolicy({ home: join(gate, "home"), snapshot: join(gate, "repository"), temp: join(gate, "home") }, []);
+      const policy = gateSandboxPolicy({ home: join(gate, "home"), snapshot: join(gate, "repository"), temp: join(gate, "home") }, [], toolchainLocators());
       const profile = macosSandboxProfile(policy);
       expect(profile).toMatch(/^\(version 1\)/u);
       expect(profile).toContain("(deny network*)");
@@ -253,16 +254,18 @@ describe("gate sandbox (master-gate S1c)", { timeout: 240_000 }, () => {
     it("linux sandbox: the bwrap arguments deny network, mount the system read-only, hide the operator home and bind only the gate's write roots", () => {
       const { home, cargo } = operatorHome();
       const gate = scratch("linux-args");
-      const policy = gateSandboxPolicy({ home: join(gate, "home"), snapshot: join(gate, "repository"), temp: join(gate, "home") }, []);
+      const policy = gateSandboxPolicy({ home: join(gate, "home"), snapshot: join(gate, "repository"), temp: join(gate, "home") }, [], toolchainLocators());
       const args = bwrapArguments(policy, join(gate, "repository"));
-      const pairs = args.map((value, index) => `${value} ${args[index + 1] ?? ""}`);
+      const has = (...sequence: readonly string[]): boolean => args.some((_, start) => sequence.every((item, offset) => args[start + offset] === item));
       expect(args).toContain("--unshare-net");
       expect(args).toContain("--die-with-parent");
-      expect(pairs).toContain("--ro-bind / ");
-      expect(pairs).toContain(`--tmpfs ${home}`);
-      expect(pairs).toContain(`--bind ${join(gate, "home")}`);
-      expect(pairs).toContain(`--bind ${join(gate, "repository")}`);
-      expect(pairs).toContain(`--ro-bind ${join(cargo, "registry")}`);
+      expect(has("--ro-bind", "/", "/")).toBe(true);
+      expect(has("--tmpfs", home)).toBe(true);
+      expect(has("--bind", join(gate, "home"), join(gate, "home"))).toBe(true);
+      expect(has("--bind", join(gate, "repository"), join(gate, "repository"))).toBe(true);
+      expect(has("--ro-bind", join(cargo, "registry"), join(cargo, "registry"))).toBe(true);
+      // Only the caches are re-exposed, so the emptied home already hides the cargo credentials beside them.
+      expect(has("--ro-bind", "/dev/null", join(cargo, "credentials"))).toBe(false);
       expect(args.at(-1)).toBe("--");
       // The operator's home is hidden before anything under it is re-exposed read-only.
       expect(args.indexOf(home)).toBeLessThan(args.indexOf(join(cargo, "registry")));
@@ -337,6 +340,16 @@ describe("gate sandbox (master-gate S1c)", { timeout: 240_000 }, () => {
       const errors = await validateNativeGateCoverage(coverage, discovery, coverage.closing_repository_object, evidence, { repository: repo });
       if (SANDBOX_EXEC_PRESENT) expect(errors).toEqual([]);
       else expect(errors).toContainEqual(expect.stringMatching(/ran without an OS sandbox/u));
+    });
+
+    it("no sandbox refuses: the CLI accepts --allow-unsandboxed-gates only where gates run (prepare and live bundle validation)", async () => {
+      const stderr: string[] = [];
+      const io = { stderr: (line: string) => stderr.push(line), stdout: () => undefined };
+      const report = join(scratch("cli-flag"), "report.json");
+      writeFileSync(report, "{}\n");
+      expect(await runCli(["validate", "report", report, "--allow-unsandboxed-gates"], io)).toBe(2);
+      expect(await runCli(["validate", "bundle", report, "--structural", "--allow-unsandboxed-gates"], io)).toBe(2);
+      expect(stderr.filter((line) => line.includes("--allow-unsandboxed-gates is only valid for live bundle validation"))).toHaveLength(2);
     });
 
     it("no sandbox refuses: a record that claims an unknown sandbox mechanism is invalid", async () => {

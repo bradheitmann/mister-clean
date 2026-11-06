@@ -3,12 +3,14 @@ import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, basename, resolve } from "node:path";
 
 import type { RepositoryObject } from "./repository-object.js";
+import { ALLOW_UNSANDBOXED_GATES_FLAG, GATE_SANDBOX_MECHANISMS, type GateSandboxMechanism } from "./gate-sandbox.js";
 import {
   repositoryVerificationCoordinationKey,
   validateExecutionLeaseReceipt,
 } from "./execution-lease.js";
 import {
   COVERAGE_RECORD_TYPE,
+  BUDGET_COVERAGE_SCHEMA_VERSION,
   COVERAGE_SCHEMA_VERSION,
   LEGACY_COVERAGE_SCHEMA_VERSION,
   NATIVE_GATE_BUDGET_PATH,
@@ -158,7 +160,11 @@ export async function validateNativeGateCoverage(
   if (!rawCoverage) return errors;
   if (rawCoverage.record_type !== COVERAGE_RECORD_TYPE) errors.push("coverage.record_type is invalid");
   const legacyCoverage = rawCoverage.schema_version === LEGACY_COVERAGE_SCHEMA_VERSION;
-  if (rawCoverage.schema_version !== COVERAGE_SCHEMA_VERSION && !legacyCoverage) errors.push("coverage.schema_version is invalid");
+  // 1.4 and 1.5 records predate the sandbox record; fresh runs carry one per execution.
+  const sandboxRecorded = rawCoverage.schema_version === COVERAGE_SCHEMA_VERSION;
+  if (!sandboxRecorded && !legacyCoverage && rawCoverage.schema_version !== BUDGET_COVERAGE_SCHEMA_VERSION) {
+    errors.push("coverage.schema_version is invalid");
+  }
   if (typeof rawCoverage.discovery_sha256 !== "string" || !HEX64.test(rawCoverage.discovery_sha256)) {
     errors.push("coverage.discovery_sha256 is invalid");
   } else if (rawCoverage.discovery_sha256 !== discovery.catalog_sha256) {
@@ -240,6 +246,7 @@ export async function validateNativeGateCoverage(
       "start_repository_object", "end_repository_object", "subject_start_state", "subject_end_state",
       "exit_code", "signal", "stdout_ref", "stderr_ref",
       ...(legacyCoverage ? [] : ["budget"]),
+      ...(sandboxRecorded ? ["sandbox"] : []),
     ], label, errors);
     if (!execution) continue;
     if (!legacyCoverage) validateBudgetEvidence(execution.budget, `${label}.budget`, errors);
@@ -269,6 +276,16 @@ export async function validateNativeGateCoverage(
     }
     if (execution.kind !== gate.kind) errors.push(`${label}.kind does not match discovery`);
     if (execution.isolation !== "disposable_exact_object_snapshot") errors.push(`${label}.isolation is invalid`);
+    // Fail closed: an unsandboxed gate, or one whose record predates the sandbox, is never CLEAN.
+    if (sandboxRecorded) {
+      if (typeof execution.sandbox !== "string" || !GATE_SANDBOX_MECHANISMS.has(execution.sandbox as GateSandboxMechanism)) {
+        errors.push(`${label}.sandbox is invalid`);
+      } else if (requirePassing && execution.sandbox === "none") {
+        errors.push(`${label}: the gate ran without an OS sandbox (${ALLOW_UNSANDBOXED_GATES_FLAG}), so it cannot be CLEAN`);
+      }
+    } else if (requirePassing && execution.state !== "blocked" && execution.state !== "skipped") {
+      errors.push(`${label}: coverage schema ${String(rawCoverage.schema_version)} records no sandbox for an executed gate, so it cannot be CLEAN`);
+    }
     validateCommand(execution.command, `${label}.command`, errors);
     if (!stableEqual(execution.command, gate.command)) errors.push(`${label}.command does not match discovery`);
     if (execution.command_sha256 !== identity(execution.command)) errors.push(`${label}.command_sha256 mismatch`);

@@ -1,4 +1,4 @@
-/** Snapshot-isolated (not OS-sandboxed), sequential execution of one discovered native-gate catalog. */
+/** Snapshot-isolated, OS-sandboxed (gate-sandbox.ts), sequential execution of one discovered native-gate catalog. */
 import { randomUUID } from "node:crypto";
 import { spawnSync, type ChildProcess } from "node:child_process";
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync, symlinkSync } from "node:fs";
@@ -14,6 +14,13 @@ import {
 } from "./execution-lease.js";
 import { spawnSupervisedCommand } from "./execution-supervisor.js";
 import { hardenedGitEnv } from "./git-hardening.js";
+import {
+  GateSandboxUnavailableError,
+  detectGateSandbox,
+  gateSandboxPolicy,
+  wrapGateCommand,
+  type GateSandboxDetection,
+} from "./gate-sandbox.js";
 import {
   COVERAGE_RECORD_TYPE,
   COVERAGE_SCHEMA_VERSION,
@@ -490,12 +497,13 @@ export async function executeGate(
   skip: ReadonlySet<string>,
   now: () => Date,
   lease: HeldExecutionLease,
+  sandbox: GateSandboxDetection,
 ): Promise<NativeGateExecution> {
   const execution = await executeGateUnderDeadline(
     repository, gate, discoveryObject, evidenceRoot,
-    { ...options, timeout_ms: budget.timeout_ms }, skip, now, lease,
+    { ...options, timeout_ms: budget.timeout_ms }, skip, now, lease, sandbox,
   );
-  return { ...execution, budget };
+  return { ...execution, budget, sandbox: sandbox.mechanism };
 }
 
 async function executeGateUnderDeadline(
@@ -507,6 +515,7 @@ async function executeGateUnderDeadline(
   skip: ReadonlySet<string>,
   now: () => Date,
   lease: HeldExecutionLease,
+  sandbox: GateSandboxDetection,
 ): Promise<NativeGateExecution> {
   const subjectStartState = captureSubjectState(repository);
   const startObject = subjectStartState.repository_object;
@@ -642,11 +651,18 @@ async function executeGateUnderDeadline(
   let child: ChildResult;
   let endObject: RepositoryObject;
   try {
+    const environment = gateEnvironment(snapshot.home, executable);
+    const policy = gateSandboxPolicy(
+      { home: snapshot.home, snapshot: snapshot.repository, temp: environment.TMPDIR ?? snapshot.home },
+      [...gateToolchain(), executable],
+      toolchainLocators(),
+    );
+    const command = wrapGateCommand(sandbox, policy, invokedExecutable, gate.command.argv, cwd);
     child = await executeChild(
-      invokedExecutable,
-      gate.command.argv,
+      command.executable,
+      command.argv,
       cwd,
-      gateEnvironment(snapshot.home, executable),
+      environment,
       options.timeout_ms,
       options.max_output_bytes,
       options.termination_grace_ms,
@@ -791,6 +807,13 @@ export async function runNativeGates(
       throw new Error("native gate evidence root must be a real directory");
     }
 
+    // Detected once per run, before any gate starts; a run with a gate to execute
+    // and no sandbox is refused unless the operator explicitly allowed it.
+    const sandbox = detectGateSandbox(runOptions.sandbox_host);
+    const executes = discovery.gates.some((gate) => gate.disposition === "required" && gate.command && !skip.has(gate.id));
+    if (sandbox.mechanism === "none" && executes && runOptions.allow_unsandboxed_gates !== true) {
+      throw new GateSandboxUnavailableError();
+    }
     const executions: NativeGateExecution[] = [];
     for (const gate of discovery.gates) {
       if (gate.disposition !== "required" || !gate.command) continue;
@@ -804,6 +827,7 @@ export async function runNativeGates(
         skip,
         now,
         lease,
+        sandbox,
       ));
     }
     partial = {
