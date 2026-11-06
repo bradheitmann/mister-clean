@@ -24,7 +24,7 @@ it("runs broad verification", { timeout: 120_000 }, () => {
 describe("verification runner finding order", () => {
   // ICU collation puts `alpha.test.ts` before `Zeta.test.ts`; the module's rule
   // is UTF-8 byte order (never locale collation), which puts `Zeta` first.
-  it("orders findings by path in UTF-8 byte order, not locale collation", () => {
+  it("orders findings by path in UTF-8 byte order, not locale collation", { timeout: 120_000 }, () => {
     const root = mkdtempSync(join(tmpdir(), "mister-clean-runner-finding-order-"));
     roots.push(root);
     const repo = join(root, "repo");

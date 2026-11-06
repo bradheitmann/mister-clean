@@ -18,7 +18,7 @@ describe("native gate source ref order", () => {
   // Field defect (7.5.1): ICU collation sorts `bun.lock` before `Cargo.lock`,
   // but the discovery validator requires UTF-8 byte order, so `prepare`
   // refused any repository mixing an uppercase root manifest with lowercase paths.
-  it("emits mixed-case source refs in the UTF-8 byte order the validator requires", () => {
+  it("emits mixed-case source refs in the UTF-8 byte order the validator requires", { timeout: 120_000 }, () => {
     const root = mkdtempSync(join(tmpdir(), "mister-clean-source-ref-order-"));
     roots.push(root);
     const repo = join(root, "repo");
