@@ -7,9 +7,10 @@
  * MISTER_CLEAN_GIT_LEDGER unset the mock returns node:child_process unchanged
  * and nothing is written. With it set, `execFileSync`, `spawnSync`, `execFile`
  * (and its promisified form) and `spawn` are wrapped, and every call whose
- * program is `git` and whose stack reaches a production module under src/
- * appends one JSON line to `<ledger dir>/<test file>.jsonl`. Calls made only by
- * tests and fixtures carry no production site and are not recorded.
+ * program is `git` and whose direct caller is a production module under src/
+ * appends one JSON line to `<ledger dir>/<test file>.jsonl`. Calls made by
+ * tests and fixtures, including fixture code that production invokes, carry no
+ * production site and are not recorded.
  */
 import { appendFileSync, mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -110,24 +111,30 @@ export function stableStringify(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-function productionFrame(file: string): boolean {
+/** The frame's role: the ledger and the runner are skipped; the first other frame under src/ decides. */
+function frameRole(file: string): "skip" | "test" | "production" {
   const rel = relative(REPOSITORY_ROOT, file).split(sep).join("/");
-  return rel.startsWith("src/")
-    && !/\.test\.ts$|\.test-fixture\.ts$/u.test(rel)
-    && !rel.startsWith("src/test-support/")
-    && rel !== "src/closeout/git-hardening.ts";
+  if (!rel.startsWith("src/") || rel.startsWith("src/test-support/") || rel === "src/closeout/git-hardening.ts") return "skip";
+  return /\.test\.ts$|\.test-fixture\.ts$/u.test(rel) ? "test" : "production";
 }
 
 const FRAME = /^\s*at (?:async )?(?:(?<fn>.+?) \()?(?<location>.+?):(?<line>\d+):\d+\)?$/u;
 
-/** The first stack frame in a production module under src/, other than git-hardening.ts. */
+/**
+ * The spawn's direct caller under src/, past the ledger and git-hardening.ts.
+ * A caller in a test file is a fixture spawn (for example a vi.mock stub that
+ * production code invokes), not a judge site, so it is not recorded; only a
+ * production caller names the site.
+ */
 function siteOf(stack: string): { readonly site: GitSpawnRecord["site"]; readonly line: number } | undefined {
   for (const raw of stack.split("\n").slice(1)) {
     const groups = raw.match(FRAME)?.groups;
     if (groups === undefined) continue;
     let location = groups.location!;
     if (location.startsWith("file:")) location = fileURLToPath(location);
-    if (!productionFrame(location)) continue;
+    const role = frameRole(location);
+    if (role === "skip") continue;
+    if (role === "test") return undefined;
     return {
       site: { file: relative(REPOSITORY_ROOT, location).split(sep).join("/"), function: groups.fn ?? "<anonymous>" },
       line: Number(groups.line),
