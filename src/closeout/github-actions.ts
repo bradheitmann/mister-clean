@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
 import { parseDocument } from "yaml";
 
 import { GIT_OUTPUT_LIMIT_BYTES } from "./repository.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitExecFileSync } from "./git-hardening.js";
 
 export type GitHubActionsFindingRule =
   | "health_gate_nonblocking"
@@ -544,9 +543,8 @@ function auditTrustedUpstream(workflow: WorkflowAudit): GitHubActionsFinding[] {
 }
 
 function trackedWorkflowPaths(repository: string): string[] {
-  return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"]), {
+  return gitExecFileSync(repository, ["ls-files", "-z", "--", ".github/workflows"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -557,9 +555,8 @@ function trackedWorkflowPaths(repository: string): string[] {
 
 /** Audit tracked GitHub Actions workflows without executing them or trusting generated workflow prose. */
 export function auditGitHubActionsRepository(root: string): GitHubActionsAuditResult {
-  const repository = resolve(execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "rev-parse", "--show-toplevel"]), {
+  const repository = resolve(gitExecFileSync(root, ["rev-parse", "--show-toplevel"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: ["ignore", "pipe", "pipe"],
   }).trim());
   const paths = trackedWorkflowPaths(repository);

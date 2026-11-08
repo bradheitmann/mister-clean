@@ -7366,7 +7366,6 @@ import { dirname as dirname20, isAbsolute as isAbsolute24, join as join23, relat
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "url";
 
 // src/attestation.ts
-import { execFileSync } from "child_process";
 import { createHash } from "crypto";
 import {
   lstat,
@@ -7397,10 +7396,12 @@ function isVerifiedServerAttestationBinding(value) {
 }
 
 // src/closeout/git-hardening.ts
-import { spawnSync } from "child_process";
+import { execFile, execFileSync, spawn, spawnSync } from "child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { promisify } from "util";
+var execFileAsync = promisify(execFile);
 var FIXED_OVERRIDES = [
   "core.fsmonitor=false",
   "core.untrackedCache=false",
@@ -7493,7 +7494,7 @@ function gitConfigSnapshot(repository) {
     "--list",
     "--name-only",
     "--null"
-  ], { encoding: "utf8", env: hardenedGitEnv(), stdio: ["ignore", "pipe", "pipe"], timeout: 1e4 });
+  ], { encoding: "utf8", env: runnerEnvironment({}), stdio: ["ignore", "pipe", "pipe"], timeout: 1e4 });
   if (result.error !== void 0) throw new GitConfigSnapshotError(repository, result.error.message);
   if (result.signal !== null) throw new GitConfigSnapshotError(repository, `git config was terminated by ${result.signal}`);
   if (result.status !== 0 || typeof result.stdout !== "string") {
@@ -7521,6 +7522,49 @@ function hardenedGitArgs(args, cwd) {
   ];
   return [...overrides.flatMap((override) => ["-c", override]), ...args];
 }
+var RUNNER_EXTRA_ENV = [
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CEILING_DIRECTORIES"
+];
+var GitRunnerEnvError = class extends Error {
+  constructor(names) {
+    super(`refusing the git call: extra environment ${names.map((name) => JSON.stringify(name)).join(", ")} is not one of ${RUNNER_EXTRA_ENV.join(", ")}`);
+    this.names = names;
+    this.name = "GitRunnerEnvError";
+  }
+  code = "git_runner_env_refused";
+};
+function runnerEnvironment(extraEnv) {
+  const refused = Object.keys(extraEnv).filter((name) => !RUNNER_EXTRA_ENV.includes(name));
+  if (refused.length > 0) throw new GitRunnerEnvError(refused);
+  return { ...hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }), ...extraEnv };
+}
+function runnerOptions(options) {
+  const { extraEnv = {}, ...rest } = options;
+  return { ...rest, env: runnerEnvironment(extraEnv) };
+}
+function runnerArgs(repo, args) {
+  return hardenedGitArgs(["--no-optional-locks", "-C", repo, ...args]);
+}
+function gitExecFileSync(repo, args, options = {}) {
+  const childOptions = runnerOptions(options);
+  return execFileSync("git", runnerArgs(repo, args), childOptions);
+}
+function gitSpawnSync(repo, args, options = {}) {
+  const childOptions = runnerOptions(options);
+  return spawnSync("git", runnerArgs(repo, args), childOptions);
+}
+async function gitExecFile(repo, args, options) {
+  const childOptions = runnerOptions(options);
+  return await execFileAsync("git", runnerArgs(repo, args), childOptions);
+}
+function gitSpawn(repo, args, options = {}) {
+  const childOptions = runnerOptions(options);
+  return spawn("git", runnerArgs(repo, args), childOptions);
+}
 function remoteTransport(url) {
   const scheme = /^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*)::/u.exec(url)?.groups?.scheme ?? /^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*):\/\//u.exec(url)?.groups?.scheme;
   if (scheme !== void 0) return scheme.toLocaleLowerCase("und");
@@ -7536,6 +7580,15 @@ var GitRemoteNameError = class extends Error {
   }
   code = "git_remote_name_refused";
 };
+var GitRemoteRefError = class extends Error {
+  constructor(ref, repository) {
+    super(`a ref contacted for ${repository} may not begin with '-'`);
+    this.ref = ref;
+    this.repository = repository;
+    this.name = "GitRemoteRefError";
+  }
+  code = "git_remote_ref_refused";
+};
 async function hardenedRemoteUrl(repository, remote, git2) {
   if (remote.startsWith("-") || remote.length === 0) throw new GitRemoteNameError(remote, "a remote name may not be empty or begin with '-'");
   const configured = (await git2.run(repository, ["remote"])).stdout.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -7547,17 +7600,16 @@ async function hardenedRemoteUrl(repository, remote, git2) {
   }
   return url;
 }
-function contactRemote(repository, url, flags, ref) {
-  if (ref.startsWith("-")) throw new GitRemoteNameError(ref, `a ref contacted for ${repository} may not begin with '-'`);
+function contactRemote(url, flags, ref) {
   const isolation = mkdtempSync(join(tmpdir(), "mister-clean-remote-contact-"));
   try {
     const outside = join(isolation, "cwd");
     const emptyGlobal = join(isolation, "gitconfig");
     mkdirSync(outside);
     writeFileSync(emptyGlobal, "");
-    const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", outside, "ls-remote", ...flags, "--end-of-options", url, ref]), {
+    const result = gitSpawnSync(outside, ["ls-remote", ...flags, "--end-of-options", url, ref], {
       encoding: "utf8",
-      env: { ...hardenedGitEnv(), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: emptyGlobal, GIT_CEILING_DIRECTORIES: isolation },
+      extraEnv: { GIT_CONFIG_GLOBAL: emptyGlobal, GIT_CEILING_DIRECTORIES: isolation },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 6e4
     });
@@ -7565,6 +7617,11 @@ function contactRemote(repository, url, flags, ref) {
   } finally {
     rmSync(isolation, { recursive: true, force: true });
   }
+}
+async function contactConfiguredRemote(repository, remote, ref, flags, git2) {
+  if (ref.startsWith("-")) throw new GitRemoteRefError(ref, repository);
+  const url = await hardenedRemoteUrl(repository, remote, git2);
+  return { url, ...contactRemote(url, flags, ref) };
 }
 
 // src/attestation.ts
@@ -7901,9 +7958,8 @@ async function verifyReleaseAttestation(root, options = {}) {
   };
 }
 function runGit(root, args) {
-  return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", root, ...args]), {
+  return gitExecFileSync(root, args, {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: ["ignore", "pipe", "pipe"]
   }).trim();
 }
@@ -10472,7 +10528,6 @@ function validateManifest(data, allowPlaceholders = false) {
 
 // src/closeout/repository.ts
 import { createHash as createHash4 } from "crypto";
-import { execFileSync as execFileSync2, spawnSync as spawnSync2 } from "child_process";
 import {
   existsSync as existsSync2,
   lstatSync,
@@ -10737,9 +10792,8 @@ function gitOutputFailure(args, error, bufferedBytes, limit) {
 }
 function runGit2(repository, args, allowedStatuses = [0], options = {}) {
   const limit = options.max_buffer_bytes ?? GIT_OUTPUT_LIMIT_BYTES;
-  const result = spawnSync2("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+  const result = gitSpawnSync(repository, args, {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: limit,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -10755,9 +10809,8 @@ function runGit2(repository, args, allowedStatuses = [0], options = {}) {
   return { status, stdout, stderr };
 }
 function gitNullPaths(repository, args) {
-  const result = spawnSync2("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+  const result = gitSpawnSync(repository, args, {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -10941,7 +10994,6 @@ import { resolve as resolve5 } from "path";
 
 // src/closeout/repository-object.ts
 import { createHash as createHash5 } from "crypto";
-import { spawnSync as spawnSync3 } from "child_process";
 import {
   closeSync,
   constants as constants2,
@@ -10966,9 +11018,8 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 function gitBytes(repository, args) {
-  const result = spawnSync3("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+  const result = gitSpawnSync(repository, args, {
     encoding: null,
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
     maxBuffer: MAX_GIT_OUTPUT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -10999,16 +11050,11 @@ function gitLine(repository, args) {
 }
 function gitCheckIgnored(repository, path, directory) {
   const candidate = directory ? `${path}/` : path;
-  const result = spawnSync3(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", repository, "check-ignore", "--quiet", "--no-index", "--", candidate]),
-    {
-      encoding: null,
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
-      maxBuffer: MAX_GIT_OUTPUT_BYTES,
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  );
+  const result = gitSpawnSync(repository, ["check-ignore", "--quiet", "--no-index", "--", candidate], {
+    encoding: null,
+    maxBuffer: MAX_GIT_OUTPUT_BYTES,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
   if (result.error) throw new Error(`git check-ignore failed: ${errorMessage(result.error)}`);
   if (result.status === 0) return true;
   if (result.status === 1) return false;
@@ -14519,7 +14565,7 @@ import { isDeepStrictEqual } from "util";
 // src/closeout/semantic.ts
 var import_yaml2 = __toESM(require_dist(), 1);
 import { createHash as createHash8 } from "crypto";
-import { spawnSync as spawnSync4 } from "child_process";
+import { spawnSync as spawnSync2 } from "child_process";
 import { existsSync as existsSync3, lstatSync as lstatSync4, readFileSync as readFileSync3, readlinkSync as readlinkSync2 } from "fs";
 import { basename as basename6, dirname as dirname5, extname as extname4, isAbsolute as isAbsolute5, relative as relative6, resolve as resolve7, sep as sep6 } from "path";
 var TEXT_EXTENSIONS2 = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
@@ -15136,9 +15182,8 @@ function semanticCandidateSetSha256(candidates) {
 }
 function repositoryObjectPaths(repository) {
   const root = resolve7(repository);
-  const listed = spawnSync4("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"]), {
+  const listed = gitSpawnSync(root, ["ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -15281,8 +15326,7 @@ function structuredRecordId(record5) {
 }
 function ignoredByRepository(root, portablePath3) {
   if (isAbsolute5(portablePath3) || portablePath3 === ".." || portablePath3.startsWith("../")) return false;
-  const result = spawnSync4("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "check-ignore", "-q", "--", portablePath3]), {
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
+  const result = gitSpawnSync(root, ["check-ignore", "-q", "--", portablePath3], {
     stdio: "ignore"
   });
   return result.status === 0;
@@ -15909,7 +15953,7 @@ function auditSemanticRepository(repository, options = {}) {
         }
         const [command, ...args] = definition.command;
         if (!command) continue;
-        const result = spawnSync4(command, args, {
+        const result = spawnSync2(command, args, {
           cwd: root,
           encoding: "utf8",
           env: {
@@ -17346,7 +17390,7 @@ async function verifyAcceptedReleaseBoundary(input) {
 
 // src/closeout/action-hygiene.ts
 import { createHash as createHash11 } from "crypto";
-import { execFileSync as execFileSync3 } from "child_process";
+import { execFileSync as execFileSync2 } from "child_process";
 import {
   closeSync as closeSync2,
   existsSync as existsSync4,
@@ -17398,9 +17442,8 @@ function gitBytes2(repository, args, input, allowed = [0]) {
       writeFileSync3(inputPath, input, { mode: 384, flag: "wx" });
       inputDescriptor = openSync2(inputPath, "r");
     }
-    return execFileSync3("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+    return gitExecFileSync(repository, args, {
       encoding: "buffer",
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
       killSignal: "SIGKILL",
       maxBuffer: 128 * 1024 * 1024,
       stdio: [inputDescriptor ?? "ignore", "pipe", "pipe"],
@@ -17754,13 +17797,13 @@ function parseLsofPaths(bytes2) {
   }]));
 }
 var nodeProcessPort = {
-  processTable: () => parsePsTable(execFileSync3("ps", ["-axo", "pid=,ppid=,lstart=,comm="], {
+  processTable: () => parsePsTable(execFileSync2("ps", ["-axo", "pid=,ppid=,lstart=,comm="], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
     timeout: 15e3,
     stdio: ["ignore", "pipe", "pipe"]
   })),
-  pathTable: () => parseLsofPaths(execFileSync3("lsof", ["-nP", "-F0pfn"], {
+  pathTable: () => parseLsofPaths(execFileSync2("lsof", ["-nP", "-F0pfn"], {
     encoding: "buffer",
     maxBuffer: 128 * 1024 * 1024,
     timeout: 15e3,
@@ -18140,7 +18183,6 @@ function assertActionHygieneDelta(delta, before, after, label = "action hygiene 
 
 // src/closeout/native-gates.ts
 import { createHash as createHash13 } from "crypto";
-import { spawn, spawnSync as spawnSync5 } from "child_process";
 import { createReadStream } from "fs";
 import {
   closeSync as closeSync3,
@@ -18166,7 +18208,7 @@ import { basename as basename7, dirname as dirname7, isAbsolute as isAbsolute9, 
 
 // src/closeout/execution-lease.ts
 import { createHash as createHash12, randomUUID } from "crypto";
-import { execFileSync as execFileSync4 } from "child_process";
+import { execFileSync as execFileSync3 } from "child_process";
 import { createRequire } from "module";
 import {
   chmodSync,
@@ -18266,15 +18308,10 @@ function validateExecutionLeaseReceipt(value, label, errors) {
 }
 function gitCommonDirectory(repository) {
   const root = realpathSync4(resolve10(repository));
-  const output = execFileSync4(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"]),
-    {
-      encoding: "utf8",
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  ).trim();
+  const output = gitExecFileSync(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  }).trim();
   if (!output || !isAbsolute8(output)) throw new Error("git did not return an absolute common directory");
   return realpathSync4(output);
 }
@@ -18345,7 +18382,7 @@ function processIdentity(pid) {
       return startTicks ? `linux-proc-start:${startTicks}` : void 0;
     }
     if (process.platform === "win32") {
-      const ticks = execFileSync4(
+      const ticks = execFileSync3(
         "powershell.exe",
         [
           "-NoProfile",
@@ -18357,7 +18394,7 @@ function processIdentity(pid) {
       ).trim();
       return ticks ? `windows-start-ticks:${ticks}` : void 0;
     }
-    const started = execFileSync4(
+    const started = execFileSync3(
       "ps",
       ["-o", "lstart=", "-o", "comm=", "-p", String(pid)],
       {
@@ -18866,26 +18903,18 @@ var NativeGateGitTimeoutError = class extends Error {
     this.timeout_ms = timeoutMs;
   }
 };
-function gitEnvironment() {
-  return hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
-}
 function gitFailure(args, status, signal, stderr) {
   const detail = UTF8_LENIENT.decode(stderr).trim();
   return new Error(detail || `git ${args.join(" ")} exited ${String(status)}${signal ? ` (${signal})` : ""}`);
 }
 function gitBytes3(repository, args, timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS) {
-  const result = spawnSync5(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]),
-    {
-      encoding: null,
-      env: gitEnvironment(),
-      killSignal: "SIGKILL",
-      maxBuffer: MAX_GIT_OUTPUT_BYTES2,
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: timeoutMs
-    }
-  );
+  const result = gitSpawnSync(repository, args, {
+    encoding: null,
+    killSignal: "SIGKILL",
+    maxBuffer: MAX_GIT_OUTPUT_BYTES2,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: timeoutMs
+  });
   if (result.error?.code === "ETIMEDOUT") {
     throw new NativeGateGitTimeoutError(args, timeoutMs);
   }
@@ -18909,8 +18938,7 @@ function gitLine3(repository, args, timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS) {
 async function gitBytesWithInput(repository, args, input, timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS) {
   assertPositiveInteger("git timeout", timeoutMs);
   return await new Promise((resolveBytes, rejectBytes) => {
-    const child = spawn("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
-      env: gitEnvironment(),
+    const child = gitSpawn(repository, args, {
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true
@@ -19148,16 +19176,11 @@ async function createExecutionSnapshot(subject, expected, options = {}) {
   }
 }
 function trackedPaths2(repository) {
-  const result = spawnSync5(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"]),
-    {
-      encoding: null,
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
-      maxBuffer: MAX_GIT_OUTPUT_BYTES2,
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  );
+  const result = gitSpawnSync(repository, ["ls-files", "--cached", "--full-name", "-z"], {
+    encoding: null,
+    maxBuffer: MAX_GIT_OUTPUT_BYTES2,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
   if (result.error) throw new Error(`git ls-files failed: ${errorMessage2(result.error)}`);
   if (result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
     const stderr = Buffer.isBuffer(result.stderr) ? new TextDecoder().decode(result.stderr).trim() : "";
@@ -20950,11 +20973,9 @@ function schema15LegacyNumericFieldErrors(value, path = "$") {
 
 // src/closeout/bundle-runtime.ts
 import { createHash as createHash15 } from "crypto";
-import { execFile } from "child_process";
 import { access, copyFile, lstat as lstat5, mkdir as mkdir2, mkdtemp as mkdtemp2, readFile as readFile2, readdir as readdir4, realpath as realpath5, rm as rm2 } from "fs/promises";
 import { tmpdir as tmpdir4 } from "os";
 import { basename as basename9, dirname as dirname8, isAbsolute as isAbsolute11, join as join8, relative as relative10, resolve as resolve13, sep as sep10 } from "path";
-import { promisify } from "util";
 var HEX643 = /^[0-9a-f]{64}$/;
 var EVENT_TIMESTAMP_FIELDS = /* @__PURE__ */ new Set([
   "acquired_at",
@@ -20972,7 +20993,6 @@ var EVENT_TIMESTAMP_FIELDS = /* @__PURE__ */ new Set([
   "started_at"
 ]);
 var IGNORED_WALK = /* @__PURE__ */ new Set([".git", "node_modules", "vendor", ".venv", "venv", "dist", "build", ".cache"]);
-var execFileAsync = promisify(execFile);
 function object5(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
@@ -21164,21 +21184,19 @@ var nodeFilePort = {
 var nodeGitPort = {
   async run(repo, args, allowed = [0]) {
     try {
-      const environment = hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
       let result;
       if (args.length === 1 && args[0] === "write-tree") {
         const temporary = await mkdtemp2(join8(tmpdir4(), "mc-readonly-index-"));
         try {
-          const sourceIndex = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "index"]), { encoding: "utf8", env: environment })).stdout.trim();
-          const sourceObjects = (await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "rev-parse", "--path-format=absolute", "--git-path", "objects"]), { encoding: "utf8", env: environment })).stdout.trim();
+          const sourceIndex = (await gitExecFile(repo, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { encoding: "utf8" })).stdout.trim();
+          const sourceObjects = (await gitExecFile(repo, ["rev-parse", "--path-format=absolute", "--git-path", "objects"], { encoding: "utf8" })).stdout.trim();
           const externalIndex = join8(temporary, "index");
           const externalObjects = join8(temporary, "objects");
           await mkdir2(externalObjects, { recursive: true });
           await copyFile(sourceIndex, externalIndex);
-          result = await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, "write-tree"]), {
+          result = await gitExecFile(repo, ["write-tree"], {
             encoding: "utf8",
-            env: {
-              ...environment,
+            extraEnv: {
               GIT_ALTERNATE_OBJECT_DIRECTORIES: sourceObjects,
               GIT_INDEX_FILE: externalIndex,
               GIT_OBJECT_DIRECTORY: externalObjects
@@ -21188,7 +21206,7 @@ var nodeGitPort = {
           await rm2(temporary, { recursive: true, force: true });
         }
       } else {
-        result = await execFileAsync("git", hardenedGitArgs(["--no-optional-locks", "-C", repo, ...args]), { encoding: "utf8", env: environment });
+        result = await gitExecFile(repo, args, { encoding: "utf8" });
       }
       return { code: 0, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
     } catch (error) {
@@ -21540,19 +21558,14 @@ async function validateBoundExecutionRecords(bundle, report, manifest2, repo, gi
         if (repo && !allowPlaceholders && (await git2.run(repo, ["cat-file", "-e", `${String(evidence.commit ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push(`${epath}: commit does not exist in live repository`);
       } else if (name === "pushed" && evidence.kind === "remote_ref_resolution") {
         if (repo && !allowPlaceholders) {
-          const ref = String(evidence.ref ?? "");
-          if (ref.startsWith("-")) {
-            errors.push(`${epath}: a pushed ref may not begin with '-'`);
-            continue;
-          }
-          let remoteUrl;
+          let result;
           try {
-            remoteUrl = await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git2);
+            result = await contactConfiguredRemote(repo, String(evidence.remote ?? ""), String(evidence.ref ?? ""), [], git2);
           } catch (error) {
-            errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
+            if (error instanceof GitRemoteRefError) errors.push(`${epath}: a pushed ref may not begin with '-'`);
+            else errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
             continue;
           }
-          const result = contactRemote(repo, remoteUrl, [], ref);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object5(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
         }
@@ -24020,7 +24033,6 @@ function auditLanguagePolicy(root) {
 // src/closeout/github-actions.ts
 var import_yaml3 = __toESM(require_dist(), 1);
 import { createHash as createHash17 } from "crypto";
-import { execFileSync as execFileSync5 } from "child_process";
 import { lstatSync as lstatSync8, readFileSync as readFileSync8 } from "fs";
 import { isAbsolute as isAbsolute13, join as join10, relative as relative11, resolve as resolve14 } from "path";
 var SENSITIVE_COMMAND = /(?:\bflyctl\s+deploy\b|\bwrangler\s+deploy\b|\bpnpm\s+publish\b|\bnpm\s+publish\b|\bdocker\s+push\b|\bkubectl\b|\bterraform\s+apply\b|\bgh\s+release\b|\bgit\s+push\b)/iu;
@@ -24453,17 +24465,15 @@ function auditTrustedUpstream(workflow) {
   return findings;
 }
 function trackedWorkflowPaths(repository) {
-  return execFileSync5("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "ls-files", "-z", "--", ".github/workflows"]), {
+  return gitExecFileSync(repository, ["ls-files", "-z", "--", ".github/workflows"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"]
   }).split("\0").filter((path) => /\.ya?ml$/iu.test(path)).sort();
 }
 function auditGitHubActionsRepository(root) {
-  const repository = resolve14(execFileSync5("git", hardenedGitArgs(["--no-optional-locks", "-C", root, "rev-parse", "--show-toplevel"]), {
+  const repository = resolve14(gitExecFileSync(root, ["rev-parse", "--show-toplevel"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     stdio: ["ignore", "pipe", "pipe"]
   }).trim());
   const paths = trackedWorkflowPaths(repository);
@@ -24902,7 +24912,7 @@ async function generatePackageManifest(root) {
 
 // src/closeout/native-gate-runner.ts
 import { randomUUID as randomUUID4 } from "crypto";
-import { spawnSync as spawnSync6 } from "child_process";
+import { spawnSync as spawnSync3 } from "child_process";
 import { accessSync as accessSync2, constants as constants4, existsSync as existsSync7, lstatSync as lstatSync10, mkdirSync as mkdirSync3, realpathSync as realpathSync6, symlinkSync } from "fs";
 import { lstat as lstat6, mkdir as mkdir3, realpath as realpath6, rm as rm3, writeFile as writeFile2 } from "fs/promises";
 import { homedir, tmpdir as tmpdir5 } from "os";
@@ -25469,7 +25479,7 @@ function signalProcessTree(child, signal) {
   if (!child.pid) return true;
   try {
     if (process.platform === "win32") {
-      const result = spawnSync6("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+      const result = spawnSync3("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
         encoding: null,
         env: scrubbedEnvironment(tmpdir5()),
         stdio: ["ignore", "ignore", "ignore"],
@@ -27166,18 +27176,14 @@ async function validateLiveRepositoryAndTarget(bundle, report, repo, files, git2
   if (observation.kind === "remote_ref_resolution") {
     const remote = String(observation.remote ?? "");
     const remoteRef = String(observation.remote_ref ?? "");
-    if (remoteRef.startsWith("-")) {
-      errors.push("$.successor_readiness.target_observation.remote_ref: a remote ref may not begin with '-'");
-      return { head, subject, successor };
-    }
-    let remoteUrl;
+    let result;
     try {
-      remoteUrl = await hardenedRemoteUrl(repo, remote, git2);
+      result = await contactConfiguredRemote(repo, remote, remoteRef, ["--heads"], git2);
     } catch (error) {
-      errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof GitRemoteRefError) errors.push("$.successor_readiness.target_observation.remote_ref: a remote ref may not begin with '-'");
+      else errors.push(`$.successor_readiness.target_observation.remote: ${error instanceof Error ? error.message : String(error)}`);
       return { head, subject, successor };
     }
-    const result = contactRemote(repo, remoteUrl, ["--heads"], remoteRef);
     const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
     if (observed !== liveTarget) errors.push("$.successor_readiness.target_observation: remote ref differs from live target");
   }
@@ -29643,7 +29649,6 @@ function assemblePrepareBundle(context) {
 
 // src/closeout/repository-boundaries.ts
 import { createHash as createHash22 } from "crypto";
-import { execFileSync as execFileSync6 } from "child_process";
 import { lstatSync as lstatSync12, readFileSync as readFileSync13 } from "fs";
 import { extname as extname5, join as join15, normalize as normalize3, posix as posix3, resolve as resolve23 } from "path";
 var SOURCE_EXTENSIONS2 = /* @__PURE__ */ new Set([".bash", ".cjs", ".go", ".js", ".jsx", ".mjs", ".py", ".rs", ".sh", ".ts", ".tsx"]);
@@ -29663,9 +29668,8 @@ function finding3(rule, path, detail, relatedPaths = []) {
   });
 }
 function candidatePaths(root) {
-  return execFileSync6("git", hardenedGitArgs(["-C", root, "ls-files", "-co", "--exclude-standard", "-z"]), {
+  return gitExecFileSync(root, ["ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES
   }).split("\0").filter(Boolean).sort();
 }
@@ -29710,8 +29714,7 @@ function unsafeParsedMaps(source) {
 }
 function ignored(root, path) {
   try {
-    execFileSync6("git", hardenedGitArgs(["-C", root, "check-ignore", "-q", "--", path]), {
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
+    gitExecFileSync(root, ["check-ignore", "-q", "--", path], {
       stdio: "ignore"
     });
     return true;
@@ -29938,7 +29941,6 @@ function auditRepositoryBoundaries(rootInput) {
 
 // src/closeout/action-lifecycle.ts
 import { randomUUID as randomUUID6 } from "crypto";
-import { execFileSync as execFileSync7 } from "child_process";
 import {
   existsSync as existsSync11,
   mkdirSync as mkdirSync6,
@@ -30202,9 +30204,8 @@ var SPECIALIZED_ACTION_PROTOCOLS = {
 };
 function currentBranch(repository) {
   try {
-    return execFileSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "symbolic-ref", "--quiet", "--short", "HEAD"]), {
-      encoding: "utf8",
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" })
+    return gitExecFileSync(repository, ["symbolic-ref", "--quiet", "--short", "HEAD"], {
+      encoding: "utf8"
     }).trim();
   } catch {
     throw new Error("action begin requires a named branch; a modifying lifecycle cannot honestly assign a detached worktree");
@@ -30684,9 +30685,8 @@ function writeActionResult(context, lifecycle2, after, status, observedAt, hygie
   };
 }
 function gitLines(repository, args) {
-  const output = execFileSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
-    encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" })
+  const output = gitExecFileSync(repository, args, {
+    encoding: "utf8"
   }).trim();
   return output ? output.split("\n") : [];
 }
@@ -30746,9 +30746,8 @@ function actionRows(regression) {
   });
 }
 function ensureCleanWorkingTree(repository) {
-  const status = execFileSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "status", "--porcelain=v1", "--untracked-files=all"]), {
-    encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" })
+  const status = gitExecFileSync(repository, ["status", "--porcelain=v1", "--untracked-files=all"], {
+    encoding: "utf8"
   });
   if (status.trim()) throw new Error("action finish requires a clean working tree; commit or otherwise resolve the action's repository changes first");
 }
@@ -31615,7 +31614,6 @@ function journalFromEnvironment(environment) {
 
 // src/closeout/finding-anchors.ts
 import { createHash as createHash27 } from "crypto";
-import { spawnSync as spawnSync7 } from "child_process";
 import { existsSync as existsSync14, readFileSync as readFileSync18, statSync as statSync6 } from "fs";
 import { join as join19 } from "path";
 var RECEIPT_FAMILIES = [
@@ -31662,9 +31660,8 @@ function workingTreeBlobOids(repository, paths) {
   }).sort();
   const oids = /* @__PURE__ */ new Map();
   if (regular.length === 0) return oids;
-  const result = spawnSync7("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "hash-object", "--stdin-paths"]), {
+  const result = gitSpawnSync(repository, ["hash-object", "--stdin-paths"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     input: `${regular.join("\n")}
 `,
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,

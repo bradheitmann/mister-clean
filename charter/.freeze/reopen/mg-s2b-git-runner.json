@@ -1,0 +1,75 @@
+{
+  "done_sha256": "2dfeea4356a7a8e71c019388a283a6cc4d0890a4b6f79c88003c79064888ca03",
+  "entries": [
+    {
+      "evidence_sha256": "344c54e72002d85bd68d8df709272b1d33244200da2aea4278b9cc2686c17d4c",
+      "proof": "1",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p1"
+    },
+    {
+      "evidence_sha256": "b721bb6cc85b0fd6e381314116e5999d1d7cce9c833665f543ef54be6ac3dcbc",
+      "proof": "2",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p2"
+    },
+    {
+      "evidence_sha256": "a714761ea8e62878c50d63c67f21eae69650d2be1a95b4026f29d47e34a4afb4",
+      "proof": "3",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p3"
+    },
+    {
+      "evidence_sha256": "815e4dfa5717d96d3678bc4b311c3679c9842206272a70bf804871c9fece096c",
+      "proof": "4",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p4"
+    },
+    {
+      "evidence_sha256": "5d55f98f72c4f6749d39cd79b1230205ec81e889cdca71c50723436914db9893",
+      "proof": "5",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p5"
+    },
+    {
+      "evidence_sha256": "c171fd815f0341f27bd56a40f1e2cc756129c69b0737d50ac81dc9ca73c64984",
+      "proof": "6",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p6"
+    },
+    {
+      "evidence_sha256": "0ea82442bc4cc800636be2a9177ba29f951566a1d7cc88b9bc7c988f7ea46b3f",
+      "proof": "7",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p7"
+    },
+    {
+      "evidence_sha256": "977c47e8228ed63b1016aa7d80741b407d84b5331d3b744997cdf5ad49f75145",
+      "proof": "8",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p8"
+    },
+    {
+      "evidence_sha256": "cfd91090d5d09142fd3a4c34841853ab1984d291c35e6b2b12265139e15804f4",
+      "proof": "9",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p9"
+    },
+    {
+      "evidence_sha256": "202b2742ecc2e92c5670bfa9d5d480f8ce08d1f8f820b34762923f6cff672037",
+      "proof": "10",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "chqa-c3bd2d6-p10"
+    },
+    {
+      "evidence_sha256": "2d3c38b433f3ece328e19fdec621f1a239471069e2678ae587f652bdc98c1582",
+      "proof": "11",
+      "recorded_utc": "2026-11-08T06:43:10Z",
+      "run_id": "mg-s2b-selfjudge-1"
+    }
+  ],
+  "head": "c3bd2d6f2ff2239b1f33a36b4f4828ea98cdbb7e",
+  "manifest_sha256": "fdadb7d80a0ababa5df0399795ab990a10d0797ccd1a3cfa0ec1bf4d9c06e8fe",
+  "schema_version": "charter.reopen/1",
+  "slice": "mg-s2b-git-runner"
+}

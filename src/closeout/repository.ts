@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -322,7 +321,7 @@ export function loadPlanningConfig(repository: string): PlanningConfig | null {
 
 export { PLANNING_LANE_LIFECYCLES, PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
 import { PLANNING_LANE_NAMES, planningLaneLifecycle, type PlanningLaneLifecycle } from "./planning-analysis/lifecycle.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitSpawnSync } from "./git-hardening.js";
 
 const PLANNING_IGNORED_NAMES = new Set([
   "__fixtures__",
@@ -394,9 +393,8 @@ export function runGit(
   options: RunGitOptions = {},
 ): GitResult {
   const limit = options.max_buffer_bytes ?? GIT_OUTPUT_LIMIT_BYTES;
-  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+  const result = gitSpawnSync(repository, args, {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: limit,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -413,9 +411,8 @@ export function runGit(
 }
 
 function gitNullPaths(repository: string, args: readonly string[]): string[] {
-  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+  const result = gitSpawnSync(repository, args, {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -663,8 +660,4 @@ export function resolveInside(root: string, candidate: string): string | undefin
 
 export function isSymlink(path: string): boolean {
   return lstatSync(path).isSymbolicLink();
-}
-
-export function runCommand(command: string, args: readonly string[], cwd?: string): string {
-  return execFileSync(command, [...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 }

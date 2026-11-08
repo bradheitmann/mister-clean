@@ -12,7 +12,6 @@
  * kept beside the new one so pre-7.3 evidence still joins.
  */
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -22,7 +21,7 @@ import {
   semanticFindingFingerprint,
 } from "./detector-coverage.js";
 import { GIT_OUTPUT_LIMIT_BYTES } from "./repository.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitSpawnSync } from "./git-hardening.js";
 
 export const RECEIPT_FAMILIES = [
   "planning_graph",
@@ -130,9 +129,8 @@ export function workingTreeBlobOids(repository: string, paths: readonly string[]
   }).sort();
   const oids = new Map<string, string>();
   if (regular.length === 0) return oids;
-  const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, "hash-object", "--stdin-paths"]), {
+  const result = gitSpawnSync(repository, ["hash-object", "--stdin-paths"], {
     encoding: "utf8",
-    env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
     input: `${regular.join("\n")}\n`,
     maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
     stdio: ["pipe", "pipe", "pipe"],

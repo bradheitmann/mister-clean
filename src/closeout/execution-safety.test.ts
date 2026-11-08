@@ -18,7 +18,7 @@ import { createFixtureRepository, fixtureCommit } from "../test-support/fixture-
 import { fixture as cleanBundleFixture, git, removeTemporaryRoots, successor, validateBundle, type RecordValue } from "./bundle.test-fixture.js";
 import { discoverNativeGates } from "./native-gates.js";
 import { gateShimDirectory, materializeGateShims, resolveExecutable, runNativeGates, scrubbedEnvironment } from "./native-gate-runner.js";
-import { GitConfigSnapshotError, contactRemote, gitConfigSnapshot, hardenedGitArgs, hardenedGitEnv, hardenedRemoteUrl } from "./git-hardening.js";
+import { GitConfigSnapshotError, contactConfiguredRemote, gitConfigSnapshot, hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
 import { nodeGitPort } from "./bundle.js";
 import { prepareCloseout } from "./prepare.js";
 import { captureRepositoryObject } from "./repository-object.js";
@@ -448,7 +448,7 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       writeFileSync(join(repo, "README.md"), "fixture\n");
       fixtureCommit(repo, "fixture");
       // An ordinary https origin, so a fallback-to-origin would pass the transport check.
-      await expect(hardenedRemoteUrl(repo, "origin", nodeGitPort)).rejects.toThrow(/not a configured remote/i);
+      await expect(contactConfiguredRemote(repo, "origin", "refs/heads/main", ["--heads"], nodeGitPort)).rejects.toThrow(/not a configured remote/i);
       await git(repo, "remote", "add", "origin", "https://example.invalid/x.git");
 
       const marker = join(root, "upload-pack-ran");
@@ -456,7 +456,7 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       writeFileSync(program, `#!/bin/sh\necho ran >> "${marker}"\n`);
       chmodSync(program, 0o755);
       // The option-shaped name is refused outright, so it never reaches ls-remote argv.
-      await expect(hardenedRemoteUrl(repo, `--upload-pack=${program}`, nodeGitPort)).rejects.toThrow(/begin with '-'/i);
+      await expect(contactConfiguredRemote(repo, `--upload-pack=${program}`, "refs/heads/main", ["--heads"], nodeGitPort)).rejects.toThrow(/begin with '-'/i);
       // Even passed straight to ls-remote with the terminator, it cannot become an option.
       spawnSync("git", hardenedGitArgs(["-C", repo, "ls-remote", "--heads", "--end-of-options", `--upload-pack=${program}`, "."]), { encoding: "utf8", env: hardenedGitEnv(), timeout: 30_000 });
       expect(existsSync(marker)).toBe(false);
@@ -482,9 +482,8 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
           `[url "${target(local)}"]`, "\tinsteadOf = https://second.invalid/",
           "",
         ].join("\n"));
-        const checked = await hardenedRemoteUrl(repo, "origin", nodeGitPort);
-        expect(checked).toBe("https://second.invalid/repo");
-        const contacted = contactRemote(repo, checked, ["--heads"], "refs/heads/main");
+        const contacted = await contactConfiguredRemote(repo, "origin", "refs/heads/main", ["--heads"], nodeGitPort);
+        expect(contacted.url).toBe("https://second.invalid/repo");
         // The checked URL is contacted as written: no repository, global or system
         // rewrite applies, so the local repository is never reached.
         expect(contacted.code).not.toBe(0);
@@ -526,9 +525,9 @@ describe("execution safety (master-gate S1)", { timeout: 180_000 }, () => {
       writeFileSync(join(repo, "README.md"), "fixture\n");
       fixtureCommit(repo, "fixture");
       appendFileSync(join(repo, ".git", "config"), "[remote \"origin\"]\n\turl = ext::sh -c id\n");
-      await expect(hardenedRemoteUrl(repo, "origin", nodeGitPort)).rejects.toThrow(/transport/i);
+      await expect(contactConfiguredRemote(repo, "origin", "refs/heads/main", ["--heads"], nodeGitPort)).rejects.toThrow(/transport/i);
       appendFileSync(join(repo, ".git", "config"), "[remote \"https\"]\n\turl = https://example.invalid/x.git\n");
-      await expect(hardenedRemoteUrl(repo, "https", nodeGitPort)).resolves.toBe("https://example.invalid/x.git");
+      await expect(contactConfiguredRemote(repo, "https", "refs/heads/main", ["--heads"], nodeGitPort)).resolves.toMatchObject({ url: "https://example.invalid/x.git" });
     });
 
     it("live validation refuses a remote-ref target proof over a command transport", async () => {

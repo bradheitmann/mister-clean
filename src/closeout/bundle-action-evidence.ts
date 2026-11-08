@@ -48,7 +48,7 @@ import {
   RETIREMENT_RATIFICATION_NORMALIZER,
   RETIREMENT_RULING_MINTED_BY,
 } from "./retirement-ratification.js";
-import { contactRemote, hardenedRemoteUrl } from "./git-hardening.js";
+import { GitRemoteRefError, contactConfiguredRemote } from "./git-hardening.js";
 
 export interface NativeGateControlEvidence {
   readonly control: JsonObject;
@@ -280,23 +280,17 @@ export async function validateBoundExecutionRecords(
         if (repo && !allowPlaceholders && (await git.run(repo, ["cat-file", "-e", `${String(evidence.commit ?? "")}^{commit}`], [0, 128])).code !== 0) errors.push(`${epath}: commit does not exist in live repository`);
       } else if (name === "pushed" && evidence.kind === "remote_ref_resolution") {
         if (repo && !allowPlaceholders) {
-          // Same boundary as the live target proof: resolve the exact remote's URL,
-          // check its transport, then contact that URL directly with --end-of-options
-          // so an option-shaped remote or ref cannot become a git option.
-          const ref = String(evidence.ref ?? "");
-          if (ref.startsWith("-")) {
-            errors.push(`${epath}: a pushed ref may not begin with '-'`);
-            continue;
-          }
-          let remoteUrl: string;
+          // Same boundary as the live target proof, through the one helper: refuse
+          // an option-shaped ref or remote, resolve the exact remote's URL, check
+          // its transport, then contact that URL directly, in isolation.
+          let result: { readonly stdout: string };
           try {
-            remoteUrl = await hardenedRemoteUrl(repo, String(evidence.remote ?? ""), git);
+            result = await contactConfiguredRemote(repo, String(evidence.remote ?? ""), String(evidence.ref ?? ""), [], git);
           } catch (error) {
-            errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
+            if (error instanceof GitRemoteRefError) errors.push(`${epath}: a pushed ref may not begin with '-'`);
+            else errors.push(`${epath}: ${error instanceof Error ? error.message : String(error)}`);
             continue;
           }
-          // Contacted outside any config, so no second insteadOf can redirect the checked URL.
-          const result = contactRemote(repo, remoteUrl, [], ref);
           const observed = result.stdout.split("\n").filter(Boolean)[0]?.split(/\s+/, 1)[0] ?? "";
           if (observed !== evidence.commit || evidence.commit !== object(report.repo)?.commit) errors.push(`${epath}: live remote resolution does not establish the subject commit`);
         }

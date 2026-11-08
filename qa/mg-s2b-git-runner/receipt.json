@@ -1,0 +1,121 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-s2b-git-runner",
+  "verifies": "mg-s2b-git-runner",
+  "candidate_commit": "c3bd2d6f2ff2239b1f33a36b4f4828ea98cdbb7e",
+  "frozen": {
+    "manifest_sha256": "fdadb7d80a0ababa5df0399795ab990a10d0797ccd1a3cfa0ec1bf4d9c06e8fe",
+    "head": "c3bd2d6f2ff2239b1f33a36b4f4828ea98cdbb7e"
+  },
+  "dispatch": {
+    "base_commit": "e3b4baa36b3c82dc3e81b47002a6624db1a0033a",
+    "brief_sha256": "aa815a919aab8719a79dfe13dd37b60fbe85a433b7a61c57d7441b405701009c"
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5.5",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa-s2b/evidence-proof-1.txt (proof 1, spawn-ledger differential, reopened by CH/QA): two scratch copies made exactly as briefed (base = `git -C <checkout> archive ef38ffd | tar -x` with `git show c3bd2d6:src/test-support/git-spawn-ledger.ts` written over the recorder, deviation I1, verified with cmp; head = `git archive c3bd2d6`), each given `cp -Rc <checkout>/node_modules`. run-ledger.sh on each: base 22 files, 19 passed / 3 failed, head 23 files, 18 passed / 5 failed; every failure was either the absent git root or the absent built dist/ of a bare archive export (planning, backbone, skill-contract on both sides, plus head git-runner delta (c)) or a 30000 ms timeout in bundle.test.ts under host load, and each file was rerun alone with rerun-ledger-file.sh until green (proofs/ledger-rerun-*.txt); the head bundle file was rerun while the copy was still unprovisioned so that base and head keep the same environment for that file. The ledger file-name sets then match the DEV evidence exactly (`diff` of ledger-base-2 vs ledger-base and of ledger-head-2 vs ledger-head over *.jsonl: empty; 20 and 21 files). Compare run from the head copy: differences 0, compared_records 8442, sites_covered 28, missed_base [], missed_head [], undeclared_head_only [], base_tests 415, head_tests 420, head_only_tests 5, transformed {a 7, b 4179, c 1, d 8}, Test Files 1 passed - byte-identical to s2/evidence/s2b/r2-compare.log. Deviation I1 judged sound and recorded in section 8 of this file and section (5) of the review: attribution to the direct caller under src/ is applied by the same recorder bytes on both sides, a record present on one side only is reported as a difference rather than silenced, and the dropped spawns are fixed-argument test fixtures whose production site never runs on either side. Evidence file: qa-s2b/evidence-proof-1.txt, sha256 344c54e72002d85bd68d8df709272b1d33244200da2aea4278b9cc2686c17d4c.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa-s2b/evidence-proof-2.txt (proof 2, declared deltas 2(a)-2(e)): `R src/closeout/git-runner.test.ts -t \"declared deltas\"` in the head copy -> exit 0, 9 passed / 21 skipped, covering (a) --no-optional-locks placement on all four entry points, (b) the added locale over the parent, (c) planning -C instead of cwd, with 2(e) covered by proof 5. Mutant applied by QA from s2/evidence/s2b/mutants/p2b-omit-lc-all.patch (the runner stops adding the locale): RED, exactly the four (b) assertions fail and nothing else, then restored - git-hardening.ts byte-identical to c3bd2d6 (cmp). Matches the DEV mutants/p2b-omit-lc-all.log shape (4 failed). Evidence file: qa-s2b/evidence-proof-2.txt, sha256 b721bb6cc85b0fd6e381314116e5999d1d7cce9c833665f543ef54be6ac3dcbc.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa-s2b/evidence-proof-3.txt (proof 3, the runner owns every hardening property): `R src/closeout/git-runner.test.ts -t \"runner contract\"` in the head copy -> exit 0; the describe asserts the hardened -c overrides then --no-optional-locks and -C <repo> then args on each of the four entry points, the hardened environment plus only the allowlisted extra names, GitRunnerEnvError before any spawn for any other name (no call at all reaches the shim), and the parent-selection control: an unhardened control call is redirected by an inherited selector while the runner call still reports the fixture repository. The DONE mutants for this proof are RED in the DEV evidence mutants/p3-accept-any-extra-env.log (4 failed) and mutants/p3-raw-env-in-place-of-hardened.log (5 failed). Evidence file: qa-s2b/evidence-proof-3.txt, sha256 a714761ea8e62878c50d63c67f21eae69650d2be1a95b4026f29d47e34a4afb4.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa-s2b/evidence-proof-4.txt (proof 4, D5 in the helper): `R src/closeout/git-runner.test.ts -t \"remote contact\"` -> exit 0 (6 passed / 24 skipped) and `R src/closeout/execution-safety.test.ts -t \"git program keys\"` -> exit 0 (22 passed / 18 skipped). Mutants applied by QA: delete the transport check -> RED on exactly the plain-local-path fixture test (control first proves git ls-remote succeeds on that path); delete the ref check -> RED on the three refusal and exact-string tests (option-shaped ref before any spawn, the live-validation string and the pushed-ref string). Both restored to byte-identical c3bd2d6 files. The third DONE mutant (delete the name dash check) is RED in the DEV evidence mutants/p4-delete-name-dash-check.log (2 failed). Evidence file: qa-s2b/evidence-proof-4.txt, sha256 815e4dfa5717d96d3678bc4b311c3679c9842206272a70bf804871c9fece096c.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa-s2b/evidence-proof-5.txt (proof 5, no direct git spawn outside the runner): `R src/backbone-single-implementation.test.ts -t \"git runner\"` -> exit 0, 5 passed / 5 skipped, i.e. the seven allowed src/ modules, the literal git program only in git-hardening.ts, every spawn program on its per-file list, hardenedGitArgs/hardenedGitEnv callers only in native-gate-runner.ts, and scripts/ frozen at 1 / 1 / 6 / 4 / 5 = 17 git spawns in 5 files (correction C1). Mutant applied by QA (import node:child_process and spawn git in github-actions.ts) -> RED on (a) and (b) only; restored to byte-identical. The other two DONE mutants are RED in the DEV evidence (fifth git spawn in verify_packed_cli on (e), variable program in semantic on (c)). Evidence file: qa-s2b/evidence-proof-5.txt, sha256 5d55f98f72c4f6749d39cd79b1230205ec81e889cdca71c50723436914db9893.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa-s2b/evidence-proof-6.txt (proof 6, one trackedPaths): `R src/closeout/native-gates.test.ts src/closeout/native-gate-budget.test.ts src/closeout/gate-evidence-subject-change.test.ts` -> exit 0 (Test Files 3 passed). The DONE mutant for this proof is ledger-only (drop --full-name): it is s2/evidence/s2b/ledger-mutants/p6-drop-full-name and is RED there; proof 1, which this QA reproduced with identical numbers to the DEV, carries the corresponding argv identity. Evidence file: qa-s2b/evidence-proof-6.txt, sha256 c171fd815f0341f27bd56a40f1e2cc756129c69b0737d50ac81dc9ca73c64984.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa-s2b/evidence-proof-7.txt (proof 7, carried declaration S2A-QA-D1): `R src/canonical-json.golden.test.ts -t \"S2A-QA-D1\"` -> exit 0, 4 passed / 21 skipped (undefined and NaN at the top level and inside arrays each throw). The DONE mutant (encode an array undefined as null) is RED in the DEV evidence mutants/p7-array-undefined-as-null.log (1 failed). Evidence file: qa-s2b/evidence-proof-7.txt, sha256 0ea82442bc4cc800636be2a9177ba29f951566a1d7cc88b9bc7c988f7ea46b3f.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa-s2b/evidence-proof-8.txt (proof 8, S1b protections on the new route): `R src/closeout/execution-safety.test.ts` (all describes) -> exit 0, 40 tests, and `R src/closeout/git-runner.test.ts -t \"fsmonitor control\"` -> exit 0. Mutant applied by QA (the runner skips the hardened argument builder) -> RED on exactly the fsmonitor control case, whose unhardened control first proves the planted hook really fires; restored to byte-identical c3bd2d6. Same shape as DEV mutants/p8-skip-hardened-git-args.log (1 failed). Evidence file: qa-s2b/evidence-proof-8.txt, sha256 977c47e8228ed63b1016aa7d80741b407d84b5331d3b744997cdf5ad49f75145.",
+      "classification": "executed"
+    },
+    {
+      "id": "C09",
+      "description": "qa-s2b/evidence-proof-9.txt (proof 9, regression set on the frozen head, in the head copy): `bun run build:raw` exit 0 with no error or warning line and `git status --porcelain` empty after it; `cmp` of the rebuilt bin/mister-clean.js and MANIFEST.sha256 against `git show c3bd2d6:<path>` IDENTICAL both (sha256 b8653a1a0bbf74022a5a867ffed4c402e668da7ad317e03a6e6104a8a3c82887 and ef4ff8f3ee3c4de4a7c62ba9a27462f32941c26f18e28baea65e7763d9a341bd); `<copy>/node_modules/.bin/tsc --noEmit` exit 0 with 0 bytes of output; `bun run sync:cli:check` exit 0; `bun run manifest:package:check` exit 0 (PASS, 82 entries); `bun run audit:public` exit 0 (PASS, 83 files); the DONE node set of 23 files under R with --no-file-parallelism -> exit 0, Test Files 23 passed, Tests 553 passed (831 s); the DONE bun file -> exit 0, 40 passed; cargo run from inside each tool directory per correction C3 -> campaign-observer 10 passed + 15 passed, campaign-query 0 passed + 2 passed, both exit 0; `charter check --strict` against the copy -> charter: ok, exit 0 (not in the brief list, run as extra assurance); no test file deleted (git diff --diff-filter=D empty), 3 test-infrastructure files added, 3 existing test files modified (the two new describes plus execution-safety.test.ts:442-534 moving to contactConfiguredRemote, as the DONE states); the copy's tracked status is empty at the end. Evidence file: qa-s2b/evidence-proof-9.txt, sha256 cfd91090d5d09142fd3a4c34841853ab1984d291c35e6b2b12265139e15804f4.",
+      "classification": "executed"
+    },
+    {
+      "id": "C10",
+      "description": "qa-s2b/evidence-proof-10.txt (proof 10, hosted CI): `gh run list --repo bradheitmann/mister-clean --branch mg/s2b-git-runner` finds run 42446347324 (CI) and 42446347300 (Dependency audit), both on headSha c0578487f083941d8952d63e01952ee680780def; `gh run view 42446347324 --json jobs,headSha` shows the required job \"verify\" conclusion=success, status=completed, every executed step success (including Reconstruct and verify the exact candidate in one clean capsule and Verify campaign SQLite reader and strict TypeScript intake helper) with only the release steps skipped. The workflow-level conclusion is failure solely because of the non-required job named \"charter (non-required; fails as NOT CHECKED while the charter source is unreachable)\", the same pre-existing infrastructure observation recorded as S2A-QA-D4 on mg-s2a-codecs. `git diff --stat c3bd2d6 c057848` is one file, charter/.freeze/mg-s2b-git-runner.json, so the CI head carries exactly the frozen code. Dependency audit run conclusion success. Evidence file: qa-s2b/evidence-proof-10.txt, sha256 202b2742ecc2e92c5670bfa9d5d480f8ce08d1f8f820b34762923f6cff672037.",
+      "classification": "executed"
+    },
+    {
+      "id": "C11",
+      "description": "qa-s2b/evidence-review.txt (independent review of `git diff 74e23b1 c3bd2d6 -- src/ scripts/`, 24 files, +1139 / -189, full diff kept at qa-s2b/review-diff.txt): (1) no git spawn bypasses the runner - the only non-test literal-git spawns in the repository are git-hardening.ts's four entry points plus its config snapshot and the five frozen scripts/ files (17 spawns, unchanged from base), src/ imports node:child_process in exactly the seven allowlisted modules, tools/ has no .ts, and no .mjs/.js source outside bin/ spawns git; (2) no argv, env or options change outside the declared deltas - all 28 sites read base-vs-head, argv identical except delta (a) at repository-boundaries :79/:138 and planning :14 plus delta (c) at planning :14 (the second argument of hardenedGitArgs only selects the repository for driver overrides, it never enters argv), env differs only by the delta (b) locale, and every option (encoding, maxBuffer, timeout, killSignal, stdio, input, windowsHide, shell) is carried through unchanged with cwd and env not settable at all; (3) D5 leaves exactly one transport check - the only construction of GitRemoteTransportError is git-hardening.ts:317, hardenedRemoteUrl and contactRemote are module-private and called only by contactConfiguredRemote, and the two callers keep their exact refusal strings and their ref-first order; (4) deleting runCommand breaks no export - it had zero callers at base and no reference to the name exists anywhere in src/ scripts/ tools/ or bin/, and the other two removed exports are likewise unreferenced; (5) deviation I1 judged sound, with the residual bounded to a test mock forwarding production-derived arguments into a dropped fixture spawn, a case that does not occur in this slice. No substantiated defect. Evidence file: qa-s2b/evidence-review.txt, sha256 bdd882224ea45fa0205fd70155e47f931c41be10fbd6a194fefdfcaba42f725d.",
+      "classification": "executed"
+    },
+    {
+      "id": "C12",
+      "description": "s2/selfjudge-s2b/evidence-proof-11.txt (proof 11, pre-merge self-judge in the Linux judge container; classification executed). Verified against the raw files, not the summary: (a) judge.log records `HEAD c0578487f083941d8952d63e01952ee680780def up origin/mg/s2b-git-runner` and `prepare exit 0`, judge.sh guards the clone with `[ rev-parse HEAD = c0578487... ] || exit 2` (no WRONG-HEAD), and closeout-report.json repo.commit, closure-bundle.json custody.subject_commit and public-safety-audit.json repository_object.head_commit all equal c0578487f083941d8952d63e01952ee680780def (the frozen c3bd2d6 plus its freeze record c057848); run id mg-s2b-selfjudge-1 in the bundle and prepare.out. (b) closeout-report.json completion_debts holds exactly 5 debts in 2 classes - the four bare-scheme public_safety_file-url instances (76269cc852b99829, 8eda1b26ec22165c, a5da646c5f919c4f, 11d91857a80c69f7) and one semantic_probe_set_unassigned (DEBT-SEMANTIC-SET-FF93D7E3397A2DF7) - both classes in main known baseline: the four file-url fingerprints are byte-identical to the s2/selfjudge/evidence-proof-9.txt (S2a) baseline list and the class is carried in ci-green-1/selfjudge/evidence-proof-5.txt and in charter/STATE.md (\"They are a baseline class\"), and the semantic re-attestation class is carried in both baselines; no native-gate debt at all, strictly fewer than baseline (both prior baselines carried one). (c) all four file-url findings sit in files from main: `git -C <checkout> log --format=%h -1 -- <path>` gives charter/DONE/mg-ci-green-1.md (lines 2, 4) -> 55db0c7, qa/mg-ci-green-1/receipt.json (line 42) -> 8013fd3, qa/mg-s1b-git-env-hardening/receipt-chqa-proofs1-7.json (line 22) -> 4c236c9, and each is an ancestor of main (merge-base --is-ancestor), none a slice commit. (d) every native gate observed_status 0: native-gate-{501f29fe5eca2a0a,526f457f42a55edd,a58bac7143754945}.json all 0 with semantic_status pass, closeout-report.json native_gate_accounting executed 3 / required 3 / passed 3, native-gate-validation.json status pass, and native-gate-output/*.stdout.bin end green (node 1135 passed | 2 skipped plus 216 control-plane passed and 73 passed | 1 skipped; campaign-observer 10 + 15 passed, 0 failed; campaign-query 2 passed, 0 failed). The summary (evidence-proof-11.txt) was compared line by line against these raw files: debt ids, findings, gate statuses, run id, head sha and every test count match; no mismatch found. Two observations, neither a mismatch: the closeout report verdict field is NOT_CLEAN with debt_census {discovered 5, paid 0}, consistent with the five debts the summary lists (the summary claims only a delta against baseline, not cleanliness); and the DONE proof-11 sentence names its baseline as the semantic re-attestation plus DEBT-NATIVE-GATE-17ED5EBED7B18D8C, while the baseline evidence files and STATE.md also carry the file-url class - this run produced no native-gate debt, so it is inside either enumeration. Evidence file: s2/selfjudge-s2b/evidence-proof-11.txt, sha256 2d3c38b433f3ece328e19fdec621f1a239471069e2678ae587f652bdc98c1582.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "S2B-QA-D1",
+      "severity": "info",
+      "title": "The briefed `git archive` scratch copies have no git root and no built dist/, which four ledger files and two proof reopens cannot run without",
+      "status": "resolved",
+      "evidence": "Measured in qa-s2b/evidence-proof-1.txt section 2 and proofs/ledger-rerun-*.txt: src/planning.test.ts fails at import with \"source-development planning requires the verified Git package root\" (src/planning.ts:14 tests <copy>/.git), src/backbone-single-implementation.test.ts fails in `git ls-files` with \"fatal: not a git repository\", src/skill-contract.test.ts fails on ENOENT dist/cli.js and on the package-manifest entry list (dist/ is gitignored, so it is absent from an archive export), and head git-runner delta (c) fails for the planning reason - the brief only sanctions reruns for timeouts, so the environment was corrected instead of the code. Correction: both copies provisioned identically (git init + add + commit, the head index verified equal to the c3bd2d6 tree with 0 missing and 0 extra paths, then `bun run build:raw` in each), then exactly those files rerun until green; the head bundle file was rerun first while still unprovisioned so base and head stay symmetric for it, and execution-safety.test.ts was rerun in both copies afterwards because two fsmonitor-audit tests record 25 and 7 fewer git spawns in an unprovisioned copy (the audit CLI fails before its first spawn, so the marker assertion still passes). After correction the ledger file-name sets match the DEV evidence sets exactly and the compare reproduces r2-compare.log byte for byte (415 base tests, 8442 compared records, 0 differences, 28/28 sites). Not a code defect; owed to the procedure text: the DONE/QA brief for this slice should say that the archive copies are provisioned with a git root and built outputs before the ledger runs.",
+      "classification": "executed"
+    },
+    {
+      "id": "S2B-QA-D2",
+      "severity": "info",
+      "title": "The compare sets aside every remote, get-url and ls-remote record of four named execution-safety tests (delta (d)), which is broader than the change it declares",
+      "status": "open",
+      "evidence": "qa-s2b/review-diff.txt, git-spawn-ledger-compare.test.ts transformBase: for the four DELTA_D_TESTS every record whose argv is a remote contact is dropped on both sides (counts.d = 8 in the final compare), so a hypothetical change to those contacts would not be caught by proof 1 for those four tests. Covered elsewhere: section (2) of qa-s2b/evidence-review.txt reads the contact code base-vs-head and finds its argv, isolation directory, environment and timeout identical apart from the declared delta (b), and proof 4's behavioural mutants (transport check, ref check) are RED. No behaviour difference was found. Not blocking; recorded so the breadth of the set-aside is on the record for the next reviewer.",
+      "classification": "executed"
+    },
+    {
+      "id": "S2B-QA-D3",
+      "severity": "info",
+      "title": "bundle.test.ts timed out on 30000 ms under host load in the head ledger run, as it does in the DEV evidence",
+      "status": "resolved",
+      "evidence": "qa-s2b/ledger-head.log: \"does not let reported satisfied state erase a physically failing native gate\" - Test timed out in 30000ms, no assertion failure; the first QA rerun attempt also failed on two 30000 ms timeouts while the host load average exceeded 100 from other work on the machine. Rerun alone with rerun-ledger-file.sh per the brief: attempt 1 after provisioning exited 0, Test Files 1 passed, Tests 128 passed, and the JSONL was replaced (proofs/ledger-rerun-head-src__closeout__bundle.test.ts.txt); the file set then matches ledger-head-2 and the compare is 0 differences. Environmental, the same load sensitivity the slice report and DONE note. Recorded so a later rerun at low load is not mistaken for a new failure.",
+      "classification": "executed"
+    }
+  ],
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11"
+  ]
+}

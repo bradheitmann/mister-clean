@@ -8,11 +8,20 @@
  * `hardenedGitEnv`, which neutralise those keys for the call and drop the
  * system config. Config is still read, so remotes, upstreams and object format
  * keep working.
+ *
+ * Callers do not spawn git themselves: the runner below (`gitExecFileSync`,
+ * `gitSpawnSync`, `gitExecFile`, `gitSpawn`) is the only place that does, and
+ * it owns the hardened argv, `--no-optional-locks`, `-C <repo>` and the
+ * environment (with `LC_ALL=C`). Each entry point keeps one child_process API,
+ * so a caller's exit, throw and timeout semantics stay its own.
  */
-import { spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawn, spawnSync, type ChildProcess, type ChildProcessWithoutNullStreams, type SpawnSyncReturns, type StdioOptions } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 /** Keys whose value names a program, or a transport that carries a command. */
 const FIXED_OVERRIDES = [
@@ -124,10 +133,12 @@ export interface GitConfigSnapshot {
  * quiescent subject, like the rest of the live path.
  */
 export function gitConfigSnapshot(repository: string): GitConfigSnapshot {
+  // The snapshot is what hardenedGitArgs needs, so it cannot go through it: its
+  // argv is the fixed overrides only, and the runner adds just LC_ALL=C.
   const result = spawnSync("git", [
     ...FIXED_OVERRIDES.flatMap((override) => ["-c", override]),
     "-C", repository, "config", "--list", "--name-only", "--null",
-  ], { encoding: "utf8", env: hardenedGitEnv(), stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });
+  ], { encoding: "utf8", env: runnerEnvironment({}), stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });
   if (result.error !== undefined) throw new GitConfigSnapshotError(repository, result.error.message);
   if (result.signal !== null) throw new GitConfigSnapshotError(repository, `git config was terminated by ${result.signal}`);
   if (result.status !== 0 || typeof result.stdout !== "string") {
@@ -166,6 +177,95 @@ export function hardenedGitArgs(args: readonly string[], cwd?: string): string[]
   return [...overrides.flatMap((override) => ["-c", override]), ...args];
 }
 
+/**
+ * The only `GIT_*` names a caller may add to the runner's environment: a
+ * read-only index and object store (bundle-runtime's `write-tree`), and the
+ * isolated global config and ceiling of the remote contact below. Any other
+ * name, GIT_DIR or GIT_SSH_COMMAND say, could redirect or reprogram the call.
+ */
+const RUNNER_EXTRA_ENV = [
+  "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG_GLOBAL", "GIT_CEILING_DIRECTORIES",
+] as const;
+
+export type GitRunnerExtraEnvName = (typeof RUNNER_EXTRA_ENV)[number];
+
+export class GitRunnerEnvError extends Error {
+  readonly code = "git_runner_env_refused";
+  constructor(readonly names: readonly string[]) {
+    super(`refusing the git call: extra environment ${names.map((name) => JSON.stringify(name)).join(", ")} is not one of ${RUNNER_EXTRA_ENV.join(", ")}`);
+    this.name = "GitRunnerEnvError";
+  }
+}
+
+/**
+ * Options a runner call may set. There is no `cwd` and no `env`: the
+ * repository is the runner's `-C` argument and the environment is always the
+ * hardened one, so a caller cannot route around either.
+ */
+export interface GitSpawnOptions {
+  readonly encoding?: BufferEncoding | "buffer" | null;
+  readonly maxBuffer?: number;
+  readonly timeout?: number;
+  readonly killSignal?: NodeJS.Signals | number;
+  readonly stdio?: StdioOptions;
+  readonly input?: string | NodeJS.ArrayBufferView | undefined;
+  readonly windowsHide?: boolean;
+  readonly shell?: false;
+  readonly extraEnv?: Readonly<Partial<Record<GitRunnerExtraEnvName, string>>>;
+}
+
+/** The runner's environment: hardened, with LC_ALL=C, plus only allowlisted extras. */
+function runnerEnvironment(extraEnv: Readonly<Record<string, string | undefined>>): NodeJS.ProcessEnv {
+  const refused = Object.keys(extraEnv).filter((name) => !(RUNNER_EXTRA_ENV as readonly string[]).includes(name));
+  if (refused.length > 0) throw new GitRunnerEnvError(refused);
+  return { ...hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }), ...extraEnv };
+}
+
+/** Child options: the caller's, unchanged, with the runner's environment. Checked before argv, so a refused env spawns nothing. */
+function runnerOptions(options: GitSpawnOptions): Record<string, unknown> {
+  const { extraEnv = {}, ...rest } = options;
+  return { ...rest, env: runnerEnvironment(extraEnv) };
+}
+
+function runnerArgs(repo: string, args: readonly string[]): string[] {
+  return hardenedGitArgs(["--no-optional-locks", "-C", repo, ...args]);
+}
+
+/** `execFileSync` of git against `repo`; throws as execFileSync does. */
+export function gitExecFileSync(repo: string, args: readonly string[], options: GitSpawnOptions & { readonly encoding: BufferEncoding }): string;
+export function gitExecFileSync(repo: string, args: readonly string[], options?: GitSpawnOptions): Buffer;
+export function gitExecFileSync(repo: string, args: readonly string[], options: GitSpawnOptions = {}): string | Buffer {
+  const childOptions = runnerOptions(options);
+  return execFileSync("git", runnerArgs(repo, args), childOptions);
+}
+
+/** `spawnSync` of git against `repo`; reports exit and timeout in its result, as spawnSync does. */
+export function gitSpawnSync(repo: string, args: readonly string[], options: GitSpawnOptions & { readonly encoding: BufferEncoding }): SpawnSyncReturns<string>;
+export function gitSpawnSync(repo: string, args: readonly string[], options?: GitSpawnOptions): SpawnSyncReturns<Buffer>;
+export function gitSpawnSync(repo: string, args: readonly string[], options: GitSpawnOptions = {}): SpawnSyncReturns<string | Buffer> {
+  const childOptions = runnerOptions(options);
+  return spawnSync("git", runnerArgs(repo, args), childOptions);
+}
+
+/** Promisified `execFile` of git against `repo`; rejects as execFile does. */
+export async function gitExecFile(
+  repo: string,
+  args: readonly string[],
+  options: GitSpawnOptions & { readonly encoding: BufferEncoding },
+): Promise<{ readonly stdout: string; readonly stderr: string }> {
+  const childOptions = runnerOptions(options) as { encoding: BufferEncoding };
+  return await execFileAsync("git", runnerArgs(repo, args), childOptions);
+}
+
+/** `spawn` of git against `repo`; the caller owns the child's lifecycle. */
+export function gitSpawn(repo: string, args: readonly string[], options: GitSpawnOptions & { readonly stdio: readonly ["pipe", "pipe", "pipe"] }): ChildProcessWithoutNullStreams;
+export function gitSpawn(repo: string, args: readonly string[], options?: GitSpawnOptions): ChildProcess;
+export function gitSpawn(repo: string, args: readonly string[], options: GitSpawnOptions = {}): ChildProcess {
+  const childOptions = runnerOptions(options);
+  return spawn("git", runnerArgs(repo, args), childOptions);
+}
+
 /** A resolved remote URL's transport: its scheme, scp-like ssh, or a local path. */
 export function remoteTransport(url: string): string {
   const scheme = /^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*)::/u.exec(url)?.groups?.scheme
@@ -183,6 +283,14 @@ export class GitRemoteNameError extends Error {
   }
 }
 
+export class GitRemoteRefError extends Error {
+  readonly code = "git_remote_ref_refused";
+  constructor(readonly ref: string, readonly repository: string) {
+    super(`a ref contacted for ${repository} may not begin with '-'`);
+    this.name = "GitRemoteRefError";
+  }
+}
+
 export interface GitRunner {
   run(repo: string, args: readonly string[], allowed?: readonly number[]): Promise<{ readonly stdout: string; readonly code?: number }>;
 }
@@ -192,10 +300,9 @@ export interface GitRunner {
  * any `insteadOf` rewrite. The name is refused unless it is a configured remote
  * whose name is not option-shaped, so it cannot fall back to `origin` or be
  * read as a git option; the URL comes from that exact remote, and its transport
- * must be https or ssh. Callers contact the returned URL, not the name, so the
- * value checked here is the value contacted.
+ * must be https or ssh. This is the only transport check in the source.
  */
-export async function hardenedRemoteUrl(
+async function hardenedRemoteUrl(
   repository: string,
   remote: string,
   git: GitRunner,
@@ -217,24 +324,19 @@ export async function hardenedRemoteUrl(
  * call runs outside any repository, with no system config and an empty global
  * config, so no `insteadOf` rewrite from the repository, global or system
  * config can redirect it after the check: the bytes checked are the bytes
- * contacted. `repository` names the subject in errors only; it is never read.
+ * contacted.
  */
-export function contactRemote(
-  repository: string,
-  url: string,
-  flags: readonly string[],
-  ref: string,
-): { readonly stdout: string; readonly code: number } {
-  if (ref.startsWith("-")) throw new GitRemoteNameError(ref, `a ref contacted for ${repository} may not begin with '-'`);
+function contactRemote(url: string, flags: readonly string[], ref: string): { readonly stdout: string; readonly code: number } {
   const isolation = mkdtempSync(join(tmpdir(), "mister-clean-remote-contact-"));
   try {
     const outside = join(isolation, "cwd");
     const emptyGlobal = join(isolation, "gitconfig");
     mkdirSync(outside);
     writeFileSync(emptyGlobal, "");
-    const result = spawnSync("git", hardenedGitArgs(["--no-optional-locks", "-C", outside, "ls-remote", ...flags, "--end-of-options", url, ref]), {
+    // GIT_CONFIG_NOSYSTEM=1 comes from hardenedGitEnv, as on every call.
+    const result = gitSpawnSync(outside, ["ls-remote", ...flags, "--end-of-options", url, ref], {
       encoding: "utf8",
-      env: { ...hardenedGitEnv(), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: emptyGlobal, GIT_CEILING_DIRECTORIES: isolation },
+      extraEnv: { GIT_CONFIG_GLOBAL: emptyGlobal, GIT_CEILING_DIRECTORIES: isolation },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 60_000,
     });
@@ -242,4 +344,26 @@ export function contactRemote(
   } finally {
     rmSync(isolation, { recursive: true, force: true });
   }
+}
+
+/**
+ * Contact the configured remote `remote` for `ref`, holding the whole
+ * remote-contact invariant in one place: the ref is refused when option-shaped
+ * (`GitRemoteRefError`), then the remote name and its configured membership are
+ * checked (`GitRemoteNameError`), then its URL is resolved and its transport
+ * checked (`GitRemoteTransportError`), and only then is that exact URL
+ * contacted, in isolation. Nothing is spawned before the ref check, and
+ * nothing contacts a remote before the transport check. A failed contact is a
+ * nonzero `code`, not a throw. `url` is the URL checked and contacted.
+ */
+export async function contactConfiguredRemote(
+  repository: string,
+  remote: string,
+  ref: string,
+  flags: readonly string[],
+  git: GitRunner,
+): Promise<{ readonly url: string; readonly stdout: string; readonly code: number }> {
+  if (ref.startsWith("-")) throw new GitRemoteRefError(ref, repository);
+  const url = await hardenedRemoteUrl(repository, remote, git);
+  return { url, ...contactRemote(url, flags, ref) };
 }

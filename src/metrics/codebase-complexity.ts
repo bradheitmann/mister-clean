@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import {
@@ -18,7 +17,7 @@ import {
   type RepositoryObject,
   type RepositoryObjectSurfaceEntry,
 } from "../closeout/repository-object.js";
-import { hardenedGitArgs, hardenedGitEnv } from "../closeout/git-hardening.js";
+import { gitExecFileSync } from "../closeout/git-hardening.js";
 
 /**
  * Schema 1.0 reports remain valid historical observations.  Version 1.1 adds
@@ -617,9 +616,8 @@ export function classifyIgnoredPath(pathValue: string): IgnoredClass {
 
 function execGit(repository: string, args: readonly string[], input?: string): Buffer {
   try {
-    return execFileSync("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
+    return gitExecFileSync(repository, args, {
       encoding: null,
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0" }),
       input,
       maxBuffer: 1024 * 1024 * 1024,
       stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],

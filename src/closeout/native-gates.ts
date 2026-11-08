@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createReadStream } from "node:fs";
 import {
   accessSync,
@@ -34,7 +33,7 @@ import {
   type HeldExecutionLease,
 } from "./execution-lease.js";
 import { isPlanningPathExcluded, loadPlanningConfig } from "./repository.js";
-import { hardenedGitArgs, hardenedGitEnv } from "./git-hardening.js";
+import { gitSpawn, gitSpawnSync } from "./git-hardening.js";
 
 export type NativeGateKind = "established_ci" | "repository_tests" | "lint" | "typecheck" | "build";
 export type NativeGateDisposition = "required" | "not_applicable" | "absent";
@@ -560,10 +559,6 @@ export class NativeGateGitTimeoutError extends Error {
   }
 }
 
-function gitEnvironment(): NodeJS.ProcessEnv {
-  return hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" });
-}
-
 function gitFailure(args: readonly string[], status: number | null, signal: string | null, stderr: Buffer): Error {
   const detail = UTF8_LENIENT.decode(stderr).trim();
   return new Error(detail || `git ${args.join(" ")} exited ${String(status)}${signal ? ` (${signal})` : ""}`);
@@ -574,18 +569,13 @@ function gitFailure(args: readonly string[], status: number | null, signal: stri
 // idle in spawnSync's private event loop, so input-bearing commands must use
 // gitBytesWithInput below.
 function gitBytes(repository: string, args: readonly string[], timeoutMs = SNAPSHOT_GIT_TIMEOUT_MS): Buffer {
-  const result = spawnSync(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]),
-    {
-      encoding: null,
-      env: gitEnvironment(),
-      killSignal: "SIGKILL",
-      maxBuffer: MAX_GIT_OUTPUT_BYTES,
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: timeoutMs,
-    },
-  );
+  const result = gitSpawnSync(repository, args, {
+    encoding: null,
+    killSignal: "SIGKILL",
+    maxBuffer: MAX_GIT_OUTPUT_BYTES,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: timeoutMs,
+  });
   if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") {
     throw new NativeGateGitTimeoutError(args, timeoutMs);
   }
@@ -624,8 +614,7 @@ async function gitBytesWithInput(
 ): Promise<Buffer> {
   assertPositiveInteger("git timeout", timeoutMs);
   return await new Promise<Buffer>((resolveBytes, rejectBytes) => {
-    const child = spawn("git", hardenedGitArgs(["--no-optional-locks", "-C", repository, ...args]), {
-      env: gitEnvironment(),
+    const child = gitSpawn(repository, args, {
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
@@ -895,16 +884,11 @@ export async function createExecutionSnapshot(
 }
 
 function trackedPaths(repository: string): readonly string[] {
-  const result = spawnSync(
-    "git",
-    hardenedGitArgs(["--no-optional-locks", "-C", repository, "ls-files", "--cached", "--full-name", "-z"]),
-    {
-      encoding: null,
-      env: hardenedGitEnv({ ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }),
-      maxBuffer: MAX_GIT_OUTPUT_BYTES,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  const result = gitSpawnSync(repository, ["ls-files", "--cached", "--full-name", "-z"], {
+    encoding: null,
+    maxBuffer: MAX_GIT_OUTPUT_BYTES,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   if (result.error) throw new Error(`git ls-files failed: ${errorMessage(result.error)}`);
   if (result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
     const stderr = Buffer.isBuffer(result.stderr) ? new TextDecoder().decode(result.stderr).trim() : "";
