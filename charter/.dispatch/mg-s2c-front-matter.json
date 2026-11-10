@@ -1,0 +1,7 @@
+{
+  "base_commit": "52d554fbc72e4284b79d0cf981a07e7f925bdaca",
+  "brief_sha256": "d9aee5e1bc7bc77bce662eaa394f0467f470b43a19da3dc6950a1290673a7132",
+  "done_sha256": "e509646db4e765b5dc82599fe73022f2b9ab74311dc06d5ac045e8aaf6d06464",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-s2c-front-matter"
+}
