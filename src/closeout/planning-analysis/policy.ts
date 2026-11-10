@@ -3,6 +3,7 @@ import { basename, dirname, extname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { foldCase } from "../normalization.js";
 import { planningLaneLifecycle } from "./lifecycle.js";
+import { frontMatterRange } from "./front-matter.js";
 
 /** Private composition hooks. Never exported through the supported package surface. */
 export interface PlanningRepositoryObservations {
@@ -163,6 +164,8 @@ interface Artifact {
   readonly topLevel: boolean;
   readonly type: string;
   readonly unfinishedMarkers: readonly string[];
+  /** The type projection's conflict, if any; read only by planningProcedureExemptPaths. */
+  readonly typeError?: string;
   readonly childRelationshipRole: ChildRelationshipRole;
   readonly relationshipErrors: readonly RelationshipError[];
 }
@@ -682,25 +685,6 @@ function stateProjection(values: readonly string[]): StateProjection {
   };
 }
 
-function frontmatterRange(content: string): { end: number; lines: string[]; start: number } | undefined {
-  const lines = content.split(/\r?\n/);
-  let start = 0;
-  while (start < lines.length) {
-    while (lines[start]?.trim() === "") start += 1;
-    if (lines[start]?.trim().startsWith("<!--")) {
-      while (start < lines.length && !lines[start]?.includes("-->")) start += 1;
-      if (start < lines.length) start += 1;
-      continue;
-    }
-    break;
-  }
-  if (lines[start]?.trim() !== "---") return undefined;
-  for (let end = start + 1; end < lines.length; end += 1) {
-    if (lines[end]?.trim() === "---") return { end, lines, start };
-  }
-  return undefined;
-}
-
 function parseStructured(content: string, kind: "json" | "yaml"): ParsedSource {
   try {
     // JSON.parse is last-key-wins and would erase contradictory duplicate
@@ -726,7 +710,7 @@ function parseSource(source: PlanningSource): ParsedSource {
   const extension = extname(source.path).toLocaleLowerCase("und");
   if (extension === ".json") return parseStructured(source.content, "json");
   if (extension === ".yaml" || extension === ".yml") return parseStructured(source.content, "yaml");
-  const range = frontmatterRange(source.content);
+  const range = frontMatterRange(source.content);
   if (!range) return { metadata: {}, structured: false };
   const raw = range.lines.slice(range.start + 1, range.end).join("\n");
   return parseStructured(raw, "yaml");
@@ -1415,7 +1399,7 @@ function stateLikeHeader(value: string): boolean {
 }
 
 function scanBody(content: string): ScannedBodyLine[] {
-  const range = frontmatterRange(content);
+  const range = frontMatterRange(content);
   const lines = range?.lines ?? content.split(/\r?\n/);
   const start = range ? range.end + 1 : 0;
   const scanned: ScannedBodyLine[] = [];
@@ -2078,6 +2062,7 @@ function parseArtifact(source: PlanningSource): Artifact {
     tableChildren: table,
     topLevel,
     type,
+    ...(typeProjection.error ? { typeError: typeProjection.error } : {}),
     unfinishedMarkers,
   };
 }
@@ -2784,14 +2769,31 @@ function auditPlanningCompletionRollups(
   }
 }
 
+/** Classify every source the way the audit does: sibling context first, then one artifact per source. */
+function parsePlanningSources(sources: readonly PlanningSource[]): Artifact[] {
+  return contextualizeGovernanceValidatorSources(
+    contextualizeDispatchPacketSources(sources),
+  ).map(parseArtifact);
+}
+
+/**
+ * The paths the validator's executed-early/unexecuted-later check exempts, by the
+ * audit's own classification of the same sources: a non-artifact, or a declared
+ * non-artifact type whose type projection has no conflict.
+ */
+export function planningProcedureExemptPaths(sources: readonly PlanningSource[]): ReadonlySet<string> {
+  return new Set(parsePlanningSources(sources)
+    .filter((artifact) => artifact.nonArtifact
+      || (isNonArtifactPlanningClass(artifact.type) && artifact.typeError === undefined))
+    .map((artifact) => artifact.path));
+}
+
 export function auditPlanningArtifacts(
   sources: readonly PlanningSource[],
   planningRootCount = sources.length > 0 ? 1 : 0,
   options: { readonly observations?: PlanningRepositoryObservations; readonly snapshot?: string } = {},
 ): PlanningAuditResult {
-  const artifacts = contextualizeGovernanceValidatorSources(
-    contextualizeDispatchPacketSources(sources),
-  ).map(parseArtifact);
+  const artifacts = parsePlanningSources(sources);
   const findings: PlanningFinding[] = [];
 
   for (const artifact of artifacts) {

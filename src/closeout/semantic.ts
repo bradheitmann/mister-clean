@@ -13,6 +13,7 @@ import {
   planningLaneLifecycle,
 } from "./repository.js";
 import { gitSpawnSync } from "./git-hardening.js";
+import { frontMatterBlock } from "./planning-analysis/front-matter.js";
 import { isTimestamp } from "../timestamp.js";
 
 export type SemanticProbeKind =
@@ -252,24 +253,13 @@ function regexLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function frontmatter(content: string): string | undefined {
-  const opening = /^---[ \t]*$/mu.exec(content);
-  if (!opening) return undefined;
-  const prefix = content.slice(0, opening.index).replaceAll(/<!--[\s\S]*?-->/gu, "").trim();
-  if (prefix) return undefined;
-  const bodyStart = opening.index + opening[0].length;
-  const remainder = content.slice(bodyStart).replace(/^\r?\n/u, "");
-  const closing = /^(?:---|\.\.\.)[ \t]*$/mu.exec(remainder);
-  return closing ? remainder.slice(0, closing.index).replace(/\r?\n$/u, "") : undefined;
-}
-
 function planningRecord(path: string, content: string): Record<string, unknown> | undefined {
   try {
     const extension = extname(path).toLocaleLowerCase("und");
     if (extension === ".json") return object(JSON.parse(content));
     if (extension === ".yaml" || extension === ".yml") return object(parseYaml(content));
     if (extension === ".md" || extension === ".mdx") {
-      const metadata = frontmatter(content);
+      const metadata = frontMatterBlock(content);
       return metadata ? object(parseYaml(metadata)) : undefined;
     }
   } catch {
