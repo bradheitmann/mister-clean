@@ -1,7 +1,7 @@
 {
-  "base_commit": "52d554fbc72e4284b79d0cf981a07e7f925bdaca",
+  "base_commit": "0323ccaa0197dcc493511032a110a2454e6a68dc",
   "brief_sha256": "d9aee5e1bc7bc77bce662eaa394f0467f470b43a19da3dc6950a1290673a7132",
-  "done_sha256": "e509646db4e765b5dc82599fe73022f2b9ab74311dc06d5ac045e8aaf6d06464",
+  "done_sha256": "16ef22e1d7e0faeab744c2ece52af0b979a7f14a7b6e8795a6bfc6bae0dd7764",
   "schema_version": "charter.dispatch/1",
   "slice": "mg-s2c-front-matter"
 }
