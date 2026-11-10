@@ -11483,6 +11483,32 @@ function proveCurrentProjectionCommand(command, repository) {
 var import_yaml = __toESM(require_dist(), 1);
 import { createHash as createHash6 } from "crypto";
 import { basename as basename4, dirname as dirname4, extname as extname3 } from "path";
+
+// src/closeout/planning-analysis/front-matter.ts
+function frontMatterRange(content) {
+  const lines2 = content.split(/\r?\n/);
+  let start = 0;
+  while (start < lines2.length) {
+    while (lines2[start]?.trim() === "") start += 1;
+    if (lines2[start]?.trim().startsWith("<!--")) {
+      while (start < lines2.length && !lines2[start]?.includes("-->")) start += 1;
+      if (start < lines2.length) start += 1;
+      continue;
+    }
+    break;
+  }
+  if (lines2[start]?.trim() !== "---") return void 0;
+  for (let end = start + 1; end < lines2.length; end += 1) {
+    if (lines2[end]?.trim() === "---") return { end, lines: lines2, start };
+  }
+  return void 0;
+}
+function frontMatterBlock(content) {
+  const range = frontMatterRange(content);
+  return range ? range.lines.slice(range.start + 1, range.end).join("\n") : void 0;
+}
+
+// src/closeout/planning-analysis/policy.ts
 var TEXT_EXTENSIONS = /* @__PURE__ */ new Set([".json", ".md", ".mdx", ".txt", ".yaml", ".yml"]);
 var DONE = /* @__PURE__ */ new Set([
   "accept",
@@ -12099,24 +12125,6 @@ function stateProjection(values) {
     values: orderedValues
   };
 }
-function frontmatterRange(content) {
-  const lines2 = content.split(/\r?\n/);
-  let start = 0;
-  while (start < lines2.length) {
-    while (lines2[start]?.trim() === "") start += 1;
-    if (lines2[start]?.trim().startsWith("<!--")) {
-      while (start < lines2.length && !lines2[start]?.includes("-->")) start += 1;
-      if (start < lines2.length) start += 1;
-      continue;
-    }
-    break;
-  }
-  if (lines2[start]?.trim() !== "---") return void 0;
-  for (let end = start + 1; end < lines2.length; end += 1) {
-    if (lines2[end]?.trim() === "---") return { end, lines: lines2, start };
-  }
-  return void 0;
-}
 function parseStructured(content, kind) {
   try {
     if (kind === "json") (0, import_yaml.parse)(content);
@@ -12137,7 +12145,7 @@ function parseSource(source) {
   const extension = extname3(source.path).toLocaleLowerCase("und");
   if (extension === ".json") return parseStructured(source.content, "json");
   if (extension === ".yaml" || extension === ".yml") return parseStructured(source.content, "yaml");
-  const range = frontmatterRange(source.content);
+  const range = frontMatterRange(source.content);
   if (!range) return { metadata: {}, structured: false };
   const raw = range.lines.slice(range.start + 1, range.end).join("\n");
   return parseStructured(raw, "yaml");
@@ -12769,7 +12777,7 @@ function stateLikeHeader(value) {
   return STATE_HEADER_WORDS.has(normalize(value).split(" ").at(-1) ?? "");
 }
 function scanBody(content) {
-  const range = frontmatterRange(content);
+  const range = frontMatterRange(content);
   const lines2 = range?.lines ?? content.split(/\r?\n/);
   const start = range ? range.end + 1 : 0;
   const scanned = [];
@@ -13388,6 +13396,7 @@ function parseArtifact(source) {
     tableChildren: table,
     topLevel,
     type,
+    ...typeProjection.error ? { typeError: typeProjection.error } : {},
     unfinishedMarkers
   };
 }
@@ -13989,10 +13998,16 @@ function auditPlanningCompletionRollups(artifacts, childrenByParent, findings) {
     }
   }
 }
-function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 ? 1 : 0, options = {}) {
-  const artifacts = contextualizeGovernanceValidatorSources(
+function parsePlanningSources(sources) {
+  return contextualizeGovernanceValidatorSources(
     contextualizeDispatchPacketSources(sources)
   ).map(parseArtifact);
+}
+function planningProcedureExemptPaths(sources) {
+  return new Set(parsePlanningSources(sources).filter((artifact) => artifact.nonArtifact || isNonArtifactPlanningClass(artifact.type) && artifact.typeError === void 0).map((artifact) => artifact.path));
+}
+function auditPlanningArtifacts(sources, planningRootCount = sources.length > 0 ? 1 : 0, options = {}) {
+  const artifacts = parsePlanningSources(sources);
   const findings = [];
   for (const artifact of artifacts) {
     if (artifact.nonArtifactRequested && !artifact.nonArtifact) {
@@ -14635,23 +14650,13 @@ function normalizeClaim(value) {
 function regexLiteral(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function frontmatter(content) {
-  const opening = /^---[ \t]*$/mu.exec(content);
-  if (!opening) return void 0;
-  const prefix = content.slice(0, opening.index).replaceAll(/<!--[\s\S]*?-->/gu, "").trim();
-  if (prefix) return void 0;
-  const bodyStart = opening.index + opening[0].length;
-  const remainder = content.slice(bodyStart).replace(/^\r?\n/u, "");
-  const closing = /^(?:---|\.\.\.)[ \t]*$/mu.exec(remainder);
-  return closing ? remainder.slice(0, closing.index).replace(/\r?\n$/u, "") : void 0;
-}
 function planningRecord(path, content) {
   try {
     const extension = extname4(path).toLocaleLowerCase("und");
     if (extension === ".json") return object3(JSON.parse(content));
     if (extension === ".yaml" || extension === ".yml") return object3((0, import_yaml2.parse)(content));
     if (extension === ".md" || extension === ".mdx") {
-      const metadata = frontmatter(content);
+      const metadata = frontMatterBlock(content);
       return metadata ? object3((0, import_yaml2.parse)(metadata)) : void 0;
     }
   } catch {
@@ -27547,15 +27552,6 @@ async function validateLive(bundle, report, manifest2, bundlePath, repo, ports, 
 }
 
 // src/closeout/bundle.ts
-function declaredPlanningType(content) {
-  const frontMatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!frontMatter) return void 0;
-  for (const key of ["artifact_type", "kind", "type"]) {
-    const line = frontMatter[1].match(new RegExp(`^${key}:[ \\t]*["']?([^"'\\r\\n#]+?)["']?[ \\t]*(?:#.*)?$`, "m"));
-    if (line) return line[1].trim();
-  }
-  return void 0;
-}
 function requiresAcceptedReleaseBoundary(report, manifest2) {
   const barrierState = object5(object5(manifest2.guard ?? report.guard)?.commit_barrier)?.state;
   if (report.mode === "GUARD" && (barrierState === "open" || barrierState === "crossed")) return true;
@@ -27686,6 +27682,7 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
   const globalArtifacts = /* @__PURE__ */ new Set();
   const planningSourcePaths = /* @__PURE__ */ new Set();
   const planningSources = [];
+  const procedureRows = [];
   for (const [index, raw] of systems.entries()) {
     const spath = `${path}.systems[${index}]`;
     const system = requireObject(raw, ["id", "kind", "sources", "schema_sources", "validators", "corpus"], spath, errors);
@@ -27819,11 +27816,9 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
             errors.push(`${spath}.corpus: planning entry ${artifact.path} contains binary NUL bytes`);
             continue;
           }
-          const declaredType = declaredPlanningType(content);
-          const procedure = declaredType === void 0 || !isNonArtifactPlanningClass(declaredType);
           const earlyDone = /\b(implementation|dev|code)\b/i.test(content) && /\b(done|complete|completed|merged)\b/i.test(content);
           const laterUnrun = /\b(review|qa|acceptance|holdout)\b/i.test(content) && /\b(not[_ -]?run|pending|todo|backlog|unexecuted)\b/i.test(content);
-          if (procedure && earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
+          if (earlyDone && laterUnrun) procedureRows.push({ spath, path: artifact.path });
           if (planningSourcePaths.has(artifact.path)) continue;
           planningSourcePaths.add(artifact.path);
           planningSources.push({
@@ -27834,6 +27829,12 @@ async function validatePlanning(bundle, repo, files, clean, allowPlaceholders, e
           });
         }
       }
+    }
+  }
+  if (procedureRows.length > 0) {
+    const exempt = planningProcedureExemptPaths(planningSources);
+    for (const row of procedureRows) {
+      if (!exempt.has(row.path)) errors.push(`${row.spath}.corpus: ${row.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
     }
   }
   if (clean && repo) {
