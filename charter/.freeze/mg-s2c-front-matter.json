@@ -1,5 +1,5 @@
 {
-  "commit": "1f48c3ecbdc974bb7e7451f1ffa5209088250c9e",
+  "commit": "66417a8895949dc7c1ffbc10966f378e72821212",
   "entries": [
     {
       "mode": "100644",
@@ -416,16 +416,16 @@
     },
     {
       "mode": "100644",
-      "object": "0e096350de6bd7e38f4e24fcf03ca0e32494c870",
+      "object": "d197093900290b68e470eb13bc70051f0b9f6970",
       "path": "charter/.dispatch/mg-s2c-front-matter.json",
-      "sha256": "103e0beb1301f702f49ecf5bee97fb806b67334a938d44335a5baa6044486f7e",
+      "sha256": "183ea86b1eb5f51af3ae462f8cafe513a461ff024450adeeaaac799b109368c7",
       "type": "blob"
     },
     {
       "mode": "100644",
-      "object": "02749751f8730a684d4262d292b168682e0f28ba",
+      "object": "f9a3edbf63ab8df79a3597f96e4844bb5482b985",
       "path": "charter/.dispatch/mg-s2c-front-matter.sha256",
-      "sha256": "1c736ee3142275765c5273ac0ea74d9060540c6800aa965a885d055c7ad461c3",
+      "sha256": "29ec4d728dfe27aeb34b5aa283f9e059d4537d8835e59b6ca8f8179125374e67",
       "type": "blob"
     },
     {
@@ -577,9 +577,9 @@
     },
     {
       "mode": "100644",
-      "object": "f5b66fd8d5d1fbadacf95caf9ba47bde35ce35ca",
+      "object": "4fb7ea8bc6c1c78acccf513b287e9a1a90d41038",
       "path": "charter/DONE/mg-s2c-front-matter.md",
-      "sha256": "16ef22e1d7e0faeab744c2ece52af0b979a7f14a7b6e8795a6bfc6bae0dd7764",
+      "sha256": "4234f8172c928f5936a7603c2336716ec00a1c2e88526c442a4588697cff752d",
       "type": "blob"
     },
     {
@@ -3881,11 +3881,11 @@
     }
   ],
   "entry_count": 554,
-  "head": "1f48c3ecbdc974bb7e7451f1ffa5209088250c9e",
+  "head": "66417a8895949dc7c1ffbc10966f378e72821212",
   "kind": "git-commit-tree",
-  "manifest_sha256": "a473bb1f66fb72c8015c65571cb0f7ea0322b1a86b92974c8655a8c3f4811701",
+  "manifest_sha256": "f9fd82397c9a6630c13f4ea5c5971c078358a2bc7b09a4543656ba39e52f55d3",
   "schema_version": "charter.freeze/2",
   "selector": "git-ls-tree:HEAD",
   "slice": "mg-s2c-front-matter",
-  "tree": "8870cc5da3a00ad2b23da9b93de78281bd89f9c5"
+  "tree": "a2b4401dc6280447c51896d5679236ea593def00"
 }
