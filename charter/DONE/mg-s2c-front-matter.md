@@ -150,23 +150,10 @@ Proofs (each re-openable before acceptance):
    - reopen: `gh run view <run id> --repo bradheitmann/mister-clean --json jobs,headSha`
    - mutant: n/a (an external result, cited by run id and head sha).
 10. The pre-merge self-judge. The installed judge judges the frozen candidate in the Linux judge container, and no debt class appears beyond main's known baseline: the carried semantic re-attestation, the four `public_safety` `file-url` instances in files from main (flagged only by the pinned 7.5.1 rule), plus DEBT-NATIVE-GATE-17ED5EBED7B18D8C (the load-dependent sqlite and HTTP timeouts, owned by S6) if it recurs. The branch must be pushed first; the script clones it from the remote and refuses any other head.
-    - Files: a directory `<dir>` holding `request.txt` (copy `~/.local/share/agent-private/mister-clean/master-gate/s2/selfjudge-s2b/request.txt`, edit the last line to name this slice) and `judge.sh`:
-      ```
-      #!/bin/bash
-      set -uo pipefail
-      git config --global user.email bradheitmann@users.noreply.github.com; git config --global user.name bradheitmann
-      cd /home/runner && git clone -q --branch mg/s2c-front-matter https://github.com/bradheitmann/mister-clean.git c && echo "HEAD $(git -C c rev-parse HEAD) up $(git -C c rev-parse --abbrev-ref @{u})"
-      [ "$(git -C c rev-parse HEAD)" = "<frozen head sha, 40 hex>" ] || { echo WRONG-HEAD; exit 2; }
-      mkdir -p ev
-      node /home/runner/mc/bin/mister-clean.js prepare --repo /home/runner/c --evidence-home /home/runner/ev --run-id mg-s2c-selfjudge-1 --request-ref owner-2026-11-06 --request-source /work/request.txt --mode CLOSE > /work/prepare.out 2> /work/prepare.err; echo "prepare exit $?"
-      rm -rf /work/out && cp -R ev /work/out
-      ```
-      (This is `selfjudge-s2b/judge.sh` with the branch, the expected head and the run id replaced.)
-    - Run: `docker run --rm --cpus=6 -v <dir>:/work -v ~/.claude/skills/mister-clean:/home/runner/mc:ro mister-clean-judge:7.5.0d /work/judge.sh`. The expected output ends `prepare exit 0`.
-    - Read the result (the baseline list of S2b is the form to compare with):
-      - `jq -r '.completion_debts[] | "\(.id) \(.cause_key.detector_family) \(.cause_key.rule // .cause_key.code)"' <dir>/out/mister-clean/mg-s2c-selfjudge-1/closeout-report.json`
-      - `jq -c '.native_gate_accounting | {required_count, executed_count, passed_count, absent_count}' <dir>/out/mister-clean/mg-s2c-selfjudge-1/closeout-report.json` (every required gate executed and passed).
-    - reopen: the commands above, with the frozen head sha filled in; the output directory is kept in the evidence with the DEV log.
+    - Files, kept outside the repository in `~/.local/share/agent-private/mister-clean/master-gate/s2/selfjudge-s2c/`: `request.txt` (the S2b request with its last line naming this slice), `judge.sh` (the S2b script with the branch, the expected head and the run id replaced) and `RUN.txt` (the container command and the two result queries). The script carries the container's home paths and the commit identity, which this repository's public-safety scan rejects, so it is cited, not inlined. The script clones the branch and refuses any head other than the branch tip that holds the freeze record; that tip differs from the frozen head only by `charter/.freeze/`.
+    - Run: the docker line of `RUN.txt`. The expected output ends `prepare exit 0`.
+    - Read the result with the two `jq` lines of `RUN.txt`: the completion debts (the baseline list of S2b is the form to compare with), and the native gate accounting (every required gate executed and passed).
+    - reopen: the commands in `RUN.txt`; the output directory is kept in the evidence with the run log.
     - mutant: n/a (comparison with the baseline).
 
 Gates (exact commands): the commands in proofs 1-10. Paired QA comes from two model families. Repair cycles: 1. QA attempts: 2.
