@@ -32,6 +32,7 @@ import {
   auditPlanningArtifacts,
   isNonArtifactPlanningClass,
   isPlanningTextPath,
+  planningProcedureExemptPaths,
   type PlanningSource,
 } from "./planning.js";
 import {
@@ -83,17 +84,6 @@ export {
   type GitPort,
   type GitResult,
 } from "./bundle-runtime.js";
-
-/** The planning type a document declares in its leading YAML front matter (artifact_type, kind or type), if any. */
-function declaredPlanningType(content: string): string | undefined {
-  const frontMatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!frontMatter) return undefined;
-  for (const key of ["artifact_type", "kind", "type"]) {
-    const line = frontMatter[1]!.match(new RegExp(`^${key}:[ \\t]*["']?([^"'\\r\\n#]+?)["']?[ \\t]*(?:#.*)?$`, "m"));
-    if (line) return line[1]!.trim();
-  }
-  return undefined;
-}
 
 function requiresAcceptedReleaseBoundary(report: JsonObject, manifest: JsonObject): boolean {
   const barrierState = object(object(manifest.guard ?? report.guard)?.commit_barrier)?.state;
@@ -229,6 +219,9 @@ async function validatePlanning(
   const globalArtifacts = new Set<string>();
   const planningSourcePaths = new Set<string>();
   const planningSources: PlanningSource[] = [];
+  // Executed-early/unexecuted-later candidates, recorded where the check runs and judged once every
+  // planning source is known (the audit classifies a document by its siblings too).
+  const procedureRows: { readonly spath: string; readonly path: string }[] = [];
   for (const [index, raw] of systems.entries()) {
     const spath = `${path}.systems[${index}]`;
     const system = requireObject(raw, ["id", "kind", "sources", "schema_sources", "validators", "corpus"], spath, errors);
@@ -370,13 +363,9 @@ async function validatePlanning(
             errors.push(`${spath}.corpus: planning entry ${artifact.path} contains binary NUL bytes`);
             continue;
           }
-          // A document that declares a non-procedure planning class (reference, schema, template, guidance)
-          // describes work; it does not record executed steps, so the procedure check does not apply to it.
-          const declaredType = declaredPlanningType(content);
-          const procedure = declaredType === undefined || !isNonArtifactPlanningClass(declaredType);
           const earlyDone = /\b(implementation|dev|code)\b/i.test(content) && /\b(done|complete|completed|merged)\b/i.test(content);
           const laterUnrun = /\b(review|qa|acceptance|holdout)\b/i.test(content) && /\b(not[_ -]?run|pending|todo|backlog|unexecuted)\b/i.test(content);
-          if (procedure && earlyDone && laterUnrun) errors.push(`${spath}.corpus: ${artifact.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
+          if (earlyDone && laterUnrun) procedureRows.push({ spath, path: artifact.path });
           if (planningSourcePaths.has(artifact.path)) continue;
           planningSourcePaths.add(artifact.path);
           planningSources.push({
@@ -389,6 +378,14 @@ async function validatePlanning(
           });
         }
       }
+    }
+  }
+  if (procedureRows.length > 0) {
+    // A document the audit classifies as a non-artifact (reference, schema, template, guidance) describes
+    // work; it does not record executed steps, so the procedure check does not apply to it.
+    const exempt = planningProcedureExemptPaths(planningSources);
+    for (const row of procedureRows) {
+      if (!exempt.has(row.path)) errors.push(`${row.spath}.corpus: ${row.path} contains an executed-early/unexecuted-later procedure and cannot be CLEAN`);
     }
   }
   if (clean && repo) {

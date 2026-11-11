@@ -1,0 +1,10 @@
+{
+  "accepted_unix_s": 1794425435,
+  "accepted_utc": "2026-11-11T19:30:35Z",
+  "base_commit": "5b38dbcb46bceedc820fc14c3ba04a099dc4134f",
+  "brief_sha256": "d9aee5e1bc7bc77bce662eaa394f0467f470b43a19da3dc6950a1290673a7132",
+  "done_sha256": "4234f8172c928f5936a7603c2336716ec00a1c2e88526c442a4588697cff752d",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-s2c-front-matter",
+  "state": "accepted"
+}

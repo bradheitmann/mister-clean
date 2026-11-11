@@ -13,9 +13,11 @@ import { fixtureGit } from "./test-support/fixture-repo.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-/** Tracked non-test TypeScript under src/, scripts/ and tools/. */
-function productionSources(): readonly { readonly path: string; readonly lines: readonly string[] }[] {
-  return fixtureGit(ROOT, ["ls-files", "-z", "--", "src", "scripts", "tools"])
+const DEFAULT_ROOTS = ["src", "scripts", "tools"] as const;
+
+/** Tracked non-test TypeScript under `roots` (src/, scripts/ and tools/ by default). */
+function productionSources(roots: readonly string[] = DEFAULT_ROOTS): readonly { readonly path: string; readonly lines: readonly string[] }[] {
+  return fixtureGit(ROOT, ["ls-files", "-z", "--", ...roots])
     .split("\0")
     .filter((path) => path.endsWith(".ts"))
     .filter((path) => !path.endsWith(".test.ts") && !path.endsWith(".test-fixture.ts"))
@@ -23,9 +25,9 @@ function productionSources(): readonly { readonly path: string; readonly lines: 
     .map((path) => ({ path, lines: readFileSync(join(ROOT, path), "utf8").split("\n") }));
 }
 
-function occurrences(pattern: RegExp, allowed: ReadonlySet<string>): string[] {
+function occurrences(pattern: RegExp, allowed: ReadonlySet<string>, roots: readonly string[] = DEFAULT_ROOTS): string[] {
   const found: string[] = [];
-  for (const { path, lines } of productionSources()) {
+  for (const { path, lines } of productionSources(roots)) {
     if (allowed.has(path)) continue;
     lines.forEach((line, index) => {
       if (pattern.test(line)) found.push(`${path}:${index + 1}`);
@@ -166,5 +168,35 @@ describe("git runner", () => {
       sites.push(...spawns.map((spawn) => `${source.path}:${spawn.line}`));
     }
     expect(counts, sites.join("\n")).toEqual(SCRIPT_GIT_SPAWNS);
+  });
+});
+
+describe("front matter", () => {
+  const PARSER = "src/closeout/planning-analysis/front-matter.ts";
+  /** Wider than the default: a parser added under customer-tests/ or ablations/ is seen too. */
+  const ROOTS = ["src", "scripts", "tools", "customer-tests", "ablations"] as const;
+
+  it("lists the production sources it guards", () => {
+    const paths = productionSources(ROOTS).map((source) => source.path);
+    expect(paths).toContain(PARSER);
+    expect(paths).toContain("src/closeout/bundle.ts");
+    expect(paths.some((path) => path.endsWith(".test.ts") || path.endsWith(".test-fixture.ts"))).toBe(false);
+  });
+
+  it("(a) a front-matter delimiter literal occurs only in the shared parser", () => {
+    // A string literal "---" (any quote), or a regex starting ^--- or ^(?:---.
+    expect(occurrences(/["'`]---["'`]|\/\^---|\/\^\(\?:---/u, new Set([PARSER]), ROOTS)).toEqual([]);
+  });
+
+  it("(b) no front-matter parser function or const is defined outside the shared parser", () => {
+    expect(occurrences(/\b(?:function|const|let|var)\s+(?:declaredPlanningType|frontmatterRange|frontmatter)\b/u, new Set([PARSER]), ROOTS)).toEqual([]);
+  });
+
+  it("(c) only policy.ts and semantic.ts import the shared parser", () => {
+    const IMPORTERS = new Set(["src/closeout/planning-analysis/policy.ts", "src/closeout/semantic.ts"]);
+    const imports = /from\s+["'][^"']*\/front-matter\.js["']/u;
+    expect(occurrences(imports, IMPORTERS, ROOTS)).toEqual([]);
+    const importers = productionSources(ROOTS).filter((source) => source.lines.some((line) => imports.test(line))).map((source) => source.path);
+    expect(importers.sort()).toEqual([...IMPORTERS].sort());
   });
 });

@@ -17,8 +17,6 @@ import { stableStringify, type GitSpawnLedgerLine, type GitSpawnRecord } from ".
 const BASE = process.env.MISTER_CLEAN_GIT_LEDGER_BASE ?? "";
 const HEAD = process.env.MISTER_CLEAN_GIT_LEDGER_HEAD ?? "";
 const ENABLED = BASE !== "" && HEAD !== "";
-// Built at runtime, as execution-safety.test.ts does, so tracked bytes carry no file-URL literal.
-const FILE_SCHEME = ["file", "//"].join(":");
 
 /** The 28 `hardenedGitArgs(` call sites outside git-hardening.ts at base 74e23b1, as file and line. */
 export const BASE_SITES = [
@@ -50,17 +48,17 @@ const DELTA_A_SITES = [
 const DELTA_C_SITE = ["src/planning.ts", "<anonymous>"] as const;
 
 /**
- * Delta (d): tests whose remote-contact records D5 changes. They called
- * `hardenedRemoteUrl` and `contactRemote` directly and now call
- * `contactConfiguredRemote` (proof 4 covers the behaviour). Only their
- * `remote`, `get-url` and `ls-remote` records are set aside; the rest compare.
+ * Delta (d): the records D5 changes in the tests that called `hardenedRemoteUrl`
+ * and `contactRemote` directly and now call `contactConfiguredRemote` (proof 4
+ * covers the behaviour), keyed by test id and argv. Only these are set aside, on
+ * both sides; every other record of those tests compares.
+ *
+ * Measured empty (mg-s2c proof 7, S2B-QA-D2): on the retained S2b QA ledgers the
+ * 8 `remote` / `remote get-url` records of the four tests are byte-identical on
+ * base and head, and neither ledger holds an `ls-remote` record, so no record
+ * differs and none is set aside. A record added here must differ on a real run.
  */
-const DELTA_D_TESTS = [
-  "src/closeout/execution-safety.test.ts > execution safety (master-gate S1) > git program keys > an option-shaped remote name cannot become a git option, and the transport check binds to the contacted remote",
-  `src/closeout/execution-safety.test.ts > execution safety (master-gate S1) > git program keys > a second insteadOf rewrite cannot redirect the contacted remote (${FILE_SCHEME} rewrite)`,
-  "src/closeout/execution-safety.test.ts > execution safety (master-gate S1) > git program keys > a second insteadOf rewrite cannot redirect the contacted remote (plain path rewrite)",
-  "src/closeout/execution-safety.test.ts > execution safety (master-gate S1) > git program keys > refuses a remote target proof whose transport is neither https nor ssh",
-] as const;
+const DELTA_D_RECORDS: readonly { readonly test: string; readonly argv: readonly string[] }[] = [];
 
 /** Tests the head adds (proofs 2-5, 7, 8); they have no base counterpart to compare. */
 const HEAD_ONLY_PREFIXES = [
@@ -104,9 +102,9 @@ function atSite(record: GitSpawnRecord, [file, fn]: readonly [string, string]): 
   return record.site.file === file && record.site.function === fn;
 }
 
-function isRemoteContact(record: GitSpawnRecord): boolean {
-  const rest = record.argv.slice(afterOverrides(record.argv));
-  return rest.includes("ls-remote") || rest.includes("get-url") || rest.at(-1) === "remote";
+/** Whether DELTA_D_RECORDS sets this record of `test` aside (same test id, same argv). */
+function isDeltaDRecord(test: string, record: GitSpawnRecord): boolean {
+  return DELTA_D_RECORDS.some((entry) => entry.test === test && stableStringify(entry.argv) === stableStringify(record.argv));
 }
 
 export interface DeltaCounts { a: number; b: number; c: number; d: number }
@@ -133,7 +131,7 @@ export function transformBase(test: string, records: readonly GitSpawnRecord[], 
       record = { ...record, options, argv: [...record.argv.slice(0, at), "-C", cwd as string, ...record.argv.slice(at)] };
       counts.c += 1;
     }
-    if ((DELTA_D_TESTS as readonly string[]).includes(test) && isRemoteContact(record)) {
+    if (isDeltaDRecord(test, record)) {
       counts.d += 1;
       continue;
     }
@@ -143,7 +141,7 @@ export function transformBase(test: string, records: readonly GitSpawnRecord[], 
 }
 
 function headRecords(test: string, records: readonly GitSpawnRecord[]): GitSpawnRecord[] {
-  return (DELTA_D_TESTS as readonly string[]).includes(test) ? records.filter((record) => !isRemoteContact(record)) : [...records];
+  return records.filter((record) => !isDeltaDRecord(test, record));
 }
 
 /**
@@ -212,6 +210,7 @@ describe.skipIf(!ENABLED)("git spawn ledger comparison (needs MISTER_CLEAN_GIT_L
     expect(missedBase, "base sites the base run never reached").toEqual([]);
     expect(missedHead, "base sites whose function the head run never reached").toEqual([]);
     expect(undeclared, "head tests with git spawns and no base counterpart, outside the declared new describes").toEqual([]);
+    if (!NO_DELTAS) expect(counts.d, "delta (d) sets aside exactly the listed records").toBe(DELTA_D_RECORDS.length);
     expect(differences.slice(0, 40), `${differences.length} differing records`).toEqual([]);
   });
 });

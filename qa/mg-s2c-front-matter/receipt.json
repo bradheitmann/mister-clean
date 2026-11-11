@@ -1,0 +1,108 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-s2c-front-matter",
+  "verifies": "mg-s2c-front-matter",
+  "candidate_commit": "66417a8895949dc7c1ffbc10966f378e72821212",
+  "frozen": {
+    "manifest_sha256": "f9fd82397c9a6630c13f4ea5c5971c078358a2bc7b09a4543656ba39e52f55d3",
+    "head": "66417a8895949dc7c1ffbc10966f378e72821212"
+  },
+  "dispatch": {
+    "base_commit": "5b38dbcb46bceedc820fc14c3ba04a099dc4134f",
+    "brief_sha256": "d9aee5e1bc7bc77bce662eaa394f0467f470b43a19da3dc6950a1290673a7132"
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5.5",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa-s2c/evidence-proof-1.txt (proof 1, golden copy): the three DONE text checks of the base oracles each print nothing (exit 0); `MISTER_CLEAN_FM_BASE=1 R src/closeout/front-matter.golden.test.ts -t \"front matter oracle fidelity\"` -> exit 0, 3 passed | 12 skipped (the 3 base-only tests); `git diff --quiet 075f359 66417a8` over the three golden files exit 0. Corrections judged: C1 sound (the verbatim oracle's TextDecoder(\"utf-8\", {fatal: true}) decode with default ignoreBOM reproduces the real read path of semantic.ts:1199 and bundle-runtime.ts:271 at 469d740, so the oracle's base parser receives the same string the real reader's parser receives; the policy check correctly keeps the raw string; BOM-parse differences remain tested where observable), C2 sound (\"record exists and role projects to dev\" mirrors the two guards gating the row: semantic.ts:326 early return on !record || !recordRole, and recordRole at :299-306; reported.size > 0 rules out a vacuous pass). Mutant M1 (P1 no-trim, golden copy) RED by assertion (policy behavioural check, 600 mismatches, 1 failed | 2 passed | 12 skipped) and restored, cmp-identical (qa-s2c/evidence-mutants.txt). Evidence file sha256 6fab40677eb72cc2a43d7a8ce07731b6adf0229877e0a7fcae226646002b5abd.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa-s2c/evidence-proof-2.txt (proof 2, head copy): `R src/closeout/front-matter.test.ts -t \"front matter policy parity\"` -> exit 0, 2 passed | 26 skipped, and the same with RB (bun 1.4.0) -> exit 0, 2 passed; D-3 supplement over both files (differential + recorded vectors) green under R and RB (4 passed each). Mutant M2 (P2.5 split on LF only) RED by assertion (range + block parity, 2 failed), restored cmp-identical; mutant M3 (P2.3/P3.1 accept `...` as a closer) RED by assertion (policy parity x2, semantic counts 3659 != 3868, C3 hand row missing; 4 failed), restored cmp-identical (qa-s2c/evidence-mutants.txt). Evidence file sha256 10e6c515fe026ab199736adf14b3e134d469ac417d7e6672b058c59e48253500.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa-s2c/evidence-proof-3.txt (proof 3, head copy): `R src/closeout/front-matter.test.ts -t \"front matter semantic parity\"` -> exit 0, 3 passed | 25 skipped; RB the same -> exit 0, 3 passed; supplement \"front matter semantic parity: recorded counts\" in the golden file on head -> exit 0, 1 passed. Evidence file sha256 b1635625f82b349a929cf02c0a3f63b7031bbf2f1e06a8b82b9b0bc25c16c036.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa-s2c/evidence-proof-4.txt (proof 4, head copy): `R src/closeout/front-matter.test.ts -t \"front matter declared deltas\"` -> exit 0, 10 passed | 18 skipped, one named test per delta; regression `R src/closeout/hardening.test.ts src/closeout/bundle.test.ts` -> hardening 17 passed, bundle.test.ts red only by 30000 ms native-gate fixture timeouts (assertion failures 0, recorded with the isolation runs); `R src/closeout/bundle.test.ts` ALONE (session 2) -> exit 0, 128 of 128 passed at load 17.56/12.76/23.46 -> 18.63/18.96/21.05, guard L=1 GO. Mutant M4 (Δ2d drop the type-error condition) RED by assertion (D6 row + Δ2d, 2 failed), restored cmp-identical; mutant M5 (Δ3 emit procedure errors inside the loop again) RED by assertion (ordering, \"expected 26 to be less than 25\"), restored cmp-identical (qa-s2c/evidence-mutants.txt). Evidence file sha256 d42e006fd5c5d2d60cd78de736f20ade43b6c618f01d9ae0ae35b05742b54adc.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa-s2c/evidence-proof-4a.txt (proof 4a): `R src/closeout/front-matter.golden.test.ts -t \"procedure check conditions\"` in the GOLDEN copy -> exit 0, 5 passed | 10 skipped, and again in the HEAD copy -> exit 0, 5 passed | 10 skipped (the cases hold on both). Mutant M6 (record the procedure rows outside `if (clean)`) RED by assertion (case (b), expected [Array(1)] to deeply equal []), restored cmp-identical (qa-s2c/evidence-mutants.txt). The gating itself is re-verified in the review (C11): rows are recorded only inside `repo && system.kind === \"repo_files\" && fileCensus` and `clean`. Evidence file sha256 9313ffdaea61fbe1059b9631732b7926256a64fc7df35ffba1a34ce319df801f.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa-s2c/evidence-proof-5.txt (proof 5, head copy): `R src/closeout/front-matter.test.ts -t \"front matter validator parity\"` -> exit 0, 13 passed | 15 skipped; `R src/closeout/hardening.test.ts` (the three existing procedure tests :199, :210, :221 pass unchanged) -> exit 0, 17 passed. Evidence file sha256 8f45b9066ef580bc05f3aa19b2aaeb3fb46a186e37a419ba555a72e9ae36b1e0.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa-s2c/evidence-proof-6.txt (proof 6, head copy): `R src/backbone-single-implementation.test.ts -t \"front matter\"` -> exit 0, 4 passed | 10 skipped: no front-matter parse remains outside src/closeout/planning-analysis/front-matter.ts across src/, scripts/, tools/, customer-tests/, ablations/. Mutant M7 (add the front-matter.js import to bundle.ts) RED by assertion (offender src/closeout/bundle.ts:639), restored cmp-identical (qa-s2c/evidence-mutants.txt). Evidence file sha256 e631b654c85449b6fec8937674552e3edb91b9f9689c88b906e9309e52c1f718.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa-s2c/evidence-proof-7.txt (proof 7, head copy): `MISTER_CLEAN_GIT_LEDGER_BASE=<qa-s2b/ledger-base> MISTER_CLEAN_GIT_LEDGER_HEAD=<qa-s2b/ledger-head> R src/test-support/git-spawn-ledger-compare.test.ts` -> exit 0, 8450 compared records, 0 differences, 28/28 sites, transformed d=0 equal to DELTA_D_RECORDS.length (0). Correction C3 judged sound by QA's own measurement (c3-check.mjs; first attempt failed on a QA-script argv bug, fixed and rerun, both recorded): 0 ls-remote records in either retained ledger, and all 8 blanket-set-aside DELTA_D remote records identical on base and head in every compared field (differing only in the excluded `line`, 330 vs 325), so an empty explicit list is correct. Mutant M8 (proof 7's substitute, on QA/mutant/ledger-head-copy; retained ledgers never edited): run1 narrowed+clean GREEN, run2 narrowed+perturbed RED by assertion (\"2 differing records\"), run3 old 075f359 compare+perturbed GREEN with d=8 (the gap the narrowing closes); copy restored and diff-identical (qa-s2c/evidence-mutants.txt). Evidence file sha256 fb1f2ae1fcf758793d8d82afc30f7133daaddd4f9ccdfb9178f4b3e3c1f55988.",
+      "classification": "executed"
+    },
+    {
+      "id": "C09",
+      "description": "qa-s2c/evidence-proof-8.txt and qa-s2c/evidence-proof-8-node.txt (proof 8, head copy). Light parts (evidence-proof-8.txt, sha256 5ac58c8b11f6cb3d553bb993a38f7513c9ef20433fb0d10dae41e16a7e0f05df): pnpm exec tsc --noEmit exit 0; bun run sync:cli:check exit 0; bun run manifest:package:check exit 0 (PASS 82 entries); bun run audit:public exit 0 (PASS 83 files); `RB src/closeout/front-matter.test.ts` (the bun file) -> 28 passed exit 0; cargo in tools/campaign-observer 10 passed + 15 passed (host cargo 1.99.1 run and rustup 1.95.0 run so rust-toolchain.toml applies, both recorded); cargo in tools/campaign-query 0+2 passed (first +1.95.0 attempt exit 101 was this shell's Homebrew cargo lacking +toolchain support - QA environment, rerun through the rustup shim green, both recorded). Node set (evidence-proof-8-node.txt, sha256 49165144422cc2acc4b17b1a49f4ce86915bd5c6fe1abdbd687ef89aac9f1299, full output qa-s2c/p8-node-run3.log, sha256 1f7301b5f8f09ba0824652d4e57588c3033becb8ad3fbaef4ba8b5d77a44dfbc): run 3 completed on the first attempt under `nice -n 10 timeout 5400` with the DONE's 18 files in ONE R command (the 1800 s wrapper that killed run 1 was lifted for this set per the task); guard L=1 GO, scratch `git status --porcelain` empty before and after; uptime start 11:21 load 19.89/20.90/25.53, uptime end 11:53 load 12.20/17.28/20.17; result Test Files 1 failed | 16 passed | 1 skipped (18), Tests 2 failed | 622 passed | 4 skipped (628), duration 1924.85 s, AssertionError count in the whole run 0. Skips are exactly the expected set: 1 skipped file = src/test-support/git-spawn-ledger-compare.test.ts (skips without the ledger variables) and 4 skipped tests = its 1 test plus the 3 oracle-fidelity tests in front-matter.golden.test.ts; NO other skip (any other skip would be a defect; none occurred). The only red file is src/closeout/bundle.test.ts with 2 failures, both `Error: Test timed out in 30000ms` in the native-gate fixtures (:1036, :1054; an ENOTEMPTY rmdir message attached to the second is a teardown artifact of the same timeout, not an assertion). JUDGED BY THE RULE INHERITED FROM THE ACCEPTED S2B REVIEW (a file that times out under load is rerun alone, a run that failed by timeout is never compared): bundle.test.ts was rerun alone at most twice (attempt 1 in the prior session: 1 failed | 127 passed, failure a 30000 ms timeout at :1226, load 41.37/29.61/30.65 -> 19.53/27.77/29.83; attempt 2 this session, qa-s2c/p8-bundle-alone-run5.log sha256 3c4a101847ca6c0fec70fd555fb01b09ec4dcca3a770227d1b39905bca8c67d7: 3 failed | 125 passed, all three 30000 ms native-gate timeouts, AssertionError 0, load 15.91/17.16/19.89 -> 30.69/30.49/27.51, guard L=1 GO), and it HAS a fully green run alone on the same frozen bytes: session 2, qa-s2c/evidence-proof-4.txt, 128 of 128 passed exit 0, load 17.56/12.76/23.46 -> 18.63/18.96/21.05, which this task explicitly permits citing. LOAD DEVIATION, recorded per the task: the file src/closeout/bundle.test.ts is taken from a run ALONE (session 2, at load 17.56/12.76/23.46 -> 18.63/18.96/21.05); every other file is taken from the set run 3 (at load 19.89/20.90/25.53 -> 12.20/17.28/20.17). The rule was judged SOUND: the failures measure host load, not the slice (no assertion failure anywhere in any node-set run; the same bytes pass 128/128 alone; the three native-gate fixtures are the known load-dependent DEBT-NATIVE-GATE class owned by S6; hosted CI ran the whole suite green on the same tree, proof 9). The node set therefore HOLDS. Evidence file sha256 49165144422cc2acc4b17b1a49f4ce86915bd5c6fe1abdbd687ef89aac9f1299.",
+      "classification": "executed"
+    },
+    {
+      "id": "C10",
+      "description": "qa-s2c/evidence-proof-9.txt (proof 9, hosted CI): run 43029002167 (CI) on branch mg/s2c-front-matter has headSha 698ce2e07491553ebcd9a2e06cb59e72ee0a8547, matching the frozen tip that carries the freeze record; job \"verify\" conclusion=success, all executed steps success (3 release-archive steps skipped by design). The run-level conclusion is failure only via the job named \"charter (non-required; ...)\", which is not the required job - an observation, not a defect. Evidence: qa-s2c/evidence-proof-9.txt sha256 cee5f329bcd29686f708a203cc9aad329cf41017a6faafb173a0c8c1e9e231b6 plus qa-s2c/ci-run-43029002167-light.json sha256 447fd527933209f1db3f2e1e296fbe1b63158202bd51beb90b509b57f938dbd5.",
+      "classification": "executed"
+    },
+    {
+      "id": "C11",
+      "description": "qa-s2c/evidence-review.txt (review of `git diff 469d740 66417a8 -- src/ scripts/`, 12 files +1319/-75, stat at qa-s2c/review-diff-stat.txt): (1) no front-matter parse left outside src/closeout/planning-analysis/front-matter.ts (the three base parsers deleted, no new parse added, git grep clean, corroborated by proof 6); (2) no behaviour change outside the declared deltas - planning.ts's 2-line change identified as additive re-export of planningProcedureExemptPaths through the planning barrel, declared in substance by Δ2/PM decision 1, not a defect; (3) bundle.ts procedure rows still recorded only inside `repo && system.kind === \"repo_files\" && fileCensus` and `clean`, post-pass not re-gated and not widened, as proof 4a requires; (4) the Δ2 rule matches the DONE verbatim: exempt = nonArtifact || (isNonArtifactPlanningClass(type) && typeError === undefined); (5) no existing test assertion changed and no test deleted (no deletions, no removed it/test/expect); (6) deviations D-1..D-7 sound; (7) D-8 verified: `git diff --name-only 1f48c3e 66417a8` lists exactly 4 charter/ files, and the DONE diff changes only proof 10's inlined judge script into citations of s2/selfjudge-s2c/ - no proof criterion changed. Defects found in the review: 0. Evidence file sha256 1fbfed0346349497d74366436cec2b429dbc0491607929a2ace5be00a623b734.",
+      "classification": "executed"
+    },
+    {
+      "id": "C12",
+      "description": "s2/selfjudge-s2c/evidence-proof-10.txt (PM summary) verified against the raw judge files, with qa-s2c/evidence-proof-10.txt (proof 10, pre-merge container self-judge): (a) judge.log shows HEAD 698ce2e07491553ebcd9a2e06cb59e72ee0a8547 up origin/mg/s2c-front-matter and prepare exit 0, judge.sh refuses any other head, and the diff 66417a8..698ce2e lists only charter/.freeze/mg-s2c-front-matter.json; (b) the six completion debts are exactly the known baseline of main 74e23b1 (the four DEBT-PUBLIC-SAFETY file-url ids identical to main, S2b and fwd752; the carried semantic re-attestation DEBT-SEMANTIC-SET with its per-commit id and the same family/rule; DEBT-NATIVE-GATE-17ED5EBED7B18D8C with the same id as main and fwd752; 7F4A61F65D3B8434 absent); (c) all four file-url findings sit in three files that come from main (log -1 469d740 prints 55db0c7 / 8013fd3 / 4c236c9, and diff 469d740..66417a8 -- path prints nothing for each); (d) native gates 3 required / 3 executed / 2 passed, the failed node:.:ci-check failing exactly three control-plane tests by a 5000 ms timeout (sqlite-store excludes identity-unbound trials from tuple capability credit; evaluation-intake.e2e accepts evidence-bound start/outcome and operator-attested aliases through authenticated local HTTP; snapshot-producer composes an admitted normalized run and historical qualification without binding a live seat) - the DEBT-NATIVE-GATE-17ED5EBED7B18D8C baseline class (STATE.md: control-plane sqlite/HTTP tests time out under load in the container, owned by S6), with the main vitest suite inside that gate green (75 files passed | 1 skipped; 1179 tests passed | 5 skipped; bundle.test.ts 128/128, no timeout) and the diff 469d740..66417a8 over src/control-plane and control-plane-app empty; (e) proof 10 read as: the explicit if-it-recurs allowance for 17ED governs the generic every-required-gate-executed-and-passed parenthetical (corroborated by STATE.md, which reads the identical 3/3/2 accounting of main 74e23b1 as baseline), so the result meets the proof. Mismatches between the PM summary and the raw files: 0. Evidence file sha256 47138da3ae7f7ee8f38154903cbcdb158856bf183587bf5821eb0e6f8f74d48f.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [],
+  "notes": {
+    "process_observations_from_LIGHT_DONE": [
+      "CI run 43029002167's overall conclusion is failure solely via the declared non-required job \"charter (non-required; fails as NOT CHECKED while the charter source is unreachable)\"; the DONE's proof 9 criterion is that the required job verify be success, and it is. Observation, not a slice defect.",
+      "QA-environment toolchain notes: the first campaign-query `cargo +1.95.0` attempt and the first campaign-observer run used Homebrew's cargo (no +toolchain support, the directive file was not applied); both were rerun correctly through the rustup shim and green, and both attempts are kept in evidence-proof-8.txt.",
+      "Two QA-side script bugs (c3-check.mjs argv destructuring; perturb-ledger paren) were found and fixed before use; both attempts are recorded in the evidence files. Neither touched the checkout or the retained ledgers."
+    ],
+    "load_deviation": "Proof 8's node set: the file src/closeout/bundle.test.ts is taken from its run ALONE - session 2 of this QA (qa-s2c/evidence-proof-4.txt, 128 of 128 passed, exit 0, load 17.56/12.76/23.46 -> 18.63/18.96/21.05, guard L=1 GO) - because in set run 3 (load 19.89/20.90/25.53 -> 12.20/17.28/20.17) and in both alone reruns (session 4 at load 41.37/29.61/30.65 -> 19.53/27.77/29.83; this session at load 15.91/17.16/19.89 -> 30.69/30.49/27.51) it failed only by 30000 ms native-gate fixture timeouts, never by an assertion. Every other file of the 18-file set is taken from set run 3 itself, which completed under `nice -n 10 timeout 5400` (16 passed + 1 skipped file + the timeout-red bundle file, 0 assertion failures, skips exactly as expected).",
+    "run3_note": "The extra `--reporter=json --outputFile.json` flags used in run 3 are output formatting only (verified on one file first, exit 0) and do not change what R checks; the per-file summary in evidence-proof-8-node.txt is read from that JSON report with jq.",
+    "not_run": "`charter check --strict` was run by no QA session of this slice: it is not part of the full task's proof 8 list (tsc, sync:cli:check, manifest:package:check, audit:public, node set, bun file, cargo), it is not among this task's five steps, and the full task forbids charter commands against the checkout. Proof 10 (the container self-judge) belongs to a later task.",
+    "mutants": "All 8 sampled mutants (M1 P1 no-trim, M2 P2.5 split-LF, M3 P2.3/P3.1 dots-closer, M4 Δ2d, M5 Δ3, M6 4a(b), M7 proof 6(c), M8 proof 7 substitute) went RED by an assertion failure and were restored to cmp-identical bytes with both scratch copies clean afterwards; full record in qa-s2c/evidence-mutants.txt sha256 2353eff8937a6ca370680617740837a97ec561ce0af857cd0ae3680118165c2c.",
+    "sessions": "Evidence spans four QA sessions (session 1 provisioning + proofs 1-4, session 2 light proofs 2-6 + mutants + bundle-alone 128/128, session 3 proof 9 + proof 8 light + review, session 4 heavy node-set attempts paused by the 1800 s wrapper, session 5 = this task: node-set run 3 + bundle-alone attempt 2 + receipt). QA/scratch was deleted after the last run; every evidence file is kept."
+  },
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "4a",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+  ]
+}

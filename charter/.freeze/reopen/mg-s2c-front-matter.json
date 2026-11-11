@@ -1,0 +1,69 @@
+{
+  "done_sha256": "4234f8172c928f5936a7603c2336716ec00a1c2e88526c442a4588697cff752d",
+  "entries": [
+    {
+      "evidence_sha256": "6fab40677eb72cc2a43d7a8ce07731b6adf0229877e0a7fcae226646002b5abd",
+      "proof": "1",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p1"
+    },
+    {
+      "evidence_sha256": "10e6c515fe026ab199736adf14b3e134d469ac417d7e6672b058c59e48253500",
+      "proof": "2",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p2"
+    },
+    {
+      "evidence_sha256": "b1635625f82b349a929cf02c0a3f63b7031bbf2f1e06a8b82b9b0bc25c16c036",
+      "proof": "3",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p3"
+    },
+    {
+      "evidence_sha256": "d42e006fd5c5d2d60cd78de736f20ade43b6c618f01d9ae0ae35b05742b54adc",
+      "proof": "4",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p4"
+    },
+    {
+      "evidence_sha256": "8f45b9066ef580bc05f3aa19b2aaeb3fb46a186e37a419ba555a72e9ae36b1e0",
+      "proof": "5",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p5"
+    },
+    {
+      "evidence_sha256": "e631b654c85449b6fec8937674552e3edb91b9f9689c88b906e9309e52c1f718",
+      "proof": "6",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p6"
+    },
+    {
+      "evidence_sha256": "fb1f2ae1fcf758793d8d82afc30f7133daaddd4f9ccdfb9178f4b3e3c1f55988",
+      "proof": "7",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p7"
+    },
+    {
+      "evidence_sha256": "cee5f329bcd29686f708a203cc9aad329cf41017a6faafb173a0c8c1e9e231b6",
+      "proof": "9",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p9"
+    },
+    {
+      "evidence_sha256": "47138da3ae7f7ee8f38154903cbcdb158856bf183587bf5821eb0e6f8f74d48f",
+      "proof": "10",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p10"
+    },
+    {
+      "evidence_sha256": "49165144422cc2acc4b17b1a49f4ce86915bd5c6fe1abdbd687ef89aac9f1299",
+      "proof": "8",
+      "recorded_utc": "2026-11-11T19:30:02Z",
+      "run_id": "chqa-66417a8-p8"
+    }
+  ],
+  "head": "66417a8895949dc7c1ffbc10966f378e72821212",
+  "manifest_sha256": "f9fd82397c9a6630c13f4ea5c5971c078358a2bc7b09a4543656ba39e52f55d3",
+  "schema_version": "charter.reopen/1",
+  "slice": "mg-s2c-front-matter"
+}
