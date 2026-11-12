@@ -1,0 +1,4 @@
+model	ladder_position_in_runs	accepted	rejected	uncharged	charged	acceptance_of_charged
+deepseek-flash	1	1	38	6	39	0.026
+glm-5.3-flash	3	6	31	23	37	0.162
+xiaomi/mimo-v2.6-pro	2	4	24	17	28	0.143

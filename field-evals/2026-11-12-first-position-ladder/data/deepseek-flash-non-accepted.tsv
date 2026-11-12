@@ -1,0 +1,4 @@
+outcome	failure_class	cause	count
+rejected	bad_candidate	quality	33
+rejected	provider_failure	quality	5
+uncharged	none	none	6
