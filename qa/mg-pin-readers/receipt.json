@@ -1,0 +1,96 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-pin-readers",
+  "verifies": "mg-pin-readers",
+  "candidate_commit": "68898065435aed8c9aff40b36fb9dc5461818b72",
+  "frozen": {
+    "manifest_sha256": "cc1dbede0681eed99fd79f68557837a392806a238550f47fe719f968e17523c8",
+    "head": "68898065435aed8c9aff40b36fb9dc5461818b72"
+  },
+  "dispatch": {
+    "base_commit": "1d93fd82e916cacab905404dc7cfe5e85b6c7df6",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5.5",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa/evidence-proof-1.txt (proof 1): reopen `test \"$(sed -n 's/^ *CHARTER_REV: //p' .github/workflows/ci.yml)\" = \"$(awk -F'\\t' '$2==\"current\"{print $1}' ~/.local/share/charter/PINS.tsv)\" && echo same` in QA/scratch at 6889806 printed `same`, exit 0 (ci.yml CHARTER_REV 98055d7d3ebd679a30d417963812b39e387fcf72 = PINS.tsv current). Mutant: CHARTER_REV set back to cf05eb5c9a1f1768d7aed8edee087e992bd9ad16 in QA/scratch only -> the command printed nothing, exit 1 (RED), then `git -C QA/scratch checkout -- .github/workflows/ci.yml` and `git status --porcelain` empty. Vacuity: the same reopen against base 0c61895 (CHARTER_REV cf05eb5 vs PINS current 98055d7) exits 1 -> not vacuous. Evidence file sha256 017df469111d29a619bc95c51cf738e7e1e44b2522f67b92b3e593747c37a209.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa/evidence-proof-2.txt (proof 2): reopen in QA/scratch -> `grep -c -e '--manifest-path' .github/workflows/ci.yml` prints 0 (grep exit 1, as grep does for zero matches) and `grep -c 'working-directory: tools/campaign-' .github/workflows/ci.yml` prints 2. Mutant: the base line `cargo clippy --manifest-path tools/campaign-observer/Cargo.toml --all-targets --locked -- -D warnings` re-added to the root step -> first count 1 (RED), second still 2; restored, `git status --porcelain` empty. Vacuity: against base 0c61895 the same reopens print 3 and 0, against the required 0 and 2 -> not vacuous. Evidence file sha256 d4d2d9b18ae3c72d1933b50779ed45d1feb35c8a9fbb2c28442668cc7a147640.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa/evidence-proof-3.txt (proof 3): both step scripts extracted in QA/tmp by the DONE's awk commands and run as `bash -eo pipefail <file>` inside QA/scratch. Reopen A `(cd tools/campaign-query && bash -eo pipefail \"$TMPDIR/query-step.sh\")` exit 0 (7s), output shows `rustc 1.95.0 (59807616e 2026-04-14)` and test result lines 0 passed / 2 passed. Reopen B `(cd tools/campaign-observer && bash -eo pipefail \"$TMPDIR/observer-step.sh\")` exit 0 (139s), output shows `rustc 1.95.0`, `clippy 0.1.95 (59807616e1 2026-04-14)`, `test result: ok. 10 passed; 0 failed` and `test result: ok. 15 passed; 0 failed` - every claim in the proof text checked line by line. Mutant `RUSTUP_TOOLCHAIN=1.88.0 bash -eo pipefail \"$TMPDIR/observer-step.sh\"` -> exit 1 at the `rustc --version` check (printed `rustc 1.88.0 (6b00bc388 2025-06-23)`), and 0 `test result` lines and 0 `cargo test` lines in the mutant run (RED). `git status --porcelain` empty. Evidence file sha256 20590d09ba6b2dfa966163385abd36e8538d31cf4dc7ef5680e7aa8575cf8df9.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa/evidence-proof-4.txt (proof 4): `bash -eo pipefail \"$TMPDIR/observer-step.sh\"` run from the repository root of QA/scratch exits 1 in 0s with the single line `sed: rust-toolchain.toml: No such file or directory`; no rustup, no rustc check, 0 cargo lines (0 lines matching `^(cargo|test result)`), so the step refuses rather than falling back to the default toolchain. The root has no rust-toolchain.toml (checked) and the extracted `channel` is empty. `git status --porcelain` empty. The proof's operative claim holds; its stated mechanism is wrong - see new defect QA-PR-D1. Evidence file sha256 79c1c6d85a01caba8d327f8a1ea26ecafdfac8b539d05992fff18d10a6be42de.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa/evidence-proof-5.txt (proof 5, hosted): `gh run view -R bradheitmann/mister-clean 43820435903 --log` and `--json jobs` (workflow CI, headSha 860dded373ec1f5f0d792a2f1749030fc99b77fe = the freeze record commit). verify job conclusion `success`, all executed steps success (3 tag-only steps skipped). Version lines quoted: step `Verify campaign SQLite reader on its pinned toolchain` -> `1.95.0-x86_64-unknown-linux-gnu installed - rustc 1.95.0 (59807616e 2026-04-14)` and `rustc 1.95.0 (59807616e 2026-04-14)` twice, plus `test result: ok. 0 passed` / `2 passed`; step `Verify campaign observer on its pinned toolchain` -> `rustc 1.95.0 (59807616e 2026-04-14)` twice, `clippy 0.1.95 (59807616e1 2026-04-14)` three times, `test result: ok. 10 passed; 0 failed` and `15 passed; 0 failed`. The non-required `charter (non-required; fails as NOT CHECKED while the charter source is unreachable)` job IS red (conclusion `failure`), failing at the probe with `##[error]charter source unreachable from this runner; nothing was checked`, exactly the declared baseline; it was given `CHARTER_REV: 98055d7d3ebd679a30d417963812b39e387fcf72`. Run-level conclusion is `failure` solely via that job - observation, not a slice defect. Both Rust steps record `shell: /usr/bin/bash -e {0}` (see QA-PR-D2). Evidence file sha256 a026a4dfff5cc398a3fad5eab03d2dc110a1ede295a9ccce0808bcb57e4a99b2.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa/evidence-proof-6.txt (proof 6): inspected only, per task - QA ran no charter hooks command. (a) the proof is stated in charter/DONE/mg-pin-readers.md with a reopen and a `mutant: n/a (landing step...)` field; (b) it names the binary `~/.local/share/charter/bin/98055d7d3ebd679a30d417963812b39e387fcf72/bin/charter` twice (DONE lines 6 and 31) and that binary exists, is executable and reports `charter 0.1.0 (98055d7d3ebd679a30d417963812b39e387fcf72)`; (c) proofs 1-5 contain no reference to hooks, to landing or to proof 6 once the range's own end line is dropped, ci.yml's only hooks mention is a comment about local enforcement, and proofs 1-5 rest on ci.yml/PINS.tsv, ci.yml greps, the two extracted step scripts and the hosted log - none of them runs charter or reads hook state, so proof 6 is not a dependency of 1-5. Evidence file sha256 3facd9332e4ecdcc89c32a1296d098e238679e60f3f5d4bd48cfd654ab8f577f.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C07",
+      "description": "qa/evidence-proof-7.txt (proof 7): (a) `charter check --strict` run in QA/scratch with ~/.local/share/charter/bin/ef2b92e911540155af27759ffadb2d9d3a04fd2a/bin/charter -> exit 0, `charter: ok`; and with ~/.local/share/charter/bin/98055d7d3ebd679a30d417963812b39e387fcf72/bin/charter -> exit 0, `charter: ok`, with exactly two warnings about the two declared out-of-scope items (`charter/SPEC.md is an earlier published spec ... run charter init --refresh-spec`, `charter/PIN.toml absent (no declared pin)`); no charter command that writes was run. (b) `pnpm exec tsc --project tsconfig.campaign.json --noEmit` in the checkout -> exit 0, 0 bytes of output, checkout `git status --porcelain` empty. (c) `bun run audit:public` in the checkout with ~/.local/share/mise/installs/bun/1.4.0/bin first on PATH, `bun --version` = 1.4.0 -> exit 0, `prospective package public-safety: PASS (62 files)`; the DONE's `pnpm run audit:public` reaches the same script (`bun scripts/verify_public_package.ts . --denylist-file ...`). (d) `git -C QA/scratch diff --name-only 0c61895 6889806...` lists exactly 6 files: .github/workflows/ci.yml, charter/.dispatch/mg-pin-readers.json, charter/.dispatch/mg-pin-readers.sha256, charter/DONE/mg-pin-readers.md, tools/campaign-observer/rust-toolchain.toml, tools/campaign-query/rust-toolchain.toml - nothing outside the allowed set. Evidence file sha256 e0364275fe122098f0d6b787fd350ca318091211cd59299a84f80cfa0658a153.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa/review.md (review of `git -C QA/scratch diff 0c61895 6889806 -- .github tools`): (1) no Rust gate runs outside its crate folder - every cargo gate in ci.yml sits under `working-directory` (lines 44/49, 51/58-60); the only root-level cargo is the non-required charter job's `cargo +1.88.0 install --git ... charter` (line 117), an external-binary install with its own +1.88.0 pin that never runs because the probe fails first, and no other workflow or script runs cargo; gate parity base->head is 3 for 3. (2) each step fails on a wrong toolchain under GitHub's actual run shell `bash -e {0}` (no pipefail): every gated pipeline ends in `grep -F`, whose status decides under both `-e` and `-e -o pipefail`, and every other gated line is a plain command; locally the RUSTUP_TOOLCHAIN=1.88.0 mutant exited 1 with no cargo output. (3) `rustup toolchain install` cannot change what the version check sees (the directory pin decides; after several installs this host's default is still 1.88.0 and only an env override beats the file) and cannot update rustup itself (`--no-self-update` on both install lines). (4) ci.yml line 57 `clippy-driver --version` is informational (printed, never matched); line 58 `cargo clippy --version | tee /dev/stderr | grep -F \"clippy 0.1.$minor \"` is the deciding check, as the DONE claims. (5) observer Cargo.toml:5 `rust-version = \"1.89\"` is an MSRV floor, satisfied by the 1.95.0 pin - agrees in the only sense that field carries, untouched by this slice. (6) proof 1 and proof 2 reopens both FAIL on base 0c61895 (1: cf05eb5 vs 98055d7, exit 1; 2: counts 3 and 0 vs required 0 and 2), so neither is vacuous; proof 3's bare exit-0 would be vacuous on base (the awk extractor yields an empty script there) but its output assertions are not. (7) the DONE states its scope honestly (line 37 names re-pin steps 2 and 3 and the charter job baseline; corroborated by the 98055d7 strict-check warnings naming exactly those two items). Supporting record checks: dispatch done_sha256 matches the frozen DONE; freeze tree matches `git rev-parse 6889806^{tree}`; all 564 freeze entries re-hash clean (0 mismatches), the 14 omitted tracked blobs being only charter/.freeze/** records of other slices; checkout and QA/scratch clean after every mutant restore. Two documentation defects found (QA-PR-D1, QA-PR-D2), neither proof-breaking. Evidence file sha256 79193538d5af80805ab1184623104f1c68ff7250ce684ac7153d014b24a3777e.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "QA-PR-D1",
+      "file": "charter/DONE/mg-pin-readers.md",
+      "line": 25,
+      "what_is_wrong": "Proof 4's parenthetical states the mechanism wrongly: it says the root run fails because 'the toolchain file is not found, so the channel is empty and the version check fails'. Observed in qa/evidence-proof-4.txt, the run exits at line 1 with `sed: rust-toolchain.toml: No such file or directory`; `channel` is never assigned and the `rustc --version` check is never reached. The proof's operative claim (non-zero exit before any cargo command) holds; only the stated mechanism is wrong.",
+      "severity": "low"
+    },
+    {
+      "id": "QA-PR-D2",
+      "file": "charter/DONE/mg-pin-readers.md",
+      "line": 12,
+      "what_is_wrong": "The DONE calls `bash -eo pipefail <file>` 'the shell GitHub Actions uses for `run:` steps'. The hosted log for both Rust steps records `shell: /usr/bin/bash -e {0}` - GitHub's default run shell has no `-o pipefail` (ci.yml sets no `defaults:` and no step says `shell: bash`). The QA reopens therefore ran a stricter shell than hosted. No proof breaks: every gated pipeline ends in `grep`, so a wrong toolchain fails under either shell (qa/evidence-proof-5.txt, qa/evidence-proof-3.txt).",
+      "severity": "low"
+    }
+  ],
+  "notes": {
+    "shell_premise": "The task premise 'GitHub runs run: steps under bash -e -o pipefail' is not what run 43820435903 shows: both Rust steps record `shell: /usr/bin/bash -e {0}`. The steps are still fail-closed on a wrong toolchain (grep is last in every gated pipeline); recorded as QA-PR-D2 against the DONE rather than against the code.",
+    "dispatch_base_vs_done_base": "dispatch.base_commit 1d93fd82e916cacab905404dc7cfe5e85b6c7df6 is the parent of the dispatch record's own commit, matching the repo convention (mg-s2b-git-runner, mg-forward-752 identical); the DONE declares the slice diff base as main 0c61895, which proof 7's diff uses. Two meanings of 'base', both internally consistent; copied exactly as recorded, brief_sha256 is null in the record.",
+    "proof_3_base_nuance": "On base 0c61895 the DONE's awk extractor yields an EMPTY observer script (the base has no step named 'Verify campaign observer on its pinned toolchain'), so a bare exit-0 criterion would be vacuous there; proof 3 also demands the rustc/clippy/test-result output lines, which an empty script cannot print, so proof 3 as written is not vacuous.",
+    "rust_version_field": "tools/campaign-observer/Cargo.toml:5 `rust-version = \"1.89\"` vs the 1.95.0 pin: rust-version is an MSRV floor, 1.95.0 >= 1.89, no contradiction, untouched by this slice - an observation, not a defect.",
+    "audit_route": "The DONE proof 7 names `pnpm run audit:public`; the task ran `bun run audit:public`. pnpm's audit:public script invokes the same `bun scripts/verify_public_package.ts ...`, PASS (62 files) under bun 1.4.0.",
+    "freeze_coverage": "Freeze record covers 564 of 578 tracked blobs at 6889806; all 564 re-hash clean. The 14 omitted are exactly charter/.freeze/*.json and charter/.freeze/reopen/*.json - charter's own records for other slices, a charter-side selector behaviour.",
+    "process": "No charter command that writes was run (no gate, freeze, receipt or hooks install); only `charter check --strict`. Every mutant was applied in QA/scratch only and restored, `git -C QA/scratch status --porcelain` empty after each; the checkout was never edited. QA/scratch is left in place for the PM to remove."
+  },
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ]
+}
