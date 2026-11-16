@@ -42,6 +42,7 @@ jobs:
       # first prove that the toolchain named in its rust-toolchain.toml ran.
       - name: Verify campaign SQLite reader on its pinned toolchain
         working-directory: tools/campaign-query
+        shell: bash
         run: |
           channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
           rustup toolchain install --no-self-update "$channel" --profile minimal
@@ -49,6 +50,7 @@ jobs:
           cargo test --locked
       - name: Verify campaign observer on its pinned toolchain
         working-directory: tools/campaign-observer
+        shell: bash
         run: |
           channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
           minor=$(printf '%s\n' "$channel" | cut -d. -f2)

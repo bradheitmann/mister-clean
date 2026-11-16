@@ -1,4 +1,4 @@
-#:schema ../schemas/charter-toml.schema.json
+#:schema schemas/charter-toml.schema.json
 charter_version = "1"
 spec_version = "1"
 project = "mister-clean"
