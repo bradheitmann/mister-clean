@@ -1,0 +1,7 @@
+{
+  "base_commit": "1d93fd82e916cacab905404dc7cfe5e85b6c7df6",
+  "brief_sha256": null,
+  "done_sha256": "de75d8e183f31792d6f4f8e679e2dd110ea77b8b53abc12e57201f626ee0942e",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-pin-readers"
+}
