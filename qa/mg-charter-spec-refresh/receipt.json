@@ -1,0 +1,94 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-charter-spec-refresh",
+  "verifies": "mg-charter-spec-refresh",
+  "candidate_commit": "01b8758daecb978f8d599de94d8519f786d5904a",
+  "frozen": {
+    "manifest_sha256": "26d19a1d00458e1a7d8456c91ddeec4aa587620c3f799347de0b0cd62e0ab395",
+    "head": "01b8758daecb978f8d599de94d8519f786d5904a"
+  },
+  "dispatch": {
+    "base_commit": "ec24a8f022cddf8a4efb253cc897667d929e8c8b",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-fable-5-2",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa/evidence-proof-1.txt (proof 1): reopen shasum -a 256 charter/SPEC.md printed 7479871a8ec7dda46411154b64f335d805e87bb2232da91de815d3c89a2ef6d8 and C check --strict printed charter: ok with no line containing earlier published spec (exit 0). Mutant in QA/scratch, git show 5c8b2c2:charter/SPEC.md > charter/SPEC.md -> sum 56f03db23c95e1f9cbdbe63b52386ddc4de24dc83680b976de8ae10655b20ba2 and the earlier published spec warning printed (RED); restored, git status --porcelain empty, reopen green again. Vacuity: the same reopen against base 5c8b2c2 fails on both criteria -> not vacuous; note check --strict still exits 0 under the mutant, so RED means the reopen's own criteria fail, exactly as the DONE words it. Evidence file sha256 d20d98ce9ec9a947ba4f7ce87060a6db6ed5e8c5629158088dd91c1709b479f0.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa/evidence-proof-2.txt (proof 2): reopen C init --refresh-spec in QA/scratch exit 0, printed already this binary's spec (7479871a...) and kept for charter/GOVERNANCE.md and charter/schemas/charter-toml.schema.json, git status --porcelain empty; rerun after the mutant is green again. Mutant: one line appended to charter/GOVERNANCE.md -> exit 1, init --refresh-spec refuses: charter/GOVERNANCE.md differs from this binary's text (RED); restored. Vacuity: at base 5c8b2c2 it prints refreshed from an earlier published text and installed rather than already/kept, so the reopen fails there -> not vacuous (only its text criterion fails; the tree ends clean again, which is why the three-part wording matters). Evidence file sha256 a2feac7411f7a7a14c9c1b6ff2966b0f6cdeff8e5e64706c351511752e900e39.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa/evidence-proof-3.txt (proof 3): reopen test -f charter/<schema line> && echo found printed found, exit 0; the base first line of charter/charter.toml at 5c8b2c2 is #:schema ../schemas/charter-toml.schema.json. Mutant: that base line put back -> no output, exit 1 (RED); restored, reopen green. Vacuity: at base the reopen prints nothing and exits 1 -> not vacuous. Evidence file sha256 f5d05e686c9b53ee34440efe45a03b1ea56492d35fd6044b817666bd508d9f29.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa/evidence-proof-4.txt (proof 4): reopen awk count of shell: bash under the two Rust steps printed 2; the two steps and their lines are quoted in the file, and the base ci.yml at 5c8b2c2 counts 0. Mutant as the DONE states it, deleting only the observer step's shell: bash line -> printed 1 (RED); a first attempt that deleted every 8-space shell: bash line in the file printed 0 and is recorded in the evidence file as a note, since it is not the DONE's mutant. Restored, git status --porcelain empty, reopen green. Vacuity: at base the count is 0, not 2 -> not vacuous. Evidence file sha256 6d7e47ef20632a40ad858d5086f01e5d6e2463cfdf59acbc8648993e7760df33.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa/evidence-proof-5.txt (proof 5, hosted): gh run view -R bradheitmann/mister-clean 43963169323 --log and --json jobs (workflow CI, headSha 30c9e7f19330f378f2db2b30ac5d8003b914aaed, event pull_request, completed). Both Rust steps log shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0} (log lines 1146 and 1207); the SQLite reader step logs rustc 1.95.0 (59807616e 2026-04-14); the observer step logs rustc 1.95.0 (59807616e 2026-04-14) and clippy 0.1.95 (59807616e1 2026-04-14). verify job conclusion success, both Rust steps success. The non-required charter job WAS red (conclusion failure), failing at probe the charter source with charter source unreachable from this runner; nothing was checked - the known NOT CHECKED baseline the DONE declares out of scope; the run-level conclusion is failure solely through that job. Evidence file sha256 38a1268fd233168368deae50f8b73a1d9d3501c5facf2bda629bf5db268af811.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa/evidence-proof-6.txt (proof 6): each of the five greps on charter/DONE-TEMPLATE.md printed 1, and the five rules sit at lines 7-11 of that file; at base 5c8b2c2 each prints 0. Mutant: the whole-number line deleted -> the first command prints 0 (RED); restored, reopens print 1 1 1 1 1, git status --porcelain empty. Vacuity: all five fail at base -> not vacuous. Evidence file sha256 0da93d41cfdade23495fa3ba87c836cdd51e7240ab057e8f628a02d759745b6c.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa/evidence-proof-7.txt (proof 7): every reopen green. The two step scripts were extracted from ci.yml with the DONE's awk commands and run as bash --noprofile --norc -eo pipefail <file> in QA/scratch with $HOME/.cargo/bin first on PATH: campaign-query exit 0 (rustc 1.95.0, test results 0 passed / 2 passed), campaign-observer exit 0 (rustc 1.95.0, clippy 0.1.95, 10 passed; 0 failed, 15 passed; 0 failed). In the checkout: pnpm exec tsc --project tsconfig.campaign.json --noEmit exit 0 with no output; pnpm run audit:public exit 0, prospective package public-safety: PASS (62 files), under bun 1.4.0; MISTER_CLEAN_SOURCE_DEVELOPMENT=1 node ./node_modules/vitest/vitest.mjs run ... inspection.test.ts -t keeps the prospective public source tree free of private identifiers -> 1 passed, 15 skipped; git diff --name-only 5c8b2c2 01b8758daecb978f8d599de94d8519f786d5904a lists exactly the nine files the DONE names. Checkout git status --porcelain empty throughout; at base the diff lists nothing -> not vacuous. Evidence file sha256 734884069d343b7ce44dd57c0e53d3465d69e80c3b59bc84c8b927a7e8f23289.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa/review.md (review of git -C QA/scratch diff 5c8b2c2 01b8758daecb978f8d599de94d8519f786d5904a): (1) no proof is vacuous - proofs 1, 3, 4 and 6 were run against base 5c8b2c2 and each fails there, proof 2 fails its text criterion at base and proof 7's diff lists nothing at base. (2) no reopen reads a file another repository can rewrite: the nearest external inputs are the pinned charter binary, ~/.local/share/charter/PINS.tsv (outside every git repository, and proof 1's outcome was shown insensitive to it via CHARTER_PINS overrides) and the GitHub-hosted log. (3) the new SPEC.md is byte-identical to what the 98055d7 build embeds (init --refresh-spec rewrote the base text to 7479871a... with an empty git diff afterwards) and nothing in the repository still reads the older text - no script, test or CI step reads charter/SPEC.md, MANIFEST.sha256 has no charter/SPEC entry, and the base schema path schemas/charter-toml.schema.json was never added in any commit. (4) with shell: bash no line of the two steps changes outcome: -e was already on, --noprofile --norc change nothing for a non-interactive script, pipefail can only add failures, the steps' only three pipelines end in grep -F or cut, and the query step exits 0 under both bash -e and -eo pipefail while the observer exits 0 under the stricter shell. (5) all three corrections to mg-pin-readers match ~/open_protocols/mister-clean/qa/mg-pin-readers/receipt.json QA-PR-D1, QA-PR-D2 and its proof 1 pin-table read. (6) the five template rules are holdable, each traced to a recorded miss in charter/STATE.md lines 14, 15, 22, 24, 25 and in this DONE's corrections, with rule 2 needing a no-alternative-readings reading and rule 4 undecided for commands CI never runs. (7) the DONE states its scope honestly: change claims all verified, budgets within charter.toml, out-of-scope items each confirmed (charter job red as NOT CHECKED, no src/ file touched), and Base main 5c8b2c2 consistent with dispatch.base_commit ec24a8f under the house convention of the dispatch record's own parent. Records: freeze tree equals 01b8758^{tree}, all seven changed blobs re-hash against the freeze record, the 16 omitted tracked blobs are exactly charter/.freeze/** records of other slices, dispatch.done_sha256 equals the DONE's own sha256. Two documentation defects found (QA-SR-D1 info, QA-SR-D2 low), none proof-breaking. Evidence file sha256 5bd87383fc6b7e8465b6f80c9805474fa7fa67f820c7cc877afbddf5087cac14.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "QA-SR-D1",
+      "file": "charter/DONE/mg-charter-spec-refresh.md",
+      "line": 13,
+      "what_is_wrong": "The QA-PR-D1 correction says the root run stops one line earlier than the version check. In the observer step script the version check is line 4 and the run stops at line 1 (the channel=$(sed ...) assignment); in the query step script the version check is line 3 against line 1. The sentence's own second half states the cause correctly (sed cannot open rust-toolchain.toml, the script exits there) and the operative claim, a non-zero exit before any cargo command, is unchanged, so no proof breaks; the phrase one line earlier is simply not literal.",
+      "severity": "info"
+    },
+    {
+      "id": "QA-SR-D2",
+      "file": "charter/DONE/mg-charter-spec-refresh.md",
+      "line": 22,
+      "what_is_wrong": "This slice adds the template rule Say which shell a reopen runs under, and use the one hosted CI uses for that step, but the DONE names a shell only for the two Rust reopens (the preamble line cited here covers S and Q). Proofs 1, 2, 3, 4, 5, 6 and proof 7's pnpm exec tsc, pnpm run audit:public and vitest reopens name no shell; pnpm exec tsc in particular is a step hosted CI does run (ci.yml line 39, under GitHub's default bash -e {0}). No proof breaks, because none of those commands depends on the shell, but the DONE does not meet the rule it just wrote.",
+      "severity": "low"
+    }
+  ],
+  "notes": {
+    "process": "QA/scratch is a shared clone at the frozen head 01b8758daecb978f8d599de94d8519f786d5904a and is left in place for the PM to remove. Every mutant was applied only in QA/scratch and restored with git checkout -- <file>, with git status --porcelain empty after each; the checkout itself was never edited. Only charter check --strict, charter init --refresh-spec (QA/scratch only) and charter receipt on this receipt were run - no gate, freeze, receipt-writing or hooks install. pnpm, tsc, audit:public and vitest ran in the checkout; everything else in QA/scratch. Home paths are written as ~; no personal data recorded. Provisioning record: qa/evidence-0.txt, sha256 91a6748d00805f9673b779aae30a8fc3b9d9832694eb394dd401920b64c796e6.",
+    "dispatch_base_vs_done_base": "dispatch.base_commit is ec24a8f022cddf8a4efb253cc897667d929e8c8b, the parent of the dispatch record's own commit (the house convention mg-pin-readers' receipt records); the DONE declares the slice diff base as main 5c8b2c2, which proof 7's diff uses. Two meanings of base, both internally consistent; brief_sha256 is null in the record and copied as null here.",
+    "proof5_baseline": "Run 43963169323 concludes failure at run level solely because the non-required charter job fails as NOT CHECKED (charter source unreachable from this runner) - the declared baseline; verify and both Rust steps are success.",
+    "freeze_coverage": "The freeze record covers 571 of 587 tracked blobs at the frozen head; the 16 omitted are exactly charter/*.freeze records of other slices (charter/.freeze/*.json and charter/.freeze/reopen/*.json), charter's own selector behaviour as recorded in the mg-pin-readers receipt. All seven changed blobs re-hash clean against the record.",
+    "proof1_mutant_note": "Under the SPEC.md mutant, charter check --strict exits 0 and only warns; the DONE's RED is the reopen's own criteria failing (wrong sum plus the earlier published spec line), which is what its wording says."
+  },
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ]
+}
