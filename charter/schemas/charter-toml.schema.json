@@ -27,7 +27,8 @@
       "properties": {
         "qa_attempts_per_slice": { "type": "integer", "minimum": 1 },
         "repair_cycles_per_slice": { "type": "integer", "minimum": 1 },
-        "review_families_required": { "type": "integer", "minimum": 1 }
+        "review_families_required": { "type": "integer", "minimum": 1 },
+        "seat_evidence": { "enum": ["required", "optional"], "description": "gaps-receipt-1: \"required\" refuses an accepted receipt unless every verifier carries a charter.seat-evidence/1 record (slices already accepted with their receipt are not re-judged). Set it only after every hook, CI job and seat runs a pin carrying this key: an older binary's check --strict refuses it as an unexpected field." }
       }
     },
     "land_check": {
