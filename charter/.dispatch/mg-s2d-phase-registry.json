@@ -1,7 +1,7 @@
 {
-  "base_commit": "ae2e3d2b7e2039c406cbac8a3d07551c9c6bf2ca",
+  "base_commit": "4921267fee70e783540cadfadbe21f8378b90d77",
   "brief_sha256": null,
-  "done_sha256": "d6b31956a88c1282aa2854b0ae16c30ae914101b8d8784d33dbc25ff1245e0b3",
+  "done_sha256": "46e8cf8eb99b99f28a4a5d19ec721c257531d2dd19b08447f87ae15cb246f08a",
   "schema_version": "charter.dispatch/1",
   "slice": "mg-s2d-phase-registry"
 }
