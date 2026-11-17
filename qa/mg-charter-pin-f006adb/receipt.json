@@ -1,0 +1,87 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-charter-pin-f006adb",
+  "candidate_commit": "ed81f5c4e6021b748165a800700d047c9ef826c6",
+  "frozen": {
+    "head": "ed81f5c4e6021b748165a800700d047c9ef826c6",
+    "manifest_sha256": "567530b8bc2fe1b2d762b04f0471966ea973d62228d0ca182ef5c29fd66e6041"
+  },
+  "dispatch": {
+    "base_commit": "dae5348c16300fefa31f933178ed384783d1a7e2",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5-5",
+    "verifier": "zai/glm-5.3-flash"
+  },
+  "checks": [
+    {
+      "id": "C01",
+      "name": "proof 1: tree declares pin f006adb and passes that build's strict check (reopen exit 0, mutant exit 1 naming both commits)",
+      "evidence_file": "evidence-proof-1.txt",
+      "evidence_sha256": "f5cbd2da3ed9d1b73f69413faf4cd79b0669c0e60e2d35bbbeeb49d567ea65d5",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "name": "proof 2: CHARTER_REV names f006adb and no old-id reference outside charter/ and qa/ (reopen holds; mutant lists ci.yml)",
+      "evidence_file": "evidence-proof-2.txt",
+      "evidence_sha256": "ee624af6892aa4d78ad12a7428a94f7497c82487139b74492ebadd4a172d6d1e",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "name": "proof 3: binary sha256/version match the notes; SPEC.md sha256 3ecb03ec…; mutant swaps the earlier published spec and check prints the warning line",
+      "evidence_file": "evidence-proof-3.txt",
+      "evidence_sha256": "1aaf076ae7798d860acfc9a8fcab0aa82e925ecd7a377c272feb0d4ce5c4947e",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "name": "proof 4: hooks status match in CHECKOUT; fresh-clone mutant exits 1 with drift in 2 of 2 hooks",
+      "evidence_file": "evidence-proof-4.txt",
+      "evidence_sha256": "e8be6b8b10288a1a5c21ec8c989596206232813990355cdf8812f1b3a9a07382",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "name": "proof 5: 14 dispatch records each print verified, then all-verified; mutant (appended newline) refuses mg-pin-readers at exit 1",
+      "evidence_file": "evidence-proof-5.txt",
+      "evidence_sha256": "fbf8c6e2970e50e48e3907374298367fcc5418dba2bdad5bff1fb094b86cb032",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "name": "proof 6: hosted run 44076623832 headSha c89546b4…, verify success, charter job red as NOT CHECKED (known baseline)",
+      "evidence_file": "evidence-proof-6.txt",
+      "evidence_sha256": "f59342a95aabc8c9bc05a5f189dd257d3680e33d656c8209b1268e5b131b38ca",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "name": "proof 7: ci.yml numstat 1 1; tsc, audit:public PASS, inspection private-identifier test 1 passed; diff lists exactly the five slice files",
+      "evidence_file": "evidence-proof-7.txt",
+      "evidence_sha256": "972f4c17220a361817aa4774f0b1be4b35a5b8d0f685e0690ceba2f9c172805b",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "name": "review: non-vacuity at base 803fd4c (QA/base reopens of proofs 1-2 fail there), binary/notes match, no old id outside charter/, order of commits true, proof 4 statement honest, scope honest",
+      "evidence_file": "review.md",
+      "evidence_sha256": "c9fbd62defd45007fbf3a8e5c47cc3151260602d4a546b8ee8228b5e4a9cd423",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "QA-PF-D1",
+      "file": "charter/.dispatch/mg-charter-pin-f006adb.json",
+      "line": 1,
+      "what_is_wrong": "The dispatch record's base_commit is dae5348c16300fefa31f933178ed384783d1a7e2 (the slice's DONE-list commit) while the contract and TASK-QA state 'Base: main 803fd4c' (803fd4c6518d3a9e5885a4d6a9b69c35afdd52fe); both are ancestors of the frozen head and every proof diff uses 803fd4c, so this is a wording/registry inconsistency only.",
+      "severity": "info"
+    }
+  ],
+  "proofs_reopened": ["1", "2", "3", "4", "5", "6", "7"],
+  "verdict": "accepted"
+}

@@ -1,0 +1,12 @@
+{
+  "accepted_unix_s": 1794917546,
+  "accepted_utc": "2026-11-17T12:12:26Z",
+  "base_commit": "dae5348c16300fefa31f933178ed384783d1a7e2",
+  "brief_sha256": null,
+  "done_sha256": "fb6b67726054f8efdeedf4e7e65cb23035b6abd075dd5a2195b561401847e08d",
+  "receipt": "qa/mg-charter-pin-f006adb/receipt.json",
+  "receipt_sha256": "ebe11e61c827a1b36535451d6f342b7dc5886398065e1944c66b63d8107f29f9",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-charter-pin-f006adb",
+  "state": "accepted"
+}
