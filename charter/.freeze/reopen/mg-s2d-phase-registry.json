@@ -1,0 +1,81 @@
+{
+  "done_sha256": "46e8cf8eb99b99f28a4a5d19ec721c257531d2dd19b08447f87ae15cb246f08a",
+  "entries": [
+    {
+      "evidence_sha256": "75f0cc5642be27f8e8b28942beec0d518b802a419ee91a03968f2076922314b2",
+      "proof": "1",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p1"
+    },
+    {
+      "evidence_sha256": "bee5884bddfe155093a8dfb63df4182d035c69cd5d80404d475c5330343bdb86",
+      "proof": "2",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p2"
+    },
+    {
+      "evidence_sha256": "65406b6f5ef77f369b011536e754cfa62e7d4636129a2ba8939be5a26714c5d2",
+      "proof": "3",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p3"
+    },
+    {
+      "evidence_sha256": "9069e1eba4245f08b40c82fddccb40aa8967c78d63ccbe8015eaa080e9cdf58e",
+      "proof": "4",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p4"
+    },
+    {
+      "evidence_sha256": "d9ca300aa5ae5769bbf9499a843e9fb95eb06023125fc43854dbf1b3fede5c62",
+      "proof": "5",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p5"
+    },
+    {
+      "evidence_sha256": "de4a9e50dc858ea788d885258a62848c29596191f428fe0224c2febdbe4004dc",
+      "proof": "6",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p6"
+    },
+    {
+      "evidence_sha256": "88a39219bc01c3cc72163126938a4d152eba8ffe08b2de3ff62f874519ecb9d4",
+      "proof": "7",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p7"
+    },
+    {
+      "evidence_sha256": "20f47fbce01b62405b2299a1b1c8831dd99739ecf17550c6afff78e60da01feb",
+      "proof": "8",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p8"
+    },
+    {
+      "evidence_sha256": "c6c147582544698c55a08b3fc846379a3f0ef85c8a3ebb04d39a754bcd06d7a5",
+      "proof": "9",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p9"
+    },
+    {
+      "evidence_sha256": "3a96aee8c6a6e53118c99a9cf69cc7b6587629726a5eb420debd3dea0448bd29",
+      "proof": "10",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p10"
+    },
+    {
+      "evidence_sha256": "28c018fc0ff471ec78898c6277abc94540c4412dfb00554185213400c6150266",
+      "proof": "11",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p11"
+    },
+    {
+      "evidence_sha256": "d0b8b2fdb3b4db557f18f353bcbe304ea7a15c739e7c7af4b5a20dc894252bb3",
+      "proof": "12",
+      "recorded_utc": "2026-11-17T08:44:02Z",
+      "run_id": "chqa1-4fdc589-p12"
+    }
+  ],
+  "head": "4fdc5896e85dac095a96926b53feeb545da0a1af",
+  "manifest_sha256": "904a20b737c48e053e7d53eca8294f0adeaa35b0d2744d32b2042abda6bc2eba",
+  "schema_version": "charter.reopen/1",
+  "slice": "mg-s2d-phase-registry"
+}

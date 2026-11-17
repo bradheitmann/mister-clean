@@ -24,6 +24,7 @@ import {
   canonicalObservationId,
   canonicalRootDebtKey,
 } from "./regression-accounting.js";
+import { isPhaseId, type PhaseId } from "./phase-registry.js";
 import {
   HEX64,
   array,
@@ -56,15 +57,17 @@ export interface ActionRepositoryBoundary {
   readonly after: JsonObject;
 }
 
-export function detectorRootProjections(
-  detectorId: string,
-  value: unknown,
-  repoId: string,
-): CanonicalRootProjection[] {
-  const result = object(value);
-  if (!result) return [];
-  const rows: Array<{ normalizer: string; causeKey: JsonObject; fingerprints: string[] }> = [];
-  if (detectorId === "planning_graph") {
+/** One root cause a detector result holds, before it is keyed to a repository. */
+interface RootProjectionRow {
+  readonly normalizer: string;
+  readonly causeKey: JsonObject;
+  readonly fingerprints: string[];
+}
+
+/** How each family groups the findings of one emitted result into root causes. */
+const ROOT_PROJECTIONS = {
+  planning_graph: (result) => {
+    const rows: RootProjectionRow[] = [];
     for (const rawDebt of array(result.root_debts)) {
       const debt = object(rawDebt);
       if (!debt) continue;
@@ -81,7 +84,70 @@ export function detectorRootProjections(
         fingerprints,
       });
     }
-  } else if (detectorId === "semantic_boundary") {
+    return rows;
+  },
+  public_safety: (result) => {
+    const rows: RootProjectionRow[] = [];
+    for (const rawFinding of array(result.findings)) {
+      const finding = object(rawFinding);
+      if (!finding || typeof finding.fingerprint !== "string") continue;
+      rows.push({
+        normalizer: "mister-clean/public-safety-root@1",
+        causeKey: {
+          detector_family: "public_safety",
+          rule: finding.rule,
+          path: finding.path,
+          line: finding.line,
+        },
+        fingerprints: [finding.fingerprint],
+      });
+    }
+    for (const rawFinding of array(result.unassessed)) {
+      const finding = object(rawFinding);
+      if (!finding || typeof finding.fingerprint !== "string") continue;
+      rows.push({
+        normalizer: "mister-clean/public-safety-root@1",
+        causeKey: {
+          detector_family: "public_safety",
+          reason: finding.reason,
+          path: finding.path,
+        },
+        fingerprints: [finding.fingerprint],
+      });
+    }
+    return rows;
+  },
+  github_actions: (result) => {
+    const rows: RootProjectionRow[] = [];
+    const grouped = new Map<string, JsonObject[]>();
+    for (const rawFinding of array(result.findings)) {
+      const finding = object(rawFinding);
+      if (!finding || typeof finding.fingerprint !== "string"
+        || typeof finding.path !== "string" || typeof finding.rule !== "string") continue;
+      const key = `${finding.path}\0${finding.rule}`;
+      grouped.set(key, [...(grouped.get(key) ?? []), finding]);
+    }
+    for (const findings of grouped.values()) {
+      const first = findings[0];
+      if (!first) continue;
+      rows.push({
+        normalizer: "mister-clean/github-actions-root@1",
+        causeKey: {
+          detector_family: "github_actions",
+          path: first.path,
+          rule: first.rule,
+        },
+        fingerprints: findings
+          .map((finding) => String(finding.fingerprint))
+          .sort(),
+      });
+    }
+    return rows;
+  },
+  // No closeout part: its results carry no root debts.
+  repository_boundaries: () => [],
+  semantic_boundary: (result) => {
+    const rows: RootProjectionRow[] = [];
     const findings = array(result.findings).map(object).filter((finding): finding is JsonObject => Boolean(finding));
     const unassigned = findings.filter((finding) => finding.code === "semantic_probe_unassigned"
       && typeof finding.candidate_id === "string");
@@ -111,36 +177,11 @@ export function detectorRootProjections(
         fingerprints: [semanticFindingFingerprint(finding.candidate_id, finding.code)],
       });
     }
-  } else if (detectorId === "public_safety") {
-    for (const rawFinding of array(result.findings)) {
-      const finding = object(rawFinding);
-      if (!finding || typeof finding.fingerprint !== "string") continue;
-      rows.push({
-        normalizer: "mister-clean/public-safety-root@1",
-        causeKey: {
-          detector_family: "public_safety",
-          rule: finding.rule,
-          path: finding.path,
-          line: finding.line,
-        },
-        fingerprints: [finding.fingerprint],
-      });
-    }
-    for (const rawFinding of array(result.unassessed)) {
-      const finding = object(rawFinding);
-      if (!finding || typeof finding.fingerprint !== "string") continue;
-      rows.push({
-        normalizer: "mister-clean/public-safety-root@1",
-        causeKey: {
-          detector_family: "public_safety",
-          reason: finding.reason,
-          path: finding.path,
-        },
-        fingerprints: [finding.fingerprint],
-      });
-    }
-  } else if (detectorId === "language_policy") {
-    // One root debt per tracked forbidden-language path.
+    return rows;
+  },
+  // One root debt per tracked forbidden-language path.
+  language_policy: (result) => {
+    const rows: RootProjectionRow[] = [];
     for (const rawFinding of array(result.findings)) {
       const finding = object(rawFinding);
       if (!finding || typeof finding.fingerprint !== "string") continue;
@@ -154,31 +195,19 @@ export function detectorRootProjections(
         fingerprints: [finding.fingerprint],
       });
     }
-  } else if (detectorId === "github_actions") {
-    const grouped = new Map<string, JsonObject[]>();
-    for (const rawFinding of array(result.findings)) {
-      const finding = object(rawFinding);
-      if (!finding || typeof finding.fingerprint !== "string"
-        || typeof finding.path !== "string" || typeof finding.rule !== "string") continue;
-      const key = `${finding.path}\0${finding.rule}`;
-      grouped.set(key, [...(grouped.get(key) ?? []), finding]);
-    }
-    for (const findings of grouped.values()) {
-      const first = findings[0];
-      if (!first) continue;
-      rows.push({
-        normalizer: "mister-clean/github-actions-root@1",
-        causeKey: {
-          detector_family: "github_actions",
-          path: first.path,
-          rule: first.rule,
-        },
-        fingerprints: findings
-          .map((finding) => String(finding.fingerprint))
-          .sort(),
-      });
-    }
-  }
+    return rows;
+  },
+} satisfies Record<PhaseId, (result: JsonObject) => RootProjectionRow[]>;
+
+export function detectorRootProjections(
+  detectorId: string,
+  value: unknown,
+  repoId: string,
+): CanonicalRootProjection[] {
+  const result = object(value);
+  if (!result) return [];
+  // An id outside the registry has no projection and, below, no detector either.
+  const rows = isPhaseId(detectorId) ? ROOT_PROJECTIONS[detectorId](result) : [];
   const sourceId = detectorById(detectorId)?.detector;
   if (!sourceId) return [];
   return rows.map(({ normalizer, causeKey, fingerprints }) => ({

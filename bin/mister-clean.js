@@ -16078,6 +16078,82 @@ ${result.stderr ?? ""}`;
   };
 }
 
+// src/closeout/phase-registry.ts
+var PHASES = [
+  {
+    id: "planning_graph",
+    auditKind: "planning",
+    closeout: {
+      scope: ".",
+      command: "mister-clean audit planning . --json",
+      detector: "mister-clean/planning_graph@2",
+      bundleFile: "planning-audit.json"
+    }
+  },
+  {
+    id: "public_safety",
+    auditKind: "public-safety",
+    closeout: {
+      scope: "tracked_shippable",
+      command: "mister-clean audit public-safety . --tracked --json",
+      detector: "mister-clean/public_safety@1",
+      bundleFile: "public-safety-audit.json"
+    }
+  },
+  {
+    id: "github_actions",
+    auditKind: "github-actions",
+    closeout: {
+      scope: ".",
+      command: "mister-clean audit github-actions . --json",
+      detector: "mister-clean/github_actions@3",
+      bundleFile: "github-actions-audit.json"
+    }
+  },
+  // Audit-only: it writes receipts but takes no part in a closeout bundle.
+  {
+    id: "repository_boundaries",
+    auditKind: "repository-boundaries",
+    closeout: null
+  },
+  {
+    id: "semantic_boundary",
+    auditKind: "semantic",
+    closeout: {
+      scope: ".",
+      command: "mister-clean audit semantic . --json",
+      detector: "mister-clean/semantic_boundary@1",
+      bundleFile: "semantic-audit.json"
+    }
+  },
+  // Always required since registry 6; a repository without a policy yields a
+  // not_applicable result with zero fingerprints, never a missing execution.
+  {
+    id: "language_policy",
+    auditKind: "language-policy",
+    closeout: {
+      scope: "tracked_shippable",
+      command: "mister-clean audit language-policy . --json",
+      detector: "mister-clean/language_policy@1",
+      bundleFile: "language-policy-audit.json"
+    }
+  }
+];
+var PHASE_IDS = PHASES.map((phase) => phase.id);
+var CLOSEOUT_PHASES = PHASES.filter((phase) => phase.closeout !== null);
+var CLOSEOUT_PHASE_IDS = CLOSEOUT_PHASES.map((phase) => phase.id);
+var AUDIT_KINDS = PHASES.map((phase) => phase.auditKind);
+var CLOSEOUT_BUNDLE_FILES = CLOSEOUT_PHASES.map((phase) => ({ family: phase.id, file: phase.closeout.bundleFile }));
+function phaseById(id) {
+  return PHASES.find((phase) => phase.id === id);
+}
+function phaseByAuditKind(kind) {
+  return PHASES.find((phase) => phase.auditKind === kind);
+}
+function isPhaseId(id) {
+  return phaseById(id) !== void 0;
+}
+
 // src/closeout/detector-coverage.ts
 var DETECTOR_COVERAGE_SCHEMA_VERSION = "6";
 var REGRESSION_DELTA_SCHEMA_VERSION = "1.6";
@@ -16114,15 +16190,15 @@ var DETECTOR_REGISTRY_V5 = [
     detector: "mister-clean/semantic_boundary@1"
   }
 ];
-var CLOSEOUT_DETECTORS = [
-  ...DETECTOR_REGISTRY_V5,
-  {
-    id: "language_policy",
-    scope: "tracked_shippable",
-    command: "mister-clean audit language-policy . --json",
-    detector: "mister-clean/language_policy@1"
-  }
-];
+function registryEntry(phase) {
+  return {
+    id: phase.id,
+    scope: phase.closeout.scope,
+    command: phase.closeout.command,
+    detector: phase.closeout.detector
+  };
+}
+var CLOSEOUT_DETECTORS = CLOSEOUT_PHASES.map(registryEntry);
 var DETECTOR_REGISTRY_V1 = [
   {
     id: "planning_graph",
@@ -16713,15 +16789,20 @@ function validateLanguagePolicyResult(record5, errors) {
   if (!declared && (findings.length > 0 || generated?.count !== 0)) errors.push("$: an undeclared policy carries no findings and no exemptions");
   if (record5.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
+var RESULT_VALIDATORS = {
+  planning_graph: validatePlanningResult,
+  public_safety: validatePublicSafetyResult,
+  github_actions: validateGitHubActionsResult,
+  repository_boundaries: null,
+  semantic_boundary: validateSemanticResult,
+  language_policy: validateLanguagePolicyResult
+};
 function detectorResultShapeErrors(detectorId, value) {
   const errors = [];
   const record5 = object4(value);
   if (!record5) return ["$: expected object"];
-  if (detectorId === "planning_graph") validatePlanningResult(record5, errors);
-  else if (detectorId === "semantic_boundary") validateSemanticResult(record5, errors);
-  else if (detectorId === "public_safety") validatePublicSafetyResult(record5, errors);
-  else if (detectorId === "github_actions") validateGitHubActionsResult(record5, errors);
-  else if (detectorId === "language_policy") validateLanguagePolicyResult(record5, errors);
+  const validate = isPhaseId(detectorId) ? RESULT_VALIDATORS[detectorId] : null;
+  if (validate) validate(record5, errors);
   else errors.push(`$: unknown detector ${detectorId}`);
   return errors;
 }
@@ -16833,30 +16914,51 @@ function validateGitHubActionsResult(record5, errors) {
   if (record5.status !== expectedStatus) errors.push(`$.status: expected ${expectedStatus}`);
   if (record5.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
+function reportedFingerprint(row) {
+  if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint)) return void 0;
+  return row.fingerprint;
+}
+var FINGERPRINT_SOURCES = {
+  planning_graph: {
+    rows: (record5) => record5.raw_findings,
+    fingerprint: (row) => {
+      if (typeof row.id !== "string" || !row.id) return void 0;
+      return planningFindingFingerprint(row.id);
+    }
+  },
+  public_safety: {
+    rows: (record5) => [...record5.findings, ...record5.unassessed],
+    fingerprint: (row) => {
+      if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint) || typeof row.path !== "string" || !row.path) return void 0;
+      const expected = row.rule !== void 0 ? typeof row.rule === "string" && row.rule && Number.isInteger(row.line) ? digest(`public_safety\0${row.rule}\0${row.path}\0${row.line}`) : "" : typeof row.reason === "string" && row.reason ? digest(`public_safety_unassessed\0${row.reason}\0${row.path}`) : "";
+      if (row.fingerprint !== expected) return void 0;
+      return row.fingerprint;
+    }
+  },
+  github_actions: { rows: (record5) => record5.findings, fingerprint: reportedFingerprint },
+  // No closeout part: its result never passes the shape gate.
+  repository_boundaries: null,
+  semantic_boundary: {
+    rows: (record5) => record5.findings,
+    fingerprint: (row) => {
+      if (typeof row.candidate_id !== "string" || !row.candidate_id || typeof row.code !== "string" || !row.code) return void 0;
+      return semanticFindingFingerprint(row.candidate_id, row.code);
+    }
+  },
+  language_policy: { rows: (record5) => record5.findings, fingerprint: reportedFingerprint }
+};
 function findingFingerprintsFromAudit(detectorId, value) {
   if (detectorResultShapeErrors(detectorId, value).length > 0) return void 0;
-  const record5 = value;
-  const rows = detectorId === "planning_graph" ? record5.raw_findings : detectorId === "public_safety" ? [...record5.findings, ...record5.unassessed] : record5.findings;
+  const source = isPhaseId(detectorId) ? FINGERPRINT_SOURCES[detectorId] : null;
+  if (!source) return void 0;
+  const rows = source.rows(value);
   if (!Array.isArray(rows)) return void 0;
   const fingerprints = [];
   for (const finding4 of rows) {
     if (!finding4 || typeof finding4 !== "object" || Array.isArray(finding4)) return void 0;
-    const row = finding4;
-    if (detectorId === "planning_graph") {
-      if (typeof row.id !== "string" || !row.id) return void 0;
-      fingerprints.push(planningFindingFingerprint(row.id));
-    } else if (detectorId === "semantic_boundary") {
-      if (typeof row.candidate_id !== "string" || !row.candidate_id || typeof row.code !== "string" || !row.code) return void 0;
-      fingerprints.push(semanticFindingFingerprint(row.candidate_id, row.code));
-    } else if (detectorId === "public_safety") {
-      if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint) || typeof row.path !== "string" || !row.path) return void 0;
-      const expected = row.rule !== void 0 ? typeof row.rule === "string" && row.rule && Number.isInteger(row.line) ? digest(`public_safety\0${row.rule}\0${row.path}\0${row.line}`) : "" : typeof row.reason === "string" && row.reason ? digest(`public_safety_unassessed\0${row.reason}\0${row.path}`) : "";
-      if (row.fingerprint !== expected) return void 0;
-      fingerprints.push(row.fingerprint);
-    } else if (detectorId === "github_actions" || detectorId === "language_policy") {
-      if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint)) return void 0;
-      fingerprints.push(row.fingerprint);
-    } else return void 0;
+    const fingerprint2 = source.fingerprint(finding4);
+    if (fingerprint2 === void 0) return void 0;
+    fingerprints.push(fingerprint2);
   }
   return sortedUnique(fingerprints);
 }
@@ -22050,11 +22152,9 @@ async function validateSuccessor(bundle, report, base, files, clean, allowPlaceh
 
 // src/closeout/bundle-detector-evidence.ts
 import { isAbsolute as isAbsolute12 } from "path";
-function detectorRootProjections(detectorId, value, repoId) {
-  const result = object5(value);
-  if (!result) return [];
-  const rows = [];
-  if (detectorId === "planning_graph") {
+var ROOT_PROJECTIONS = {
+  planning_graph: (result) => {
+    const rows = [];
     for (const rawDebt of array2(result.root_debts)) {
       const debt = object5(rawDebt);
       if (!debt) continue;
@@ -22069,7 +22169,67 @@ function detectorRootProjections(detectorId, value, repoId) {
         fingerprints
       });
     }
-  } else if (detectorId === "semantic_boundary") {
+    return rows;
+  },
+  public_safety: (result) => {
+    const rows = [];
+    for (const rawFinding of array2(result.findings)) {
+      const finding4 = object5(rawFinding);
+      if (!finding4 || typeof finding4.fingerprint !== "string") continue;
+      rows.push({
+        normalizer: "mister-clean/public-safety-root@1",
+        causeKey: {
+          detector_family: "public_safety",
+          rule: finding4.rule,
+          path: finding4.path,
+          line: finding4.line
+        },
+        fingerprints: [finding4.fingerprint]
+      });
+    }
+    for (const rawFinding of array2(result.unassessed)) {
+      const finding4 = object5(rawFinding);
+      if (!finding4 || typeof finding4.fingerprint !== "string") continue;
+      rows.push({
+        normalizer: "mister-clean/public-safety-root@1",
+        causeKey: {
+          detector_family: "public_safety",
+          reason: finding4.reason,
+          path: finding4.path
+        },
+        fingerprints: [finding4.fingerprint]
+      });
+    }
+    return rows;
+  },
+  github_actions: (result) => {
+    const rows = [];
+    const grouped = /* @__PURE__ */ new Map();
+    for (const rawFinding of array2(result.findings)) {
+      const finding4 = object5(rawFinding);
+      if (!finding4 || typeof finding4.fingerprint !== "string" || typeof finding4.path !== "string" || typeof finding4.rule !== "string") continue;
+      const key = `${finding4.path}\0${finding4.rule}`;
+      grouped.set(key, [...grouped.get(key) ?? [], finding4]);
+    }
+    for (const findings of grouped.values()) {
+      const first = findings[0];
+      if (!first) continue;
+      rows.push({
+        normalizer: "mister-clean/github-actions-root@1",
+        causeKey: {
+          detector_family: "github_actions",
+          path: first.path,
+          rule: first.rule
+        },
+        fingerprints: findings.map((finding4) => String(finding4.fingerprint)).sort()
+      });
+    }
+    return rows;
+  },
+  // No closeout part: its results carry no root debts.
+  repository_boundaries: () => [],
+  semantic_boundary: (result) => {
+    const rows = [];
     const findings = array2(result.findings).map(object5).filter((finding4) => Boolean(finding4));
     const unassigned = findings.filter((finding4) => finding4.code === "semantic_probe_unassigned" && typeof finding4.candidate_id === "string");
     if (unassigned.length > 0 && typeof result.candidate_set_sha256 === "string") {
@@ -22098,35 +22258,11 @@ function detectorRootProjections(detectorId, value, repoId) {
         fingerprints: [semanticFindingFingerprint(finding4.candidate_id, finding4.code)]
       });
     }
-  } else if (detectorId === "public_safety") {
-    for (const rawFinding of array2(result.findings)) {
-      const finding4 = object5(rawFinding);
-      if (!finding4 || typeof finding4.fingerprint !== "string") continue;
-      rows.push({
-        normalizer: "mister-clean/public-safety-root@1",
-        causeKey: {
-          detector_family: "public_safety",
-          rule: finding4.rule,
-          path: finding4.path,
-          line: finding4.line
-        },
-        fingerprints: [finding4.fingerprint]
-      });
-    }
-    for (const rawFinding of array2(result.unassessed)) {
-      const finding4 = object5(rawFinding);
-      if (!finding4 || typeof finding4.fingerprint !== "string") continue;
-      rows.push({
-        normalizer: "mister-clean/public-safety-root@1",
-        causeKey: {
-          detector_family: "public_safety",
-          reason: finding4.reason,
-          path: finding4.path
-        },
-        fingerprints: [finding4.fingerprint]
-      });
-    }
-  } else if (detectorId === "language_policy") {
+    return rows;
+  },
+  // One root debt per tracked forbidden-language path.
+  language_policy: (result) => {
+    const rows = [];
     for (const rawFinding of array2(result.findings)) {
       const finding4 = object5(rawFinding);
       if (!finding4 || typeof finding4.fingerprint !== "string") continue;
@@ -22140,28 +22276,13 @@ function detectorRootProjections(detectorId, value, repoId) {
         fingerprints: [finding4.fingerprint]
       });
     }
-  } else if (detectorId === "github_actions") {
-    const grouped = /* @__PURE__ */ new Map();
-    for (const rawFinding of array2(result.findings)) {
-      const finding4 = object5(rawFinding);
-      if (!finding4 || typeof finding4.fingerprint !== "string" || typeof finding4.path !== "string" || typeof finding4.rule !== "string") continue;
-      const key = `${finding4.path}\0${finding4.rule}`;
-      grouped.set(key, [...grouped.get(key) ?? [], finding4]);
-    }
-    for (const findings of grouped.values()) {
-      const first = findings[0];
-      if (!first) continue;
-      rows.push({
-        normalizer: "mister-clean/github-actions-root@1",
-        causeKey: {
-          detector_family: "github_actions",
-          path: first.path,
-          rule: first.rule
-        },
-        fingerprints: findings.map((finding4) => String(finding4.fingerprint)).sort()
-      });
-    }
+    return rows;
   }
+};
+function detectorRootProjections(detectorId, value, repoId) {
+  const result = object5(value);
+  if (!result) return [];
+  const rows = isPhaseId(detectorId) ? ROOT_PROJECTIONS[detectorId](result) : [];
   const sourceId = detectorById(detectorId)?.detector;
   if (!sourceId) return [];
   return rows.map(({ normalizer, causeKey, fingerprints }) => ({
@@ -27405,21 +27526,20 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
     }
     semanticLive = auditSemanticRepository(repo);
   }
-  const liveDetectorFindings = [
-    ["planning_graph", findingFingerprintsFromAudit("planning_graph", planningLive)],
-    ["github_actions", findingFingerprintsFromAudit("github_actions", githubActionsLive)],
-    ["semantic_boundary", findingFingerprintsFromAudit("semantic_boundary", semanticLive)]
-  ];
+  const liveDetectorFindings = /* @__PURE__ */ new Map();
+  const rerun = (detectorId, audit) => {
+    liveDetectorFindings.set(detectorId, findingFingerprintsFromAudit(detectorId, audit));
+  };
+  rerun("planning_graph", planningLive);
+  rerun("github_actions", githubActionsLive);
+  rerun("semantic_boundary", semanticLive);
   if (liveRequiredDetectorIds.includes("public_safety")) {
     const publicSafetyResult = scanTrackedPublicSafetySync(repo, trackedPaths3, await loadDenylist(publicSafetyDenylist));
     const policyTrackedPathCount = object5(object5(coverage?.run_policy)?.public_safety)?.tracked_path_count;
     if (policyTrackedPathCount !== trackedPaths3.length) {
       errors.push(`$.live_detector_coverage.public_safety: tracked path count drifted from bound policy (${String(policyTrackedPathCount)} -> ${trackedPaths3.length})`);
     }
-    liveDetectorFindings.splice(1, 0, [
-      "public_safety",
-      findingFingerprintsFromAudit("public_safety", publicSafetyResult)
-    ]);
+    rerun("public_safety", publicSafetyResult);
   }
   if (liveRequiredDetectorIds.includes("language_policy")) {
     let languagePolicyFingerprints;
@@ -27429,10 +27549,12 @@ async function validateLiveDetectors(report, bundlePath, repo, coverage, files, 
       errors.push(`$.live_detector_coverage.language_policy: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (languagePolicyFingerprints !== void 0 || !errors.some((error) => error.startsWith("$.live_detector_coverage.language_policy:"))) {
-      liveDetectorFindings.push(["language_policy", languagePolicyFingerprints]);
+      liveDetectorFindings.set("language_policy", languagePolicyFingerprints);
     }
   }
-  for (const [detectorId, fingerprints] of liveDetectorFindings) {
+  for (const detectorId of CLOSEOUT_PHASE_IDS) {
+    if (!liveDetectorFindings.has(detectorId)) continue;
+    const fingerprints = liveDetectorFindings.get(detectorId);
     if (!fingerprints) {
       errors.push(`$.live_detector_coverage.${detectorId}: fresh registered detector result was not canonical`);
       continue;
@@ -31617,14 +31739,7 @@ function journalFromEnvironment(environment) {
 import { createHash as createHash27 } from "crypto";
 import { existsSync as existsSync14, readFileSync as readFileSync18, statSync as statSync6 } from "fs";
 import { join as join19 } from "path";
-var RECEIPT_FAMILIES = [
-  "planning_graph",
-  "public_safety",
-  "github_actions",
-  "repository_boundaries",
-  "semantic_boundary",
-  "language_policy"
-];
+var RECEIPT_FAMILIES = PHASE_IDS;
 var ANCHOR_KINDS = ["line_content", "value_digest", "detail_digest", "whole_repo", "legacy", "file"];
 function sha256Text(value) {
   return createHash27("sha256").update(value, "utf8").digest("hex");
@@ -31691,108 +31806,143 @@ function githubActionsRefText(repository, ref) {
   const row = text3.split(/\r?\n/u)[line - 1];
   return { text: row === void 0 ? "" : row.trim(), line };
 }
+function assertValidatedShape(family, audit) {
+  const errors = detectorResultShapeErrors(family, audit);
+  if (errors.length > 0) throw new Error(`${family}: audit result is not canonical: ${errors[0]}`);
+}
+var RECEIPT_PROJECTIONS = {
+  planning_graph: {
+    assertCanonical: (_record, audit) => assertValidatedShape("planning_graph", audit),
+    sourceRows: (record5) => record5.raw_findings,
+    rowPaths: () => (row) => asString(row.path, "planning_graph.path"),
+    project: ({ row, blobOid }) => {
+      const rule = asString(row.code, "planning_graph.code");
+      const legacy = planningFindingFingerprint(asString(row.id, "planning_graph.id"));
+      const kind = "detail_digest";
+      const content = sha256Text([rule, asString(row.subject, "planning_graph.subject"), normalizeWhitespace(asString(row.detail, "planning_graph.detail"))].join("\0"));
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, blob_oid: blobOid } };
+    }
+  },
+  public_safety: {
+    // Both the tracked (closeout) and the walked (audit) scans emit the same
+    // finding rows; only the tracked form carries the scope-binding fields.
+    assertCanonical: (record5) => {
+      if (!Array.isArray(record5.findings) || !Array.isArray(record5.unassessed)) {
+        throw new Error("public_safety: audit result is not canonical");
+      }
+    },
+    sourceRows: (record5) => [...record5.findings, ...record5.unassessed],
+    rowPaths: () => (row) => asString(row.path, "public_safety.path"),
+    project: ({ row, blobOid }) => {
+      const legacy = asString(row.fingerprint, "public_safety.fingerprint");
+      if (typeof row.rule === "string") {
+        const rule2 = row.rule;
+        const kind2 = "value_digest";
+        const content2 = asString(row.value_sha256, "public_safety.value_sha256");
+        if (!/^[0-9a-f]{64}$/u.test(content2)) throw new Error("public_safety.value_sha256: expected lowercase SHA-256");
+        const lineHint = typeof row.line === "number" ? row.line : null;
+        return { rule: rule2, kind: kind2, content: content2, lineHint, severity: null, legacy, probe: { kind: kind2, rule: rule2, value_sha256: content2 } };
+      }
+      const rule = `unassessed:${asString(row.reason, "public_safety.reason")}`;
+      const kind = "detail_digest";
+      const content = sha256Text(`unassessed\0${row.reason}`);
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, blob_oid: blobOid } };
+    }
+  },
+  github_actions: {
+    assertCanonical: (_record, audit) => assertValidatedShape("github_actions", audit),
+    sourceRows: (record5) => record5.findings,
+    rowPaths: () => (row) => asString(row.path, "github_actions.path"),
+    project: ({ row, auditRoot }) => {
+      const rule = asString(row.rule, "github_actions.rule");
+      const severity = typeof row.severity === "string" ? row.severity : null;
+      const legacy = asString(row.fingerprint, "github_actions.fingerprint");
+      const kind = "line_content";
+      const refs = [...new Set(row.refs)].sort().map((ref) => githubActionsRefText(auditRoot, ref));
+      const texts = refs.map((item) => item.text);
+      const lineDigests = texts.map(trimmedLineSha256);
+      const content = sha256Text(texts.join("\n"));
+      const lineHint = refs.find((item) => item.line !== null)?.line ?? null;
+      return { rule, kind, content, lineHint, severity, legacy, probe: { kind, line_sha256s: lineDigests } };
+    }
+  },
+  repository_boundaries: {
+    assertCanonical: (record5) => {
+      if (record5.record_type !== "mister-clean.repository-boundary-audit" || !Array.isArray(record5.findings)) {
+        throw new Error("repository_boundaries: audit result is not canonical");
+      }
+    },
+    sourceRows: (record5) => record5.findings,
+    rowPaths: () => (row) => asString(row.path, "repository_boundaries.path"),
+    project: ({ row, blobOid }) => {
+      const rule = asString(row.rule, "repository_boundaries.rule");
+      const legacy = asString(row.fingerprint, "repository_boundaries.fingerprint");
+      const kind = "detail_digest";
+      const content = sha256Text(asString(row.detail, "repository_boundaries.detail"));
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, blob_oid: blobOid } };
+    }
+  },
+  semantic_boundary: {
+    assertCanonical: (_record, audit) => assertValidatedShape("semantic_boundary", audit),
+    sourceRows: (record5) => record5.findings,
+    // A semantic finding names a candidate; the candidate holds the path.
+    rowPaths: (record5) => {
+      const candidatePaths2 = /* @__PURE__ */ new Map();
+      for (const candidate of record5.candidates) {
+        const row = object7(candidate);
+        if (row && typeof row.id === "string" && typeof row.path === "string") candidatePaths2.set(row.id, row.path);
+      }
+      return (row) => candidatePaths2.get(asString(row.candidate_id, "semantic_boundary.candidate_id")) ?? ".";
+    },
+    project: ({ row, record: record5 }) => {
+      const rule = asString(row.code, "semantic_boundary.code");
+      const legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
+      const kind = "whole_repo";
+      const content = asString(record5.candidate_set_sha256, "semantic_boundary.candidate_set_sha256");
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, content_sha256: content } };
+    }
+  },
+  language_policy: {
+    assertCanonical: (record5) => {
+      if (record5.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record5.findings)) {
+        throw new Error("language_policy: audit result is not canonical");
+      }
+    },
+    sourceRows: (record5) => record5.findings,
+    rowPaths: () => (row) => asString(row.path, "language_policy.path"),
+    project: ({ row }) => {
+      const rule = asString(row.rule, "language_policy.rule");
+      const legacy = asString(row.fingerprint, "language_policy.fingerprint");
+      const kind = "file";
+      const content = sha256Text(`${rule}\0${asString(row.extension, "language_policy.extension")}`);
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind } };
+    }
+  }
+};
 function receiptFindingsFromAudit(family, audit, context) {
+  if (!isPhaseId(family)) throw new Error(`${String(family)}: not a registered detector family`);
+  const projection = RECEIPT_PROJECTIONS[family];
   const record5 = object7(audit);
   if (!record5) throw new Error(`${family}: audit result must be an object`);
-  if (family === "repository_boundaries") {
-    if (record5.record_type !== "mister-clean.repository-boundary-audit" || !Array.isArray(record5.findings)) {
-      throw new Error("repository_boundaries: audit result is not canonical");
-    }
-  } else if (family === "public_safety") {
-    if (!Array.isArray(record5.findings) || !Array.isArray(record5.unassessed)) {
-      throw new Error("public_safety: audit result is not canonical");
-    }
-  } else if (family === "language_policy") {
-    if (record5.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record5.findings)) {
-      throw new Error("language_policy: audit result is not canonical");
-    }
-  } else {
-    const errors = detectorResultShapeErrors(family, audit);
-    if (errors.length > 0) throw new Error(`${family}: audit result is not canonical: ${errors[0]}`);
-  }
+  projection.assertCanonical(record5, audit);
   const prefix = (context.path_prefix ?? "").replace(/\/+$/u, "");
   const rows = [];
   const pathsToHash = /* @__PURE__ */ new Set();
-  const semanticCandidatePaths = /* @__PURE__ */ new Map();
-  if (family === "semantic_boundary") {
-    for (const candidate of record5.candidates) {
-      const row = object7(candidate);
-      if (row && typeof row.id === "string" && typeof row.path === "string") semanticCandidatePaths.set(row.id, row.path);
-    }
-  }
-  const sourceRows = family === "planning_graph" ? record5.raw_findings : family === "public_safety" ? [...record5.findings, ...record5.unassessed] : record5.findings;
-  for (const value of sourceRows) {
+  const rawPathOf = projection.rowPaths(record5);
+  for (const value of projection.sourceRows(record5)) {
     const row = object7(value);
     if (!row) throw new Error(`${family}: finding must be an object`);
-    const rawPath = family === "semantic_boundary" ? semanticCandidatePaths.get(asString(row.candidate_id, `${family}.candidate_id`)) ?? "." : asString(row.path, `${family}.path`);
-    const path = posixPath(prefix, rawPath);
+    const path = posixPath(prefix, rawPathOf(row));
     rows.push({ row, path });
     pathsToHash.add(path);
   }
   const oids = (context.blobOids ?? ((paths) => workingTreeBlobOids(context.repository, paths)))([...pathsToHash]);
+  const auditRoot = prefix ? join19(context.repository, prefix) : context.repository;
   const anchored = [];
   const seen = /* @__PURE__ */ new Set();
   for (const { row, path } of rows) {
     const blobOid = oids.get(path) ?? null;
-    let rule;
-    let kind;
-    let content;
-    let lineHint = null;
-    let severity = null;
-    let legacy;
-    let probe;
-    if (family === "public_safety") {
-      legacy = asString(row.fingerprint, "public_safety.fingerprint");
-      if (typeof row.rule === "string") {
-        rule = row.rule;
-        kind = "value_digest";
-        content = asString(row.value_sha256, "public_safety.value_sha256");
-        if (!/^[0-9a-f]{64}$/u.test(content)) throw new Error("public_safety.value_sha256: expected lowercase SHA-256");
-        lineHint = typeof row.line === "number" ? row.line : null;
-        probe = { kind, rule, value_sha256: content };
-      } else {
-        rule = `unassessed:${asString(row.reason, "public_safety.reason")}`;
-        kind = "detail_digest";
-        content = sha256Text(`unassessed\0${row.reason}`);
-        probe = { kind, blob_oid: blobOid };
-      }
-    } else if (family === "github_actions") {
-      rule = asString(row.rule, "github_actions.rule");
-      severity = typeof row.severity === "string" ? row.severity : null;
-      legacy = asString(row.fingerprint, "github_actions.fingerprint");
-      kind = "line_content";
-      const auditRoot = prefix ? join19(context.repository, prefix) : context.repository;
-      const refs = [...new Set(row.refs)].sort().map((ref) => githubActionsRefText(auditRoot, ref));
-      const texts = refs.map((item) => item.text);
-      const lineDigests = texts.map(trimmedLineSha256);
-      content = sha256Text(texts.join("\n"));
-      lineHint = refs.find((item) => item.line !== null)?.line ?? null;
-      probe = { kind, line_sha256s: lineDigests };
-    } else if (family === "planning_graph") {
-      rule = asString(row.code, "planning_graph.code");
-      legacy = planningFindingFingerprint(asString(row.id, "planning_graph.id"));
-      kind = "detail_digest";
-      content = sha256Text([rule, asString(row.subject, "planning_graph.subject"), normalizeWhitespace(asString(row.detail, "planning_graph.detail"))].join("\0"));
-      probe = { kind, blob_oid: blobOid };
-    } else if (family === "repository_boundaries") {
-      rule = asString(row.rule, "repository_boundaries.rule");
-      legacy = asString(row.fingerprint, "repository_boundaries.fingerprint");
-      kind = "detail_digest";
-      content = sha256Text(asString(row.detail, "repository_boundaries.detail"));
-      probe = { kind, blob_oid: blobOid };
-    } else if (family === "language_policy") {
-      rule = asString(row.rule, "language_policy.rule");
-      legacy = asString(row.fingerprint, "language_policy.fingerprint");
-      kind = "file";
-      content = sha256Text(`${rule}\0${asString(row.extension, "language_policy.extension")}`);
-      probe = { kind };
-    } else {
-      rule = asString(row.code, "semantic_boundary.code");
-      legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
-      kind = "whole_repo";
-      content = asString(record5.candidate_set_sha256, "semantic_boundary.candidate_set_sha256");
-      probe = { kind, content_sha256: content };
-    }
+    const { rule, kind, content, lineHint, severity, legacy, probe } = projection.project({ row, record: record5, blobOid, auditRoot });
     const fingerprint2 = receiptFingerprint({ family, rule, path, anchor_kind: kind, content_sha256: content });
     if (seen.has(fingerprint2)) continue;
     seen.add(fingerprint2);
@@ -32335,24 +32485,27 @@ function assembleRunReceipt(input) {
     ...input.validation === void 0 ? {} : { validation: input.validation }
   };
 }
+var READ_ONLY_ENTRIES = {
+  planning_graph: (root, options) => auditPlanningRepository(root, options.deadline_ms === void 0 ? void 0 : { deadline_ms: options.deadline_ms }),
+  public_safety: (root, options) => scanTrackedPublicSafetySync(root, trackedShippablePaths(root), loadDenylistSync(options.denylistPath)),
+  github_actions: (root) => auditGitHubActionsRepository(root),
+  repository_boundaries: (root) => auditRepositoryBoundaries(root),
+  semantic_boundary: (root) => auditSemanticRepository(root, { execute: false }),
+  language_policy: (root) => auditLanguagePolicy(root)
+};
 function runReadOnlyFamilies(capture, root, families, options = {}) {
   const results = {};
   const anchored = [];
   const context = { repository: capture.repository, path_prefix: capture.path_prefix };
   for (const family of families) {
-    let result;
-    if (family === "planning_graph") result = auditPlanningRepository(root, options.deadline_ms === void 0 ? void 0 : { deadline_ms: options.deadline_ms });
-    else if (family === "public_safety") result = scanTrackedPublicSafetySync(root, trackedShippablePaths(root), loadDenylistSync(options.denylistPath));
-    else if (family === "github_actions") result = auditGitHubActionsRepository(root);
-    else if (family === "repository_boundaries") result = auditRepositoryBoundaries(root);
-    else if (family === "language_policy") result = auditLanguagePolicy(root);
-    else result = auditSemanticRepository(root, { execute: false });
+    if (!isPhaseId(family)) throw new Error(`${String(family)}: not a registered detector family`);
+    const result = READ_ONLY_ENTRIES[family](root, options);
     results[family] = result;
     anchored.push(...receiptFindingsFromAudit(family, result, context));
   }
   return { anchored, results };
 }
-var LEGACY_DETECTOR_FAMILIES = /* @__PURE__ */ new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
+var LEGACY_BASELINE_FAMILIES = new Set(CLOSEOUT_PHASE_IDS);
 function legacyBaselineFromBundle(reference) {
   const path = resolve27(reference);
   if (!existsSync16(path)) return void 0;
@@ -32369,7 +32522,7 @@ function legacyBaselineFromBundle(reference) {
   const findings = [];
   for (const execution of executions) {
     const detectorId = String(execution.detector_id);
-    if (!LEGACY_DETECTOR_FAMILIES.has(detectorId)) continue;
+    if (!LEGACY_BASELINE_FAMILIES.has(detectorId)) continue;
     const family = detectorId;
     families.push(family);
     const resultRef = execution.result_ref;
@@ -32412,10 +32565,18 @@ function baselineFromReceipt(receipt) {
     subject_sha256: receipt.subject.repository_object?.sha256 ?? null
   };
 }
+var BaselineReceiptModeError = class extends Error {
+  constructor(mode) {
+    super(`a ${mode} receipt cannot be a second-pass baseline; pass --against <receipt_id|bundle> naming an AUDIT, CLOSE or SECOND_PASS receipt, or a bundle`);
+    this.mode = mode;
+    this.name = "BaselineReceiptModeError";
+  }
+  code = "BASELINE_RECEIPT_MODE";
+};
 function resolveEarlierBaseline(store, repositoryId, against) {
   if (against === void 0) {
     const entries2 = store.forRepository(repositoryId).filter((entry) => entry.mode !== "SECOND_PASS" && entry.mode !== "VALIDATE");
-    const latest = entries2.at(-1) ?? store.forRepository(repositoryId).at(-1);
+    const latest = entries2.at(-1);
     if (latest === void 0) throw new Error("no earlier receipt for this repository; pass --against <receipt_id|bundle>");
     return baselineFromReceipt(store.read(latest.receipt_id));
   }
@@ -32425,6 +32586,7 @@ function resolveEarlierBaseline(store, repositoryId, against) {
   }
   const receipt = store.read(against);
   if (receipt.repository_id !== repositoryId) throw new Error("the earlier receipt belongs to a different repository identity");
+  if (receipt.mode === "VALIDATE") throw new BaselineReceiptModeError(receipt.mode);
   return baselineFromReceipt(receipt);
 }
 function runSecondPass(input) {
@@ -32864,13 +33026,16 @@ ${text3.slice(start, next < 0 ? void 0 : next).trimEnd()}`);
   }
   return 0;
 }
+var AUDIT_KIND_NAMES = [...AUDIT_KINDS].sort();
 async function runAudit(args, io, onResult) {
   const kind = args.shift();
-  if (!(/* @__PURE__ */ new Set(["github-actions", "language-policy", "planning", "public-safety", "repository-boundaries", "semantic"])).has(String(kind))) {
-    throw new UsageError("audit requires github-actions, language-policy, planning, public-safety, repository-boundaries, or semantic");
+  const phase = kind === void 0 ? void 0 : phaseByAuditKind(kind);
+  if (phase === void 0) {
+    throw new UsageError(`audit requires ${AUDIT_KIND_NAMES.slice(0, -1).join(", ")}, or ${AUDIT_KIND_NAMES.at(-1)}`);
   }
+  const auditKind = phase.auditKind;
   const root = args[0]?.startsWith("--") === false ? args.shift() : process.cwd();
-  if (kind === "planning") {
+  if (auditKind === "planning") {
     const json2 = removeFlag(args, "--json");
     const deadlineOption = removeOption(args, "--deadline-ms");
     assertNoArgs(args);
@@ -32903,10 +33068,10 @@ async function runAudit(args, io, onResult) {
       }
       io.stdout(`planning: ${result2.status.toLocaleUpperCase("und")} artifacts=${result2.artifactCount} structured=${result2.structuredArtifactCount} findings=${result2.findings.length}`);
     }
-    onResult?.({ root, family: "planning_graph", result: result2 });
+    onResult?.({ root, family: phase.id, result: result2 });
     return result2.exitCode;
   }
-  if (kind === "semantic") {
+  if (auditKind === "semantic") {
     const json2 = removeFlag(args, "--json");
     const execute = removeFlag(args, "--execute");
     const manifestPath = removeOption(args, "--manifest");
@@ -32933,10 +33098,10 @@ async function runAudit(args, io, onResult) {
       }
       io.stdout(`semantic: ${result2.status.toLocaleUpperCase("und")} candidates=${result2.candidate_probe_count} executed=${result2.executed_probe_count} findings=${result2.findings.length}`);
     }
-    onResult?.({ root, family: "semantic_boundary", result: result2 });
+    onResult?.({ root, family: phase.id, result: result2 });
     return result2.exitCode;
   }
-  if (kind === "github-actions") {
+  if (auditKind === "github-actions") {
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     const result2 = await nodeCloseoutEngine.auditGitHubActions(root);
@@ -32947,10 +33112,10 @@ async function runAudit(args, io, onResult) {
       }
       io.stdout(`github-actions: ${result2.status.toLocaleUpperCase("und")} workflows=${result2.workflow_count} sensitive=${result2.sensitive_workflow_count} findings=${result2.findings.length}`);
     }
-    onResult?.({ root, family: "github_actions", result: result2 });
+    onResult?.({ root, family: phase.id, result: result2 });
     return result2.exitCode;
   }
-  if (kind === "language-policy") {
+  if (auditKind === "language-policy") {
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     let result2;
@@ -32967,10 +33132,10 @@ async function runAudit(args, io, onResult) {
       for (const policyFinding of result2.findings) io.stdout(`${policyFinding.rule}	${policyFinding.path}	${policyFinding.extension}`);
       io.stdout(`language-policy: ${result2.status.toLocaleUpperCase("und")} tracked=${result2.tracked_path_count} generated_exempt=${result2.generated_exempt.count} allowed=${result2.allowed_count} findings=${result2.findings.length}`);
     }
-    onResult?.({ root, family: "language_policy", result: result2 });
+    onResult?.({ root, family: phase.id, result: result2 });
     return result2.exitCode;
   }
-  if (kind === "repository-boundaries") {
+  if (auditKind === "repository-boundaries") {
     const json2 = removeFlag(args, "--json");
     assertNoArgs(args);
     const result2 = await nodeCloseoutEngine.auditRepositoryBoundaries(root);
@@ -32981,9 +33146,10 @@ async function runAudit(args, io, onResult) {
       }
       io.stdout(`repository-boundaries: ${result2.status.toLocaleUpperCase("und")} parsers=${result2.parser_surfaces.length} contracts=${result2.external_contract_count} findings=${result2.findings.length}`);
     }
-    onResult?.({ root, family: "repository_boundaries", result: result2 });
+    onResult?.({ root, family: phase.id, result: result2 });
     return result2.exitCode;
   }
+  auditKind;
   const json = removeFlag(args, "--json");
   const tracked = removeFlag(args, "--tracked");
   const denylist = removeOption(args, "--denylist-file");
@@ -32995,13 +33161,13 @@ async function runAudit(args, io, onResult) {
   ) : await nodeCloseoutEngine.scanPublicSafety(root, denylist);
   if (json) {
     io.stdout(JSON.stringify(result, null, 2));
-    onResult?.({ root, family: "public_safety", result });
+    onResult?.({ root, family: phase.id, result });
     return result.exitCode;
   }
   for (const finding4 of result.findings) io.stdout(`${finding4.path}:${finding4.line}: ${finding4.rule}`);
   if (result.status === "fail") io.stderr(`public-safety: FAIL (${result.findings.length} finding(s))`);
   else io.stdout("public-safety: PASS");
-  onResult?.({ root, family: "public_safety", result });
+  onResult?.({ root, family: phase.id, result });
   return result.exitCode;
 }
 async function runManifest(args, io) {
@@ -33190,7 +33356,7 @@ async function runSecondPassCommand(args, io, runtimeAttestation, receipts, opti
   return result.exitCode;
 }
 function usage(io) {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|language-policy|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr(`usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: ${AUDIT_KIND_NAMES.join("|")}; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)`);
 }
 function receiptStoreFromEnvironment(environment) {
   return new LocalRunReceiptStore(receiptRootFromEnvironment(environment));
@@ -33247,14 +33413,7 @@ async function runCli(argv2, io = defaultIO(), lifecycle2 = void 0, journal = vo
           });
           if (receipts !== void 0 && prepared !== void 0) {
             const bundle = prepared.bundleDirectory;
-            const families = [
-              { family: "planning_graph", file: "planning-audit.json" },
-              { family: "public_safety", file: "public-safety-audit.json" },
-              { family: "github_actions", file: "github-actions-audit.json" },
-              { family: "semantic_boundary", file: "semantic-audit.json" },
-              { family: "language_policy", file: "language-policy-audit.json" }
-            ];
-            const results = families.filter((entry) => existsSync18(join23(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join23(bundle, entry.file)) }));
+            const results = CLOSEOUT_BUNDLE_FILES.filter((entry) => existsSync18(join23(bundle, entry.file))).map((entry) => ({ family: entry.family, result: readJson3(join23(bundle, entry.file)) }));
             const delta = record4(readJson3(join23(bundle, "regression-delta.json")));
             const baselineObject = record4(delta?.baseline_repository_object);
             const verdict = "NOT_CLEAN";

@@ -1,0 +1,146 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-s2d-phase-registry",
+  "verifies": "mg-s2d-phase-registry",
+  "candidate_commit": "4fdc5896e85dac095a96926b53feeb545da0a1af",
+  "frozen": {
+    "manifest_sha256": "904a20b737c48e053e7d53eca8294f0adeaa35b0d2744d32b2042abda6bc2eba",
+    "head": "4fdc5896e85dac095a96926b53feeb545da0a1af"
+  },
+  "dispatch": {
+    "base_commit": "4921267fee70e783540cadfadbe21f8378b90d77",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-fable-5-2",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa/evidence-proof-1.txt (proof 1): reopen of V src/backbone-single-implementation.test.ts -t \"phase registry\" from the root of QA/scratch under the contract's shell exits 0 (5 passed | 18 skipped). Mutant appending const again = [\"planning_graph\", \"public_safety\"]; to src/closeout/second-pass.ts exits 1 (RED), failing test \"(a) no array, tuple or Set literal ...\" at src/backbone-single-implementation.test.ts:294 and naming src/closeout/second-pass.ts:542 again; git checkout restored, status --porcelain empty. Evidence file sha256 75f0cc5642be27f8e8b28942beec0d518b802a419ee91a03968f2076922314b2.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa/evidence-proof-2.txt (proof 2): both reopens exit 0 (derived lists 7 passed; detector-coverage stable order 1 passed) and git diff caa59e9 4fdc589 -- src/closeout/detector-coverage.test.ts is empty (test text unchanged from base). Mutant exchanging the public_safety and github_actions entries of PHASES turns both commands RED (4 failed in derived lists: family order, CLOSEOUT_DETECTORS, RECEIPT_FAMILIES, receipt table; 1 failed in detector-coverage); restore clean. Evidence file sha256 bee5884bddfe155093a8dfb63df4182d035c69cd5d80404d475c5330343bdb86.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa/evidence-proof-3.txt (proof 3): reopen of the phase branches scan exits 0 (4 passed). Mutant appending a seventh PHASES entry { id: \"probe_family\", auditKind: \"probe\", closeout: null } makes pnpm exec tsc --noEmit exit 2; the TS1360 errors name src/cli.ts:616, src/closeout/bundle-detector-evidence.ts:200, src/closeout/detector-coverage.ts:847 and 1051, src/closeout/finding-anchors.ts:305, src/closeout/second-pass.ts:349 (plus follow-on TS7053/7031/7006 in the same files and phase-registry.test.ts:309) - the four contract files all named; restore clean. Evidence file sha256 65406b6f5ef77f369b011536e754cfa62e7d4636129a2ba8939be5a26714c5d2.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa/evidence-proof-4.txt (proof 4): reopen of phase-registry.differential.test.ts exits 0, 21 passed, and prints corpus items per family planning_graph=1582 public_safety=866 github_actions=411 repository_boundaries=296 semantic_boundary=886 language_policy=351 total=4392 with live results 4/12/4/4/4/4 and the per-family reach lines (receipt rows 23/369/22/88/24/105). Mutant changing the language_policy receipt join from NUL to a space at finding-anchors.ts:301 turns it RED on \"language_policy: every corpus item yields what the base yielded\"; restore clean. Evidence file sha256 9069e1eba4245f08b40c82fddccb40aa8967c78d63ccbe8015eaa080e9cdf58e.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa/evidence-proof-5.txt (proof 5): reopen of the entry dispatch tests exits 0 (16 passed | 10 skipped). Mutant mapping language_policy to auditSemanticRepository in READ_ONLY_ENTRIES (second-pass.ts:348) turns it RED on 3 tests (language_policy option set 0 and 1, and the multi-family order test); restore clean. The test observes live calls through vi.mock interception and compares them with the base oracle, which I checked line by line against git show caa59e9:src/closeout/second-pass.ts:347-357. Evidence file sha256 d9ca300aa5ae5769bbf9499a843e9fb95eb06023125fc43854dbf1b3fede5c62.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa/evidence-proof-6.txt (proof 6, delta 1): reopen of second-pass.test.ts -t \"default baseline\" exits 0 (6 passed). Mutant restoring the base line entries.at(-1) ?? store.forRepository(repositoryId).at(-1) at second-pass.ts:465 turns it RED on 3 tests (only-VALIDATE, only-SECOND_PASS, both-without-AUDIT); restore clean. Evidence file sha256 de4a9e50dc858ea788d885258a62848c29596191f428fe0224c2febdbe4004dc.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa/evidence-proof-7.txt (proof 7, delta 2): reopen of second-pass.test.ts -t \"against\" exits 0 (4 passed), including the base end-to-end SECOND_PASS test at second-pass.test.ts:288; git diff caa59e9 4fdc589 -- src/closeout/second-pass.test.ts has 0 removed or changed lines (the only '^-' line is the diff header), so the existing test is textually unchanged. Mutant deleting the mode check at second-pass.ts:476 turns it RED on the typed-error test and the exit-2 command-line test; restore clean. Evidence file sha256 88a39219bc01c3cc72163126938a4d152eba8ffe08b2de3ff62f874519ecb9d4.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa/evidence-proof-8.txt (proof 8, delta 3): reopen of second-pass.test.ts -t \"legacy baseline keeps language_policy\" exits 0 (1 passed). Mutant filtering language_policy out of LEGACY_BASELINE_FAMILIES (second-pass.ts:375) turns it RED on \"legacy bundle families > legacy baseline keeps language_policy\"; restore clean. Evidence file sha256 20f47fbce01b62405b2299a1b1c8831dd99739ecf17550c6afff78e60da01feb.",
+      "classification": "executed"
+    },
+    {
+      "id": "C09",
+      "description": "qa/evidence-proof-9.txt (proof 9, delta 4): reopen of phase-registry.test.ts -t \"unknown family\" exits 0 (5 passed). Mutant n/a; instead the base delta-4 line was checked with git show: base second-pass.ts:347-354 fell through to auditSemanticRepository for an unknown id (so the base entry dispatch really ran the semantic audit first), and base finding-anchors.ts:178-195 with detector-coverage.ts:831 refused an unknown id at the shape gate with \"audit result is not canonical: $: unknown detector <id>\". The contract's amended delta-4 wording is true of the base. Evidence file sha256 c6c147582544698c55a08b3fc846379a3f0ef85c8a3ebb04d39a754bcd06d7a5.",
+      "classification": "executed"
+    },
+    {
+      "id": "C10",
+      "description": "qa/evidence-proof-10.txt (proof 10): every first-reopen command exits 0 from QA/scratch with dist/ present - tsc --noEmit, sync:cli:check, manifest:package:check (PASS 82 entries), audit:public printing PASS (83 files) (the contract's built-state count; 62 is the unbuilt state), build:materials printing Generated 40 MCP materials, the inspection test 1 passed, and the nine-file regression set 9 files / 149 tests passed in 79.64s. Second reopen: git diff --stat over ':(glob)src/**/*.test.ts' minus the two new files lists only src/backbone-single-implementation.test.ts (188+) and src/closeout/second-pass.test.ts (173+), 361 insertions, and each has 0 removed or changed lines. Evidence file sha256 3a96aee8c6a6e53118c99a9cf69cc7b6587629726a5eb420debd3dea0448bd29.",
+      "classification": "executed"
+    },
+    {
+      "id": "C11",
+      "description": "qa/evidence-proof-11.txt (proof 11): gh run view -R bradheitmann/mister-clean 44030224261 --json headSha,jobs exits 0; headSha 058e56c82351c06ce1ae3c18d49ef3ecb8be4b8e (the pushed tip, verified locally as 4fdc589 + only charter/.freeze/mg-s2d-phase-registry.json, the tip that holds the freeze record); job verify conclusion success; job charter (non-required) conclusion failure - red as the declared NOT CHECKED baseline, not part of this proof. Evidence file sha256 28c018fc0ff471ec78898c6277abc94540c4412dfb00554185213400c6150266.",
+      "classification": "executed"
+    },
+    {
+      "id": "C12",
+      "description": "qa/evidence-base-copies.txt (base copies): my own shell loop compared all 17 BEGIN/END blocks of src/closeout/phase-oracles.test-fixture.ts with git show caa59e9:<path> | sed -n '<from>,<to>p', allowing only a removed leading export - 17 blocks checked, 0 differing (6 differ raw, each exactly one or two 'export ' prefixes removed, listed). The four function ranges (receipt_findings_from_audit 171-303, finding_fingerprints_from_audit 980-1017, detector_result_shape_errors 822-833, detector_root_projections 59-193) each start at the declaration and end at the function's closing brace, with the line after the range blank - no range cuts a function. git diff --quiet d2f1010 4fdc589 over the three golden files exits 0 (unchanged since the golden commit). Evidence file sha256 9368c01e05af02bafaa8d1e791152a4b916c8a1994110151bfb2d27571f599f7.",
+      "classification": "executed"
+    },
+    {
+      "id": "C13",
+      "description": "qa/evidence-mutants-own.txt (own mutants): 12 one-line mutants inside single family entries of the four records (RECEIPT_PROJECTIONS x4, RESULT_VALIDATORS x2, FINGERPRINT_SOURCES x3, ROOT_PROJECTIONS x2, plus one more RECEIPT_PROJECTIONS), covering all six families; each ran proof 4's differential command from the root of QA/scratch and every one went RED with its failing test named; after each, git checkout restored and status --porcelain was empty. No mutant stayed green - no corpus-gap defect found by this method. Evidence file sha256 562f4c09c30ec61d8f81c65490ae4757eac5f3cbec01858a5f78405069eb59b3.",
+      "classification": "executed"
+    },
+    {
+      "id": "C14",
+      "description": "qa/review.md (review): full diff of cli.ts, second-pass.ts, finding-anchors.ts, detector-coverage.ts, bundle-detector-evidence.ts, bundle-live-validation.ts and all of phase-registry.ts read in full. No fifth behaviour change found (check order in receiptFindingsFromAudit, detectorResultShapeErrors for repository_boundaries/unknown ids, detectorRootProjections for unknown ids and inherited keys all base-equal or inside declared delta 4); usage line and usage error proven byte-identical; the satisfies line proven to reject a branchless kind by proof 3's tsc output; registry 6 key order and frozen digest confirmed; phase-registry.ts imports nothing; the two scanners' blind spots named and judged against the proofs' claims; proof 5 shown to observe live calls; delta 2's class, code and exit 2 confirmed and SECOND_PASS still accepted; no test changed, deleted or skipped (918 insertions, 0 deletions); the three amendments weaken no criterion and the opening paragraph is now true of the base; nothing new published. Three new defects: QA-S2D-D1 (medium), QA-S2D-D2 (low), QA-S2D-D3 (info); none critical or high. Evidence file sha256 daf2b3c7d5aaf524a97b456fc319d77be8340c0084c4feafea73c142f876a791.",
+      "classification": "executed"
+    },
+    {
+      "id": "C15",
+      "description": "qa/evidence-proof-12.txt (proof 12, the pre-merge container self-judge): the run of ~/.local/share/agent-private/mister-clean/master-gate/s2d/selfjudge (judge.log, judge.sh, RUN.txt, run-times.txt, prepare.out, prepare.err, out/mister-clean/mg-s2d-selfjudge-1/) was checked against the PM summary at ~/.local/share/agent-private/mister-clean/master-gate/s2d/selfjudge/evidence-proof-12.txt (sha256 7bd10a2054df585fca294da47701b2d883e2917da4d6fe16cb8d4b19e3a7980c) and against this seat's findings at ~/.local/share/agent-private/mister-clean/master-gate/s2d/qa/evidence-proof-12.txt (sha256 d0b8b2fdb3b4db557f18f353bcbe304ea7a15c739e7c7af4b5a20dc894252bb3). (a) the judge cloned 058e56c82351c06ce1ae3c18d49ef3ecb8be4b8e (judge.sh aborts WRONG-HEAD otherwise), prepare exit 0, and git diff --name-only 4fdc589 058e56c lists only charter/.freeze/mg-s2d-phase-registry.json. (b) the five debts compared row by row with the post-merge self-judge of main 4f3e00d (run mg-main-postmerge-slice-zero-1): the four file-scheme ids, classes, rules and paths identical; the semantic re-attestation carries a new id (DEBT-SEMANTIC-SET-01E0C77FD6F2BD4C becomes DEBT-SEMANTIC-SET-8BE314841D96D817) because the slice changes the set of executable files, and its class is the same in both runs (semantic_probe_set_unassigned, code semantic_probe_unassigned, family semantic_boundary); DEBT-NATIVE-GATE-17ED5EBED7B18D8C is absent here, a baseline debt that did not recur, so no debt class beyond the baseline. (c) each file-scheme finding sits in a file that comes from main: git diff --name-only caa59e9 4fdc589 prints nothing for charter/DONE/mg-ci-green-1.md, qa/mg-ci-green-1/receipt.json and qa/mg-s1b-git-env-hardening/receipt-chqa-proofs1-7.json. (d) native gates: required 3, executed 3, passed 3, absent 0, validation status pass; no gate failed, so no failing stdout to attribute (the baseline run's failed gate names 2 control-plane tests, snapshot-producer and sqlite-store, the DEBT-NATIVE-GATE-17ED5EBED7B18D8C class of control-plane tests that fail under load); the main vitest suite inside node:.:ci-check is green (Test Files 77 passed | 1 skipped (78); Tests 1245 passed | 5 skipped (1250)) and lists src/closeout/phase-registry.test.ts (26 tests) and src/closeout/phase-registry.differential.test.ts (21 tests) as passed, and git diff --name-only caa59e9 4fdc589 shows no file under src/control-plane or control-plane-app. (e) proof 12 states one criterion, prepare exits 0 and the debts are only the recorded baseline classes: met. One new defect, QA-S2D-D4 (low), a documentation mismatch between the summary and RUN.txt that affects no criterion; receipt-1-11.json was accepted.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "QA-S2D-D1",
+      "file": "src/closeout/bundle-live-validation.ts",
+      "line": 382,
+      "what_is_wrong": "No proof of the contract names this file, whose live-error construction changed from a hand-built array (splice public_safety at index 1, push language_policy at the end) to a Map walked in CLOSEOUT_PHASE_IDS order. The order is equal to the base in every combination of required detectors today (case analysis in review.md section 2), but no test in proof 10's regression set would fail if the order changed: the only proof-10 file touching it asserts with toContain, and my order mutant (walking liveDetectorFindings.keys() instead) stayed GREEN across all nine files, 149/149 passed, exit 0. A future order regression would be caught by no proof 1-11.",
+      "severity": "medium"
+    },
+    {
+      "id": "QA-S2D-D2",
+      "file": "charter/DONE/mg-s2d-phase-registry.md",
+      "line": 62,
+      "what_is_wrong": "The Out of scope paragraph names prepare.ts's per-family root-debt blocks, its three literal detector ids and the completion-debt order, but does not name two sites the DEV report (section 6, items 4 and 5) records as left alone: prepare.ts's five bundle result file names (prepare.ts:249-355, a second copy of the registry's bundleFile values) and the spec.id input-kind ternaries/ifs in bundle-detector-evidence.ts:569-667 plus the policy filter in detector-coverage.ts. Both were surfaced to the PM in the report, so nothing is hidden, but the contract's recorded obligations are incomplete on them. Not a behaviour change.",
+      "severity": "low"
+    },
+    {
+      "id": "QA-S2D-D3",
+      "file": "src/backbone-single-implementation.test.ts",
+      "line": 319,
+      "what_is_wrong": "The proof titles are stronger than the mechanisms. Proof 1's scanner flags array/tuple/Set literals only; a second list written as an object keyed by family ids passes (documented negative at line 319), as do runtime-joined string consts. Proof 3's scanner flags else-if chains only in four files; a switch statement or a sequence of plain ifs on a family id passes (documented negative at line 379). The contract's criteria text describes exactly these mechanisms, test (c) adds the satisfies Record<PhaseId, compiler guard at all four sites, and proof 4's differential covers reachable paths - so the criteria hold as written; the titles ('the registry is the only place that lists family ids', 'no chain of family comparisons is left at the named sites') should be read with these limits.",
+      "severity": "info"
+    },
+    {
+      "id": "QA-S2D-D4",
+      "file": "RUN.txt",
+      "line": 1,
+      "what_is_wrong": "The proof-12 summary (SJ-ROOT/s2d/selfjudge/evidence-proof-12.txt line 2) describes the run as the docker line of RUN.txt with nice -n 10, but RUN.txt's docker line carries no nice -n 10 (grep over RUN.txt, judge.sh, judge.log and run-times.txt finds that string only in the summary itself), and RUN.txt still ends with the stale comment # NOT STARTED: waits for the Mac queue although judge.log and run-times.txt show the run completed 2026-11-17T07:15:52Z to 07:24:10Z rc=0. The run folder does not record the exact command that ran. The outcome records (judge.sh, judge.log, run-times.txt, prepare.out, prepare.err, out/mister-clean/mg-s2d-selfjudge-1/) are mutually consistent, so no criterion of proof 12 is affected.",
+      "severity": "low"
+    }
+  ],
+  "notes": {
+    "process": "QA/scratch is a shared clone left in place at frozen head 4fdc5896e85dac095a96926b53feeb545da0a1af for the PM to remove; CHECKOUT was never edited (git status --porcelain empty in both trees after every step). Every reopen and mutant ran as bash --noprofile --norc -e -o pipefail -c from the root of QA/scratch with nice -n 10 timeout 900 and ~/.local/share/mise/installs/bun/1.4.0/bin first on PATH (bun 1.4.0, node v26.13.1); vitest ran only on the files each proof names, one worker, exactly as V says. No container, no cargo, no pnpm run ci:check, no bun run test, no model called, no server started. Mutants were applied only in QA/scratch, written by this seat, and reverted with git checkout -- after each; one void attempt (a single-pass awk that cannot reorder) is recorded in evidence-proof-2.txt and not counted. Home paths written as ~; no personal data recorded.",
+    "dispatch_base_vs_done_base": "dispatch.base_commit is 4921267fee70e783540cadfadbe21f8378b90d77, the commit that amended the DONE list for the third time, from which the renewed dispatch ran; the DONE declares the slice base as main caa59e9, which proofs 2, 7, 10 and the base-copy check diff against. Two meanings of base, each internally consistent; brief_sha256 is null in the dispatch record and carried as null here.",
+    "verdict_rule": "All 15 checks (C01-C15) hold. New defects: QA-S2D-D1 medium, QA-S2D-D2 low, QA-S2D-D3 info, QA-S2D-D4 low - none critical or high, so the blocking condition of the verdict rule is not met. Proof 12 meets its single criterion: prepare exited 0 and the debts are only the recorded baseline classes (the four file-scheme instances; the semantic re-attestation, same class semantic_probe_set_unassigned with a new id because the executable-file set changed; and DEBT-NATIVE-GATE-17ED5EBED7B18D8C, which did not recur because all 3 required native gates passed)."
+  },
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12"
+  ]
+}

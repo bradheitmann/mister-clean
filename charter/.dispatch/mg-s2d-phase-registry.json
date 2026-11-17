@@ -1,0 +1,12 @@
+{
+  "accepted_unix_s": 1794905055,
+  "accepted_utc": "2026-11-17T08:44:15Z",
+  "base_commit": "4921267fee70e783540cadfadbe21f8378b90d77",
+  "brief_sha256": null,
+  "done_sha256": "46e8cf8eb99b99f28a4a5d19ec721c257531d2dd19b08447f87ae15cb246f08a",
+  "receipt": "qa/mg-s2d-phase-registry/receipt.json",
+  "receipt_sha256": "f40c180a9acc73816f424c7f250c3616f13520ccb544463e4b79d7dfd36781ec",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-s2d-phase-registry",
+  "state": "accepted"
+}

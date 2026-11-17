@@ -7,8 +7,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
+import { PHASE_IDS } from "./closeout/phase-registry.js";
 import { fixtureGit } from "./test-support/fixture-repo.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -198,5 +200,191 @@ describe("front matter", () => {
     expect(occurrences(imports, IMPORTERS, ROOTS)).toEqual([]);
     const importers = productionSources(ROOTS).filter((source) => source.lines.some((line) => imports.test(line))).map((source) => source.path);
     expect(importers.sort()).toEqual([...IMPORTERS].sort());
+  });
+});
+
+/** Quoted family ids, for the two phase-registry guards below. */
+const FAMILY_IDS: ReadonlySet<string> = new Set<string>(PHASE_IDS);
+const REGISTRY = "src/closeout/phase-registry.ts";
+
+function unwrapped(node: ts.Expression): ts.Expression {
+  let current = node;
+  while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isSatisfiesExpression(current) || ts.isSpreadElement(current)) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isFamilyIdLiteral(node: ts.Node): boolean {
+  return (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && FAMILY_IDS.has(node.text);
+}
+
+/**
+ * Does one element of a list name a family? It does when it is a quoted family
+ * id, an object with a property whose value is one (a registry row), or a
+ * tuple that holds one (a pair keyed by family).
+ */
+function elementNamesFamily(element: ts.Expression): boolean {
+  const value = unwrapped(element);
+  if (isFamilyIdLiteral(value)) return true;
+  if (ts.isObjectLiteralExpression(value)) {
+    return value.properties.some((property) => ts.isPropertyAssignment(property) && isFamilyIdLiteral(unwrapped(property.initializer)));
+  }
+  if (ts.isArrayLiteralExpression(value)) return value.elements.some((inner) => isFamilyIdLiteral(unwrapped(inner)));
+  return false;
+}
+
+/** The const, let or var a node initializes, or "<expression>". */
+function declarationName(node: ts.Node): string {
+  for (let current: ts.Node | undefined = node; current !== undefined; current = current.parent) {
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) return current.name.text;
+    if (ts.isFunctionLike(current) || ts.isSourceFile(current)) break;
+  }
+  return "<expression>";
+}
+
+interface FamilyList {
+  readonly site: string;
+  readonly name: string;
+}
+
+/**
+ * Every array literal (a tuple and the argument of `new Set` are array
+ * literals too) and every tuple type in `text` that holds two or more quoted
+ * family ids.
+ */
+function familyLists(path: string, text: string): FamilyList[] {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const found: FamilyList[] = [];
+  const record = (node: ts.Node): void => {
+    found.push({ site: `${path}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`, name: declarationName(node) });
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isArrayLiteralExpression(node) && node.elements.filter(elementNamesFamily).length >= 2) record(node);
+    if (ts.isTupleTypeNode(node) && node.elements.filter((element) => ts.isLiteralTypeNode(element) && isFamilyIdLiteral(element.literal)).length >= 2) record(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+describe("phase registry", () => {
+  /** Detector registries 1 to 5 are frozen data keyed by version; registry 6 is derived. */
+  const FROZEN_REGISTRIES = /^DETECTOR_REGISTRY_V[1-5]$/u;
+  const isFrozenRegistry = (path: string, list: FamilyList): boolean => path === "src/closeout/detector-coverage.ts" && FROZEN_REGISTRIES.test(list.name);
+
+  it("lists the production sources it guards", () => {
+    const paths = productionSources(["src"]).map((source) => source.path);
+    for (const path of [REGISTRY, "src/cli.ts", "src/closeout/detector-coverage.ts", "src/closeout/finding-anchors.ts", "src/closeout/second-pass.ts", "src/closeout/bundle-live-validation.ts", "src/closeout/prepare.ts"]) {
+      expect(paths).toContain(path);
+    }
+    expect(paths.some((path) => path.endsWith(".test.ts") || path.endsWith(".test-fixture.ts"))).toBe(false);
+  });
+
+  it("(a) no array, tuple or Set literal outside the registry and the frozen registries 1 to 5 holds two or more family ids", () => {
+    const offenders: string[] = [];
+    const frozen: string[] = [];
+    for (const { path, lines } of productionSources(["src"])) {
+      if (path === REGISTRY) continue;
+      for (const list of familyLists(path, lines.join("\n"))) {
+        if (isFrozenRegistry(path, list)) frozen.push(list.name);
+        else offenders.push(`${list.site} ${list.name}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+    // The exemption is live: these are the frozen registries that spell out two or more ids.
+    expect(frozen.sort()).toEqual(["DETECTOR_REGISTRY_V1", "DETECTOR_REGISTRY_V5"]);
+  });
+
+  it("(b) the registry itself is the one list the scan finds in its file", () => {
+    const registry = productionSources(["src"]).find((source) => source.path === REGISTRY)!;
+    expect(familyLists(REGISTRY, registry.lines.join("\n")).map((list) => list.name)).toEqual(["PHASES"]);
+  });
+
+  it("(c) the scan flags each way of writing the list by hand, and nothing else", () => {
+    const names = (text: string): string[] => familyLists("src/sample.ts", text).map((list) => list.name);
+    expect(familyLists("src/closeout/second-pass.ts", "const first = 1;\nconst again = [\"planning_graph\", \"public_safety\"];\n")).toEqual([{ site: "src/closeout/second-pass.ts:2", name: "again" }]);
+    expect(names("const list = ['planning_graph', `language_policy`] as const;")).toEqual(["list"]);
+    expect(names("const set = new Set([\n  \"github_actions\",\n  \"semantic_boundary\",\n]);")).toEqual(["set"]);
+    expect(names("const typed: ReadonlySet<string> = new Set<string>([\"planning_graph\", \"repository_boundaries\"]);")).toEqual(["typed"]);
+    expect(names("const table = [{ family: \"planning_graph\", file: \"a.json\" }, { family: \"public_safety\", file: \"b.json\" }];")).toEqual(["table"]);
+    expect(names("const pairs = [[\"planning_graph\", one], [\"github_actions\", two]];")).toEqual(["pairs"]);
+    expect(names("const spread = [...earlier, \"planning_graph\", \"public_safety\"];")).toEqual(["spread"]);
+    expect(names("type Listed = readonly [\"planning_graph\", \"public_safety\"];")).toEqual(["<expression>"]);
+    expect(names("call([\"semantic_boundary\", \"language_policy\"]);")).toEqual(["<expression>"]);
+    // One id, an id inside a longer string, a call's arguments, and a record keyed by family are not lists of ids.
+    expect(names("const one = [\"planning_graph\", \"planning\"];")).toEqual([]);
+    expect(names("const commands = [\"mister-clean/planning_graph@2\", \"mister-clean/public_safety@1\"];")).toEqual([]);
+    expect(names("frozenInput(\"public_safety\", \"semantic_boundary\");")).toEqual([]);
+    expect(names("const record = { planning_graph: 1, public_safety: 2 };")).toEqual([]);
+    expect(names("const compared = id === \"planning_graph\" || id === \"public_safety\";")).toEqual([]);
+  });
+
+  it("(d) the six consumers read the registry", () => {
+    const imports = /from\s+["'][^"']*\/phase-registry\.js["']/u;
+    const importers = productionSources(["src"]).filter((source) => source.lines.some((line) => imports.test(line))).map((source) => source.path);
+    for (const path of ["src/cli.ts", "src/closeout/bundle-detector-evidence.ts", "src/closeout/bundle-live-validation.ts", "src/closeout/detector-coverage.ts", "src/closeout/finding-anchors.ts", "src/closeout/second-pass.ts"]) {
+      expect(importers).toContain(path);
+    }
+    // Data only: the registry imports nothing.
+    const registry = productionSources(["src"]).find((source) => source.path === REGISTRY)!;
+    expect(registry.lines.filter((line) => /^\s*import\s/u.test(line))).toEqual([]);
+  });
+});
+
+describe("phase branches", () => {
+  /** The files whose per-family behaviour the slice turned into records. */
+  const SITES = [
+    "src/closeout/bundle-detector-evidence.ts",
+    "src/closeout/detector-coverage.ts",
+    "src/closeout/finding-anchors.ts",
+    "src/closeout/second-pass.ts",
+  ] as const;
+
+  /** Does `node` compare something with a quoted family id (`===`, `!==`, `==`, `!=`)? */
+  function comparesFamilyId(node: ts.Node): boolean {
+    if (ts.isBinaryExpression(node)) {
+      const operator = node.operatorToken.kind;
+      const equality = operator === ts.SyntaxKind.EqualsEqualsEqualsToken || operator === ts.SyntaxKind.ExclamationEqualsEqualsToken
+        || operator === ts.SyntaxKind.EqualsEqualsToken || operator === ts.SyntaxKind.ExclamationEqualsToken;
+      if (equality && (isFamilyIdLiteral(unwrapped(node.left)) || isFamilyIdLiteral(unwrapped(node.right)))) return true;
+    }
+    return ts.forEachChild(node, (child) => comparesFamilyId(child) || undefined) ?? false;
+  }
+
+  /** Every `else if` in `text` whose condition compares with a quoted family id. */
+  function familyElseIfs(path: string, text: string): string[] {
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const found: string[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isIfStatement(node) && node.elseStatement !== undefined && ts.isIfStatement(node.elseStatement) && comparesFamilyId(node.elseStatement.expression)) {
+        found.push(`${path}:${source.getLineAndCharacterOfPosition(node.elseStatement.getStart(source)).line + 1}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return found;
+  }
+
+  const siteSources = () => productionSources(["src"]).filter((source) => (SITES as readonly string[]).includes(source.path));
+
+  it("lists the four sites it guards", () => {
+    expect(siteSources().map((source) => source.path).sort()).toEqual([...SITES]);
+  });
+
+  it("(a) no else-if compares a family or detector id with a quoted family id at the four sites", () => {
+    expect(siteSources().flatMap((source) => familyElseIfs(source.path, source.lines.join("\n")))).toEqual([]);
+  });
+
+  it("(b) the scan flags such a chain, on one line or several, and not a plain if", () => {
+    expect(familyElseIfs("src/sample.ts", "if (id === \"planning_graph\") a();\nelse if (id === \"public_safety\") b();\nelse c();\n")).toEqual(["src/sample.ts:2"]);
+    expect(familyElseIfs("src/sample.ts", "if (ready) a();\nelse if (\n  family !== \"language_policy\"\n  && ready\n) {\n  b();\n} else if (\"github_actions\" == detectorId) c();\n")).toEqual(["src/sample.ts:2", "src/sample.ts:7"]);
+    expect(familyElseIfs("src/sample.ts", "if (id === \"planning_graph\") a();\nif (id === \"public_safety\") b();\nelse if (kind === \"planning\") c();\n")).toEqual([]);
+  });
+
+  it("(c) each site keys its per-family behaviour by the registry's id type, so a family without an entry does not compile", () => {
+    for (const source of siteSources()) {
+      expect(source.lines.some((line) => /\}\s*satisfies\s+Record<PhaseId,/u.test(line)), source.path).toBe(true);
+    }
   });
 });
