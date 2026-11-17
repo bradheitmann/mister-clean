@@ -1,5 +1,5 @@
 {
-  "commit": "8201f3d138c7faede2166409058bb9c4592a7025",
+  "commit": "e18ade07f12104b86137d2ecfc0e5dfc8404bedd",
   "entries": [
     {
       "mode": "100644",
@@ -1179,16 +1179,16 @@
     },
     {
       "mode": "100644",
-      "object": "900195a44a3c7154bf453b546c3ad41234e17263",
+      "object": "39edd155569a5e84ae6756d46b8bb21eaed65fad",
       "path": "docs/EVAL-LAB-INVENTORY.citations.tsv",
-      "sha256": "a3cb2956ffce566ca308533738247d899ff5c0be4ca35e85d0b2dd4f195dbe9a",
+      "sha256": "b3a2f3d533172420115ccfeb260c9f8f653687f80bdb4fae87dbed6739acd5e5",
       "type": "blob"
     },
     {
       "mode": "100644",
-      "object": "2bb52c3e165c88bb7c0d61b8a02927d902a5daed",
+      "object": "2d843fa1b88b99fdbb36ee0b3acd68e1f73c7498",
       "path": "docs/EVAL-LAB-INVENTORY.md",
-      "sha256": "290118a9cebd985a6161e141ecde05a39f473389f189bc745e3e031fcaec6a65",
+      "sha256": "6299887b207dca38f315b2c4f82f6cab8dd2b6256c2be48d6e4b89c99809b925",
       "type": "blob"
     },
     {
@@ -4189,11 +4189,11 @@
     }
   ],
   "entry_count": 598,
-  "head": "8201f3d138c7faede2166409058bb9c4592a7025",
+  "head": "e18ade07f12104b86137d2ecfc0e5dfc8404bedd",
   "kind": "git-commit-tree",
-  "manifest_sha256": "a0a1682218c812c0466b2c0c0a8d7446d79aa849c964473c084d68b729cf56c2",
+  "manifest_sha256": "7c6ba56f510d4cf371ea387a4691bb643f92ffbae34a1b8476ce6245c0bee34e",
   "schema_version": "charter.freeze/2",
   "selector": "git-ls-tree:HEAD",
   "slice": "eval-lab-m1-inventory",
-  "tree": "4fcdc82f5fbe4f90665d066f4b2f34e5b48347cd"
+  "tree": "aa10c3b18e03818c761f8d2b5c04374c052227b7"
 }
