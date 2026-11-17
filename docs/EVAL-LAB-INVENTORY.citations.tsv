@@ -23,6 +23,7 @@ C5	src/control-plane/runtime/evaluation-identity-receipt.ts	28	const verifiedRec
 C5	src/control-plane/runtime/evaluation-intake-bounded-state.test.ts	170	refuses the outcome of an evicted run with the typed fault
 C5	src/control-plane/runtime/evaluation-intake.ts	108	readonly #capturedDispatchReceipts = new Map<string,
 C5	src/control-plane/runtime/evaluation-intake.ts	145	this.#receiptVerificationRowidAtStartup) !== null
+C5	src/control-plane/runtime/evaluation-intake.ts	253	this.#identityReceiptAuthority.authorize({ phase: "pre_dispatch"
 C5	tools/campaign-observer/src/main.rs	416	Kernel-held file locks release on process exit
 C6	src/control-plane/contracts/agent-evaluation.ts	33	export interface AgentTuple {
 C6	src/control-plane/contracts/agent-evaluation.ts	251	export interface RouteTelemetry {
@@ -36,7 +37,6 @@ C7	src/control-plane/runtime/http.ts	502	must bind to a numeric loopback address
 C7	src/control-plane/runtime/unix-socket.ts	229	await chmod(options.path, 0o600);
 H1	src/cli.ts	770	const agentCard = removeOption(args, "--agent-card");
 H1	src/closeout/repository.ts	78	".claude/agents",
-H1	src/mister-clean-lifecycle.ts	3	it never discovers a
 H1	src/run-receipt.ts	465	Load an explicit agent card; identity is never inferred
 H2	src/control-plane/persistence/migrations.ts	927	campaign execution observations without trial credit
 H2	src/control-plane/runtime/campaign-observation-intake.ts	220	export async function importCampaignExecutionObservations(
@@ -48,13 +48,11 @@ H3	src/control-plane/runtime/cmux-visual-readback.ts	28	Bytes captured by the tr
 H3	src/control-plane/runtime/evaluation-identity-receipt.ts	181	export class ConfiguredHarnessStateObservationAdapter
 H4	src/control-plane/runtime/evaluation-identity-receipt.ts	107	export interface EvaluationIdentityObservationAdapter {
 H4	src/metrics/codebase-complexity.ts	579	first === ".droid"
-H5	project/planning/FIELD-EVALS-PLAN.md	76	Out of scope here: a meter sampler for every harness
 H5	src/closeout/repository.ts	84	".pi",
 H5	src/control-plane/runtime/evaluation-identity-receipt.ts	181	export class ConfiguredHarnessStateObservationAdapter
 H6	project/planning/FIELD-EVALS-PLAN.md	76	Out of scope here: a meter sampler for every harness
 H6	src/control-plane/runtime/evaluation-identity-receipt.ts	107	export interface EvaluationIdentityObservationAdapter {
 P1	README.md	141	It does not launch a model, inspect providers or unrelated processes, infer an
-P1	src/cli.ts	213	async function runPrepare(
 P1	src/cli.ts	869	usage: mister-clean <prepare|action|validate|detect|audit
 P1	src/cli.ts	896	invocationId = journal?.recordStart({ command: command!
 P1	src/mister-clean-lifecycle.ts	29	LocalEvaluationRunLifecycle
@@ -69,7 +67,6 @@ P3	tools/campaign-query/src/main.rs	12	usage: mister-clean-campaign-query <globa
 S1	project/planning/FIELD-EVALS-PLAN.md	10	Planned, not implemented. The first field window
 S1	project/planning/FIELD-EVALS-PLAN.md	21	## 2. One schema: `field-evals/1`
 S1	project/planning/FIELD-EVALS-PLAN.md	72	strict-TypeScript `field` subcommand (open, refresh, close)
-S1	src/run-receipt.ts	51	export type AgentIdentityStatus = "receipt"
 S2	project/planning/EVAL-STANDARDIZATION-PLAN.md	17	**Planned; not dispatched or implemented.**
 S2	project/planning/EVAL-STANDARDIZATION-PLAN.md	252	- [ ] EV-06 exact-candidate gates, dogfood, independent QA/GUARD
 S2	src/control-plane/contracts/capability-taxonomy.ts	21	export const CAPABILITY_DEFINITIONS
@@ -102,8 +99,8 @@ V1	src/control-plane/runtime/snapshot-producer.ts	298	fail("repository scope is 
 V2	control-plane-app/src/App.svelte	538	<div class="run-timeline">
 V2	control-plane-app/src/App.svelte	560	run.classification_correction
 V2	project/planning/AGENT-EVAL-LAB.md	131	Drill from experiment to attempts to per-case expected/observed result
-V2	src/control-plane/runtime/evaluation-recorder.ts	99	readonly worker_actor_id: string;
 V3	project/planning/AGENT-EVAL-LAB.md	32	**Case revision:** content-addressed input
+V3	src/cli.ts	146	mister-clean.semantic-case-proposals
 V3	src/control-plane/contracts/capability-evaluator-registry.ts	27	readonly case_id: string;
 V3	src/control-plane/contracts/capability-evaluator-registry.ts	34	const caseId = `mister-clean.case.
 V4	project/planning/AGENT-EVAL-LAB.md	114	### Workbench
