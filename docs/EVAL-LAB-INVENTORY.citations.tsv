@@ -1,0 +1,126 @@
+row	path	line	text
+C1	src/control-plane/persistence/migrations.ts	687	canonical_git_common_directory TEXT NOT NULL UNIQUE
+C1	src/control-plane/runtime/evaluation-intake.ts	54	export class ConfiguredLogicalProjectRegistrationAuthority
+C1	src/control-plane/runtime/evaluation-recorder.test.ts	569	records physical checkout provenance without treating worktrees
+C1	src/control-plane/runtime/evaluation-recorder.ts	133	export interface LogicalProjectRegistrationInput
+C1	src/control-plane/runtime/evaluation-recorder.ts	269	local-repository:${sha256Bytes(canonicalJson
+C2	src/control-plane/contracts/agent-evaluation.ts	99	AGENT_IDENTITY_PHASES = ["pre_dispatch", "pre_evaluation"]
+C2	src/control-plane/runtime/evaluation-recorder.ts	617	VALUES (?, ?, ?, ?, NULL, 'issued', NULL, ?)
+C2	tools/campaign-observer/src/main.rs	534	model = p["model"].as_str().map(str::to_owned);
+C2	tools/campaign-observer/src/main.rs	745	let kind = if body.starts_with("VERDICT: PASS") {
+C2	tools/campaign-observer/src/main.rs	761	items.push(("merge",text(&receipt,"mergedAt").to_owned()
+C3	src/control-plane/runtime/sqlite-store.ts	780	async listPendingEvaluationInvocations(limit: number)
+C3	tools/campaign-observer/src/main.rs	178	fn retain(path: &Path, bytes: &[u8]) -> Result<()> {
+C3	tools/campaign-observer/src/main.rs	273	let path = dir.join(format!("{}.jsonl", hash(&bytes)));
+C3	tools/campaign-observer/src/main.rs	893	let output = Command::new("bun")
+C3	tools/campaign-observer/tests/capture.rs	297	assert_eq!(replay["import"], json!({"imported":0,"replayed":1}));
+C4	src/control-plane/persistence/migrations.ts	603	cannot be replayed into multiple credited trials
+C4	src/control-plane/runtime/campaign-observation-intake.ts	263	conflicting campaign observation replay
+C4	src/control-plane/runtime/evaluation-intake.e2e.test.ts	204	call("receipt-replay", "evaluation.run.start"
+C4	src/control-plane/runtime/evaluation-recorder.ts	709	"recorded run already has an evaluation outcome"
+C4	src/control-plane/runtime/evaluation-recorder.ts	766	const contributesQualityCredit = identity.disposition
+C5	src/control-plane/runtime/evaluation-identity-receipt.ts	28	const verifiedReceiptTokens = new WeakMap<object, StoredBinding>();
+C5	src/control-plane/runtime/evaluation-intake-bounded-state.test.ts	170	refuses the outcome of an evicted run with the typed fault
+C5	src/control-plane/runtime/evaluation-intake.ts	108	readonly #capturedDispatchReceipts = new Map<string,
+C5	src/control-plane/runtime/evaluation-intake.ts	145	this.#receiptVerificationRowidAtStartup) !== null
+C5	tools/campaign-observer/src/main.rs	416	Kernel-held file locks release on process exit
+C6	src/control-plane/contracts/agent-evaluation.ts	33	export interface AgentTuple {
+C6	src/control-plane/contracts/agent-evaluation.ts	251	export interface RouteTelemetry {
+C6	src/control-plane/contracts/agent-evaluation.ts	264	readonly price_source: "custom"
+C6	src/control-plane/contracts/agent-profile.ts	8	status: z.enum(["verified", "reported", "inferred", "unavailable"])
+C6	src/control-plane/persistence/migrations.ts	546	CREATE TABLE availability_observations (
+C7	src/control-plane/contracts/agent-profile.ts	52	export_requires_redaction_review: z.literal(true)
+C7	src/control-plane/runtime/evaluation-intake.e2e.test.ts	147	expect(Object.keys(directPending.result.invocations[0]).sort())
+C7	src/control-plane/runtime/evaluation-intake.ts	152	const journalPathSha256 = sha256Bytes(this.#invocationJournalPath);
+C7	src/control-plane/runtime/http.ts	502	must bind to a numeric loopback address
+C7	src/control-plane/runtime/unix-socket.ts	229	await chmod(options.path, 0o600);
+H1	src/cli.ts	770	const agentCard = removeOption(args, "--agent-card");
+H1	src/closeout/repository.ts	78	".claude/agents",
+H1	src/mister-clean-lifecycle.ts	3	it never discovers a
+H1	src/run-receipt.ts	465	Load an explicit agent card; identity is never inferred
+H2	src/control-plane/persistence/migrations.ts	927	campaign execution observations without trial credit
+H2	src/control-plane/runtime/campaign-observation-intake.ts	220	export async function importCampaignExecutionObservations(
+H2	tools/campaign-observer/src/main.rs	481	if text(&meta, "type") == "session_meta" {
+H2	tools/campaign-observer/src/main.rs	539	if kind == "event_msg" && text(p, "type") == "token_count" {
+H2	tools/campaign-observer/src/main.rs	894	.arg("scripts/reconcile_campaign_invocations.ts")
+H3	src/closeout/repository.ts	83	".opencode",
+H3	src/control-plane/runtime/cmux-visual-readback.ts	28	Bytes captured by the trusted operator/Computer Use bridge
+H3	src/control-plane/runtime/evaluation-identity-receipt.ts	181	export class ConfiguredHarnessStateObservationAdapter
+H4	src/control-plane/runtime/evaluation-identity-receipt.ts	107	export interface EvaluationIdentityObservationAdapter {
+H4	src/metrics/codebase-complexity.ts	579	first === ".droid"
+H5	project/planning/FIELD-EVALS-PLAN.md	76	Out of scope here: a meter sampler for every harness
+H5	src/closeout/repository.ts	84	".pi",
+H5	src/control-plane/runtime/evaluation-identity-receipt.ts	181	export class ConfiguredHarnessStateObservationAdapter
+H6	project/planning/FIELD-EVALS-PLAN.md	76	Out of scope here: a meter sampler for every harness
+H6	src/control-plane/runtime/evaluation-identity-receipt.ts	107	export interface EvaluationIdentityObservationAdapter {
+P1	README.md	141	It does not launch a model, inspect providers or unrelated processes, infer an
+P1	src/cli.ts	213	async function runPrepare(
+P1	src/cli.ts	869	usage: mister-clean <prepare|action|validate|detect|audit
+P1	src/cli.ts	896	invocationId = journal?.recordStart({ command: command!
+P1	src/mister-clean-lifecycle.ts	29	LocalEvaluationRunLifecycle
+P2	src/server.ts	199	"mister_clean_attestation",
+P2	src/server.ts	239	"mister_clean_list_materials",
+P2	src/server.ts	288	"mister_clean_read_material",
+P3	README.md	126	`dispatch_supported: false` and `execution_supported: false`. Route probes,
+P3	src/control-plane/runtime/protocol.ts	104	"evaluation.invocations.pending.list";
+P3	src/control-plane/runtime/protocol.ts	159	readonly name: "evaluation.run.start";
+P3	src/control-plane/runtime/protocol.ts	167	readonly name: "evaluation.run.outcome";
+P3	tools/campaign-query/src/main.rs	12	usage: mister-clean-campaign-query <global.sqlite>
+S1	project/planning/FIELD-EVALS-PLAN.md	10	Planned, not implemented. The first field window
+S1	project/planning/FIELD-EVALS-PLAN.md	21	## 2. One schema: `field-evals/1`
+S1	project/planning/FIELD-EVALS-PLAN.md	72	strict-TypeScript `field` subcommand (open, refresh, close)
+S1	src/run-receipt.ts	51	export type AgentIdentityStatus = "receipt"
+S2	project/planning/EVAL-STANDARDIZATION-PLAN.md	17	**Planned; not dispatched or implemented.**
+S2	project/planning/EVAL-STANDARDIZATION-PLAN.md	252	- [ ] EV-06 exact-candidate gates, dogfood, independent QA/GUARD
+S2	src/control-plane/contracts/capability-taxonomy.ts	21	export const CAPABILITY_DEFINITIONS
+S2	src/control-plane/runtime/evaluation-intake.e2e.test.ts	110	accepts evidence-bound start/outcome and operator-attested aliases
+S2	src/control-plane/runtime/protocol.ts	38	"evaluation.project.register", "evaluation.run.start"
+S3	project/planning/AGENT-EVAL-LAB.md	11	implementation not dispatched
+S3	project/planning/AGENT-EVAL-LAB.md	36	**Key revision:** expected results, allowed alternatives
+S3	project/planning/AGENT-EVAL-LAB.md	38	**Experiment:** preregistered role, suite, key, candidate treatments
+S3	project/planning/AGENT-EVAL-LAB.md	42	**Grade:** attempt + key/rubric/scorer revision
+S3	src/control-plane/domain/qualification.ts	35	export function deriveQualification
+S4	src/control-plane/runtime/evaluation-intake.e2e.test.ts	110	accepts evidence-bound start/outcome and operator-attested aliases
+S4	src/control-plane/runtime/evaluation-intake.ts	63	Registration receipt is not authorized by trusted runtime setup
+S4	src/control-plane/runtime/evaluation-intake.ts	223	Evaluation outcome requires a trusted runtime evaluator adapter
+S4	src/control-plane/runtime/evaluation-intake.ts	225	Direct caller-provided evaluator outcomes are not admitted
+S4	src/control-plane/runtime/evaluation-intake.ts	231	throw new CapturedDispatchReceiptUnavailableFault(outcomeRunEventId)
+S4	src/control-plane/runtime/evaluation-intake.ts	235	cannot replace the collector-bound dispatch identity lease
+S5	src/control-plane/runtime/evaluation-recorder.test.ts	643	keeps a raw failed task in the qualification denominator
+S5	src/control-plane/runtime/evaluation-recorder.ts	631	INSERT INTO agent_run_events(run_event_id, source_run_token
+S5	src/control-plane/runtime/evaluation-recorder.ts	640	repository_cohort_provenance: "LEGACY_NON_QUALIFYING_LABEL"
+S5	src/control-plane/runtime/evaluation-recorder.ts	709	"recorded run already has an evaluation outcome"
+S5	src/control-plane/runtime/evaluation-recorder.ts	803	violation:${raw.run_event_id}:${evaluator.evaluation_dimension}
+S6	src/control-plane/runtime/evaluation-identity-receipt.ts	83	record_type: "mister-clean.evaluation-identity-receipt"
+S6	src/control-plane/runtime/evaluation-identity-receipt.ts	90	export function verifiedReceiptForBinding(value: unknown
+S6	src/control-plane/runtime/evaluation-identity-receipt.ts	146	capture?.identity_assurance !== "active_harness_selection"
+S6	src/control-plane/runtime/evaluation-identity-receipt.ts	211	export class ConfiguredEvaluationIdentityReceiptAuthority
+S6	src/control-plane/runtime/evaluation-recorder.test.ts	479	keeps custody mint private and rejects a valid token reused
+V1	control-plane-app/src/App.svelte	380	snapshot.repository} · {snapshot.current_run_id}
+V1	src/control-plane/contracts/snapshot.ts	194	source_label: text, repository: text, current_run_id: text
+V1	src/control-plane/runtime/snapshot-producer.ts	298	fail("repository scope is absent or ambiguous")
+V2	control-plane-app/src/App.svelte	538	<div class="run-timeline">
+V2	control-plane-app/src/App.svelte	560	run.classification_correction
+V2	project/planning/AGENT-EVAL-LAB.md	131	Drill from experiment to attempts to per-case expected/observed result
+V2	src/control-plane/runtime/evaluation-recorder.ts	99	readonly worker_actor_id: string;
+V3	project/planning/AGENT-EVAL-LAB.md	32	**Case revision:** content-addressed input
+V3	src/control-plane/contracts/capability-evaluator-registry.ts	27	readonly case_id: string;
+V3	src/control-plane/contracts/capability-evaluator-registry.ts	34	const caseId = `mister-clean.case.
+V4	project/planning/AGENT-EVAL-LAB.md	114	### Workbench
+V4	project/planning/AGENT-EVAL-LAB.md	120	unavailable execution adapters disable launch with a reason
+V4	src/control-plane/runtime/local-runtime.test.ts	33	honestly denying dispatch and execution support
+V4	src/control-plane/runtime/service.ts	305	dispatch_supported: false,
+V5	assets/codebase-state-dashboard/model-scorecard.html	163	Complete static example.
+V5	control-plane-app/src/App.svelte	527	bind:value={inventoryCapability}
+V5	control-plane-app/src/App.svelte	531	cost_per_success_usd, " USD/success")
+V5	control-plane-app/src/domain.test.ts	90	filters and sorts exact inventory treatments with missing metrics last
+V5	src/model-scorecard-interactions.test.ts	23	filters without weakening tuple identity or qualification boundaries
+V6	control-plane-app/src/App.svelte	16	export let initialView: View = "Progress / Command";
+V6	control-plane-app/src/App.svelte	420	Evidence could not be read
+V6	control-plane-app/src/lane-contract.test.ts	25	uses a token-composed 44px interaction floor
+V6	control-plane-app/src/zero-data-render.test.ts	100	renders ${view} without inferring evidence
+V6	project/planning/AGENT-EVAL-LAB.md	185	UI acceptance requires persisted results surviving process/browser restart
+Z1	charter/charter.toml	10	proven_on = "2026-11-17"
+Z1	offline-scorer/score.ts	22	const CASE_SET_SCHEMA = "eval-case-set/1";
+Z1	offline-scorer/score.ts	23	const ANSWER_SCHEMA = "eval-answer/1";
+Z1	offline-scorer/score.ts	24	const SCORE_SCHEMA = "eval-score/1";
