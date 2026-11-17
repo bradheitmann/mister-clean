@@ -1,0 +1,7 @@
+{
+  "base_commit": "15bbdf0debbd88fbfee5e8e29f733194a19f0cc5",
+  "brief_sha256": "c788b20c776e45e43ea241262681860be912fa8a4e33e88dae7995dcbf40138d",
+  "done_sha256": "833ff2cb3904fabda44d4c4ee4501d6c04b00a5eff663841eb73fa1368082a97",
+  "schema_version": "charter.dispatch/1",
+  "slice": "mg-s2e-finding-reducer"
+}
