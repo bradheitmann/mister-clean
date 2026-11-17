@@ -1,0 +1,63 @@
+# DONE: mg-s2e-finding-reducer (one completion-debt reducer for prepare)
+Slice: prepare.ts builds every completion debt inline in one long function: it applies public-safety exemptions, builds each family's root debts with its own block, concatenates them in a fixed order, then applies retirements and adds ratification debts. Three detector ids and five bundle file names are written there by hand, although the phase registry holds them. A census at main 803fd4c (kept privately as s2/CENSUS-s2e-2026-11-17.md) also found that exemptions are applied nowhere but prepare (finding A2-1, owned by S2f). This slice moves the decision into one pure reducer that prepare calls, keyed by the registry's family ids, and proves that prepare's output does not change. It also pays two obligations of mg-s2d-phase-registry (QA-S2D-D1 and QA-S2D-D2).
+
+Design, fixed here so the proofs can name it:
+- src/closeout/completion-debts.ts exports `reduceCompletionDebts(input, dispositions)`. It is pure: it reads no file and writes none. In this order it applies the public-safety exemptions to the public-safety findings, builds the root debts of each family, concatenates them in `COMPLETION_DEBT_ORDER`, and applies the retirements. It returns the debts, the exempted findings and the retirement outcome. prepare.ts keeps every file write (staging and binding retirement rulings, writing the bundle) and the ratification debts, and calls the reducer once.
+- Each closeout family's root-debt builder is an entry of a record typed `satisfies Record<CloseoutPhaseId, …>` in that module; native-gate debts have their own builder, because native gates are not a registry family. A family added to the registry without a builder does not compile.
+- `COMPLETION_DEBT_ORDER` is exported data: planning_graph, public_safety, github_actions, language_policy, semantic_boundary, then native gates. It is prepare's order at the base, which differs from the registry order; its comment says so and says that changing it changes report bytes.
+- The detector ids the builders cite, and the five bundle file names prepare writes, are read from the phase registry. No `"mister-clean/<family>@<n>"` literal and no `*-audit.json` literal remains in prepare.ts or completion-debts.ts. The planning builder's fallback `?? "mister-clean/planning_graph@2"` becomes a registry lookup that throws if the family is absent, which no run can reach.
+- bundle-live-validation.ts: the loop that judges each family's fresh fingerprints is extracted, unchanged, into an exported pure function `judgeLiveDetectorFindings` that returns the errors in the order it pushes them (pays QA-S2D-D1).
+
+Declared behaviour changes: none. Every output is byte-identical to the base.
+
+Base: main 803fd4c. Repair cycles: 1. QA attempts: 2. Review families: 2 (author: a DEV seat of the PM's family, Claude, under the PM's brief; QA: another model maker). A second QA rejection goes to the owner under S5.
+
+Shell: every reopen and every mutant below runs from the root of a checkout of the frozen head as `bash --noprofile --norc -e -o pipefail -c '<command>'`, with `~/.local/share/mise/installs/bun/1.4.0/bin` first on PATH, after `pnpm install --frozen-lockfile --ignore-scripts` and `bun run build:materials`. `V` below stands for `MISTER_CLEAN_SOURCE_DEVELOPMENT=1 node ./node_modules/vitest/vitest.mjs run --allowOnly=false --no-file-parallelism --maxWorkers=1 --testTimeout=120000`. Hosted CI runs the same test files inside its capsule step, which has no `shell:` line; the `V` commands have no pipe, so they behave the same under `bash -e {0}`.
+Proof 9 needs dist/: its test of src/skill-contract.test.ts reads built files, so its reopens run after `bun run build:raw` in that checkout. Proofs 1 to 8 need only the two steps above.
+
+Proofs (each re-openable before acceptance):
+1. prepare's output is byte-identical to the base on fixtures that reach every builder and both dispositions.
+   - reopen: `V src/closeout/prepare.golden.test.ts` passes. It runs `prepareCloseout` with a fixed clock on fixture repositories it builds, and compares, with golden data recorded by running the same capture on the base code and saved as src/closeout/prepare-golden.test-fixture.ts: `completion_debts`, `retirement_applications`, `debt_census`, `public_safety_debt_accounting`, the five per-family accounting blocks of closeout-report.json, and the bytes of regression-delta.json. The only normalization is the replacement of the fixture's temporary root by a fixed token, applied to both sides. Between them the fixtures produce at least one debt of each of planning_graph, public_safety (a value finding and an unassessed one), github_actions (one group of two findings), language_policy, semantic_boundary (one confirmed finding and one unassigned set) and one native gate; one exempted public-safety finding; and one retirement record that retires at least one debt. The test prints the number of debts per family and fails if any of those is zero.
+   - reopen: `git diff --quiet <golden commit> <frozen head> -- src/closeout/prepare.golden.test.ts src/closeout/prepare-golden.test-fixture.ts` exits 0: the test and its golden data were not changed after the golden commit, which holds no production change.
+   - mutant: in the public-safety builder take `slice(0, 15)` instead of `slice(0, 16)` for the debt id; the command fails (RED).
+2. One place applies exemptions and retirements.
+   - reopen: `V src/backbone-single-implementation.test.ts -t "completion debt reducer"` passes. It fails if any non-test file under src/ other than src/closeout/completion-debts.ts calls `applyPublicSafetyExemptions` or `applyRetirements`, and if prepare.ts builds a debt without calling `reduceCompletionDebts`, judged by the absence of any `baselineDebt(` call outside the ratification debts.
+   - mutant: add a second call of `applyPublicSafetyExemptions` in prepare.ts; the command fails and names prepare.ts (RED).
+3. The reducer applies exemptions before it builds debts, and retirements after.
+   - reopen: `V src/closeout/completion-debts.test.ts -t "disposition order"` passes. A public-safety finding that is both exempted and under a retired root is absent from the debts and from every retirement application's debt ids; a public-safety finding under the retired root that is not exempted is retired.
+   - mutant: apply the retirements to the debts before the exemptions filter the findings; the command fails (RED).
+4. The builders are a record over the registry's closeout ids, and the order is data.
+   - reopen: `V src/closeout/completion-debts.test.ts -t "debt order"` passes: `COMPLETION_DEBT_ORDER` equals planning_graph, public_safety, github_actions, language_policy, semantic_boundary, native gate, and the debts of a reducer run appear grouped in that order.
+   - mutant: append a seventh closeout entry with id `probe_family` to `PHASES`; `pnpm exec tsc --noEmit` exits non-zero and its errors name src/closeout/completion-debts.ts (RED).
+   - mutant: exchange language_policy and semantic_boundary in `COMPLETION_DEBT_ORDER`; the "debt order" command and proof 1's command both fail (RED).
+5. No detector id or bundle file name is written by hand in prepare.ts or completion-debts.ts.
+   - reopen: `V src/backbone-single-implementation.test.ts -t "completion debt literals"` passes. It fails on a quoted string matching `mister-clean/<family id>@<digits>` or ending in `-audit.json` in either file.
+   - mutant: write `"mister-clean/public_safety@1"` in place of the registry lookup in the public-safety builder; the command fails and names completion-debts.ts (RED).
+6. The order of live-revalidation errors is pinned (QA-S2D-D1).
+   - reopen: `V src/closeout/bundle-live-validation.test.ts -t "live detector error order"` passes. It gives `judgeLiveDetectorFindings` fingerprints for every closeout family, inserted into its map in an order other than the registry's, with payable findings in each and one family not canonical, and requires the errors in registry order with their exact text.
+   - mutant: iterate the map's own keys instead of the registry order; the command fails (RED).
+7. The golden test is faithful to the base.
+   - reopen: in a checkout of the golden commit, `V src/closeout/prepare.golden.test.ts` passes: the golden data is what the base code writes.
+   - reopen: in that checkout, `git diff --quiet 803fd4c <golden commit> -- src/closeout/prepare.ts src/closeout/retirements.ts src/closeout/bundle-live-validation.ts` exits 0.
+   - mutant: n/a (it pins the base).
+8. The existing tests of every touched module still pass, unchanged.
+   - reopen: `V src/closeout/prepare.test.ts src/closeout/retirements.test.ts src/closeout/language-policy-root-debts.test.ts src/closeout/regression-accounting.test.ts src/closeout/phase-registry.test.ts src/closeout/phase-registry.differential.test.ts`, every test passed.
+   - reopen: `git diff --stat 803fd4c <frozen head> -- ':(glob)src/**/*.test.ts' ':!src/closeout/prepare.golden.test.ts' ':!src/closeout/completion-debts.test.ts'` lists only src/backbone-single-implementation.test.ts and src/closeout/bundle-live-validation.test.ts (created or extended), and `git diff 803fd4c <frozen head>` of each has no removed or changed line.
+   - mutant: n/a (regression set).
+9. Nothing else changes.
+   - reopen, each exits 0: `pnpm exec tsc --noEmit`; `bun run sync:cli:check`; `bun run manifest:package:check`; `pnpm run audit:public`, which prints `PASS (83 files)`, the count the base prints when built the same way, in a checkout where `bun run build:raw` has written dist/; `bun run build:materials`, which prints `Generated 40 MCP materials`; `V src/closeout/inspection.test.ts -t "keeps the prospective public source tree free of private identifiers"`, 1 passed; `V src/closeout/second-pass.test.ts src/closeout/finding-anchors.test.ts src/closeout/detector-coverage.test.ts src/closeout/language-policy.test.ts src/run-receipt.test.ts src/canonical-json.golden.test.ts src/skill-contract.test.ts src/cli.test.ts`, every test passed.
+   - reopen: bin/ and MANIFEST.sha256 are the ones `bun run build:raw` writes under bun 1.4.0 at the frozen head (`bun run sync:cli:check` and `bun run manifest:package:check` are the checks).
+   - mutant: n/a (regression set).
+10. Hosted CI `verify` is green on the tip that holds the freeze record.
+   - reopen: `gh run view -R bradheitmann/mister-clean <run id> --json headSha,jobs`; `headSha` is the pushed tip and the job named `verify` has conclusion `success`. The non-required `charter` job is expected red as NOT CHECKED, the known baseline; its colour is not part of this proof.
+   - mutant: n/a (hosted observation).
+11. The installed release judges the candidate and finds no new class of debt.
+   - reopen: the pre-merge self-judge by the installed 7.5.1, in the judge container, on the pushed tip: `prepare` exits 0 and its debts are only the recorded baseline classes (the four file-scheme instances, the semantic re-attestation, and DEBT-NATIVE-GATE-17ED5EBED7B18D8C). The run folder, with the script and its log, is named in the receipt.
+   - mutant: n/a (observation by the installed release). This run is a heavy job; it waits for the shared host's queue and the slice does not merge before it.
+
+Out of scope (recorded obligations, not fixed here):
+- A2-1, owned by S2f: validate (live revalidation, regression projection, detector-coverage fingerprints), the second pass and `audit public-safety` do not apply exemptions, and the public-safety keys disagree (finding fingerprint and cause key are line-bound; exemptions and receipt fingerprints are value-bound). S2f makes them consume this reducer.
+- The reducer's accepted-exception stage, and one finding type shared by every family (INTEGRATION-PLAN §2.2): S2f, where validate is their first consumer.
+- The root formulas written a second time in bundle-detector-evidence.ts `ROOT_PROJECTIONS`: S2f.
+- Changing `COMPLETION_DEBT_ORDER` to the registry order: not planned; it would change report bytes.
+- Named by mg-s2d's DEV report and QA-S2D-D2, left as they are: the input-kind ternaries and ifs on `spec.id` in bundle-detector-evidence.ts (frozen input kinds) and the public-safety policy filter in detector-coverage.ts. Neither is a list of family ids nor a chain this slice touches.
