@@ -1,0 +1,80 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-charter-pin-c6c9843",
+  "verifies": "mg-charter-pin-c6c9843",
+  "candidate_commit": "efece0f8f2ed233f815dd12397e06af5d70276fe",
+  "frozen": {
+    "manifest_sha256": "d90e77a37ecef7bf8c35e38f3fb3c79a424e90f1e6d450a1a0103333b354bf4c",
+    "head": "efece0f8f2ed233f815dd12397e06af5d70276fe"
+  },
+  "dispatch": {
+    "base_commit": "e2874c3edd02310aea72bd866330bb88cf68b75d",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-fable-5-2",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa/evidence-proof-1.txt (proof 1): reopen cat charter/PIN.toml printed exactly the c6c9843 line (exit 0); C check --strict exit 0 with the line charter/PIN.toml declares c6c9843bfc83 (this binary) and last line charter: ok. Mutant in QA/scratch, charter/PIN.toml set to the 98055d7 commit -> check --strict exit 1 and its last line names both commits (RED); restored with git checkout, git status --porcelain empty, reopen green again. Vacuity: in QA/base at 363be85 the cat prints the 98055d7 line and check --strict exits 1 with no charter: ok, so both criteria fail at base -> not vacuous. Evidence file sha256 bffe365abf5fa69a654a48a18c6553f8613563227d68e46b09f60900697536cc.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa/evidence-proof-2.txt (proof 2): reopen sed of the CHARTER_REV line printed one line, the c6c9843 commit; git grep -l 98055d7 outside charter/ and qa/ printed none (both exit 0). Mutant in QA/scratch, CHARTER_REV moved back to the 98055d7 commit -> the sed reopen printed the 98055d7 commit and the git grep reopen printed .github/workflows/ci.yml instead of none (RED); restored, status empty, reopen green again. Vacuity: at base 363be85 the sed prints the 98055d7 commit and the grep prints .github/workflows/ci.yml, so both criteria fail at base -> not vacuous. Evidence file sha256 a4aa44e2e8c0d5f32b776a34e94371d0ddf96924809986d5da818c2ca0787e68.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa/evidence-proof-3.txt (proof 3): reopen shasum -a 256 printed 3ecb03eca8b39cb1497b7f32f9b2b553729fd824a5b0ec11d0e222e5bf20c5a4 for charter/SPEC.md and 314220fea9a84fa266c3b6c295bde41210c0d5d3fa90cc6436278dfb29cf6ec7 for the schema; C init --refresh-spec in QA/scratch exit 0 printing already this binary's spec for charter/SPEC.md and kept for charter/GOVERNANCE.md and for the schema, git status --porcelain empty. Mutant, git show 363be85:charter/SPEC.md over the file -> first sum differs (the contract's 7479871a... value) and check --strict prints a line containing earlier published spec (RED); check exits 0 and only warns there, which is exactly what the contract claims - no exit-1 claim is made; restored with git checkout, not init --refresh-spec. Vacuity: at base 363be85 the shasum prints the two older sums -> fails; init --refresh-spec was not run in QA/base because the task restricts it to QA/scratch, and its already-this-binary criterion cannot hold at base since base carries the older spec text (the base check warning quotes it). Evidence file sha256 c28b19cf25e415be9ae22cd0b35155ce2d54fc6b3f2dcae1d9fb5debb650a845.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa/evidence-proof-4.txt (proof 4): reopen in the slice checkout, C hooks status exit 0 naming the literal path of C for pre-commit and for pre-push and ending charter: hooks status: match; git status --porcelain in the checkout after was empty (nothing written). Mutant in QA/scratch, the fresh clone verified hookless (0 non-sample hooks, still hookless after proof 3's init --refresh-spec): C hooks status exit 1 ending charter: hooks status: drift in 2 of 2 hooks (RED). The proof is stated with its scope: the Change section says the hooks live in the repository's common git directory shared by the main checkout and every worktree, and proof 4 names where each part runs, so a reader can tell it shows the installed hooks of this repository, not hooks on other machines or in other clones. Evidence file sha256 df4282cd8454e5f10a71c59e41cd3085ca46854f39bc53c9b9b2f50be377fdbf.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa/evidence-proof-5.txt (proof 5): the gate --verify loop over charter/.dispatch/*.json exited 0, printed exactly one line containing verified for each of the 10 records at the frozen head, then all-verified; 11 lines of the output contain verified (10 per-record plus all-verified). Mutant, one newline appended to charter/DONE/mg-pin-readers.md -> the loop stopped with exit 1 at mg-pin-readers on a line containing changed after mg-pin-readers was accepted and never printed all-verified (RED); the five records before it verified, the four after never ran; restored, status empty. Evidence file sha256 a5fadebffe0d1b6f552c3d984cd8d6187ce96aa9b609f03fbfa3ff3043a8d301.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa/evidence-proof-6.txt (proof 6, hosted): gh run view -R bradheitmann/mister-clean 43980869590 --json headSha,jobs, re-run from the root of QA/scratch under the contract's shell with identical data. headSha is dcb2a354e4a6380a13d1714340390ad962dee299, the pushed tip (the freeze record commit, whose parent is the frozen head). Job verify conclusion success. The non-required charter job WAS red, conclusion failure at the probe step with the charter NOT CHECKED annotation - the known baseline the contract declares out of scope; its colour is not part of this proof. No mutant (hosted observation; proofs 1 to 5 hold the local negatives). Evidence file sha256 e026f5b18f7ad4375b3b13cd7b693e734c59ac12e5c79e2c39e8c983264d1c33.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa/evidence-proof-7.txt (proof 7): every reopen green. In QA/scratch git diff --numstat 363be85 efece0f8 over ci.yml printed one line starting 1 TAB 1; git diff --name-only listed exactly the seven files the contract names. In the checkout: pnpm exec tsc --project tsconfig.campaign.json --noEmit exit 0; pnpm run audit:public exit 0 printing prospective package public-safety: PASS (62 files) under bun 1.4.0; the vitest inspection test exit 0 with 1 passed, 15 skipped. The checkout's git status --porcelain stayed empty throughout. Mutants n/a (regression set). At base the two diff reopens list nothing rather than the named results, so they cannot pass there. Evidence file sha256 da2dba9b66b3bf42c4c9b306e03991c4b8a3940cb7b3bd39fd2d77b6a6e47108.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa/review.md (review of git -C QA/scratch diff 363be85 efece0f8, seven files, 71 insertions, 10 deletions): (1) no proof is vacuous - reopens of proofs 1, 2 and 3 were executed in QA/base at 363be85 and each fails there on every criterion; proof 3's init was not run in base because the task restricts init --refresh-spec to QA/scratch, and its criterion cannot hold at base regardless. (2) no reopen reads a file another repository can rewrite: every read is in-tree except the charter binary at its literal path (allowed), this repository's own common git directory hooks (proof 4's declared subject), gh/bun/pnpm tool config outside every repository, and charter's pin table, which is outside every git repository and whose content was shown not to affect proof 1's verdict (with a table carrying no current rows, check --strict still exits 0 with the required substring and charter: ok). (3) a shell is named for every reopen and mutant by the paragraph headed Shell, all mutants and the gh reopen were executed under exactly it, and the hosted-CI claim is true of .github/workflows/ci.yml: no defaults block, the tsc step has no shell: line, and GitHub's default for a step with no shell: line is bash -e {0}; the three proof-7 commands contain no pipe. (4) no tracked file outside charter/ and qa/ names 98055d7, the older spec or schema hashes, or even the string charter/SPEC. (5) proof 4 is stated with its scope - hooks outside the frozen tree in this repository's common git directory, reopen in the slice worktree, mutant in a hookless fresh clone - so a reader can tell what it shows and what it does not. (6) the paragraph headed Order of commits is true: log 363be85..efece0f8 is DONE list, dispatch record, re-pin, then the freeze record commit; e2874c3 and 02171e4 both carry the 98055d7 PIN line; the change commit touches only the four re-pin files; the build/hooks attribution clauses leave no mark in git - unverifiable, not contradicted, with today's hooks matching the c6c9843 build. (7) scope is stated honestly: every Change claim verified, out-of-scope items each confirmed (no src/ file, charter job red as NOT CHECKED, seat_evidence unset), budgets consistent with charter.toml (repair cycles 1 and review families 2 match; QA attempts 2 is the slice-level declaration every recent accepted DONE uses under the cap of 3), Base main 363be85 consistent with dispatch.base_commit e2874c3 under the house convention of the dispatch record's own parent, and the pin-notes order claim matches the charter pin notes. Records: freeze record commit names the frozen head, 575 entries = 593 tracked files minus the 18 freeze records of other slices, four spot re-hashes matched; gate --verify confirmed this slice's DONE hash against the dispatch record. Zero new defects found. Evidence file sha256 2cffb00675d0a49c31953c98e7a54a7b704a0467f383c2546cbd62bfe3302f33.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [],
+  "notes": {
+    "process": "QA/scratch is a shared clone at the frozen head efece0f8f2ed233f815dd12397e06af5d70276fe and QA/base a shared clone at 363be85; both are left in place for the PM to remove. Every mutant was applied only in QA/scratch and restored with git checkout -- <file>, with git status --porcelain empty after each; the slice checkout was never edited and its status stayed empty. Only charter check --strict, charter init --refresh-spec (QA/scratch only), charter hooks status, charter gate <slice> --verify and charter receipt on this receipt were run - no gate --dispatch or --accept, no freeze, no reopen, no hooks install, no cargo. pnpm, tsc, audit:public and vitest ran in the checkout; everything else in QA/scratch, each under bash --noprofile --norc -e -o pipefail -c with nice -n 10 timeout 900. Bun from ~/.local/share/mise/installs/bun/1.4.0/bin, version 1.4.0. Home paths written as ~; no personal data recorded. Provisioning record qa/evidence-0.txt, sha256 0d7a45908858027bd66e172ee3c5ffd1dc6ed8bb2353eef61fe925b143271345.",
+    "dispatch_base_vs_done_base": "dispatch.base_commit is e2874c3edd02310aea72bd866330bb88cf68b75d, the parent of the dispatch record's own commit - the same house convention the accepted mg-charter-spec-refresh receipt records; the DONE declares the slice base as main 363be85, which is the DONE commit's parent and the repository's refs/heads/main, and which proof 7's diffs use. Two meanings of base, each internally consistent; brief_sha256 is null in the record and copied as null here.",
+    "proof6_baseline": "Run 43980869590 concludes failure at run level solely because the non-required charter job fails as NOT CHECKED at its probe step (charter source unreachable from this runner) - the declared baseline; verify is success.",
+    "freeze_coverage": "The freeze record covers 575 of the 593 files tracked at the frozen head; the 18 omitted are exactly the charter/.freeze records of other slices (nine freeze records and nine reopen records), charter's selector behaviour as recorded in the mg-charter-spec-refresh receipt. Four spot re-hashes (ci.yml, PIN.toml, SPEC.md, schema) matched the record byte-for-byte, and the SPEC.md/schema values are the contract's two new sums.",
+    "proof3_mutant_note": "Under the SPEC.md mutant, charter check --strict exits 0 and only warns; the contract claims only the differing sum plus the earlier published spec line, both observed, so RED rests on the reopen's own shasum criterion - exactly as the DONE words it.",
+    "pins_input_note": "check --strict reads charter's pin table at ~/.local/share/charter/PINS.tsv, outside every git repository. With CHARTER_PINS pointed at a table carrying no current rows it still exited 0 with the required substring and charter: ok, so proof 1's verdict does not depend on that file's content."
+  },
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ]
+}
