@@ -2,8 +2,9 @@
 Slice: the owner's brief of 2026-11-11, "automatic coding-session evidence and Eval Lab" (relayed by the acting EXEC-PM and accepted in STATE.md), asks first for an inventory: what collector, intake and interface capability exists, what store is configured, which seams are missing, and what existing work to reuse. This slice writes that inventory and the answers the brief asks the PM for. It changes no source file, builds nothing, calls no model and starts nothing.
 
 What is written:
-- project/planning/EVAL-LAB-INVENTORY.md: one table of rows. Each row has an id, the capability, one status (`implemented`, `partial`, `missing` or `not applicable`), and a short note. After the table, a section headed `Answers to the brief` with six headed answers.
-- project/planning/EVAL-LAB-INVENTORY.citations.tsv: one line per citation, tab-separated: row id, repository path, line number, and a text that must appear on that line. A header line comes first. A row with status `missing` cites the place where the capability would have to be, or the plan line that asks for it.
+- docs/EVAL-LAB-INVENTORY.md: one table of rows. Each row has an id, the capability, one status (`implemented`, `partial`, `missing` or `not applicable`), and a short note. After the table, a section headed `Answers to the brief` with six headed answers.
+- docs/EVAL-LAB-INVENTORY.citations.tsv: one line per citation, tab-separated: row id, repository path, line number, and a text that must appear on that line. A header line comes first. A row with status `missing` cites the place where the capability would have to be, or the plan line that asks for it.
+- Both files are in docs/, not in project/planning/: the planning audit reads every file there as a planning input and refuses a data file it cannot classify.
 - Facts about the installed package and the configured local store are private. They are in `P` = `~/.local/share/agent-private/mister-clean/eval-lab/m1/INSTALLED-AND-STORE.md`, with the command behind each fact. The public table states them without any path, alias or count that identifies a project.
 
 Row ids that must each appear exactly once:
@@ -16,7 +17,7 @@ Row ids that must each appear exactly once:
 
 Base: main f14ecce. Repair cycles: 1. QA attempts: 2. Review families: 2 (author: this PM, Claude, with read-only subagents of the same family collecting facts; QA: another model maker). A second QA rejection goes to the owner under S5.
 
-`D` below stands for project/planning/EVAL-LAB-INVENTORY.md and `T` for project/planning/EVAL-LAB-INVENTORY.citations.tsv.
+`D` below stands for docs/EVAL-LAB-INVENTORY.md and `T` for docs/EVAL-LAB-INVENTORY.citations.tsv.
 
 Shell: every reopen and every mutant below runs from the root of a checkout of the frozen head as `bash --noprofile --norc -e -o pipefail -c '<command>'`, with `~/.local/share/mise/installs/bun/1.4.0/bin` first on PATH. Hosted CI has no step for proofs 1 to 5; the commands of proof 6 that hosted CI also runs have no pipe, so they behave the same under `bash -e {0}`.
 
@@ -38,7 +39,7 @@ Proofs (each re-openable before acceptance):
    - mutant: n/a (records).
 6. Nothing else changes, and nothing private is published.
    - reopen, each exits 0: `pnpm run audit:public`, which prints `PASS (62 files)`; `bun run build:materials`, which prints `Generated 40 MCP materials`; `MISTER_CLEAN_SOURCE_DEVELOPMENT=1 node ./node_modules/vitest/vitest.mjs run --allowOnly=false --no-file-parallelism --maxWorkers=1 --testTimeout=120000 src/closeout/inspection.test.ts -t "keeps the prospective public source tree free of private identifiers"`, 1 passed; `node ~/.claude/skills/mister-clean/bin/mister-clean.js audit planning . --json`, whose output has `"status":"pass"` and no finding.
-   - reopen: `git diff --name-only f14ecce <frozen head>` lists only D, T, charter/DONE/eval-lab-m1-inventory.md, and charter/.dispatch/eval-lab-m1-inventory.json and .sha256. `grep -c -E '/Users/|\.local/share|agent-private' D T || true` prints 0 for both files.
+   - reopen: `git diff --name-only f14ecce <frozen head>` lists only D, T, charter/DONE/eval-lab-m1-inventory.md, and charter/.dispatch/eval-lab-m1-inventory.json and .sha256. `grep -c -E '[/]Users[/]|[.]local[/]share|agent-private' D T || true` prints 0 for both files.
    - mutant: n/a (regression set).
 7. Hosted CI `verify` is green on the tip that holds the freeze record.
    - reopen: `gh run view -R bradheitmann/mister-clean <run id> --json headSha,jobs`; `headSha` is the pushed tip and the job named `verify` has conclusion `success`. The non-required `charter` job is expected red as NOT CHECKED, the known baseline; its colour is not part of this proof.
