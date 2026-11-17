@@ -12,7 +12,7 @@ Declared behaviour changes, each with a proof; everything else is byte-identical
 - Δ1 (D8): with no `--against`, the second pass never takes a SECOND_PASS or VALIDATE receipt as its baseline. When no other receipt exists it stops with the existing message `no earlier receipt for this repository; pass --against <receipt_id|bundle>`. The base fell back to the latest receipt of any mode.
 - Δ2 (D8): `--against` naming a VALIDATE receipt is refused with a typed error. A SECOND_PASS receipt named explicitly is still accepted, as the existing test asserts.
 - Δ3: a legacy baseline read from a bundle keeps that bundle's language_policy execution. The base skipped it without a message.
-- Δ4: an id that is not in the registry is refused by the entry dispatch and by the receipt projection. The base ran or projected it as semantic_boundary. No validated input reaches this; the tests reach it with a cast.
+- Δ4: an id that is not in the registry is refused by the entry dispatch before anything runs, and by the receipt projection with an error that names the id. The base entry dispatch ran the semantic audit for such an id before it failed; the base projection already refused it, at its shape gate, with another message. No validated input reaches either; the tests reach them with a cast.
 
 Base: main caa59e9. Repair cycles: 1. QA attempts: 2. Review families: 2 (author: a DEV seat of the PM's family, Claude, under the PM's brief; QA: another model maker). A second QA rejection goes to the owner under S5.
 
