@@ -1,0 +1,98 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "eval-lab-m1-inventory",
+  "verifies": "eval-lab-m1-inventory",
+  "candidate_commit": "e18ade07f12104b86137d2ecfc0e5dfc8404bedd",
+  "frozen": {
+    "manifest_sha256": "7c6ba56f510d4cf371ea387a4691bb643f92ffbae34a1b8476ce6245c0bee34e",
+    "head": "e18ade07f12104b86137d2ecfc0e5dfc8404bedd"
+  },
+  "dispatch": {
+    "base_commit": "8525b0384e0c80be417d1238d342bdec2073aef5",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-fable-5-2",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa/evidence-proof-1.txt (proof 1): reopen from the root of QA/scratch under the contract's shell prints citations: ok (122), exit 0 (122 >= 60; attempt 1 had 125, the repair removed 5 and added 2). Mutant changing tsv line 80 (S4, 110 -> 111) prints citation fails: S4 src/control-plane/runtime/evaluation-intake.e2e.test.ts:111 and citations: FAILED 1 of 122, exit 1 (RED); git checkout restored, status --porcelain empty. Evidence file sha256 0191ea35f96283da9da361c1b01cd2fbb63ece0d1d86dd49bc90791b2be69873.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa/evidence-proof-2.txt (proof 2): reopen over all 29 ids prints rows: ok, exit 0. Mutant deleting row V3's table line from docs/EVAL-LAB-INVENTORY.md prints row V3: rows=0 citations=4 and exits 1 (RED); restore clean, status --porcelain empty. Evidence file sha256 b4139dacbe8fc940f53d8f3e93c37594970fec60145109878835aeaa98741524.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa/evidence-proof-3.txt (proof 3): 19 rows judged at e18ade0 - the two changed rows (C5, V3) re-derived from source clause by clause, the 14 unchanged rows of attempt 1's 16 confirmed byte-identical and carried with attempt 1's verdicts, and three rows attempt 1 never judged (P2, C4, S3) judged from the source first. My status equals the document's in every row: 0 wrong statuses (4 implemented, 7 partial, 8 missing in the sample; full table unchanged at 4/12/13). Every factual clause of the new C5 and V3 notes checked against named files and lines; one false clause found and recorded as QA-EL-D5. Method caveat: the document was read once at session start, so statuses were re-derived per row with search terms recorded before comparison. Evidence file sha256 aed075918c0f6f7aaeeeafb15fdfaeb0809e1e0df17d964277c6fc48e4f7864c.",
+      "classification": "inspected"
+    },
+    {
+      "id": "C04",
+      "description": "qa/evidence-proof-4.txt (proof 4): all eight commands P lists under Installed package rerun read-only under the contract's shell; every observed value equals P's record (version 7.5.1; attest verdict pass exit 0; the eleven-command usage line; no eval/intake/case/score/enroll word in it while --agent-card is present; five MCP tool names identical; no evaluation MCP tool; exports [\".\",\"./control-plane\",\"./planning\"]; README lines 120-145 identical). Nothing under ~/.local/state opened. Evidence file sha256 799ff67c3212c0346f94e7b1a6579a91250bdc49a2a2c455608e22d8a8db5e4a.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa/evidence-proof-5.txt (proof 5): reopen prints answers: ok, exit 0, each of the six headings exactly once with a paragraph under it. The rewritten answer Identity and restart handling checked sentence by sentence against evaluation-intake.ts, evaluation-identity-receipt.ts and evaluation-recorder.ts: all six sentences true. Answer 6's pilot name is now neutral and publishes nothing. Answers 1, 2, 3, 5 byte-identical to attempt 1 and still sound. Evidence file sha256 cd2854a959393db7795ae13f4e57d27f999e37db2fedfa7fd87345ac23ad15d0.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa/evidence-proof-6.txt (proof 6): from the checkout root pnpm run audit:public prints prospective package public-safety: PASS (62 files); bun run build:materials prints Generated 40 MCP materials; the named vitest inspection test reports 1 passed; mister-clean audit planning . --json exits 0 with status pass and 0 findings. From QA/scratch git diff --name-only f14ecce e18ade0 lists six files - the five the contract's sentence names plus charter/.freeze/eval-lab-m1-inventory.json (attempt 1's freeze record), a stale enumeration recorded as QA-EL-D6, with no source or other deliverable added. Private-path grep prints 0 for D and 0 for T; no project name and no store count in either file. git status --porcelain empty in both trees after every step. Evidence file sha256 639b0244b882960c0fbc7da2cefed346d274273227f394d74735c623a6627562.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa/evidence-proof-7.txt (proof 7): gh run view -R bradheitmann/mister-clean 44005251675 --json headSha,jobs gives headSha 9ae89f2f063a3ea9edf89302a077d3dffc0edba6, the pushed tip holding the freeze record for frozen head e18ade0; job verify conclusion success; job \"charter (non-required; fails as NOT CHECKED while the charter source is unreachable)\" conclusion failure - the non-required charter job was red, exactly the declared NOT CHECKED baseline the contract allows, and not part of this proof. Evidence file sha256 996c41fd19945724ad55557e7d5d5c0a5fe995e19e958a94cbe381d64280033e.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa/review.md (review): QA-EL-D1 partly fixed (exact false opening gone, but the rewritten note still miscounts case concepts - the residue is new defect QA-EL-D5), QA-EL-D2 fixed (C5 note and answer 4 now scoped to the two receipt paths, every clause verified), QA-EL-D3 fixed (pilot name neutral, no string left in docs/), QA-EL-D4 partly fixed (two greps: four of the five named citations gone entirely, FIELD-EVALS-PLAN.md:76 gone from H5 but the identical weak citation remains under H6 at tsv line 53; the two added citations, intake.ts:253 and cli.ts:146, resolve and back their rows). Two new defects carried from evidence-proof-3.txt and evidence-proof-6.txt: QA-EL-D5 (medium), QA-EL-D6 (low). Nothing private published. Verdict accepted, 2 new defects. Evidence file sha256 341016f597d403a52d2c99f82f6b6b667d0ca57028cfafc9f4dd97f9f20cb0dd.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [
+    { "id": "QA-EL-D1", "status": "partly fixed", "severity": "medium" },
+    { "id": "QA-EL-D2", "status": "fixed", "severity": "low" },
+    { "id": "QA-EL-D3", "status": "fixed", "severity": "info" },
+    { "id": "QA-EL-D4", "status": "partly fixed", "severity": "info" }
+  ],
+  "new_defects": [
+    {
+      "id": "QA-EL-D5",
+      "file": "docs/EVAL-LAB-INVENTORY.md",
+      "line": 28,
+      "what_is_wrong": "QA-EL-D5 (medium) - V3's new note says \"Source has two case concepts\" and there are three (the third: eval-case-set/1, offline-scorer/score.ts:22/40-52, reported by this very document in row Z1). No other note clause in C5 or V3 is false; no status differs.",
+      "severity": "medium"
+    },
+    {
+      "id": "QA-EL-D6",
+      "file": "charter/DONE/eval-lab-m1-inventory.md",
+      "line": 42,
+      "what_is_wrong": "The contract's proof 6 enumeration now lists five changed files while git diff --name-only f14ecce e18ade0 prints six; the extra file is attempt 1's freeze record (charter/.freeze/eval-lab-m1-inventory.json), a charter record, not a deliverable. The contract's enumeration is now stale after repair cycle 1; the substantive check (nothing else changes) holds.",
+      "severity": "low"
+    }
+  ],
+  "notes": {
+    "process": "QA/scratch is a shared clone left in place at the frozen head e18ade07f12104b86137d2ecfc0e5dfc8404bedd for the PM to remove; neither the checkout nor qa1/ was edited (git status --porcelain empty in both trees after every step of this attempt). Mutants were applied only in QA/scratch and reverted with git checkout --. Every reopen and mutant ran as bash --noprofile --norc -e -o pipefail -c from the root of QA/scratch with nice -n 10 timeout 600 and ~/.local/share/mise/installs/bun/1.4.0/bin first on PATH; the pnpm, build:materials and vitest commands of proof 6 ran from the checkout root as the contract allows. No model called, no server started, no cargo command, no test other than proof 6's named vitest run; nothing read under ~/.local/state; P read, never written. Steps 0 to 7 were finished in an earlier session of this same attempt; this session ran only the two QA-EL-D4 greps, jq and charter receipt for steps 8 and 10, and did not change any recorded finding. Home paths written as ~; no personal data recorded.",
+    "method_caveat": "Carried from qa/evidence-proof-3.txt: the inventory document was read once at the start of the session, so proof 3 was not blind-ordered; for each row a status was derived from the cited source and independent searches first, with search terms recorded, and only then compared with the document.",
+    "defect_statuses": "QA-EL-D1 partly fixed (the note still misdescribes the case census, now as two concepts instead of one - recorded as new defect QA-EL-D5), QA-EL-D2 fixed, QA-EL-D3 fixed, QA-EL-D4 partly fixed (four of the five named citations gone, the fifth's weak twin left under H6). Only D1 is medium; it does not carry the status not fixed, so the verdict rule's blocking condition is not met. New defects QA-EL-D5 (medium) and QA-EL-D6 (low): neither is critical or high.",
+    "dispatch_base_vs_done_base": "dispatch.base_commit is 8525b0384e0c80be417d1238d342bdec2073aef5, the amended DONE-list commit from which the renewed dispatch ran, a descendant of main f14ecce on the same line; the DONE declares the slice base as main f14ecce, which proof 6's diff uses. Two meanings of base, each internally consistent; brief_sha256 is null in the dispatch record and carried as null here."
+  },
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ]
+}

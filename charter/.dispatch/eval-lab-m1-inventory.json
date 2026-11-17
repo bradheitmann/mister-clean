@@ -1,0 +1,12 @@
+{
+  "accepted_unix_s": 1794887177,
+  "accepted_utc": "2026-11-17T03:46:17Z",
+  "base_commit": "8525b0384e0c80be417d1238d342bdec2073aef5",
+  "brief_sha256": null,
+  "done_sha256": "c3e8e9bb812b3bc0a53fd800b1b2c97f1c3fd210c221d7c9b5ad50f62f085ba5",
+  "receipt": "qa/eval-lab-m1-inventory/receipt.json",
+  "receipt_sha256": "143daa49f1a9012f9bd5c470c1eccc51257c757b90bc048dab34b038b035e680",
+  "schema_version": "charter.dispatch/1",
+  "slice": "eval-lab-m1-inventory",
+  "state": "accepted"
+}
