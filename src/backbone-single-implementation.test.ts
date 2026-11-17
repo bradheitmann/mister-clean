@@ -388,3 +388,94 @@ describe("phase branches", () => {
     }
   });
 });
+
+const REDUCER = "src/closeout/completion-debts.ts";
+const PREPARE = "src/closeout/prepare.ts";
+
+describe("completion debt reducer", () => {
+  /** A call of either disposition, not its definition. */
+  const DISPOSITION_CALL = /(?<!function\s+)\b(?:applyPublicSafetyExemptions|applyRetirements)\(/u;
+
+  /** Each call of `callee` in `text`, with the names of the consts, lets and vars it lies inside. */
+  function calls(path: string, text: string, callee: string): { readonly site: string; readonly within: readonly string[] }[] {
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const found: { site: string; within: string[] }[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === callee) {
+        const within: string[] = [];
+        for (let current: ts.Node | undefined = node.parent; current !== undefined; current = current.parent) {
+          if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) within.push(current.name.text);
+        }
+        found.push({ site: `${path}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`, within });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return found;
+  }
+
+  const prepareText = () => productionSources(["src"]).find((source) => source.path === PREPARE)!.lines.join("\n");
+
+  it("lists the production sources it guards", () => {
+    const paths = productionSources(["src"]).map((source) => source.path);
+    for (const path of [REDUCER, PREPARE, "src/closeout/retirements.ts"]) expect(paths).toContain(path);
+  });
+
+  it("(a) only completion-debts.ts calls applyPublicSafetyExemptions or applyRetirements", () => {
+    expect(occurrences(DISPOSITION_CALL, new Set([REDUCER]), ["src"])).toEqual([]);
+    // The exemption is live: the reducer calls each once.
+    const reducer = productionSources(["src"]).find((source) => source.path === REDUCER)!;
+    expect(reducer.lines.filter((line) => DISPOSITION_CALL.test(line))).toHaveLength(2);
+  });
+
+  it("(b) prepare.ts builds its debts through reduceCompletionDebts: one call, and baselineDebt only for the ratification debts", () => {
+    expect(calls(PREPARE, prepareText(), "reduceCompletionDebts")).toHaveLength(1);
+    const outside = calls(PREPARE, prepareText(), "baselineDebt").filter((call) => !call.within.includes("ratificationDebts"));
+    expect(outside.map((call) => call.site)).toEqual([]);
+    expect(calls(PREPARE, prepareText(), "baselineDebt")).toHaveLength(1);
+  });
+
+  it("(c) the scans flag a call and not a definition, and place a call by its enclosing const", () => {
+    expect(DISPOSITION_CALL.test("const outcome = applyRetirements(debts, records);")).toBe(true);
+    expect(DISPOSITION_CALL.test("  const kept = applyPublicSafetyExemptions(")).toBe(true);
+    expect(DISPOSITION_CALL.test("export function applyRetirements(")).toBe(false);
+    expect(DISPOSITION_CALL.test("export function applyPublicSafetyExemptions<T extends {")).toBe(false);
+    const sample = "const ratificationDebts = rows.map((row) => baselineDebt(id, row));\nconst planningDebts = roots.map((root) => baselineDebt(id, root));\n";
+    expect(calls("src/sample.ts", sample, "baselineDebt")).toEqual([
+      { site: "src/sample.ts:1", within: ["ratificationDebts"] },
+      { site: "src/sample.ts:2", within: ["planningDebts"] },
+    ]);
+  });
+});
+
+describe("completion debt literals", () => {
+  const FILES: readonly string[] = [PREPARE, REDUCER];
+  /** A quoted string that holds a registered detector id, `mister-clean/<family>@<n>`. */
+  const DETECTOR_ID = new RegExp(`["'\`][^"'\`\\n]*mister-clean/(?:${[...FAMILY_IDS].join("|")})@\\d+[^"'\`\\n]*["'\`]`, "u");
+  /** A quoted string that ends in `-audit.json`. */
+  const BUNDLE_FILE = /["'`][^"'`\n]*-audit\.json["'`]/u;
+
+  function literals(path: string, lines: readonly string[]): string[] {
+    return lines.flatMap((line, index) => (DETECTOR_ID.test(line) || BUNDLE_FILE.test(line) ? [`${path}:${index + 1}`] : []));
+  }
+
+  it("lists the two files it guards", () => {
+    expect(productionSources(["src"]).filter((source) => FILES.includes(source.path)).map((source) => source.path).sort()).toEqual([...FILES].sort());
+  });
+
+  it("(a) prepare.ts and completion-debts.ts write no detector id and no bundle file name by hand", () => {
+    expect(productionSources(["src"]).filter((source) => FILES.includes(source.path)).flatMap((source) => literals(source.path, source.lines))).toEqual([]);
+  });
+
+  it("(b) the scan flags each form, and not the normalizers or the native-gate files", () => {
+    expect(literals("src/sample.ts", [
+      "observationId(\"mister-clean/public_safety@1\", fingerprint)",
+      "const id = 'mister-clean/planning_graph@2';",
+      "writeJson(join(bundleDirectory, \"semantic-audit.json\"), audit);",
+      "const name = `language-policy-audit.json`;",
+      "}, \"mister-clean/public-safety-root@1\", {",
+      "path: \"native-gate-validation.json\",",
+      "command: \"mister-clean audit planning . --json\",",
+    ])).toEqual(["src/sample.ts:1", "src/sample.ts:2", "src/sample.ts:3", "src/sample.ts:4"]);
+  });
+});

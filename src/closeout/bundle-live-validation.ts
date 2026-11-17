@@ -378,6 +378,21 @@ async function validateLiveDetectors(
         liveDetectorFindings.set("language_policy", languagePolicyFingerprints);
       }
     }
+    errors.push(...judgeLiveDetectorFindings(liveDetectorFindings, acceptedDetectorFindings));
+  return acceptedObservationIds;
+}
+
+/**
+ * Judge each rerun family's fresh fingerprints against the owner-signed exceptions
+ * (keys `family\0fingerprint`), and return the errors in the order they arise: the
+ * families in registry order, whatever order they were rerun in. A family absent from
+ * the map was not rerun; one mapped to undefined gave a result that was not canonical.
+ */
+export function judgeLiveDetectorFindings(
+  liveDetectorFindings: ReadonlyMap<CloseoutPhaseId, readonly string[] | undefined>,
+  acceptedDetectorFindings: ReadonlySet<string>,
+): string[] {
+  const errors: string[] = [];
     // Judge the families in registry order, whatever order they were rerun in.
     for (const detectorId of CLOSEOUT_PHASE_IDS) {
       if (!liveDetectorFindings.has(detectorId)) continue;
@@ -393,7 +408,7 @@ async function validateLiveDetectors(
         errors.push(`$.live_detector_coverage.${detectorId}: CLEAN requires zero payable findings after owner-signed exceptions (got ${payable.length})`);
       }
     }
-  return acceptedObservationIds;
+  return errors;
 }
 
 async function validateLiveNativeGates(

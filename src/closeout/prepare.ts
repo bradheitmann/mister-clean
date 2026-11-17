@@ -22,10 +22,7 @@ import { auditSemanticEvidencePackageV2 } from "./semantic-v2.js";
 import {
   createDetectorCoverage,
   createDetectorRunPolicy,
-  detectorById,
-  planningFindingFingerprint,
   REGRESSION_DELTA_SCHEMA_VERSION,
-  semanticFindingFingerprint,
 } from "./detector-coverage.js";
 import { loadDenylistSync, scanTrackedPublicSafetySync } from "./inspection.js";
 import { captureRepositoryObject } from "./repository-object.js";
@@ -37,16 +34,15 @@ import {
 import {
   discoverNativeGates,
   excludedCandidateNote,
-  nativeGateFailureObservations,
 } from "./native-gates.js";
 import { runNativeGates } from "./native-gate-runner.js";
 import {
-  applyPublicSafetyExemptions,
-  applyRetirements,
   readPublicSafetyExemptions,
   readRetirements,
   type RetirementApplication,
 } from "./retirements.js";
+import { baselineDebt, nativeGateCommand, reduceCompletionDebts } from "./completion-debts.js";
+import { CLOSEOUT_PHASES, type CloseoutPhaseId } from "./phase-registry.js";
 import {
   retirementRatificationCauseKey,
   retirementRatificationObservationId,
@@ -58,8 +54,6 @@ import {
 import { validateNativeGateCoverage } from "./native-gate-validation.js";
 import { acquireRepositoryVerificationLease } from "./execution-lease.js";
 import {
-  canonicalObservationId,
-  canonicalRootDebtKey,
   deriveRegressionAccounting,
   type CanonicalJsonValue,
   type RootDebtAccountingRow,
@@ -121,34 +115,11 @@ function unique(values: readonly string[]): string[] {
 function splitLines(value: string): string[] {
   return value ? value.split(/\r?\n/) : [];
 }
-function evidenceLabel(value: string): string {
-  return value.replaceAll("<", "‹").replaceAll(">", "›");
-}
-function nativeGateCommand(executable: string, argv: readonly string[], cwd: string): string {
-  const args = argv.map((value) => JSON.stringify(value)).join(" ");
-  return `${executable}${args ? ` ${args}` : ""} (cwd ${cwd})`;
-}
-function observationId(sourceId: string, nativeFingerprint: string): string {
-  return canonicalObservationId({
-    source_id: sourceId,
-    source_native_fingerprint: nativeFingerprint,
-  });
-}
-function baselineDebt<T extends JsonObject & Pick<RootDebtAccountingRow, "state" | "disposition">>(
-  repoId: string,
-  row: T,
-  normalizer: string,
-  causeKey: CanonicalJsonValue,
-  observationIds: readonly string[],
-): T & RootDebtAccountingRow {
-  return {
-    ...row,
-    debt_key: canonicalRootDebtKey({ repo_id: repoId, normalizer, cause_key: causeKey }),
-    normalizer,
-    cause_key: causeKey,
-    observation_ids: [...new Set(observationIds)].sort(),
-    origin: { class: "baseline" },
-  } as T & RootDebtAccountingRow;
+/** The result file a closeout family writes into the bundle, from the phase registry. */
+function bundleFile(family: CloseoutPhaseId): string {
+  const phase = CLOSEOUT_PHASES.find((candidate) => candidate.id === family);
+  if (!phase) throw new Error(`closeout family ${family} is absent from the phase registry`);
+  return phase.closeout.bundleFile;
 }
 export async function prepareCloseout(options: PrepareCloseoutOptions): Promise<PreparedCloseout> {
   const mode = validatePrepareMode(options);
@@ -246,10 +217,11 @@ async function collectPrepareEvidence(
         .filter((finding) => finding.code === "planning_input_unparsed")
         .map((finding) => finding.path),
     );
-    writeJson(join(bundleDirectory, "planning-audit.json"), planningAudit);
+    const planningAuditFile = bundleFile("planning_graph");
+    writeJson(join(bundleDirectory, planningAuditFile), planningAudit);
     const planningAuditRef = {
-      path: "planning-audit.json",
-      sha256: sha256File(join(bundleDirectory, "planning-audit.json")),
+      path: planningAuditFile,
+      sha256: sha256File(join(bundleDirectory, planningAuditFile)),
     };
     let publicSafetyInputRef: { kind: "public_safety_denylist"; path: string; sha256: string } | undefined;
     let publicSafetyDenylistPath: string | undefined;
@@ -273,22 +245,24 @@ async function collectPrepareEvidence(
         ...(publicSafetyInputRef === undefined ? {} : { input_sha256: publicSafetyInputRef.sha256 }),
       }
       : undefined;
-    if (publicSafetyAudit) writeJson(join(bundleDirectory, "public-safety-audit.json"), publicSafetyAudit);
+    const publicSafetyAuditFile = bundleFile("public_safety");
+    if (publicSafetyAudit) writeJson(join(bundleDirectory, publicSafetyAuditFile), publicSafetyAudit);
     const publicSafetyAuditRef = publicSafetyAudit === undefined
       ? undefined
       : {
-        path: "public-safety-audit.json",
-        sha256: sha256File(join(bundleDirectory, "public-safety-audit.json")),
+        path: publicSafetyAuditFile,
+        sha256: sha256File(join(bundleDirectory, publicSafetyAuditFile)),
       };
     const githubActionsAudit = {
       ...auditGitHubActionsRepository(repository),
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject,
     };
-    writeJson(join(bundleDirectory, "github-actions-audit.json"), githubActionsAudit);
+    const githubActionsAuditFile = bundleFile("github_actions");
+    writeJson(join(bundleDirectory, githubActionsAuditFile), githubActionsAudit);
     const githubActionsAuditRef = {
-      path: "github-actions-audit.json",
-      sha256: sha256File(join(bundleDirectory, "github-actions-audit.json")),
+      path: githubActionsAuditFile,
+      sha256: sha256File(join(bundleDirectory, githubActionsAuditFile)),
     };
     // Declared language policy (registry 6, always required): an absent policy
     // is a positive not_applicable result with zero fingerprints; a malformed
@@ -298,10 +272,11 @@ async function collectPrepareEvidence(
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject,
     };
-    writeJson(join(bundleDirectory, "language-policy-audit.json"), languagePolicyAudit);
+    const languagePolicyAuditFile = bundleFile("language_policy");
+    writeJson(join(bundleDirectory, languagePolicyAuditFile), languagePolicyAudit);
     const languagePolicyAuditRef = {
-      path: "language-policy-audit.json",
-      sha256: sha256File(join(bundleDirectory, "language-policy-audit.json")),
+      path: languagePolicyAuditFile,
+      sha256: sha256File(join(bundleDirectory, languagePolicyAuditFile)),
     };
     const semanticInputRefs: Array<{
       kind: "semantic_evidence_package" | "semantic_probe_manifest" | "semantic_trust_policy";
@@ -349,10 +324,11 @@ async function collectPrepareEvidence(
       object: baselineRepositoryObject.sha256,
       repository_object: baselineRepositoryObject,
     };
-    writeJson(join(bundleDirectory, "semantic-audit.json"), semanticAudit);
+    const semanticAuditFile = bundleFile("semantic_boundary");
+    writeJson(join(bundleDirectory, semanticAuditFile), semanticAudit);
     const semanticAuditRef = {
-      path: "semantic-audit.json",
-      sha256: sha256File(join(bundleDirectory, "semantic-audit.json")),
+      path: semanticAuditFile,
+      sha256: sha256File(join(bundleDirectory, semanticAuditFile)),
     };
     const detectorCoverage = createDetectorCoverage({
       baselineRepositoryObject,
@@ -823,44 +799,6 @@ function assemblePrepareReport(
     policyRef,
   } = context;
   const report = loadTemplate(templates, "closeout-report.json");
-  const validationDebtClasses = new Set([
-    "acceptance_cascade_unexecuted",
-    "acceptance_gate_unknown",
-    "completed_parent_unexecuted_acceptance",
-  ]);
-  const planningDebts = planningAudit.root_debts.map((debt) => {
-    const nativeFingerprints = debt.raw_finding_ids.map(planningFindingFingerprint).sort();
-    const causeKey = {
-      detector_family: "planning_graph",
-      source_cause_key: debt.cause_key,
-      repair_boundary: debt.repair_boundary,
-    } as const;
-    return baselineDebt(repoId, {
-      id: debt.id.replace("ROOT-", "DEBT-"),
-      class: debt.class,
-      observation_count: debt.observation_count,
-      raw_finding_ids: debt.raw_finding_ids,
-      detector_finding_fingerprints: nativeFingerprints,
-      affected_paths: debt.affected_paths,
-      repair_boundary: debt.repair_boundary,
-      causal_evidence: debt.causal_evidence,
-      procedure: `Reconcile ${debt.affected_projection_field} across ${evidenceLabel(debt.repair_boundary)}`,
-      state: "open",
-      disposition: debt.class.split("+").some((code) => validationDebtClasses.has(code))
-        ? "autonomously_validate"
-        : "autonomously_repair",
-      evidence: [{
-        kind: "planning_census",
-        object: debt.cause_key,
-        command: "mister-clean audit planning . --json",
-        result: `${debt.observation_count} raw observations: ${debt.class}`,
-        observed_at: now,
-        evidence_ref: planningAuditRef,
-      }],
-    }, "mister-clean/planning-root@1", causeKey, nativeFingerprints.map((fingerprint) => (
-      observationId(detectorById("planning_graph")?.detector ?? "mister-clean/planning_graph@2", fingerprint)
-    )));
-  });
   const semanticCommand = options.semanticEvidencePackagePath !== undefined
     ? "mister-clean audit semantic . --evidence-package semantic-evidence-package.json --trust-policy semantic-trust-policy.json --json"
     : options.semanticManifestPath === undefined
@@ -871,233 +809,38 @@ function assemblePrepareReport(
   // debt family at the end, exemptions only to the public-safety scan.
   const retirements = readRetirements(repository);
   stageRetirementRulings(repository, bundleDirectory, retirements);
-  const publicSafetyExemptions = applyPublicSafetyExemptions(
-    publicSafetyAudit?.findings ?? [],
-    readPublicSafetyExemptions(repository),
-  );
-  const unassignedSemanticFindings = semanticAudit.findings
-    .filter((finding) => finding.code === "semantic_probe_unassigned");
-  const semanticDebts = semanticAudit.findings
-    .filter((finding) => finding.code !== "semantic_probe_unassigned")
-    .map((finding) => baselineDebt(repoId, {
-    id: `DEBT-SEMANTIC-${sha256(Buffer.from(`${finding.candidate_id}\0${finding.code}\0${finding.refs.join("\0")}\0${finding.detail.replaceAll(/\s+/g, " ")}`, "utf8")).slice(0, 16).toUpperCase()}`,
-    class: finding.code,
-    observation_count: 1,
-    detector_finding_fingerprints: [semanticFindingFingerprint(finding.candidate_id, finding.code)],
-    affected_paths: unique(finding.refs.map((ref) => ref.split("#line-", 1)[0] ?? ref)),
-    repair_boundary: `candidate:${finding.candidate_id}`,
-    procedure: finding.classification === "confirmed_product_defect"
-      ? `Repair ${finding.kind.replaceAll("_", " ")} and rerun its bound semantic probe`
-      : finding.classification === "operate_time_pending"
-        ? `Execute and record the owned operate-time proof for ${finding.candidate_id}`
-        : `Bind and execute complete adversarial coverage for ${finding.candidate_id}`,
-    state: "open",
-    disposition: finding.classification === "confirmed_product_defect"
-      ? "autonomously_repair"
-      : finding.classification === "operate_time_pending"
-        ? "decision_or_coordination_required"
-        : "autonomously_validate",
-    evidence: [{
-      kind: "gate_result",
-      object: baselineRepositoryObject.sha256,
-      command: semanticCommand,
-      result: `${finding.code}: ${finding.detail}`,
-      observed_at: now,
-      evidence_ref: semanticAuditRef,
-    }],
-  }, "mister-clean/semantic-root@1", {
-    detector_family: "semantic_boundary",
-    candidate_id: finding.candidate_id,
-    code: finding.code,
-  }, [observationId(
-    "mister-clean/semantic_boundary@1",
-    semanticFindingFingerprint(finding.candidate_id, finding.code),
-  )]));
-  if (unassignedSemanticFindings.length > 0) {
-    const fingerprints = unassignedSemanticFindings
-      .map((finding) => semanticFindingFingerprint(finding.candidate_id, finding.code))
-      .sort();
-    semanticDebts.push(baselineDebt(repoId, {
-      id: `DEBT-SEMANTIC-SET-${semanticAudit.candidate_set_sha256.slice(0, 16).toUpperCase()}`,
-      class: "semantic_probe_set_unassigned",
-      observation_count: unassignedSemanticFindings.length,
-      detector_finding_fingerprints: fingerprints,
-      affected_paths: unique(unassignedSemanticFindings.flatMap((finding) => (
-        finding.refs.map((ref) => ref.split("#line-", 1)[0] ?? ref)
-      ))),
-      repair_boundary: `probe-set:${semanticAudit.candidate_set_sha256}`,
-      procedure: `Triage the ${unassignedSemanticFindings.length} semantic candidates once, bind one complete manifest to candidate set ${semanticAudit.candidate_set_sha256}, then execute or explicitly dispose each candidate`,
-      state: "open",
-      disposition: "autonomously_validate",
-      evidence: [{
-        kind: "gate_result",
-        object: baselineRepositoryObject.sha256,
-        command: semanticCommand,
-        result: `${unassignedSemanticFindings.length} unassigned candidates share one missing-manifest root cause`,
-        observed_at: now,
-        evidence_ref: semanticAuditRef,
-      }],
-    }, "mister-clean/semantic-candidate-set@1", {
-      detector_family: "semantic_boundary",
-      candidate_set_sha256: semanticAudit.candidate_set_sha256,
-      code: "semantic_probe_unassigned",
-    }, fingerprints.map((fingerprint) => observationId("mister-clean/semantic_boundary@1", fingerprint))) as unknown as (typeof semanticDebts)[number]);
-  }
-  const publicSafetyDebts = publicSafetyExemptions.findings.map((finding) => baselineDebt(repoId, {
-    id: `DEBT-PUBLIC-SAFETY-${finding.fingerprint.slice(0, 16).toUpperCase()}`,
-    class: `public_safety_${finding.rule}`,
-    observation_count: 1,
-    detector_finding_fingerprints: [finding.fingerprint],
-    affected_paths: [finding.path],
-    repair_boundary: `file:${finding.path}:${String(finding.line)}`,
-    procedure: `Remove or remediate the ${finding.rule} public-safety finding, then rerun the redacted public-safety audit`,
-    state: "open",
-    disposition: "autonomously_repair",
-    evidence: [{
-      kind: "public_safety_scan",
-      object: baselineRepositoryObject.sha256,
-      command: publicSafetyCommand,
-      result: `public-safety fingerprint ${finding.fingerprint}`,
-      observed_at: now,
-      evidence_ref: publicSafetyAuditRef,
-    }],
-  }, "mister-clean/public-safety-root@1", {
-    detector_family: "public_safety",
-    rule: finding.rule,
-    path: finding.path,
-    line: finding.line,
-  }, [observationId("mister-clean/public_safety@1", finding.fingerprint)]));
-  const publicSafetyUnassessedDebts = (publicSafetyAudit?.unassessed ?? []).map((finding) => baselineDebt(repoId, {
-    id: `DEBT-PUBLIC-SAFETY-UNASSESSED-${finding.fingerprint.slice(0, 16).toUpperCase()}`,
-    class: `public_safety_unassessed_${finding.reason}`,
-    observation_count: 1,
-    detector_finding_fingerprints: [finding.fingerprint],
-    affected_paths: [finding.path],
-    repair_boundary: `file:${finding.path}`,
-    procedure: `Make ${finding.path} safely text-assessable or explicitly remove it from the tracked shippable surface, then rerun public-safety inspection`,
-    state: "open",
-    disposition: "autonomously_repair",
-    evidence: [{
-      kind: "public_safety_scan",
-      object: baselineRepositoryObject.sha256,
-      command: publicSafetyCommand,
-      result: `unassessed ${finding.reason} fingerprint ${finding.fingerprint}`,
-      observed_at: now,
-      evidence_ref: publicSafetyAuditRef,
-    }],
-  }, "mister-clean/public-safety-root@1", {
-    detector_family: "public_safety",
-    reason: finding.reason,
-    path: finding.path,
-  }, [observationId("mister-clean/public_safety@1", finding.fingerprint)]));
-  const publicSafetyRootDebts = [...publicSafetyDebts, ...publicSafetyUnassessedDebts];
-  const githubActionsCommand = "mister-clean audit github-actions . --json";
-  const githubActionsDetector = detectorById("github_actions")?.detector;
-  if (!githubActionsDetector) throw new Error("GitHub Actions detector is absent from the canonical registry");
-  const githubActionGroups = new Map<string, typeof githubActionsAudit.findings>();
-  for (const finding of githubActionsAudit.findings) {
-    const key = `${finding.path}\0${finding.rule}`;
-    githubActionGroups.set(key, [...(githubActionGroups.get(key) ?? []), finding]);
-  }
-  const githubActionsRootDebts = [...githubActionGroups.entries()].map(([key, findings]) => {
-    const first = findings[0];
-    if (!first) throw new Error(`empty GitHub Actions finding group: ${key}`);
-    const fingerprints = findings.map((finding) => finding.fingerprint).sort();
-    return baselineDebt(repoId, {
-      id: `DEBT-GITHUB-ACTIONS-${sha256(Buffer.from(key, "utf8")).slice(0, 16).toUpperCase()}`,
-      class: `github_actions_${first.rule}`,
-      severity: first.severity,
-      observation_count: findings.length,
-      detector_finding_fingerprints: fingerprints,
-      affected_paths: [first.path],
-      affected_refs: unique(findings.flatMap((finding) => finding.refs)),
-      repair_boundary: `path:${first.path}`,
-      procedure: `Repair ${first.rule.replaceAll("_", " ")} as one fail-closed workflow invariant, add a negative control, then rerun the GitHub Actions audit`,
-      state: "open",
-      disposition: "autonomously_repair",
-      evidence: [{
-        kind: "gate_result",
-        object: baselineRepositoryObject.sha256,
-        command: githubActionsCommand,
-        result: `${findings.length} observation(s): ${first.detail}`,
-        observed_at: now,
-        evidence_ref: githubActionsAuditRef,
-      }],
-    }, "mister-clean/github-actions-root@1", {
-      detector_family: "github_actions",
-      path: first.path,
-      rule: first.rule,
-    }, fingerprints.map((fingerprint) => observationId(githubActionsDetector, fingerprint)));
-  });
-  const languagePolicyCommand = "mister-clean audit language-policy . --json";
-  const languagePolicyDetector = detectorById("language_policy")?.detector;
-  if (!languagePolicyDetector) throw new Error("language-policy detector is absent from the canonical registry");
-  const languagePolicyRootDebts = languagePolicyAudit.findings.map((finding) => baselineDebt(repoId, {
-    id: `DEBT-LANGUAGE-POLICY-${finding.fingerprint.slice(0, 16).toUpperCase()}`,
-    class: `language_policy_${finding.rule}`,
-    observation_count: 1,
-    detector_finding_fingerprints: [finding.fingerprint],
-    affected_paths: [finding.path],
-    repair_boundary: `file:${finding.path}`,
-    procedure: `Port ${finding.path} out of the forbidden ${finding.extension} language declared in .mister-clean/language-policy.json (or have the owner allow it), then rerun the language-policy audit`,
-    state: "open",
-    disposition: "autonomously_repair",
-    evidence: [{
-      kind: "gate_result",
-      object: baselineRepositoryObject.sha256,
-      command: languagePolicyCommand,
-      result: `forbidden_language ${finding.extension}: ${finding.path}`,
-      observed_at: now,
-      evidence_ref: languagePolicyAuditRef,
-    }],
-  }, "mister-clean/language-policy-root@1", {
-    detector_family: "language_policy",
-    path: finding.path,
-    extension: finding.extension,
-  }, [observationId(languagePolicyDetector, finding.fingerprint)]));
-  const nativeGateDebts = nativeGateFailureObservations(nativeGateDiscovery, nativeGateCoverage).map((projection) => {
-    const { gate, execution } = projection;
-    const failure = gate.disposition === "absent"
-      ? `required native gate is absent (${gate.basis})`
-      : `native gate ended ${execution?.state ?? "without execution"}: ${execution?.failure_reason ?? "no passing evidence"}`;
-    return baselineDebt(repoId, {
-      id: `DEBT-NATIVE-GATE-${projection.source_native_fingerprint.slice(0, 16).toUpperCase()}`,
-      class: gate.disposition === "absent" ? "native_gate_absent" : `native_gate_${execution?.state ?? "unexecuted"}`,
-      observation_count: 1,
-      affected_paths: gate.source_refs.map((ref) => ref.path),
-      repair_boundary: `gate:${gate.id}`,
-      procedure: gate.disposition === "absent"
-        ? `Restore a safe repository-native ${gate.kind} gate for ${gate.id}, then rerun closeout`
-        : `Repair ${gate.id} and rerun the exact repository-native gate on an unchanged repository object`,
-      state: "open",
-      disposition: "autonomously_repair",
-      evidence: [{
-        kind: "gate_result",
-        object: baselineRepositoryObject.sha256,
-        command: execution
-          ? nativeGateCommand(execution.command.executable, execution.command.argv, execution.command.cwd)
-          : "mister-clean native gate discovery",
-        result: failure,
-        observed_at: execution?.finished_at ?? now,
-        evidence_ref: {
-          path: "native-gate-validation.json",
-          sha256: sha256File(join(bundleDirectory, "native-gate-validation.json")),
-        },
-      }],
-    }, projection.normalizer, projection.cause_key, [
-      observationId(projection.source_id, projection.source_native_fingerprint),
-    ]);
-  });
-  const nativeRootDebts = nativeGateDebts;
-  const completionDebts = [
-    ...planningDebts,
-    ...publicSafetyRootDebts,
-    ...githubActionsRootDebts,
-    ...languagePolicyRootDebts,
-    ...semanticDebts,
-    ...nativeRootDebts,
-  ];
-  const retirementOutcome = applyRetirements(completionDebts as unknown as JsonObject[], retirements);
+  // The one place that decides the run's debts: exemptions, each family's root debts,
+  // then retirements (completion-debts.ts). The rulings were read above; prepare keeps
+  // every file write and the ratification debts.
+  const { rootDebts, completionDebts, exempted, retirementOutcome } = reduceCompletionDebts({
+    repoId,
+    now,
+    baselineRepositoryObject,
+    planningAudit,
+    planningAuditRef,
+    publicSafetyAudit,
+    publicSafetyAuditRef,
+    publicSafetyCommand,
+    githubActionsAudit,
+    githubActionsAuditRef,
+    languagePolicyAudit,
+    languagePolicyAuditRef,
+    semanticAudit,
+    semanticAuditRef,
+    semanticCommand,
+    nativeGateDiscovery,
+    nativeGateCoverage,
+    nativeGateValidationRef: {
+      path: "native-gate-validation.json",
+      sha256: sha256File(join(bundleDirectory, "native-gate-validation.json")),
+    },
+  }, { publicSafetyExemptions: readPublicSafetyExemptions(repository), retirements });
+  const planningDebts = rootDebts.planning_graph;
+  const publicSafetyRootDebts = rootDebts.public_safety;
+  const githubActionsRootDebts = rootDebts.github_actions;
+  const languagePolicyRootDebts = rootDebts.language_policy;
+  const semanticDebts = rootDebts.semantic_boundary;
+  const nativeRootDebts = rootDebts.native_gate;
   // No verifiable ratification route exists yet (O-RET-2): each applied
   // retirement record leaves one open owner decision, so the retired debts can
   // stay compact as accepted_exception while the run still cannot be CLEAN.
@@ -1166,7 +909,7 @@ function assemblePrepareReport(
     retirement_applications: retirementApplications,
     public_safety_debt_accounting: {
       debt_count: publicSafetyRootDebts.length,
-      exempted_finding_count: publicSafetyExemptions.exempted.length,
+      exempted_finding_count: exempted.length,
     },
     planning_accounting: {
       raw_finding_count: planningAudit.raw_finding_count,
@@ -1188,7 +931,7 @@ function assemblePrepareReport(
       tracked_path_count: publicSafetyAudit?.tracked_path_count ?? 0,
       finding_count: publicSafetyAudit?.findings.length ?? 0,
       unassessed_count: publicSafetyAudit?.unassessed.length ?? 0,
-      exempted_count: publicSafetyExemptions.exempted.length,
+      exempted_count: exempted.length,
       evidence_ref: publicSafetyAuditRef ?? null,
     },
     github_actions_accounting: {
