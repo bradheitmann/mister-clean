@@ -1,0 +1,13 @@
+diff --git a/offline-scorer/score.ts b/offline-scorer/score.ts
+index dbbcb7e..f890a79 100644
+--- a/offline-scorer/score.ts
++++ b/offline-scorer/score.ts
+@@ -369,7 +369,7 @@ function scoreSubject(caseSet: CaseSet, subject: Subject, answers: readonly Answ
+       .filter((answer) => answer.caseId === entry.id)
+       .map((answer) => judge(caseSet, entry.expected, answer.output));
+     const passes = results.filter((result) => result === "pass").length;
+-    const answered = results.length >= caseSet.minAttemptsPerCase;
++    const answered = results.length >= 1;
+     return {
+       case: entry.id,
+       attempts: results.length,

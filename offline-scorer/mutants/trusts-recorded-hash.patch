@@ -1,0 +1,13 @@
+diff --git a/offline-scorer/score.ts b/offline-scorer/score.ts
+index dbbcb7e..dd0bc5a 100644
+--- a/offline-scorer/score.ts
++++ b/offline-scorer/score.ts
+@@ -313,7 +313,7 @@ function parseAnswers(bytes: Uint8Array, caseSet: CaseSet): { answers: Answer[];
+     if (!isCount(attempt) || attempt < 1) problems.push(`${where}: attempt is not a positive integer`);
+     const output = value["output"];
+     if (typeof output !== "string") problems.push(`${where}: output is not a string`);
+-    else if (value["output_sha256"] !== sha256(output)) problems.push(`${where}: output_sha256 is not the sha256 of output`);
++    else if (value["output_sha256"] === undefined) problems.push(`${where}: output_sha256 is not the sha256 of output`);
+     for (const key of ["tokens_in", "tokens_out"] as const) {
+       if (value[key] !== null && !isCount(value[key])) problems.push(`${where}: ${key} is neither null nor a non-negative integer`);
+     }

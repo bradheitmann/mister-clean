@@ -1,0 +1,56 @@
+{
+  "schema": "eval-case-set/1",
+  "id": "slice-zero-canonical-json",
+  "version": 1,
+  "task_class": "rewrite a JSON value in canonical form (exact text)",
+  "provenance": "synthetic: written for Slice Zero, taken from no project",
+  "kind": "exact",
+  "floors": {
+    "min_attempts_per_case": 3,
+    "min_cases_passed": 5
+  },
+  "cases": [
+    {
+      "id": "cj-01",
+      "material": "{ \"b\": 1, \"a\": 2 }",
+      "input": "Rewrite the JSON value between the markers in canonical form: object keys sorted by Unicode code point at every level, no whitespace outside strings, values otherwise unchanged.\nReply with the canonical JSON only, on one line.\n<<<\n{ \"b\": 1, \"a\": 2 }\n>>>",
+      "input_sha256": "560706bdbb2581bf5f68e8efceed44d5e7dbf9c76ebdd0b8e327d701844fe7ce",
+      "expected": "{\"a\":2,\"b\":1}"
+    },
+    {
+      "id": "cj-02",
+      "material": "{\"z\":{\"y\":true,\"x\":null},\"a\":[3,2,1]}",
+      "input": "Rewrite the JSON value between the markers in canonical form: object keys sorted by Unicode code point at every level, no whitespace outside strings, values otherwise unchanged.\nReply with the canonical JSON only, on one line.\n<<<\n{\"z\":{\"y\":true,\"x\":null},\"a\":[3,2,1]}\n>>>",
+      "input_sha256": "86eea044925663a8d48c7f7ae101fc983d8ffb23d860b4fb6724cdc626282b28",
+      "expected": "{\"a\":[3,2,1],\"z\":{\"x\":null,\"y\":true}}"
+    },
+    {
+      "id": "cj-03",
+      "material": "[ {\"k\":\"v\"}, {\"b\":2,\"a\":1} ]",
+      "input": "Rewrite the JSON value between the markers in canonical form: object keys sorted by Unicode code point at every level, no whitespace outside strings, values otherwise unchanged.\nReply with the canonical JSON only, on one line.\n<<<\n[ {\"k\":\"v\"}, {\"b\":2,\"a\":1} ]\n>>>",
+      "input_sha256": "0de72917684371e5b6c4274da9337c5809a071aa9c96867df9da9773e3ece2e4",
+      "expected": "[{\"k\":\"v\"},{\"a\":1,\"b\":2}]"
+    },
+    {
+      "id": "cj-04",
+      "material": "{\"name\" : \"a b\",  \"id\" : 7}",
+      "input": "Rewrite the JSON value between the markers in canonical form: object keys sorted by Unicode code point at every level, no whitespace outside strings, values otherwise unchanged.\nReply with the canonical JSON only, on one line.\n<<<\n{\"name\" : \"a b\",  \"id\" : 7}\n>>>",
+      "input_sha256": "b6a476fb9830fb965aa01f90452d04eaad229eec54d959b431bbcc51a581c2cf",
+      "expected": "{\"id\":7,\"name\":\"a b\"}"
+    },
+    {
+      "id": "cj-05",
+      "material": "{\"B\":1,\"a\":2,\"A\":3}",
+      "input": "Rewrite the JSON value between the markers in canonical form: object keys sorted by Unicode code point at every level, no whitespace outside strings, values otherwise unchanged.\nReply with the canonical JSON only, on one line.\n<<<\n{\"B\":1,\"a\":2,\"A\":3}\n>>>",
+      "input_sha256": "a9d2631d6f622967641c4a584859f9d8994b50b56bed7ed55edac097c64b45f1",
+      "expected": "{\"A\":3,\"B\":1,\"a\":2}"
+    },
+    {
+      "id": "cj-06",
+      "material": "{\"list\":[{\"y\":1,\"x\":2}],\"flag\":false}",
+      "input": "Rewrite the JSON value between the markers in canonical form: object keys sorted by Unicode code point at every level, no whitespace outside strings, values otherwise unchanged.\nReply with the canonical JSON only, on one line.\n<<<\n{\"list\":[{\"y\":1,\"x\":2}],\"flag\":false}\n>>>",
+      "input_sha256": "517526ed15743900a6384858e1eed9e286c158f3e35001fc5c12382c88751ba3",
+      "expected": "{\"flag\":false,\"list\":[{\"x\":2,\"y\":1}]}"
+    }
+  ]
+}

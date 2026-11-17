@@ -26,6 +26,7 @@
     "env.d.ts",
     "customer-tests/**/*.ts",
     "ablations/**/*.ts",
+    "offline-scorer/**/*.ts",
     "scripts/attest_sign.ts",
     "scripts/attest_sign.test.ts",
     "scripts/sync_cli.ts",
