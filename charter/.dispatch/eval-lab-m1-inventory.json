@@ -1,0 +1,7 @@
+{
+  "base_commit": "5f43bbda08523fa253ca9493260e893ed2cafdd5",
+  "brief_sha256": null,
+  "done_sha256": "2744cb1e9d22ba215744666149f00fb8401b7fd4036995d2e6955355586920e9",
+  "schema_version": "charter.dispatch/1",
+  "slice": "eval-lab-m1-inventory"
+}
