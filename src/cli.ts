@@ -45,6 +45,7 @@ import {
   type FileCensus,
 } from "./census.js";
 import { receiptFindingsFromAudit, type ReceiptFamily } from "./closeout/finding-anchors.js";
+import { AUDIT_KINDS, CLOSEOUT_BUNDLE_FILES, phaseByAuditKind } from "./closeout/phase-registry.js";
 import type { RepositoryObject } from "./closeout/repository-object.js";
 import {
   assembleRunReceipt,
@@ -481,13 +482,19 @@ async function runDetect(args: string[], io: CliIO): Promise<number> {
   return 0;
 }
 
+/** The audit kinds as the usage texts name them: in alphabetical order. */
+const AUDIT_KIND_NAMES: readonly string[] = [...AUDIT_KINDS].sort();
+
 async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): Promise<number> {
   const kind = args.shift();
-  if (!new Set(["github-actions", "language-policy", "planning", "public-safety", "repository-boundaries", "semantic"]).has(String(kind))) {
-    throw new UsageError("audit requires github-actions, language-policy, planning, public-safety, repository-boundaries, or semantic");
+  const phase = kind === undefined ? undefined : phaseByAuditKind(kind);
+  if (phase === undefined) {
+    throw new UsageError(`audit requires ${AUDIT_KIND_NAMES.slice(0, -1).join(", ")}, or ${AUDIT_KIND_NAMES.at(-1)}`);
   }
+  // The kind picks the option grammar and the output below; the family it reports comes from the registry.
+  const auditKind = phase.auditKind;
   const root = args[0]?.startsWith("--") === false ? (args.shift() as string) : process.cwd();
-  if (kind === "planning") {
+  if (auditKind === "planning") {
     const json = removeFlag(args, "--json");
     const deadlineOption = removeOption(args, "--deadline-ms");
     assertNoArgs(args);
@@ -523,10 +530,10 @@ async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): 
       }
       io.stdout(`planning: ${result.status.toLocaleUpperCase("und")} artifacts=${result.artifactCount} structured=${result.structuredArtifactCount} findings=${result.findings.length}`);
     }
-    onResult?.({ root, family: "planning_graph", result });
+    onResult?.({ root, family: phase.id, result });
     return result.exitCode;
   }
-  if (kind === "semantic") {
+  if (auditKind === "semantic") {
     const json = removeFlag(args, "--json");
     const execute = removeFlag(args, "--execute");
     const manifestPath = removeOption(args, "--manifest");
@@ -553,10 +560,10 @@ async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): 
       }
       io.stdout(`semantic: ${result.status.toLocaleUpperCase("und")} candidates=${result.candidate_probe_count} executed=${result.executed_probe_count} findings=${result.findings.length}`);
     }
-    onResult?.({ root, family: "semantic_boundary", result });
+    onResult?.({ root, family: phase.id, result });
     return result.exitCode;
   }
-  if (kind === "github-actions") {
+  if (auditKind === "github-actions") {
     const json = removeFlag(args, "--json");
     assertNoArgs(args);
     const result = await nodeCloseoutEngine.auditGitHubActions(root);
@@ -567,10 +574,10 @@ async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): 
       }
       io.stdout(`github-actions: ${result.status.toLocaleUpperCase("und")} workflows=${result.workflow_count} sensitive=${result.sensitive_workflow_count} findings=${result.findings.length}`);
     }
-    onResult?.({ root, family: "github_actions", result });
+    onResult?.({ root, family: phase.id, result });
     return result.exitCode;
   }
-  if (kind === "language-policy") {
+  if (auditKind === "language-policy") {
     const json = removeFlag(args, "--json");
     assertNoArgs(args);
     let result;
@@ -588,10 +595,10 @@ async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): 
       for (const policyFinding of result.findings) io.stdout(`${policyFinding.rule}\t${policyFinding.path}\t${policyFinding.extension}`);
       io.stdout(`language-policy: ${result.status.toLocaleUpperCase("und")} tracked=${result.tracked_path_count} generated_exempt=${result.generated_exempt.count} allowed=${result.allowed_count} findings=${result.findings.length}`);
     }
-    onResult?.({ root, family: "language_policy", result });
+    onResult?.({ root, family: phase.id, result });
     return result.exitCode;
   }
-  if (kind === "repository-boundaries") {
+  if (auditKind === "repository-boundaries") {
     const json = removeFlag(args, "--json");
     assertNoArgs(args);
     const result = await nodeCloseoutEngine.auditRepositoryBoundaries(root);
@@ -602,9 +609,11 @@ async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): 
       }
       io.stdout(`repository-boundaries: ${result.status.toLocaleUpperCase("und")} parsers=${result.parser_surfaces.length} contracts=${result.external_contract_count} findings=${result.findings.length}`);
     }
-    onResult?.({ root, family: "repository_boundaries", result });
+    onResult?.({ root, family: phase.id, result });
     return result.exitCode;
   }
+  // Every other kind returned above; a kind added to the registry without a branch does not compile.
+  auditKind satisfies "public-safety";
   const json = removeFlag(args, "--json");
   const tracked = removeFlag(args, "--tracked");
   const denylist = removeOption(args, "--denylist-file");
@@ -618,13 +627,13 @@ async function runAudit(args: string[], io: CliIO, onResult?: AuditResultSink): 
     : await nodeCloseoutEngine.scanPublicSafety(root, denylist);
   if (json) {
     io.stdout(JSON.stringify(result, null, 2));
-    onResult?.({ root, family: "public_safety", result });
+    onResult?.({ root, family: phase.id, result });
     return result.exitCode;
   }
   for (const finding of result.findings) io.stdout(`${finding.path}:${finding.line}: ${finding.rule}`);
   if (result.status === "fail") io.stderr(`public-safety: FAIL (${result.findings.length} finding(s))`);
   else io.stdout("public-safety: PASS");
-  onResult?.({ root, family: "public_safety", result });
+  onResult?.({ root, family: phase.id, result });
   return result.exitCode;
 }
 
@@ -866,7 +875,7 @@ async function runSecondPassCommand(
 }
 
 function usage(io: CliIO): void {
-  io.stderr("usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: github-actions|language-policy|planning|public-safety|repository-boundaries|semantic; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)");
+  io.stderr(`usage: mister-clean <prepare|action|validate|detect|audit|inspect|census|manifest|semantic|second-pass|attest> ... (action: begin|finish; audit: ${AUDIT_KIND_NAMES.join("|")}; semantic: plan|verify; inspect: repository-object; census: capture|validate|compare; second-pass <repo> [--against <receipt_id|bundle>] [--json]; audit/prepare/second-pass accept --agent-card <card.json> and --no-subject-hash)`);
 }
 
 export function receiptStoreFromEnvironment(environment: NodeJS.ProcessEnv): LocalRunReceiptStore {
@@ -932,14 +941,7 @@ export async function runCli(
           exitCode = await runPrepare(args, io, runtimeAttestation, (entry) => { prepared = entry; });
           if (receipts !== undefined && prepared !== undefined) {
             const bundle = prepared.bundleDirectory;
-            const families: { readonly family: ReceiptFamily; readonly file: string }[] = [
-              { family: "planning_graph", file: "planning-audit.json" },
-              { family: "public_safety", file: "public-safety-audit.json" },
-              { family: "github_actions", file: "github-actions-audit.json" },
-              { family: "semantic_boundary", file: "semantic-audit.json" },
-              { family: "language_policy", file: "language-policy-audit.json" },
-            ];
-            const results = families
+            const results = CLOSEOUT_BUNDLE_FILES
               .filter((entry) => existsSync(join(bundle, entry.file)))
               .map((entry) => ({ family: entry.family, result: readJson(join(bundle, entry.file)) }));
             const delta = record(readJson(join(bundle, "regression-delta.json")));

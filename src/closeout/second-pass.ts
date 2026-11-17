@@ -38,6 +38,7 @@ import { loadDenylistSync, publicSafetyValueDigestsInText, scanTrackedPublicSafe
 import { auditLanguagePolicy } from "./language-policy.js";
 import { auditPlanningRepository } from "./planning.js";
 import { auditRepositoryBoundaries } from "./repository-boundaries.js";
+import { CLOSEOUT_PHASE_IDS, isPhaseId, type PhaseId } from "./phase-registry.js";
 import { captureRepositoryObject } from "./repository-object.js";
 import { repositoryIdentity, runGit, trackedShippablePaths } from "./repository.js";
 import { auditSemanticRepository } from "./semantic.js";
@@ -334,6 +335,19 @@ export interface ReadOnlyAuditOptions {
   readonly deadline_ms?: number;
 }
 
+/**
+ * The read-only entry function of each family, with the arguments the second
+ * pass gives it. Nothing here executes a probe or writes to the repository.
+ */
+const READ_ONLY_ENTRIES = {
+  planning_graph: (root, options) => auditPlanningRepository(root, options.deadline_ms === undefined ? undefined : { deadline_ms: options.deadline_ms }),
+  public_safety: (root, options) => scanTrackedPublicSafetySync(root, trackedShippablePaths(root), loadDenylistSync(options.denylistPath)),
+  github_actions: (root) => auditGitHubActionsRepository(root),
+  repository_boundaries: (root) => auditRepositoryBoundaries(root),
+  semantic_boundary: (root) => auditSemanticRepository(root, { execute: false }),
+  language_policy: (root) => auditLanguagePolicy(root),
+} satisfies Record<PhaseId, (root: string, options: ReadOnlyAuditOptions) => unknown>;
+
 /** Run the named families read-only against `root` and return anchored findings. */
 export function runReadOnlyFamilies(
   capture: ReceiptSubjectCapture,
@@ -345,20 +359,20 @@ export function runReadOnlyFamilies(
   const anchored: AnchoredFinding[] = [];
   const context = { repository: capture.repository, path_prefix: capture.path_prefix };
   for (const family of families) {
-    let result: unknown;
-    if (family === "planning_graph") result = auditPlanningRepository(root, options.deadline_ms === undefined ? undefined : { deadline_ms: options.deadline_ms });
-    else if (family === "public_safety") result = scanTrackedPublicSafetySync(root, trackedShippablePaths(root), loadDenylistSync(options.denylistPath));
-    else if (family === "github_actions") result = auditGitHubActionsRepository(root);
-    else if (family === "repository_boundaries") result = auditRepositoryBoundaries(root);
-    else if (family === "language_policy") result = auditLanguagePolicy(root);
-    else result = auditSemanticRepository(root, { execute: false });
+    // A caller can reach this with an id that only a cast made a ReceiptFamily.
+    if (!isPhaseId(family)) throw new Error(`${String(family)}: not a registered detector family`);
+    const result: unknown = READ_ONLY_ENTRIES[family](root, options);
     results[family] = result;
     anchored.push(...receiptFindingsFromAudit(family, result, context));
   }
   return { anchored, results };
 }
 
-const LEGACY_DETECTOR_FAMILIES: ReadonlySet<string> = new Set(["planning_graph", "public_safety", "github_actions", "semantic_boundary"]);
+/**
+ * The families a legacy bundle baseline may hold: every family that takes part
+ * in a closeout. A bundle never carries an audit-only family.
+ */
+export const LEGACY_BASELINE_FAMILIES: ReadonlySet<string> = new Set<string>(CLOSEOUT_PHASE_IDS);
 
 /**
  * Read a pre-7.3 closeout bundle (a bundle directory, its closeout-report.json
@@ -380,7 +394,7 @@ export function legacyBaselineFromBundle(reference: string): EarlierBaseline | u
   const findings: ReceiptFinding[] = [];
   for (const execution of executions) {
     const detectorId = String(execution.detector_id);
-    if (!LEGACY_DETECTOR_FAMILIES.has(detectorId)) continue;
+    if (!LEGACY_BASELINE_FAMILIES.has(detectorId)) continue;
     const family = detectorId as ReceiptFamily;
     families.push(family);
     // Prefer recomputing from the bundle's own result file; fall back to the recorded list.
@@ -426,11 +440,29 @@ export function baselineFromReceipt(receipt: RunReceipt): EarlierBaseline {
   };
 }
 
-/** Resolve `--against`: a receipt id, a receipt path, a legacy bundle, or the latest receipt for this repository. */
+/**
+ * `--against` named a receipt whose mode cannot be a baseline. A VALIDATE
+ * receipt records a verdict on a bundle and examined no family, so a second
+ * pass against it would re-audit nothing and report nothing.
+ */
+export class BaselineReceiptModeError extends Error {
+  readonly code = "BASELINE_RECEIPT_MODE";
+  constructor(readonly mode: ReceiptMode) {
+    super(`a ${mode} receipt cannot be a second-pass baseline; pass --against <receipt_id|bundle> naming an AUDIT, CLOSE or SECOND_PASS receipt, or a bundle`);
+    this.name = "BaselineReceiptModeError";
+  }
+}
+
+/**
+ * Resolve `--against`: a receipt id, a receipt path or a legacy bundle. Without
+ * it, the latest AUDIT or CLOSE receipt for this repository: a SECOND_PASS or
+ * VALIDATE receipt is never chosen by default, and when no other receipt exists
+ * there is no baseline.
+ */
 export function resolveEarlierBaseline(store: LocalRunReceiptStore, repositoryId: string, against: string | undefined): EarlierBaseline {
   if (against === undefined) {
     const entries = store.forRepository(repositoryId).filter((entry) => entry.mode !== "SECOND_PASS" && entry.mode !== "VALIDATE");
-    const latest = entries.at(-1) ?? store.forRepository(repositoryId).at(-1);
+    const latest = entries.at(-1);
     if (latest === undefined) throw new Error("no earlier receipt for this repository; pass --against <receipt_id|bundle>");
     return baselineFromReceipt(store.read(latest.receipt_id));
   }
@@ -440,6 +472,8 @@ export function resolveEarlierBaseline(store: LocalRunReceiptStore, repositoryId
   }
   const receipt = store.read(against);
   if (receipt.repository_id !== repositoryId) throw new Error("the earlier receipt belongs to a different repository identity");
+  // A SECOND_PASS receipt named explicitly examined families and stays a valid baseline.
+  if (receipt.mode === "VALIDATE") throw new BaselineReceiptModeError(receipt.mode);
   return baselineFromReceipt(receipt);
 }
 

@@ -21,6 +21,7 @@ import {
 } from "./semantic.js";
 import type { RepositoryObject } from "./repository-object.js";
 import type { GitHubActionsAuditResult } from "./github-actions.js";
+import { CLOSEOUT_PHASES, isPhaseId, type CloseoutPhase, type CloseoutPhaseId, type PhaseId } from "./phase-registry.js";
 import {
   isVerifiedServerAttestationBinding,
   type FileRuntimeAttestationBinding,
@@ -67,18 +68,35 @@ const DETECTOR_REGISTRY_V5 = [
   },
 ] as const;
 
+/**
+ * One closeout family as a detector-registry entry. The registry digest hashes
+ * the JSON of these objects, so each holds exactly id, scope, command and
+ * detector, in that order.
+ */
+type RegistryEntryOf<P> = P extends CloseoutPhase
+  ? {
+    readonly id: P["id"];
+    readonly scope: P["closeout"]["scope"];
+    readonly command: P["closeout"]["command"];
+    readonly detector: P["closeout"]["detector"];
+  }
+  : never;
+
+function registryEntry<P extends CloseoutPhase>(phase: P): RegistryEntryOf<P> {
+  return {
+    id: phase.id,
+    scope: phase.closeout.scope,
+    command: phase.closeout.command,
+    detector: phase.closeout.detector,
+  } as RegistryEntryOf<P>;
+}
+
 // Schema 6 (regression delta 1.6): schema 5 plus the declared language policy,
 // always required; a repository without a policy yields a not_applicable
-// result with zero fingerprints, never a missing execution.
-export const CLOSEOUT_DETECTORS = [
-  ...DETECTOR_REGISTRY_V5,
-  {
-    id: "language_policy",
-    scope: "tracked_shippable",
-    command: "mister-clean audit language-policy . --json",
-    detector: "mister-clean/language_policy@1",
-  },
-] as const;
+// result with zero fingerprints, never a missing execution. Derived from the
+// closeout families of phase-registry.ts, in their order; the frozen digest of
+// registry 6 (DETECTOR_REGISTRY_V6_SHA256) refuses any run in which they drift.
+export const CLOSEOUT_DETECTORS: readonly RegistryEntryOf<CloseoutPhase>[] = CLOSEOUT_PHASES.map(registryEntry);
 
 // Frozen schema-1 registry. Do not alias this to CLOSEOUT_DETECTORS: future
 // registry changes must leave historical 1.3/1.4 evidence independently
@@ -129,7 +147,7 @@ const DETECTOR_REGISTRY_V4 = [
   DETECTOR_REGISTRY_V1[2],
 ] as const;
 
-export type DetectorId = (typeof CLOSEOUT_DETECTORS)[number]["id"];
+export type DetectorId = CloseoutPhaseId;
 export type DetectorRegistryVersion = "1" | "2" | "3" | "4" | "5" | typeof DETECTOR_COVERAGE_SCHEMA_VERSION;
 /** Registry versions a runtime-bound (1.5+) regression delta may carry. */
 export type RuntimeBoundRegistryVersion = "5" | typeof DETECTOR_COVERAGE_SCHEMA_VERSION;
@@ -816,6 +834,19 @@ function validateLanguagePolicyResult(record: Record<string, unknown>, errors: s
 }
 
 /**
+ * The whole-result validator of each family. A family with no closeout part
+ * has no canonical result shape here and is refused like an unknown detector.
+ */
+const RESULT_VALIDATORS = {
+  planning_graph: validatePlanningResult,
+  public_safety: validatePublicSafetyResult,
+  github_actions: validateGitHubActionsResult,
+  repository_boundaries: null,
+  semantic_boundary: validateSemanticResult,
+  language_policy: validateLanguagePolicyResult,
+} satisfies Record<PhaseId, ((record: Record<string, unknown>, errors: string[]) => void) | null>;
+
+/**
  * Validate the whole canonical detector result, including internal accounting.
  * A fingerprint-only fragment is evidence of neither coverage nor execution.
  */
@@ -823,11 +854,8 @@ export function detectorResultShapeErrors(detectorId: string, value: unknown): s
   const errors: string[] = [];
   const record = object(value);
   if (!record) return ["$: expected object"];
-  if (detectorId === "planning_graph") validatePlanningResult(record, errors);
-  else if (detectorId === "semantic_boundary") validateSemanticResult(record, errors);
-  else if (detectorId === "public_safety") validatePublicSafetyResult(record, errors);
-  else if (detectorId === "github_actions") validateGitHubActionsResult(record, errors);
-  else if (detectorId === "language_policy") validateLanguagePolicyResult(record, errors);
+  const validate = isPhaseId(detectorId) ? RESULT_VALIDATORS[detectorId] : null;
+  if (validate) validate(record, errors);
   else errors.push(`$: unknown detector ${detectorId}`);
   return errors;
 }
@@ -972,31 +1000,30 @@ function validateGitHubActionsResult(record: Record<string, unknown>, errors: st
   if (record.exitCode !== (expectedStatus === "fail" ? 1 : 0)) errors.push("$.exitCode: disagrees with status");
 }
 
-/**
- * Derive the public, redacted fingerprint set from an emitted detector result.
- * Returning undefined means the result did not have the detector's expected
- * machine-readable shape and must not be trusted as coverage.
- */
-export function findingFingerprintsFromAudit(detectorId: string, value: unknown): string[] | undefined {
-  if (detectorResultShapeErrors(detectorId, value).length > 0) return undefined;
-  const record = value as Record<string, unknown>;
-  const rows = detectorId === "planning_graph"
-    ? record.raw_findings
-    : detectorId === "public_safety"
-      ? [...(record.findings as unknown[]), ...(record.unassessed as unknown[])]
-      : record.findings;
-  if (!Array.isArray(rows)) return undefined;
-  const fingerprints: string[] = [];
-  for (const finding of rows) {
-    if (!finding || typeof finding !== "object" || Array.isArray(finding)) return undefined;
-    const row = finding as Record<string, unknown>;
-    if (detectorId === "planning_graph") {
+/** Where a family's emitted result keeps its finding rows, and the fingerprint of one row. */
+interface FingerprintSource {
+  readonly rows: (record: Record<string, unknown>) => unknown;
+  /** undefined: the row is not canonical, so the whole result is not trusted. */
+  readonly fingerprint: (row: Record<string, unknown>) => string | undefined;
+}
+
+/** A row that carries its own fingerprint, already checked by the family's validator. */
+function reportedFingerprint(row: Record<string, unknown>): string | undefined {
+  if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint)) return undefined;
+  return row.fingerprint;
+}
+
+const FINGERPRINT_SOURCES = {
+  planning_graph: {
+    rows: (record) => record.raw_findings,
+    fingerprint: (row) => {
       if (typeof row.id !== "string" || !row.id) return undefined;
-      fingerprints.push(planningFindingFingerprint(row.id));
-    } else if (detectorId === "semantic_boundary") {
-      if (typeof row.candidate_id !== "string" || !row.candidate_id || typeof row.code !== "string" || !row.code) return undefined;
-      fingerprints.push(semanticFindingFingerprint(row.candidate_id, row.code));
-    } else if (detectorId === "public_safety") {
+      return planningFindingFingerprint(row.id);
+    },
+  },
+  public_safety: {
+    rows: (record) => [...(record.findings as unknown[]), ...(record.unassessed as unknown[])],
+    fingerprint: (row) => {
       if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint)
         || typeof row.path !== "string" || !row.path) return undefined;
       const expected = row.rule !== undefined
@@ -1007,11 +1034,39 @@ export function findingFingerprintsFromAudit(detectorId: string, value: unknown)
           ? digest(`public_safety_unassessed\0${row.reason}\0${row.path}`)
           : "";
       if (row.fingerprint !== expected) return undefined;
-      fingerprints.push(row.fingerprint);
-    } else if (detectorId === "github_actions" || detectorId === "language_policy") {
-      if (typeof row.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(row.fingerprint)) return undefined;
-      fingerprints.push(row.fingerprint);
-    } else return undefined;
+      return row.fingerprint;
+    },
+  },
+  github_actions: { rows: (record) => record.findings, fingerprint: reportedFingerprint },
+  // No closeout part: its result never passes the shape gate.
+  repository_boundaries: null,
+  semantic_boundary: {
+    rows: (record) => record.findings,
+    fingerprint: (row) => {
+      if (typeof row.candidate_id !== "string" || !row.candidate_id || typeof row.code !== "string" || !row.code) return undefined;
+      return semanticFindingFingerprint(row.candidate_id, row.code);
+    },
+  },
+  language_policy: { rows: (record) => record.findings, fingerprint: reportedFingerprint },
+} satisfies Record<PhaseId, FingerprintSource | null>;
+
+/**
+ * Derive the public, redacted fingerprint set from an emitted detector result.
+ * Returning undefined means the result did not have the detector's expected
+ * machine-readable shape and must not be trusted as coverage.
+ */
+export function findingFingerprintsFromAudit(detectorId: string, value: unknown): string[] | undefined {
+  if (detectorResultShapeErrors(detectorId, value).length > 0) return undefined;
+  const source = isPhaseId(detectorId) ? FINGERPRINT_SOURCES[detectorId] : null;
+  if (!source) return undefined;
+  const rows = source.rows(value as Record<string, unknown>);
+  if (!Array.isArray(rows)) return undefined;
+  const fingerprints: string[] = [];
+  for (const finding of rows) {
+    if (!finding || typeof finding !== "object" || Array.isArray(finding)) return undefined;
+    const fingerprint = source.fingerprint(finding as Record<string, unknown>);
+    if (fingerprint === undefined) return undefined;
+    fingerprints.push(fingerprint);
   }
   return sortedUnique(fingerprints);
 }

@@ -22,16 +22,11 @@ import {
 } from "./detector-coverage.js";
 import { GIT_OUTPUT_LIMIT_BYTES } from "./repository.js";
 import { gitSpawnSync } from "./git-hardening.js";
+import { isPhaseId, PHASE_IDS, type PhaseId } from "./phase-registry.js";
 
-export const RECEIPT_FAMILIES = [
-  "planning_graph",
-  "public_safety",
-  "github_actions",
-  "repository_boundaries",
-  "semantic_boundary",
-  "language_policy",
-] as const;
-export type ReceiptFamily = (typeof RECEIPT_FAMILIES)[number];
+/** Every family that can write receipt findings: the whole phase registry, in its order. */
+export const RECEIPT_FAMILIES: readonly PhaseId[] = PHASE_IDS;
+export type ReceiptFamily = PhaseId;
 
 /**
  * `file`: the finding is about a tracked path itself (its language), not about
@@ -163,6 +158,152 @@ function githubActionsRefText(repository: string, ref: string): { readonly text:
   return { text: row === undefined ? "" : row.trim(), line };
 }
 
+/** What one finding row contributes to a receipt finding, before the shared fingerprint rule. */
+interface ReceiptRowProjection {
+  readonly rule: string;
+  readonly kind: AnchorKind;
+  readonly content: string;
+  readonly lineHint: number | null;
+  readonly severity: string | null;
+  readonly legacy: string;
+  readonly probe: EarlierBytesProbe;
+}
+
+interface ReceiptRowInput {
+  readonly row: Record<string, unknown>;
+  /** The whole audit result the row belongs to. */
+  readonly record: Record<string, unknown>;
+  readonly blobOid: string | null;
+  /** The audited root, which may be a subdirectory of the worktree; line references are relative to it. */
+  readonly auditRoot: string;
+}
+
+/** How one family's audit result becomes receipt findings. */
+interface ReceiptProjection {
+  /** Throws unless the result has the family's canonical shape. */
+  readonly assertCanonical: (record: Record<string, unknown>, audit: unknown) => void;
+  readonly sourceRows: (record: Record<string, unknown>) => unknown;
+  /** Called once per result; the returned function gives the path one row is about. */
+  readonly rowPaths: (record: Record<string, unknown>) => (row: Record<string, unknown>) => string;
+  readonly project: (input: ReceiptRowInput) => ReceiptRowProjection;
+}
+
+/** The shape gate of a family whose whole result detector-coverage.ts validates. */
+function assertValidatedShape(family: ReceiptFamily, audit: unknown): void {
+  const errors = detectorResultShapeErrors(family, audit);
+  if (errors.length > 0) throw new Error(`${family}: audit result is not canonical: ${errors[0]}`);
+}
+
+const RECEIPT_PROJECTIONS = {
+  planning_graph: {
+    assertCanonical: (_record, audit) => assertValidatedShape("planning_graph", audit),
+    sourceRows: (record) => record.raw_findings,
+    rowPaths: () => (row) => asString(row.path, "planning_graph.path"),
+    project: ({ row, blobOid }) => {
+      const rule = asString(row.code, "planning_graph.code");
+      const legacy = planningFindingFingerprint(asString(row.id, "planning_graph.id"));
+      const kind = "detail_digest";
+      const content = sha256Text([rule, asString(row.subject, "planning_graph.subject"), normalizeWhitespace(asString(row.detail, "planning_graph.detail"))].join("\0"));
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, blob_oid: blobOid } };
+    },
+  },
+  public_safety: {
+    // Both the tracked (closeout) and the walked (audit) scans emit the same
+    // finding rows; only the tracked form carries the scope-binding fields.
+    assertCanonical: (record) => {
+      if (!Array.isArray(record.findings) || !Array.isArray(record.unassessed)) {
+        throw new Error("public_safety: audit result is not canonical");
+      }
+    },
+    sourceRows: (record) => [...(record.findings as unknown[]), ...(record.unassessed as unknown[])],
+    rowPaths: () => (row) => asString(row.path, "public_safety.path"),
+    project: ({ row, blobOid }) => {
+      const legacy = asString(row.fingerprint, "public_safety.fingerprint");
+      if (typeof row.rule === "string") {
+        const rule = row.rule;
+        const kind = "value_digest";
+        const content = asString(row.value_sha256, "public_safety.value_sha256");
+        if (!/^[0-9a-f]{64}$/u.test(content)) throw new Error("public_safety.value_sha256: expected lowercase SHA-256");
+        const lineHint = typeof row.line === "number" ? row.line : null;
+        return { rule, kind, content, lineHint, severity: null, legacy, probe: { kind, rule, value_sha256: content } };
+      }
+      const rule = `unassessed:${asString(row.reason, "public_safety.reason")}`;
+      const kind = "detail_digest";
+      const content = sha256Text(`unassessed\0${row.reason as string}`);
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, blob_oid: blobOid } };
+    },
+  },
+  github_actions: {
+    assertCanonical: (_record, audit) => assertValidatedShape("github_actions", audit),
+    sourceRows: (record) => record.findings,
+    rowPaths: () => (row) => asString(row.path, "github_actions.path"),
+    project: ({ row, auditRoot }) => {
+      const rule = asString(row.rule, "github_actions.rule");
+      const severity = typeof row.severity === "string" ? row.severity : null;
+      const legacy = asString(row.fingerprint, "github_actions.fingerprint");
+      const kind = "line_content";
+      const refs = [...new Set(row.refs as string[])].sort().map((ref) => githubActionsRefText(auditRoot, ref));
+      const texts = refs.map((item) => item.text);
+      const lineDigests = texts.map(trimmedLineSha256);
+      const content = sha256Text(texts.join("\n"));
+      const lineHint = refs.find((item) => item.line !== null)?.line ?? null;
+      return { rule, kind, content, lineHint, severity, legacy, probe: { kind, line_sha256s: lineDigests } };
+    },
+  },
+  repository_boundaries: {
+    assertCanonical: (record) => {
+      if (record.record_type !== "mister-clean.repository-boundary-audit" || !Array.isArray(record.findings)) {
+        throw new Error("repository_boundaries: audit result is not canonical");
+      }
+    },
+    sourceRows: (record) => record.findings,
+    rowPaths: () => (row) => asString(row.path, "repository_boundaries.path"),
+    project: ({ row, blobOid }) => {
+      const rule = asString(row.rule, "repository_boundaries.rule");
+      const legacy = asString(row.fingerprint, "repository_boundaries.fingerprint");
+      const kind = "detail_digest";
+      const content = sha256Text(asString(row.detail, "repository_boundaries.detail"));
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, blob_oid: blobOid } };
+    },
+  },
+  semantic_boundary: {
+    assertCanonical: (_record, audit) => assertValidatedShape("semantic_boundary", audit),
+    sourceRows: (record) => record.findings,
+    // A semantic finding names a candidate; the candidate holds the path.
+    rowPaths: (record) => {
+      const candidatePaths = new Map<string, string>();
+      for (const candidate of (record.candidates as unknown[])) {
+        const row = object(candidate);
+        if (row && typeof row.id === "string" && typeof row.path === "string") candidatePaths.set(row.id, row.path);
+      }
+      return (row) => candidatePaths.get(asString(row.candidate_id, "semantic_boundary.candidate_id")) ?? ".";
+    },
+    project: ({ row, record }) => {
+      const rule = asString(row.code, "semantic_boundary.code");
+      const legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
+      const kind = "whole_repo";
+      const content = asString(record.candidate_set_sha256, "semantic_boundary.candidate_set_sha256");
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind, content_sha256: content } };
+    },
+  },
+  language_policy: {
+    assertCanonical: (record) => {
+      if (record.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record.findings)) {
+        throw new Error("language_policy: audit result is not canonical");
+      }
+    },
+    sourceRows: (record) => record.findings,
+    rowPaths: () => (row) => asString(row.path, "language_policy.path"),
+    project: ({ row }) => {
+      const rule = asString(row.rule, "language_policy.rule");
+      const legacy = asString(row.fingerprint, "language_policy.fingerprint");
+      const kind = "file";
+      const content = sha256Text(`${rule}\0${asString(row.extension, "language_policy.extension")}`);
+      return { rule, kind, content, lineHint: null, severity: null, legacy, probe: { kind } };
+    },
+  },
+} satisfies Record<PhaseId, ReceiptProjection>;
+
 /**
  * Derive receipt findings from one emitted detector result. The same function
  * serves AUDIT (the in-process result) and CLOSE (the result the bundle wrote),
@@ -173,116 +314,30 @@ export function receiptFindingsFromAudit(
   audit: unknown,
   context: AnchorContext,
 ): AnchoredFinding[] {
+  // A caller can reach this with an id that only a cast made a ReceiptFamily.
+  if (!isPhaseId(family)) throw new Error(`${String(family)}: not a registered detector family`);
+  const projection: ReceiptProjection = RECEIPT_PROJECTIONS[family];
   const record = object(audit);
   if (!record) throw new Error(`${family}: audit result must be an object`);
-  if (family === "repository_boundaries") {
-    if (record.record_type !== "mister-clean.repository-boundary-audit" || !Array.isArray(record.findings)) {
-      throw new Error("repository_boundaries: audit result is not canonical");
-    }
-  } else if (family === "public_safety") {
-    // Both the tracked (closeout) and the walked (audit) scans emit the same
-    // finding rows; only the tracked form carries the scope-binding fields.
-    if (!Array.isArray(record.findings) || !Array.isArray(record.unassessed)) {
-      throw new Error("public_safety: audit result is not canonical");
-    }
-  } else if (family === "language_policy") {
-    if (record.record_type !== "mister-clean.language-policy-audit" || !Array.isArray(record.findings)) {
-      throw new Error("language_policy: audit result is not canonical");
-    }
-  } else {
-    const errors = detectorResultShapeErrors(family, audit);
-    if (errors.length > 0) throw new Error(`${family}: audit result is not canonical: ${errors[0]}`);
-  }
+  projection.assertCanonical(record, audit);
   const prefix = (context.path_prefix ?? "").replace(/\/+$/u, "");
   const rows: { readonly row: Record<string, unknown>; readonly path: string }[] = [];
   const pathsToHash = new Set<string>();
-  const semanticCandidatePaths = new Map<string, string>();
-  if (family === "semantic_boundary") {
-    for (const candidate of (record.candidates as unknown[])) {
-      const row = object(candidate);
-      if (row && typeof row.id === "string" && typeof row.path === "string") semanticCandidatePaths.set(row.id, row.path);
-    }
-  }
-  const sourceRows = family === "planning_graph"
-    ? record.raw_findings
-    : family === "public_safety"
-      ? [...(record.findings as unknown[]), ...(record.unassessed as unknown[])]
-      : record.findings;
-  for (const value of sourceRows as unknown[]) {
+  const rawPathOf = projection.rowPaths(record);
+  for (const value of projection.sourceRows(record) as unknown[]) {
     const row = object(value);
     if (!row) throw new Error(`${family}: finding must be an object`);
-    const rawPath = family === "semantic_boundary"
-      ? (semanticCandidatePaths.get(asString(row.candidate_id, `${family}.candidate_id`)) ?? ".")
-      : asString(row.path, `${family}.path`);
-    const path = posixPath(prefix, rawPath);
+    const path = posixPath(prefix, rawPathOf(row));
     rows.push({ row, path });
     pathsToHash.add(path);
   }
   const oids = (context.blobOids ?? ((paths) => workingTreeBlobOids(context.repository, paths)))([...pathsToHash]);
+  const auditRoot = prefix ? join(context.repository, prefix) : context.repository;
   const anchored: AnchoredFinding[] = [];
   const seen = new Set<string>();
   for (const { row, path } of rows) {
     const blobOid = oids.get(path) ?? null;
-    let rule: string;
-    let kind: AnchorKind;
-    let content: string;
-    let lineHint: number | null = null;
-    let severity: string | null = null;
-    let legacy: string;
-    let probe: EarlierBytesProbe;
-    if (family === "public_safety") {
-      legacy = asString(row.fingerprint, "public_safety.fingerprint");
-      if (typeof row.rule === "string") {
-        rule = row.rule;
-        kind = "value_digest";
-        content = asString(row.value_sha256, "public_safety.value_sha256");
-        if (!/^[0-9a-f]{64}$/u.test(content)) throw new Error("public_safety.value_sha256: expected lowercase SHA-256");
-        lineHint = typeof row.line === "number" ? row.line : null;
-        probe = { kind, rule, value_sha256: content };
-      } else {
-        rule = `unassessed:${asString(row.reason, "public_safety.reason")}`;
-        kind = "detail_digest";
-        content = sha256Text(`unassessed\0${row.reason as string}`);
-        probe = { kind, blob_oid: blobOid };
-      }
-    } else if (family === "github_actions") {
-      rule = asString(row.rule, "github_actions.rule");
-      severity = typeof row.severity === "string" ? row.severity : null;
-      legacy = asString(row.fingerprint, "github_actions.fingerprint");
-      kind = "line_content";
-      // Refs are relative to the audited root, which may be a subdirectory of the worktree.
-      const auditRoot = prefix ? join(context.repository, prefix) : context.repository;
-      const refs = [...new Set(row.refs as string[])].sort().map((ref) => githubActionsRefText(auditRoot, ref));
-      const texts = refs.map((item) => item.text);
-      const lineDigests = texts.map(trimmedLineSha256);
-      content = sha256Text(texts.join("\n"));
-      lineHint = refs.find((item) => item.line !== null)?.line ?? null;
-      probe = { kind, line_sha256s: lineDigests };
-    } else if (family === "planning_graph") {
-      rule = asString(row.code, "planning_graph.code");
-      legacy = planningFindingFingerprint(asString(row.id, "planning_graph.id"));
-      kind = "detail_digest";
-      content = sha256Text([rule, asString(row.subject, "planning_graph.subject"), normalizeWhitespace(asString(row.detail, "planning_graph.detail"))].join("\0"));
-      probe = { kind, blob_oid: blobOid };
-    } else if (family === "repository_boundaries") {
-      rule = asString(row.rule, "repository_boundaries.rule");
-      legacy = asString(row.fingerprint, "repository_boundaries.fingerprint");
-      kind = "detail_digest";
-      content = sha256Text(asString(row.detail, "repository_boundaries.detail"));
-      probe = { kind, blob_oid: blobOid };
-    } else if (family === "language_policy") {
-      rule = asString(row.rule, "language_policy.rule");
-      legacy = asString(row.fingerprint, "language_policy.fingerprint");
-      kind = "file";
-      content = sha256Text(`${rule}\0${asString(row.extension, "language_policy.extension")}`);
-      probe = { kind };
-    } else {
-      rule = asString(row.code, "semantic_boundary.code");
-      legacy = semanticFindingFingerprint(asString(row.candidate_id, "semantic_boundary.candidate_id"), rule);
-      kind = "whole_repo";
-      content = asString(record.candidate_set_sha256, "semantic_boundary.candidate_set_sha256");
-      probe = { kind, content_sha256: content };
-    }
+    const { rule, kind, content, lineHint, severity, legacy, probe } = projection.project({ row, record, blobOid, auditRoot });
     const fingerprint = receiptFingerprint({ family, rule, path, anchor_kind: kind, content_sha256: content });
     if (seen.has(fingerprint)) continue;
     seen.add(fingerprint);

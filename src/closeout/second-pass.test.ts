@@ -23,6 +23,9 @@ import { type CliIO, runCli } from "../cli.js";
 import { mintServerAttestationBinding } from "../runtime-binding.js";
 import { LocalRunReceiptStore } from "../run-receipt.js";
 import { createFixtureRepository, fixtureCommit, fixtureGit } from "../test-support/fixture-repo.js";
+import { auditLanguagePolicy, LANGUAGE_POLICY_SCHEMA, languagePolicyFindingFingerprint } from "./language-policy.js";
+import { BaselineReceiptModeError, resolveEarlierBaseline } from "./second-pass.js";
+import type { ReceiptMode, RunReceipt } from "../run-receipt.js";
 
 const roots: string[] = [];
 
@@ -308,5 +311,175 @@ describe("second pass classification", () => {
     fixtureCommit(other);
     expect(() => runSecondPass({ store, root: other, against: receipt.receipt_id, runtimeAttestation: SOURCE_RUNTIME, agent: UNOBSERVED, invocation_id: null })).toThrow(/different repository identity/);
     expect(baselineFromReceipt(receipt).families).toEqual(["public_safety"]);
+  });
+});
+
+const NO_BASELINE = "no earlier receipt for this repository; pass --against <receipt_id|bundle>";
+
+/** Store one receipt of `mode` for `root`. A VALIDATE receipt examines no family and carries a bundle verdict. */
+function storedReceipt(store: LocalRunReceiptStore, root: string, mode: ReceiptMode, observedAt: string): RunReceipt {
+  const validating = mode === "VALIDATE";
+  const receipt = assembleRunReceipt({
+    capture: captureReceiptSubject(root)!,
+    mode,
+    invocation_id: null,
+    runtimeAttestation: SOURCE_RUNTIME,
+    agent: UNOBSERVED,
+    families: validating ? [] : ["public_safety"],
+    findings: [],
+    verdict: validating || mode === "CLOSE" ? "NOT_CLEAN" : "AUDIT_ONLY",
+    exit_code: 0,
+    observed_at: observedAt,
+    finished_at: observedAt,
+    ...(validating
+      ? { validation: { bundle_sha256: "b".repeat(64), subject_commit: null, trust_policy_pins: [], trust_policy_pins_used: [], live: false } }
+      : {}),
+  });
+  store.write(receipt, root);
+  return receipt;
+}
+
+function committedRepository(name: string): { root: string; store: LocalRunReceiptStore; repositoryId: string } {
+  const root = repository(name);
+  writeFileSync(join(root, "notes.txt"), "clean\n");
+  fixtureCommit(root);
+  const store = new LocalRunReceiptStore(join(scratch(`${name}-receipts`), "receipts"));
+  return { root, store, repositoryId: captureReceiptSubject(root)!.repository_id };
+}
+
+describe("default baseline", () => {
+  it("a store that holds only a VALIDATE receipt has no baseline", () => {
+    const { root, store, repositoryId } = committedRepository("only-validate");
+    storedReceipt(store, root, "VALIDATE", "2026-11-03T00:00:00.000Z");
+    expect(() => resolveEarlierBaseline(store, repositoryId, undefined)).toThrow(new Error(NO_BASELINE));
+  });
+
+  it("a store that holds only a SECOND_PASS receipt has no baseline", () => {
+    const { root, store, repositoryId } = committedRepository("only-second-pass");
+    storedReceipt(store, root, "SECOND_PASS", "2026-11-03T00:00:00.000Z");
+    expect(() => resolveEarlierBaseline(store, repositoryId, undefined)).toThrow(new Error(NO_BASELINE));
+  });
+
+  it("a store that holds only VALIDATE and SECOND_PASS receipts has no baseline, and the run stops before it writes one", () => {
+    const { root, store, repositoryId } = committedRepository("no-eligible");
+    storedReceipt(store, root, "SECOND_PASS", "2026-11-03T00:00:00.000Z");
+    storedReceipt(store, root, "VALIDATE", "2026-11-03T00:01:00.000Z");
+    expect(() => resolveEarlierBaseline(store, repositoryId, undefined)).toThrow(new Error(NO_BASELINE));
+    expect(() => runSecondPass({ store, root, runtimeAttestation: SOURCE_RUNTIME, agent: UNOBSERVED, invocation_id: null })).toThrow(new Error(NO_BASELINE));
+    expect(store.index().map((entry) => entry.mode)).toEqual(["SECOND_PASS", "VALIDATE"]);
+  });
+
+  it("an empty store has no baseline", () => {
+    const { store, repositoryId } = committedRepository("empty-store");
+    expect(() => resolveEarlierBaseline(store, repositoryId, undefined)).toThrow(new Error(NO_BASELINE));
+  });
+
+  it("an AUDIT receipt followed by a VALIDATE receipt selects the AUDIT receipt", () => {
+    const { root, store, repositoryId } = committedRepository("audit-then-validate");
+    const audit = storedReceipt(store, root, "AUDIT", "2026-11-03T00:00:00.000Z");
+    storedReceipt(store, root, "VALIDATE", "2026-11-03T00:01:00.000Z");
+    expect(resolveEarlierBaseline(store, repositoryId, undefined)).toMatchObject({ kind: "receipt", ref: audit.receipt_id, families: ["public_safety"] });
+    // A later SECOND_PASS receipt does not displace it either.
+    storedReceipt(store, root, "SECOND_PASS", "2026-11-03T00:02:00.000Z");
+    expect(resolveEarlierBaseline(store, repositoryId, undefined).ref).toBe(audit.receipt_id);
+  });
+
+  it("the latest AUDIT or CLOSE receipt is the baseline", () => {
+    const { root, store, repositoryId } = committedRepository("latest-eligible");
+    storedReceipt(store, root, "AUDIT", "2026-11-03T00:00:00.000Z");
+    const close = storedReceipt(store, root, "CLOSE", "2026-11-03T00:01:00.000Z");
+    storedReceipt(store, root, "VALIDATE", "2026-11-03T00:02:00.000Z");
+    expect(resolveEarlierBaseline(store, repositoryId, undefined).ref).toBe(close.receipt_id);
+  });
+});
+
+describe("named baseline", () => {
+  it("--against a VALIDATE receipt is refused with a typed error", () => {
+    const { root, store, repositoryId } = committedRepository("against-validate");
+    storedReceipt(store, root, "AUDIT", "2026-11-03T00:00:00.000Z");
+    const validate = storedReceipt(store, root, "VALIDATE", "2026-11-03T00:01:00.000Z");
+    let thrown: unknown;
+    try { resolveEarlierBaseline(store, repositoryId, validate.receipt_id); } catch (error) { thrown = error; }
+    expect(thrown).toBeInstanceOf(BaselineReceiptModeError);
+    expect(thrown).toMatchObject({ name: "BaselineReceiptModeError", code: "BASELINE_RECEIPT_MODE", mode: "VALIDATE" });
+    expect((thrown as Error).message).toMatch(/^a VALIDATE receipt cannot be a second-pass baseline/u);
+    expect(() => runSecondPass({ store, root, against: validate.receipt_id, runtimeAttestation: SOURCE_RUNTIME, agent: UNOBSERVED, invocation_id: null })).toThrow(BaselineReceiptModeError);
+    expect(store.index().map((entry) => entry.mode)).toEqual(["AUDIT", "VALIDATE"]);
+  });
+
+  it("--against a SECOND_PASS, an AUDIT or a CLOSE receipt named explicitly is accepted", () => {
+    const { root, store, repositoryId } = committedRepository("against-second-pass");
+    for (const [mode, observedAt] of [["SECOND_PASS", "2026-11-03T00:00:00.000Z"], ["AUDIT", "2026-11-03T00:01:00.000Z"], ["CLOSE", "2026-11-03T00:02:00.000Z"]] as const) {
+      const receipt = storedReceipt(store, root, mode, observedAt);
+      expect(resolveEarlierBaseline(store, repositoryId, receipt.receipt_id)).toMatchObject({ kind: "receipt", ref: receipt.receipt_id, families: ["public_safety"] });
+    }
+  });
+
+  it("--against a VALIDATE receipt on the command line exits 2, says why and writes no receipt", async () => {
+    const { root, store } = committedRepository("against-validate-cli");
+    const validate = storedReceipt(store, root, "VALIDATE", "2026-11-03T00:00:00.000Z");
+    const output = cliOutput();
+    expect(await runCli(["second-pass", root, "--against", validate.receipt_id, "--json"], output.io, undefined, undefined, store)).toBe(2);
+    expect(output.stdout).toEqual([]);
+    expect(output.stderr).toEqual([expect.stringMatching(/^ERROR: a VALIDATE receipt cannot be a second-pass baseline/u)]);
+    expect(store.index().map((entry) => entry.mode)).toEqual(["VALIDATE"]);
+  });
+});
+
+describe("legacy bundle families", () => {
+  it("legacy baseline keeps language_policy", () => {
+    const root = repository("legacy-language");
+    mkdirSync(join(root, ".mister-clean"));
+    writeFileSync(join(root, ".mister-clean", "language-policy.json"), `${JSON.stringify({ schema: LANGUAGE_POLICY_SCHEMA, forbid_extensions: [".py"] })}\n`);
+    writeFileSync(join(root, "old.py"), "print('old')\n");
+    writeFileSync(join(root, "notes.txt"), `contact=${PLANTED}\n`);
+    fixtureCommit(root);
+    const languagePolicy = auditLanguagePolicy(root);
+    const publicSafety = scanTrackedPublicSafetySync(root, trackedShippablePaths(root), []);
+    expect(languagePolicy.findings.map((finding) => finding.path)).toEqual(["old.py"]);
+    const bundle = scratch("legacy-language-bundle");
+    writeFileSync(join(bundle, "language-policy-audit.json"), `${JSON.stringify(languagePolicy, null, 2)}\n`);
+    writeFileSync(join(bundle, "public-safety-audit.json"), `${JSON.stringify(publicSafety, null, 2)}\n`);
+    const head = fixtureGit(root, ["rev-parse", "HEAD"]);
+    writeFileSync(join(bundle, "regression-delta.json"), JSON.stringify({
+      record_type: "mister-clean.regression-delta",
+      schema_version: "1.6",
+      detector_coverage: {
+        baseline_repository_object: { record_type: "mister-clean.repository-object", schema_version: "1.0", head_commit: head, surface: "tracked_and_nonignored", entry_count: 3, sha256: "3".repeat(64) },
+        executions: [
+          { detector_id: "public_safety", result_ref: { path: "public-safety-audit.json", sha256: "0".repeat(64) }, finding_fingerprints: publicSafety.findings.map((finding) => finding.fingerprint) },
+          { detector_id: "language_policy", result_ref: { path: "language-policy-audit.json", sha256: "0".repeat(64) }, finding_fingerprints: languagePolicy.findings.map((finding) => finding.fingerprint) },
+        ],
+      },
+    }));
+    const legacyFingerprint = languagePolicyFindingFingerprint("old.py", ".py");
+    const earlier = legacyBaselineFromBundle(bundle);
+    expect(earlier).toMatchObject({ kind: "legacy_bundle", dirty: null, families: ["public_safety", "language_policy"] });
+    expect(earlier!.findings.filter((finding) => finding.family === "language_policy")).toEqual([
+      expect.objectContaining({ fingerprint: legacyFingerprint, legacy_fingerprint: legacyFingerprint, anchor: expect.objectContaining({ kind: "legacy" }) }),
+    ]);
+    // Joined through anchor kind legacy: the same file, still tracked, reads persisting.
+    const current = receiptFindingsFromAudit("language_policy", languagePolicy, { repository: root });
+    expect(classifySecondPass({ earlier: earlier!, current, git: gitPortFor(root) })
+      .filter((row) => row.family === "language_policy")).toEqual([expect.objectContaining({
+        observed: "both", classification: "persisting", path: "old.py", legacy_fingerprint: legacyFingerprint,
+        basis: "legacy fingerprint joined; no anchor to test for a rewrite",
+      })]);
+    // End to end: the second pass re-audits the family the bundle ran.
+    const store = new LocalRunReceiptStore(join(scratch("legacy-language-receipts"), "receipts"));
+    const { result, receipt } = runSecondPass({ store, root, against: bundle, runtimeAttestation: SOURCE_RUNTIME, agent: UNOBSERVED, invocation_id: null });
+    expect(result.against.kind).toBe("legacy_bundle");
+    expect(result.families).toEqual(["public_safety", "language_policy"]);
+    expect(receipt.families).toEqual(["language_policy", "public_safety"]);
+    expect(result.rows.map((row) => [row.family, row.classification])).toEqual([["language_policy", "persisting"], ["public_safety", "persisting"]]);
+    // An execution without a result file falls back to its recorded fingerprints and is kept too.
+    const recordedOnly = scratch("legacy-language-recorded");
+    writeFileSync(join(recordedOnly, "regression-delta.json"), JSON.stringify({
+      detector_coverage: {
+        baseline_repository_object: { head_commit: head, sha256: "3".repeat(64) },
+        executions: [{ detector_id: "language_policy", finding_fingerprints: [legacyFingerprint] }, { detector_id: "repository_boundaries", finding_fingerprints: ["f".repeat(64)] }],
+      },
+    }));
+    expect(legacyBaselineFromBundle(recordedOnly)).toMatchObject({ families: ["language_policy"], findings: [{ family: "language_policy", legacy_fingerprint: legacyFingerprint }] });
   });
 });

@@ -12,6 +12,7 @@ import {
   sortedUnique,
 } from "./detector-coverage.js";
 import { auditLanguagePolicy } from "./language-policy.js";
+import { CLOSEOUT_PHASE_IDS, type CloseoutPhaseId } from "./phase-registry.js";
 import { canonicalObservationId } from "./regression-accounting.js";
 import { auditGitHubActionsRepository } from "./github-actions.js";
 import { loadDenylist, scanTrackedPublicSafetySync } from "./inspection.js";
@@ -349,21 +350,22 @@ async function validateLiveDetectors(
       }
       semanticLive = auditSemanticRepository(repo);
     }
-    const liveDetectorFindings: Array<readonly [string, readonly string[] | undefined]> = [
-      ["planning_graph", findingFingerprintsFromAudit("planning_graph", planningLive)],
-      ["github_actions", findingFingerprintsFromAudit("github_actions", githubActionsLive)],
-      ["semantic_boundary", findingFingerprintsFromAudit("semantic_boundary", semanticLive)],
-    ];
+    // Fresh fingerprints by family. A family is present when it was rerun; its
+    // value is undefined when the fresh result was not canonical.
+    const liveDetectorFindings = new Map<CloseoutPhaseId, readonly string[] | undefined>();
+    const rerun = (detectorId: CloseoutPhaseId, audit: unknown): void => {
+      liveDetectorFindings.set(detectorId, findingFingerprintsFromAudit(detectorId, audit));
+    };
+    rerun("planning_graph", planningLive);
+    rerun("github_actions", githubActionsLive);
+    rerun("semantic_boundary", semanticLive);
     if (liveRequiredDetectorIds.includes("public_safety")) {
       const publicSafetyResult = scanTrackedPublicSafetySync(repo, trackedPaths, await loadDenylist(publicSafetyDenylist));
       const policyTrackedPathCount = object(object(coverage?.run_policy)?.public_safety)?.tracked_path_count;
       if (policyTrackedPathCount !== trackedPaths.length) {
         errors.push(`$.live_detector_coverage.public_safety: tracked path count drifted from bound policy (${String(policyTrackedPathCount)} -> ${trackedPaths.length})`);
       }
-      liveDetectorFindings.splice(1, 0, [
-        "public_safety",
-        findingFingerprintsFromAudit("public_safety", publicSafetyResult),
-      ]);
+      rerun("public_safety", publicSafetyResult);
     }
     if (liveRequiredDetectorIds.includes("language_policy")) {
       let languagePolicyFingerprints: readonly string[] | undefined;
@@ -373,10 +375,13 @@ async function validateLiveDetectors(
         errors.push(`$.live_detector_coverage.language_policy: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (languagePolicyFingerprints !== undefined || !errors.some((error) => error.startsWith("$.live_detector_coverage.language_policy:"))) {
-        liveDetectorFindings.push(["language_policy", languagePolicyFingerprints]);
+        liveDetectorFindings.set("language_policy", languagePolicyFingerprints);
       }
     }
-    for (const [detectorId, fingerprints] of liveDetectorFindings) {
+    // Judge the families in registry order, whatever order they were rerun in.
+    for (const detectorId of CLOSEOUT_PHASE_IDS) {
+      if (!liveDetectorFindings.has(detectorId)) continue;
+      const fingerprints = liveDetectorFindings.get(detectorId);
       if (!fingerprints) {
         errors.push(`$.live_detector_coverage.${detectorId}: fresh registered detector result was not canonical`);
         continue;
