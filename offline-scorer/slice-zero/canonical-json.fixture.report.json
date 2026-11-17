@@ -1,0 +1,233 @@
+{
+  "schema": "eval-score/1",
+  "scorer": {
+    "name": "offline-scorer",
+    "version": 1,
+    "source_sha256": "3b0c005595acfd6cf34644b4d390934114ea342bfb2480a51b86a68efd3a3b73"
+  },
+  "case_set": {
+    "id": "slice-zero-canonical-json",
+    "version": 1,
+    "sha256": "a2c4d66a4227265d96ededc209377beb6cb7883ad6ea0f1003d6a117b528f0b0",
+    "task_class": "rewrite a JSON value in canonical form (exact text)",
+    "kind": "exact",
+    "cases": 6,
+    "floors": {
+      "min_attempts_per_case": 3,
+      "min_cases_passed": 5
+    }
+  },
+  "answers": {
+    "sha256": "e9845cfbd983b40b894bafca4e5c48d765b95e91e59568768068ba3cb324a153",
+    "lines": 52
+  },
+  "subjects": [
+    {
+      "subject": {
+        "id": "FX-PARTIAL",
+        "harness": "none",
+        "model": "hand-written",
+        "reasoning": "none",
+        "provider": "none",
+        "identity_status": "synthetic"
+      },
+      "identity_bound": false,
+      "outcome": "insufficient_evidence",
+      "cases": 6,
+      "cases_answered": 5,
+      "cases_passed": 5,
+      "cases_failed": 0,
+      "cases_unanswered": 1,
+      "attempts": 16,
+      "malformed_attempts": 0,
+      "flaky_cases": 0,
+      "constant_label": null,
+      "tokens_in": null,
+      "tokens_out": null,
+      "cost_usd": null,
+      "cost_known_attempts": 0,
+      "per_case": [
+        {
+          "case": "cj-01",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-02",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-03",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-04",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-05",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-06",
+          "attempts": 1,
+          "passes": 1,
+          "malformed": 0,
+          "result": "unanswered"
+        }
+      ]
+    },
+    {
+      "subject": {
+        "id": "FX-PERFECT",
+        "harness": "none",
+        "model": "hand-written",
+        "reasoning": "none",
+        "provider": "none",
+        "identity_status": "synthetic"
+      },
+      "identity_bound": false,
+      "outcome": "meets_floor",
+      "cases": 6,
+      "cases_answered": 6,
+      "cases_passed": 6,
+      "cases_failed": 0,
+      "cases_unanswered": 0,
+      "attempts": 18,
+      "malformed_attempts": 0,
+      "flaky_cases": 0,
+      "constant_label": null,
+      "tokens_in": 1080,
+      "tokens_out": 216,
+      "cost_usd": 0.00036,
+      "cost_known_attempts": 18,
+      "per_case": [
+        {
+          "case": "cj-01",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-02",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-03",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-04",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-05",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        },
+        {
+          "case": "cj-06",
+          "attempts": 3,
+          "passes": 3,
+          "malformed": 0,
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "subject": {
+        "id": "FX-WRONG",
+        "harness": "none",
+        "model": "hand-written",
+        "reasoning": "none",
+        "provider": "none",
+        "identity_status": "synthetic"
+      },
+      "identity_bound": false,
+      "outcome": "below_floor",
+      "cases": 6,
+      "cases_answered": 6,
+      "cases_passed": 0,
+      "cases_failed": 6,
+      "cases_unanswered": 0,
+      "attempts": 18,
+      "malformed_attempts": 0,
+      "flaky_cases": 0,
+      "constant_label": null,
+      "tokens_in": null,
+      "tokens_out": null,
+      "cost_usd": null,
+      "cost_known_attempts": 0,
+      "per_case": [
+        {
+          "case": "cj-01",
+          "attempts": 3,
+          "passes": 0,
+          "malformed": 0,
+          "result": "fail"
+        },
+        {
+          "case": "cj-02",
+          "attempts": 3,
+          "passes": 0,
+          "malformed": 0,
+          "result": "fail"
+        },
+        {
+          "case": "cj-03",
+          "attempts": 3,
+          "passes": 0,
+          "malformed": 0,
+          "result": "fail"
+        },
+        {
+          "case": "cj-04",
+          "attempts": 3,
+          "passes": 0,
+          "malformed": 0,
+          "result": "fail"
+        },
+        {
+          "case": "cj-05",
+          "attempts": 3,
+          "passes": 0,
+          "malformed": 0,
+          "result": "fail"
+        },
+        {
+          "case": "cj-06",
+          "attempts": 3,
+          "passes": 0,
+          "malformed": 0,
+          "result": "fail"
+        }
+      ]
+    }
+  ]
+}

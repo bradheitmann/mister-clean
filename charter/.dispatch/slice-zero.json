@@ -1,0 +1,12 @@
+{
+  "accepted_unix_s": 1794879513,
+  "accepted_utc": "2026-11-17T01:38:33Z",
+  "base_commit": "380172b76e2a1d8af760bd79ca32721341133fe0",
+  "brief_sha256": null,
+  "done_sha256": "235288b19dd4246d44d6e8ef11b1056002751680181e9062cefd06bcba27a534",
+  "receipt": "qa/slice-zero/receipt.json",
+  "receipt_sha256": "bad181a31cffca910131d02beadb1e6f24ca6fdc5275f7ce31c7578646dd8fed",
+  "schema_version": "charter.dispatch/1",
+  "slice": "slice-zero",
+  "state": "accepted"
+}

@@ -1,0 +1,63 @@
+{
+  "done_sha256": "235288b19dd4246d44d6e8ef11b1056002751680181e9062cefd06bcba27a534",
+  "entries": [
+    {
+      "evidence_sha256": "446b1558222ae4e4999ca549f09bb744e42c4f29f748f8185bb6c5bc0a36fa90",
+      "proof": "1",
+      "recorded_utc": "2026-11-17T01:38:11Z",
+      "run_id": "chqa-d3a7a9a-p1"
+    },
+    {
+      "evidence_sha256": "b044dcb5b4fbe1b936557a50bc531650194b2737c7e0734f05b21a463178a0a5",
+      "proof": "2",
+      "recorded_utc": "2026-11-17T01:38:11Z",
+      "run_id": "chqa-d3a7a9a-p2"
+    },
+    {
+      "evidence_sha256": "ef4a23a4fb5eeac1fa2edc15b0d2decfb8961847f6fb072466182a8fb9918cab",
+      "proof": "3",
+      "recorded_utc": "2026-11-17T01:38:11Z",
+      "run_id": "chqa-d3a7a9a-p3"
+    },
+    {
+      "evidence_sha256": "7556977a0d40cc37ebeceafddec5034eda94dce8c3cce54b74e430fe5128a095",
+      "proof": "4",
+      "recorded_utc": "2026-11-17T01:38:11Z",
+      "run_id": "chqa-d3a7a9a-p4"
+    },
+    {
+      "evidence_sha256": "6ed9a13244fa9af0653b23ac13e9fa1f986d2c4394bb83263374b0e0130774ed",
+      "proof": "5",
+      "recorded_utc": "2026-11-17T01:38:11Z",
+      "run_id": "chqa-d3a7a9a-p5"
+    },
+    {
+      "evidence_sha256": "aeb873f276a0391fa3dd172701bf9803c5fc32ca9de689959ed17e629992e349",
+      "proof": "6",
+      "recorded_utc": "2026-11-17T01:38:11Z",
+      "run_id": "chqa-d3a7a9a-p6"
+    },
+    {
+      "evidence_sha256": "27c87fa6e0b9b8ff3b930940e50c95b6d13587de8a4782e985e4cef9c412f31e",
+      "proof": "7",
+      "recorded_utc": "2026-11-17T01:38:11Z",
+      "run_id": "chqa-d3a7a9a-p7"
+    },
+    {
+      "evidence_sha256": "130249431908315e5e89acd9bfc0c402ca51a2bce9a7387d8e458fd950d62cf9",
+      "proof": "8",
+      "recorded_utc": "2026-11-17T01:38:12Z",
+      "run_id": "chqa-d3a7a9a-p8"
+    },
+    {
+      "evidence_sha256": "4d1e4e9fb6bfd53f9646e0f651941c9f82e78bab1db6bdf1df71bab089c8a5c4",
+      "proof": "9",
+      "recorded_utc": "2026-11-17T01:38:12Z",
+      "run_id": "chqa-d3a7a9a-p9"
+    }
+  ],
+  "head": "d3a7a9ad2021e8ca091e0df7849d97e763a350a3",
+  "manifest_sha256": "a406055e98c91d8d845ec81143ed4e2781f6273b3714d197eb129a57274723b5",
+  "schema_version": "charter.reopen/1",
+  "slice": "slice-zero"
+}

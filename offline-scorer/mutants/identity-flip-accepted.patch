@@ -1,0 +1,13 @@
+diff --git a/offline-scorer/score.ts b/offline-scorer/score.ts
+index dbbcb7e..2d8ddec 100644
+--- a/offline-scorer/score.ts
++++ b/offline-scorer/score.ts
+@@ -325,7 +325,7 @@ function parseAnswers(bytes: Uint8Array, caseSet: CaseSet): { answers: Answer[];
+       const description = JSON.stringify(subject);
+       const earlier = described.get(subject.id);
+       if (earlier === undefined) described.set(subject.id, description);
+-      else if (earlier !== description) problems.push(`${where}: subject ${subject.id} is described two ways in this file`);
++      else if (earlier.length === 0) problems.push(`${where}: subject ${subject.id} is described two ways in this file`);
+     }
+     if (problems.length > before || subject === undefined || known === undefined) return;
+     const key = JSON.stringify([subject.id, known.id, attempt]);

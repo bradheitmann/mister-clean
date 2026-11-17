@@ -1,0 +1,106 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "slice-zero",
+  "verifies": "slice-zero",
+  "candidate_commit": "d3a7a9ad2021e8ca091e0df7849d97e763a350a3",
+  "frozen": {
+    "manifest_sha256": "a406055e98c91d8d845ec81143ed4e2781f6273b3714d197eb129a57274723b5",
+    "head": "d3a7a9ad2021e8ca091e0df7849d97e763a350a3"
+  },
+  "dispatch": {
+    "base_commit": "380172b76e2a1d8af760bd79ca32721341133fe0",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-fable-5-2",
+    "verifier": "xiaomi/mimo-v2.6-flash"
+  },
+  "verdict": "accepted",
+  "checks": [
+    {
+      "id": "C01",
+      "description": "qa/evidence-proof-1.txt (proof 1): clean self-test exit 0 printing self-test: ok. All four mutant patches applied in QA/scratch (rc 0), each self-test then exited 1 with exactly one failing self-test: line naming the rule its patch name states - trusts-recorded-hash: an output changed after its hash was written must be refused; unanswered-case-ignored: a case with fewer attempts than the floor is unanswered; identity-flip-accepted: one subject id described with two models; floor-allows-constant-label: a floor a constant label would meet. Each revert rc 0, git status clean after each. Evidence file sha256 446b1558222ae4e4999ca549f09bb744e42c4f29f748f8185bb6c5bc0a36fa90.",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "description": "qa/evidence-proof-2.txt (proof 2): both fixture runs exit 0 and cmp against the committed reports exits 0 (json-validity 9928 bytes, canonical-json 5336 bytes). Mutant on a copy in QA/tmp: FX-PERFECT first-line output flipped to the other label with output_sha256 recomputed -> run exits 0, cmp exits 1 (RED). Evidence file sha256 b044dcb5b4fbe1b936557a50bc531650194b2737c7e0734f05b21a463178a0a5.",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "description": "qa/evidence-proof-3.txt (proof 3): the three jq reopens print exactly the strings the contract names, on both fixture reports, and [false] for identity_bound on either. Mutant unanswered-case-ignored applied: the json-validity run reports FX-PARTIAL meets_floor instead of insufficient_evidence (RED); revert rc 0, status clean. Evidence file sha256 ef4a23a4fb5eeac1fa2edc15b0d2decfb8961847f6fb072466182a8fb9918cab.",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "description": "qa/evidence-proof-4.txt (proof 4): all six tampering changes (a)-(f) made to copies in QA/tmp exit 2 with at least one stderr problem line and zero stdout bytes (stderr lines 1/119/1/23/1/24; the problems name output_sha256, case_set_sha256, unknown case id, two-way subject description, duplicate attempt, receipt without evidence). Mutant trusts-recorded-hash plus change (a): exit 0 printing the full 5-subject report (RED). Evidence file sha256 7556977a0d40cc37ebeceafddec5034eda94dce8c3cce54b74e430fe5128a095.",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "description": "qa/evidence-proof-5.txt (proof 5): oracle-check exit 0 printing oracle-check: ok (json-validity 8, canonical-json 6). Mutant: first expected value flipped to the other label in QA/scratch -> exit 1 naming jv-01 (RED); git checkout restored, status clean. Source read in full: the oracle imports only node:fs, shares no code with score.ts, and recomputes both sets in one run. Evidence file sha256 6ed9a13244fa9af0653b23ac13e9fa1f986d2c4394bb83263374b0e0130774ed.",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "description": "qa/evidence-proof-6.txt (proof 6): both real-run reports reproduce byte for byte; each shasum equals the sum recorded for that set in P/REPORTS.sha256 (json-validity 80d71f74e88e4dab4a827e1c316a8ea8ea2e5611b5426808135cc39f7313e8e1, canonical-json e85ce91b8cd4e02f1bafd9b600095b9c2f40bfa3700686032235102f6192e4d6); the jq shape check prints [3,[true],[]] for each; bash P/verify-evidence.sh exit 0 printing evidence: ok (126 answers checked). Subject outcome lines recorded as data with no model name as a criterion. Mutant on a copy: one output flipped, hash left -> exit 2 (RED). Evidence file sha256 aeb873f276a0391fa3dd172701bf9803c5fc32ca9de689959ed17e629992e349.",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "description": "qa/evidence-proof-7.txt (proof 7): grep -c offline-scorer/score.ts charter/charter.toml prints 1; grep -c '^proven_on = \"\"' prints 1; grep -c CS-001 prints 0 (with || true); the owner-decision file test prints found - each under the contract's shell, exit 0. Mutant: n/a (records). Evidence file sha256 27c87fa6e0b9b8ff3b930940e50c95b6d13587de8a4782e985e4cef9c412f31e.",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "description": "qa/evidence-proof-8.txt (proof 8): bun run build:materials exit 0 printing Generated 40 MCP materials; pnpm exec tsc --noEmit and pnpm exec tsc --project tsconfig.campaign.json --noEmit exit 0 from the checkout root; pnpm run audit:public exit 0 printing PASS (62 files); the vitest inspection test exit 0 with 1 passed; bun ablations/view-ab.ts --self-test exit 0 printing self-test: ok; git diff --name-only 43f49fa d3a7a9ad lists exactly the 20 files the contract allows; the diff over src dist bin package.json prints nothing. Checkout git status clean throughout; nothing tracked written. Mutant: n/a (regression set). Evidence file sha256 130249431908315e5e89acd9bfc0c402ca51a2bce9a7387d8e458fd950d62cf9.",
+      "classification": "executed"
+    },
+    {
+      "id": "C09",
+      "description": "qa/evidence-proof-9.txt (proof 9): gh run view -R bradheitmann/mister-clean 43990964246 --json headSha,jobs gives headSha a65d664f8ec53c6d3f82a4835426531ae8e498c4 (the pushed tip a65d664, the freeze-record commit); job verify conclusion success; the non-required charter job conclusion failure - red as NOT CHECKED, the declared baseline, not part of this proof. The --log shows, in the step named Offline scorer self-test, oracle check and fixture reports (eval-score/1), the two lines self-test: ok and oracle-check: ok (json-validity 8, canonical-json 6). Evidence file sha256 4d1e4e9fb6bfd53f9646e0f651941c9f82e78bab1db6bdf1df71bab089c8a5c4.",
+      "classification": "executed"
+    },
+    {
+      "id": "C10",
+      "description": "qa/review.md (review): read the full diff 43f49fa..d3a7a9ad over offline-scorer, tsconfig.json, .github, charter/charter.toml and charter/owner-decisions, and all of offline-scorer/score.ts. Thirteen forgery inputs of my own beyond proof 4's six (repeated output key with hash of last value and of first value; label case/inner/outer whitespace; answers mixing two case sets; attempts 1,2,7; repeated floors key with old and with rebound answers; trailing-space subject id; BOM on the case set and on the answers file; attempt 1.0 and attempt \"1\"; an answer line carrying verdict/passed/score fields): each behaved as recorded in the review, nothing was scored that should have been refused. Hand-predicted my own three-subject set before running (exact floor, one below, exactly half of a case's attempts passing) and every predicted field matched. The scorer reads no recorded verdict and no field besides output can decide pass/fail; the oracle shares no code with the scorer and recomputes both sets; the four mutants are four different rules each failing only its own expectation; the scorer is unpublished (package.json files whitelist, categoryRoots, audit PASS (62 files)); collect.sh writes answers only from the harness log, and verify-evidence.sh alone could print evidence: ok for an answer whose output bytes differ from its log - QA-SZ-D1, closed transitively by the scorer in the same proof; the decision record's two quotations are exact (D3 truncated without an ellipsis - QA-SZ-D2) and claim no more authority than the packet and DECISIONS-1 carry; commit 380172b weakened no proof criterion and added one to proof 8; the contract states its scope honestly including what the real run does not prove. Evidence file sha256 0fee36eeac8bb6e5a94891f7733266c6765e23f1fe0f40712b4e61a7415c5c58.",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "QA-SZ-D1",
+      "file": "~/.local/share/agent-private/mister-clean/master-gate/slice-zero/real-run/verify-evidence.sh",
+      "line": 29,
+      "what_is_wrong": "The script compares the sha256 of the log's final assistant text with the answer's recorded output_sha256 field and never reads answer.output, so run alone it can print evidence: ok while an answer's output bytes do not match its log (replace output and set output_sha256 to the log-text hash); the contract's proof 6 sentence says the script compares the log's text with the answer's output, which it does not do directly. The slice's proof still holds because the same proof runs the scorer, which forces output_sha256 = sha256(output), chaining the two checks.",
+      "severity": "low"
+    },
+    {
+      "id": "QA-SZ-D2",
+      "file": "charter/owner-decisions/2026-11-10-slice-zero-offline-scorer.md",
+      "line": 16,
+      "what_is_wrong": "The D3 quotation is cut off mid-sentence at 'stay outside the repository' with no ellipsis; the source item continues 'per mister-clean's INTENT; \"private area\" means code only.' The quoted words are exact and the dropped clause only adds sourcing context, so the citation is imprecise but does not inflate the claim.",
+      "severity": "info"
+    }
+  ],
+  "notes": {
+    "process": "QA/scratch is a shared clone at the frozen head d3a7a9ad2021e8ca091e0df7849d97e763a350a3, left in place for the PM to remove; the slice checkout was never edited (git status --porcelain empty in both after every step). Every mutant was applied only in QA/scratch or on copies in QA/tmp and reverted with git apply -R or git checkout --. Every reopen and mutant ran as bash --noprofile --norc -e -o pipefail -c from the root of QA/scratch with nice -n 10 timeout 900, TMPDIR=QA/tmp, and ~/.local/share/mise/installs/bun/1.4.0/bin first on PATH (bun 1.4.0); the pnpm, tsc, build:materials, audit:public and vitest commands of proof 8 ran from the checkout root as the contract's exception allows. No model was called, no server started, no cargo run. Only charter check --strict, gate slice-zero --verify and receipt on this receipt were available; only receipt was run. P was read, never written. Home paths written as ~; no personal data recorded; harness logs cited by path only. Provisioning record qa/evidence-0.txt, sha256 9dcf2bcf9af106650b1b30e9fa5d0cae94f5bc930a8bf263e945c582a0029770.",
+    "dispatch_base_vs_done_base": "dispatch.base_commit is 380172b76e2a1d8af760bd79ca32721341133fe0, the parent of the renewed dispatch record's own commit (b1ef2ec) - the same house convention as the accepted mg-charter-pin-c6c9843 receipt. The DONE declares the slice base as main 43f49fa, the direct parent of the first slice commit and an ancestor of the frozen head, which proof 8's diffs use. Two meanings of base, each internally consistent; brief_sha256 is null in the record and carried as null here.",
+    "proof6_subjects": "The six subject outcome lines are recorded in qa/evidence-proof-6.txt as data only; all six read meets_floor, which the contract explicitly does not require and which is not a criterion of this review.",
+    "amendment_380172b": "git show 380172b is a 15+/15- edit of charter/DONE/slice-zero.md only: paths moved from evals/offline-scorer/ to top-level offline-scorer/ with matching command rewrites, and proof 8 gained the Generated 40 MCP materials criterion. No proof criterion was weakened; the dispatch record was renewed at b1ef2ec.",
+    "charter_job_red": "The non-required charter job of run 43990964246 was red (failure, NOT CHECKED baseline); its colour is not part of proof 9, and verify was success."
+  },
+  "proofs_reopened": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9"
+  ]
+}

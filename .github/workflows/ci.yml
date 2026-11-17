@@ -33,6 +33,16 @@ jobs:
         run: pnpm run ci:check
       - name: View-ablation comparator self-test (ablation-replay/1)
         run: bun ablations/view-ab.ts --self-test
+      # Slice Zero: the scorer calls no model. Each fixture run must reproduce
+      # its committed report byte for byte.
+      - name: Offline scorer self-test, oracle check and fixture reports (eval-score/1)
+        run: |
+          bun offline-scorer/score.ts --self-test
+          bun offline-scorer/slice-zero/oracle-check.ts
+          bun offline-scorer/score.ts offline-scorer/slice-zero/json-validity.case-set.json offline-scorer/slice-zero/json-validity.fixture.answers.jsonl > "$RUNNER_TEMP/json-validity.report.json"
+          cmp "$RUNNER_TEMP/json-validity.report.json" offline-scorer/slice-zero/json-validity.fixture.report.json
+          bun offline-scorer/score.ts offline-scorer/slice-zero/canonical-json.case-set.json offline-scorer/slice-zero/canonical-json.fixture.answers.jsonl > "$RUNNER_TEMP/canonical-json.report.json"
+          cmp "$RUNNER_TEMP/canonical-json.report.json" offline-scorer/slice-zero/canonical-json.fixture.report.json
       - name: Verify strict TypeScript intake helper
         run: |
           pnpm install --frozen-lockfile --ignore-scripts

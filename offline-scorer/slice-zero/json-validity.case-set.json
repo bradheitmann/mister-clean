@@ -1,0 +1,74 @@
+{
+  "schema": "eval-case-set/1",
+  "id": "slice-zero-json-validity",
+  "version": 1,
+  "task_class": "decide whether a text is valid JSON (one of two labels)",
+  "provenance": "synthetic: written for Slice Zero, taken from no project",
+  "kind": "label",
+  "labels": [
+    "valid",
+    "invalid"
+  ],
+  "floors": {
+    "min_attempts_per_case": 3,
+    "min_cases_passed": 7
+  },
+  "cases": [
+    {
+      "id": "jv-01",
+      "material": "{\"name\":\"ledger\",\"entries\":[1,2,3]}",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n{\"name\":\"ledger\",\"entries\":[1,2,3]}\n>>>",
+      "input_sha256": "44aedd527b44d787a588d397f296d3b4d1706e8b1b97bd7a5b700c2e5f3717f1",
+      "expected": "valid"
+    },
+    {
+      "id": "jv-02",
+      "material": "{\"name\":\"ledger\",\"entries\":[1,2,3,]}",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n{\"name\":\"ledger\",\"entries\":[1,2,3,]}\n>>>",
+      "input_sha256": "4ba9bb1e59d6f7f5a7b7c20ab4a509c7df0155cb6ac5c63547ed4a90a20bad00",
+      "expected": "invalid"
+    },
+    {
+      "id": "jv-03",
+      "material": "{'name':'ledger'}",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n{'name':'ledger'}\n>>>",
+      "input_sha256": "8624d9c37a319fe07b43c14aa3eed641ef8afcdcfb7a03dc759e9c3f68de6fed",
+      "expected": "invalid"
+    },
+    {
+      "id": "jv-04",
+      "material": "[true,false,null,-0.5e3]",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n[true,false,null,-0.5e3]\n>>>",
+      "input_sha256": "3bfc494f019fc32115481d98d04d9089973edc5cfbbcdb7dbf31e5987f361f9d",
+      "expected": "valid"
+    },
+    {
+      "id": "jv-05",
+      "material": "{\"path\":\"C:\\\\temp\",\"tab\":\"\\u0009\"}",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n{\"path\":\"C:\\\\temp\",\"tab\":\"\\u0009\"}\n>>>",
+      "input_sha256": "6b6bc4f6a74a720198a4c4326a6890a5b4059744eb5b85256a72a08adb732746",
+      "expected": "valid"
+    },
+    {
+      "id": "jv-06",
+      "material": "{\"count\":012}",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n{\"count\":012}\n>>>",
+      "input_sha256": "e0a664f4df04e9b63502ce7fa2521c67d39e31ed907e6e6c26150b38d848a365",
+      "expected": "invalid"
+    },
+    {
+      "id": "jv-07",
+      "material": "{\"a\":{\"b\":{\"c\":[]}}}",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n{\"a\":{\"b\":{\"c\":[]}}}\n>>>",
+      "input_sha256": "e3045b8f4128875d43da6d343453eb6319724c4cf1ebdcb15f3e3bbcf2df3e79",
+      "expected": "valid"
+    },
+    {
+      "id": "jv-08",
+      "material": "{\"a\":1 \"b\":2}",
+      "input": "Decide whether the text between the markers is valid JSON as defined by RFC 8259.\nReply with exactly one word: valid or invalid.\n<<<\n{\"a\":1 \"b\":2}\n>>>",
+      "input_sha256": "eaf672520ac260a598e475b35c6f34b67517da8e68f6b4a86c17275fbe944294",
+      "expected": "invalid"
+    }
+  ]
+}

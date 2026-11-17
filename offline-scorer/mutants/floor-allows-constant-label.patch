@@ -1,0 +1,13 @@
+diff --git a/offline-scorer/score.ts b/offline-scorer/score.ts
+index dbbcb7e..2a37385 100644
+--- a/offline-scorer/score.ts
++++ b/offline-scorer/score.ts
+@@ -222,7 +222,7 @@ function parseCaseSet(bytes: Uint8Array): { caseSet?: CaseSet; problems: string[
+   if (kind === "label" && minCasesPassed > 0) {
+     for (const label of labels) {
+       const share = cases.filter((entry) => entry.expected === label).length;
+-      if (share >= minCasesPassed) {
++      if (share > cases.length) {
+         problems.push(`case set: answering ${label} every time would pass ${share} cases and meet the floor of ${minCasesPassed}`);
+       }
+     }
