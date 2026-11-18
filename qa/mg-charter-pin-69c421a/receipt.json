@@ -1,0 +1,87 @@
+{
+  "schema_version": "charter.receipt/1",
+  "slice": "mg-charter-pin-69c421a",
+  "candidate_commit": "4dd25890bccfb264b1cf31ddd0888cb6f092fc7f",
+  "frozen": {
+    "head": "4dd25890bccfb264b1cf31ddd0888cb6f092fc7f",
+    "manifest_sha256": "845e1c036e526b4b330b1d99061d30c018dbdb8493203f4525f000fcbc097887"
+  },
+  "dispatch": {
+    "base_commit": "b543b70b526425e7c8d59bc9a4496365deea3ad7",
+    "brief_sha256": null
+  },
+  "models": {
+    "author": "anthropic/claude-opus-5-5",
+    "verifier": "zai/glm-5.3-flash"
+  },
+  "checks": [
+    {
+      "id": "C01",
+      "name": "proof 1: tree declares pin 69c421a and passes that build's strict check (reopen exit 0, mutant exit 1 naming both commits)",
+      "evidence_file": "evidence-proof-1.txt",
+      "evidence_sha256": "7e27468e897c1d74b6878e877c08d9b7faecf8e9173bc7e5607ddb068e8c5a81",
+      "classification": "executed"
+    },
+    {
+      "id": "C02",
+      "name": "proof 2: CHARTER_REV names 69c421a and no old-id reference outside charter/ and qa/ (reopen holds; mutant lists ci.yml)",
+      "evidence_file": "evidence-proof-2.txt",
+      "evidence_sha256": "c2c3b1391f2e762156bf0bf46e9460027269268572a7b6a4d44ec687da8fe4cc",
+      "classification": "executed"
+    },
+    {
+      "id": "C03",
+      "name": "proof 3: binary sha256/version match cut record lines 2; SPEC.md is the 69c421a text (cut record line 3); schemas/ and GOVERNANCE.md unchanged; mutant shows warning-only behaviour with the changed sum",
+      "evidence_file": "evidence-proof-3.txt",
+      "evidence_sha256": "337c30b72b033f0c7657bdfcaeacc5f1770c49b87072867dc059c3fa52559ee8",
+      "classification": "executed"
+    },
+    {
+      "id": "C04",
+      "name": "proof 4: hooks status match in CHECKOUT; fresh-clone mutant exits 1 with drift in 2 of 2 hooks",
+      "evidence_file": "evidence-proof-4.txt",
+      "evidence_sha256": "cd6a0cc0fa7f50efd3b93afda9ed4013e008a16b025ae368f79ea2781990e3c6",
+      "classification": "executed"
+    },
+    {
+      "id": "C05",
+      "name": "proof 5: 15 dispatch records each print verified (15 ' verified: ' lines), then all-verified; mutant (appended newline) refuses mg-pin-readers at exit 1",
+      "evidence_file": "evidence-proof-5.txt",
+      "evidence_sha256": "e00168de7e9dc61361335736fd309fed7510ba7cd88940f71efe30b4663c487b",
+      "classification": "executed"
+    },
+    {
+      "id": "C06",
+      "name": "proof 6: hosted run 44181949190 headSha 2d9b6943…, verify success, charter job red as NOT CHECKED (known baseline)",
+      "evidence_file": "evidence-proof-6.txt",
+      "evidence_sha256": "be1ba035804b0ef2ff08e306439a2430975b6fc679f9b785f2186c5da204b767",
+      "classification": "executed"
+    },
+    {
+      "id": "C07",
+      "name": "proof 7: ci.yml numstat 1 1; tsc exit 0, audit:public PASS, inspection private-identifier test 1 passed; diff lists exactly the six slice files (including charter/SPEC.md)",
+      "evidence_file": "evidence-proof-7.txt",
+      "evidence_sha256": "f07fa0abb3d0ad1a2fe393e7be9c6452508e8f1e5d91c4974939092246fd5ab1",
+      "classification": "executed"
+    },
+    {
+      "id": "C08",
+      "name": "review: non-vacuity at base 16f3357 (QA/base reopens of proofs 1-2 and the spec sum fail there), binary/spec match the cut record, companions unchanged, SPEC diff binds nothing unmentioned, no old id outside charter/, order of commits true, proof 4 statement honest, scope honest",
+      "evidence_file": "review.md",
+      "evidence_sha256": "925df5af9efbf1696a82bf4c0d4e0963f994aa6aa97bad79bab4f18aa4d8b462",
+      "classification": "executed"
+    }
+  ],
+  "defects": [],
+  "new_defects": [
+    {
+      "id": "QA-PN-D1",
+      "file": "charter/.dispatch/mg-charter-pin-69c421a.json",
+      "line": 1,
+      "what_is_wrong": "The dispatch record's base_commit is b543b70b526425e7c8d59bc9a4496365deea3ad7 (the slice's DONE-list commit) while the contract and TASK-QA state 'Base: main 16f3357'; both are ancestors of the frozen head and every proof diff uses 16f3357, so this repeats the f006adb QA-PF-D1 wording/registry inconsistency. Kept at info severity on purpose; the repetition is not by itself an escalation.",
+      "severity": "info"
+    }
+  ],
+  "proofs_reopened": ["1", "2", "3", "4", "5", "6", "7"],
+  "verdict": "accepted"
+}
